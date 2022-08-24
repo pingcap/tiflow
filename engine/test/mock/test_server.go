@@ -81,7 +81,7 @@ func (s *testStream) Recv() (*pb.Record, error) {
 		}
 		return r, nil
 	case <-s.ctx.Done():
-		return nil, errors.New("cancelled")
+		return nil, errors.New("canceled")
 	}
 }
 

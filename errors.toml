@@ -186,6 +186,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrCliAborted"]
+error = '''
+command '%s' is aborted by user
+'''
+
 ["CDC:ErrCliCheckpointTsIsInFuture"]
 error = '''
 the overwrite-checkpoint-ts %d must be smaller than current TSO
@@ -211,6 +216,11 @@ error = '''
 codec decode error
 '''
 
+["CDC:ErrCodecInvalidConfig"]
+error = '''
+Codec invalid config
+'''
+
 ["CDC:ErrConsistentLevel"]
 error = '''
 consistent level (%s) not support
@@ -234,6 +244,11 @@ craft codec invalid data
 ["CDC:ErrCreateMarkTableFailed"]
 error = '''
 create mark table failed
+'''
+
+["CDC:ErrDBSorterError"]
+error = '''
+db error: %s
 '''
 
 ["CDC:ErrDDLEventIgnored"]
@@ -566,11 +581,6 @@ error = '''
 owner lease timeout
 '''
 
-["CDC:ErrLevelDBSorterError"]
-error = '''
-leveldb error: %s
-'''
-
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
@@ -579,16 +589,6 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
-'''
-
-["CDC:ErrMQCodecInvalidConfig"]
-error = '''
-MQ Codec invalid config
-'''
-
-["CDC:ErrMQSinkUnknownProtocol"]
-error = '''
-unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -1036,6 +1036,11 @@ error = '''
 sink uri invalid '%s'
 '''
 
+["CDC:ErrSinkUnknownProtocol"]
+error = '''
+unknown '%s' message protocol for sink
+'''
+
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
 fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
@@ -1066,9 +1071,9 @@ error = '''
 sorter is closed
 '''
 
-["CDC:ErrStartAStoppedLevelDBSystem"]
+["CDC:ErrStartAStoppedDBSystem"]
 error = '''
-start a stopped leveldb system
+start a stopped db system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]

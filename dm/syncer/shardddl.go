@@ -266,7 +266,7 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 		// TODO: current table checkpoints will be deleted in track ddls, but created and updated in flush checkpoints,
 		//       we should use a better mechanism to combine these operations
 		if ddl.s.cfg.ShardMode == "" {
-			recordSourceTbls(qec.sourceTbls, ddlInfo.originStmt, sourceTable)
+			recordSourceTbls(qec.sourceTbls, ddlInfo.stmtCache, sourceTable)
 		}
 	}
 
@@ -357,7 +357,7 @@ func (ddl *Normal) handleDDL(qec *queryEventContext) error {
 }
 
 func (ddl *Pessimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceTable *filter.Table, targetTable *filter.Table) (bool, error) {
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.DropDatabaseStmt:
 		err := ddl.s.dropSchemaInSharding(qec.tctx, sourceTable.Schema)
 		if err != nil {
@@ -409,7 +409,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 	)
 
 	var annotate string
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.CreateDatabaseStmt:
 		// for CREATE DATABASE, we do nothing. when CREATE TABLE under this DATABASE, sharding groups will be added
 	case *ast.CreateTableStmt:
@@ -617,7 +617,7 @@ func (ddl *Optimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceT
 		ddl.logger.Info("skip event in re-replicating shard group", zap.String("event", "query"), zap.Stringer("re-shard", qec.shardingReSync))
 		return true, nil
 	}
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.TruncateTableStmt:
 		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), zap.String("statement", ddlInfo.routedDDL))
 		return true, nil
@@ -656,7 +656,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		return nil
 	}
 
-	switch trackInfos[0].originStmt.(type) {
+	switch trackInfos[0].stmtCache.(type) {
 	case *ast.CreateDatabaseStmt, *ast.DropDatabaseStmt, *ast.AlterDatabaseStmt:
 		isDBDDL = true
 	}
@@ -671,7 +671,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	}
 
 	if !isDBDDL {
-		if _, ok := trackInfos[0].originStmt.(*ast.CreateTableStmt); !ok {
+		if _, ok := trackInfos[0].stmtCache.(*ast.CreateTableStmt); !ok {
 			tiBefore, err = ddl.s.getTableInfo(qec.tctx, upTable, downTable)
 			if err != nil {
 				return err
@@ -702,7 +702,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		skipOp bool
 		op     optimism.Operation
 	)
-	switch trackInfos[0].originStmt.(type) {
+	switch trackInfos[0].stmtCache.(type) {
 	case *ast.CreateDatabaseStmt, *ast.AlterDatabaseStmt:
 		// need to execute the DDL to the downstream, but do not do the coordination with DM-master.
 		op.DDLs = qec.needHandleDDLs

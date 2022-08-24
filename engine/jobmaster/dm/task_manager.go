@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
@@ -77,6 +79,10 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case dmpkg.Update:
 		return tm.jobStore.UpdateConfig(ctx, jobCfg)
+	// Deleting marks the job as deleting.
+	case dmpkg.Deleting:
+		return tm.jobStore.MarkDeleting(ctx)
+	// Delete deletes the job in metadata.
 	case dmpkg.Delete:
 		return tm.jobStore.Delete(ctx)
 	case dmpkg.Resume:
@@ -92,7 +98,13 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	tm.logger.Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)), zap.Uint64("config_modify_revison", taskStatus.CfgModRevision))
+	tm.logger.Debug(
+		"update task status",
+		zap.String("task_id", taskStatus.Task),
+		zap.String("stage", string(taskStatus.Stage)),
+		zap.Int("unit", int(taskStatus.Unit)),
+		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
+	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
@@ -111,9 +123,9 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	tm.logger.Info("start to check and operate tasks")
 	state, err := tm.jobStore.Get(ctx)
-	if err != nil {
-		tm.logger.Error("get job state failed", zap.Error(err))
-		tm.onJobNotExist(ctx)
+	if err != nil || state.(*metadata.Job).Deleting {
+		tm.logger.Info("on job deleting", zap.Error(err))
+		tm.onJobDel(ctx)
 		return err
 	}
 	job := state.(*metadata.Job)
@@ -144,12 +156,21 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 
 		op := genOp(runningTask.Stage, persistentTask.Stage)
 		if op == dmpkg.None {
-			tm.logger.Debug("task status will not be changed", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
+			tm.logger.Debug(
+				"task status will not be changed",
+				zap.String("task_id", taskID),
+				zap.String("stage", string(runningTask.Stage)),
+			)
 			continue
 		}
 
-		tm.logger.Info("unexpected task status", zap.String("task_id", taskID), zap.Int("op", int(op)),
-			zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
+		tm.logger.Info(
+			"unexpected task status",
+			zap.String("task_id", taskID),
+			zap.Int("op", int(op)),
+			zap.String("expected_stage", string(persistentTask.Stage)),
+			zap.String("stage", string(runningTask.Stage)),
+		)
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {
 			recordError = err
@@ -161,7 +182,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 }
 
 // remove all tasks, usually happened when delete jobs.
-func (tm *TaskManager) onJobNotExist(ctx context.Context) {
+func (tm *TaskManager) onJobDel(ctx context.Context) {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
@@ -208,4 +229,28 @@ func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, op
 		Op:   op,
 	}
 	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
+}
+
+func (tm *TaskManager) allFinished(ctx context.Context) bool {
+	state, err := tm.jobStore.Get(ctx)
+	if err != nil {
+		return false
+	}
+	job := state.(*metadata.Job)
+
+	for taskID, task := range job.Tasks {
+		t, ok := tm.tasks.Load(taskID)
+		if !ok {
+			return false
+		}
+		runningTask := t.(runtime.TaskStatus)
+		if runningTask.Stage != metadata.StageFinished {
+			return false
+		}
+		// update if we add new task mode
+		if runningTask.Unit != framework.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
+			return false
+		}
+	}
+	return true
 }

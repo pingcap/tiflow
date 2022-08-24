@@ -16,22 +16,31 @@ package servermaster
 import (
 	"sync"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
-	frame "github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/pkg/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
-type jobHolder struct {
-	framework.WorkerHandle
-	*frameModel.MasterMetaKVData
+// JobHolder holds job meta and worker handle for a job.
+type JobHolder struct {
+	workerHandle framework.WorkerHandle
+	masterMeta   *frameModel.MasterMetaKVData
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
+}
+
+// MasterMeta returns master meta of the job.
+func (jh *JobHolder) MasterMeta() *frameModel.MasterMetaKVData {
+	return jh.masterMeta
+}
+
+// WorkerHandle returns the job master's worker handle.
+func (jh *JobHolder) WorkerHandle() framework.WorkerHandle {
+	return jh.workerHandle
 }
 
 // JobFsm manages state of all job masters, job master state forms a finite-state
@@ -41,153 +50,102 @@ type jobHolder struct {
 // ,-------.                   ,-------.            ,-------.       ,--------.
 // |WaitAck|                   |Online |            |Pending|       |Finished|
 // `---+---'                   `---+---'            `---+---'       `---+----'
-//     |                           |                    |               |
-//     | Master                    |                    |               |
-//     |  .OnWorkerOnline          |                    |               |
-//     |-------------------------->|                    |               |
-//     |                           |                    |               |
-//     |                           | Master             |               |
-//     |                           |   .OnWorkerOffline |               |
-//     |                           |   (failover)       |               |
-//     |                           |------------------->|               |
-//     |                           |                    |               |
-//     |                           | Master             |               |
-//     |                           |   .OnWorkerOffline |               |
-//     |                           |   (finish)         |               |
-//     |                           |----------------------------------->|
-//     |                           |                    |               |
-//     | Master                    |                    |               |
-//     |  .OnWorkerOffline         |                    |               |
-//     |  (failover)               |                    |               |
-//     |----------------------------------------------->|               |
-//     |                           |                    |               |
-//     | Master                    |                    |               |
-//     |  .OnWorkerOffline         |                    |               |
-//     |  (finish)                 |                    |               |
-//     |--------------------------------------------------------------->|
-//     |                           |                    |               |
-//     |                           | Master             |               |
-//     |                           |   .CreateWorker    |               |
-//     |<-----------------------------------------------|               |
-//     |                           |                    |               |
-//     | Master                    |                    |               |
-//     |  .OnWorkerDispatched      |                    |               |
-//     |  (with error)             |                    |               |
-//     |----------------------------------------------->|               |
-//     |                           |                    |               |
-//     |                           |                    |               |
-//     |                           |                    |               |
+//
+//	|                           |                    |               |
+//	| Master                    |                    |               |
+//	|  .OnWorkerOnline          |                    |               |
+//	|-------------------------->|                    |               |
+//	|                           |                    |               |
+//	|                           | Master             |               |
+//	|                           |   .OnWorkerOffline |               |
+//	|                           |   (failover)       |               |
+//	|                           |------------------->|               |
+//	|                           |                    |               |
+//	|                           | Master             |               |
+//	|                           |   .OnWorkerOffline |               |
+//	|                           |   (finish)         |               |
+//	|                           |----------------------------------->|
+//	|                           |                    |               |
+//	| Master                    |                    |               |
+//	|  .OnWorkerOffline         |                    |               |
+//	|  (failover)               |                    |               |
+//	|----------------------------------------------->|               |
+//	|                           |                    |               |
+//	| Master                    |                    |               |
+//	|  .OnWorkerOffline         |                    |               |
+//	|  (finish)                 |                    |               |
+//	|--------------------------------------------------------------->|
+//	|                           |                    |               |
+//	|                           | Master             |               |
+//	|                           |   .CreateWorker    |               |
+//	|<-----------------------------------------------|               |
+//	|                           |                    |               |
+//	| Master                    |                    |               |
+//	|  .OnWorkerDispatched      |                    |               |
+//	|  (with error)             |                    |               |
+//	|----------------------------------------------->|               |
+//	|                           |                    |               |
+//	|                           |                    |               |
+//	|                           |                    |               |
 type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
 	pendingJobs map[frameModel.MasterID]*frameModel.MasterMetaKVData
-	waitAckJobs map[frameModel.MasterID]*jobHolder
-	onlineJobs  map[frameModel.MasterID]*jobHolder
+	waitAckJobs map[frameModel.MasterID]*JobHolder
+	onlineJobs  map[frameModel.MasterID]*JobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
 type JobStats interface {
-	JobCount(pb.QueryJobResponse_JobStatus) int
+	JobCount(status pb.Job_Status) int
 }
 
 // NewJobFsm creates a new job fsm
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
 		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMetaKVData),
-		waitAckJobs: make(map[frameModel.MasterID]*jobHolder),
-		onlineJobs:  make(map[frameModel.MasterID]*jobHolder),
+		waitAckJobs: make(map[frameModel.MasterID]*JobHolder),
+		onlineJobs:  make(map[frameModel.MasterID]*JobHolder),
 	}
 }
 
 // QueryOnlineJob queries job from online job list
-func (fsm *JobFsm) QueryOnlineJob(jobID frameModel.MasterID) *jobHolder {
+func (fsm *JobFsm) QueryOnlineJob(jobID frameModel.MasterID) *JobHolder {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	return fsm.onlineJobs[jobID]
 }
 
 // QueryJob queries job with given jobID and returns QueryJobResponse
-// TODO: Refine me. remove the pb from JobFsm to alleviate coupling
-func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
-	checkPendingJob := func() *pb.QueryJobResponse {
-		fsm.jobsMu.Lock()
-		defer fsm.jobsMu.Unlock()
+func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *JobHolder {
+	fsm.jobsMu.Lock()
+	defer fsm.jobsMu.Unlock()
 
-		meta, ok := fsm.pendingJobs[jobID]
-		if !ok {
-			return nil
+	if meta, ok := fsm.pendingJobs[jobID]; ok {
+		return &JobHolder{
+			masterMeta: meta,
 		}
-		resp := &pb.QueryJobResponse{
-			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
-			Config: meta.Config,
-			Status: pb.QueryJobResponse_pending,
-		}
-		return resp
 	}
 
-	checkWaitAckJob := func() *pb.QueryJobResponse {
-		fsm.jobsMu.Lock()
-		defer fsm.jobsMu.Unlock()
-
-		job, ok := fsm.waitAckJobs[jobID]
-		if !ok {
-			return nil
-		}
-		meta := job.MasterMetaKVData
-		resp := &pb.QueryJobResponse{
-			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
-			Config: meta.Config,
-			Status: pb.QueryJobResponse_dispatched,
-		}
-		return resp
+	if job, ok := fsm.waitAckJobs[jobID]; ok {
+		return job
 	}
 
-	checkOnlineJob := func() *pb.QueryJobResponse {
-		fsm.jobsMu.Lock()
-		defer fsm.jobsMu.Unlock()
-
-		job, ok := fsm.onlineJobs[jobID]
-		if !ok {
-			return nil
-		}
-		resp := &pb.QueryJobResponse{
-			Tp:     int32(frame.MustConvertWorkerType2JobType(job.Tp)),
-			Config: job.Config,
-			Status: pb.QueryJobResponse_online,
-		}
-		jobInfo, err := job.ToPB()
-		// TODO (zixiong) ToPB should handle the tombstone situation gracefully.
-		if err != nil {
-			resp.Err = &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}
-		} else if jobInfo != nil {
-			resp.JobMasterInfo = jobInfo
-		} else {
-			// job master is just timeout but have not call OnOffline.
-			return nil
-		}
-		return resp
+	if job, ok := fsm.onlineJobs[jobID]; ok {
+		return job
 	}
 
-	if resp := checkPendingJob(); resp != nil {
-		return resp
-	}
-	if resp := checkWaitAckJob(); resp != nil {
-		return resp
-	}
-	return checkOnlineJob()
+	return nil
 }
 
 // JobDispatched is called when a job is firstly created or server master is failovered
 func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
-	fsm.waitAckJobs[job.ID] = &jobHolder{
-		MasterMetaKVData: job,
-		addFromFailover:  addFromFailover,
+	fsm.waitAckJobs[job.ID] = &JobHolder{
+		masterMeta:      job,
+		addFromFailover: addFromFailover,
 	}
 }
 
@@ -203,8 +161,8 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 		}
 		delete(fsm.pendingJobs, oldJobID)
 		job.ID = id
-		fsm.waitAckJobs[id] = &jobHolder{
-			MasterMetaKVData: job,
+		fsm.waitAckJobs[id] = &JobHolder{
+			masterMeta: job,
 		}
 		log.Info("job master recovered", zap.Any("job", job))
 	}
@@ -221,7 +179,7 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMeta
 		if !job.addFromFailover {
 			continue
 		}
-		_, err := dispatchJobFn(job.MasterMetaKVData)
+		_, err := dispatchJobFn(job.masterMeta)
 		if err != nil {
 			return err
 		}
@@ -239,11 +197,11 @@ func (fsm *JobFsm) JobOnline(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
-	fsm.onlineJobs[worker.ID()] = &jobHolder{
-		WorkerHandle:     worker,
-		MasterMetaKVData: job.MasterMetaKVData,
+	fsm.onlineJobs[worker.ID()] = &JobHolder{
+		workerHandle: worker,
+		masterMeta:   job.masterMeta,
 	}
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
@@ -266,7 +224,7 @@ func (fsm *JobFsm) JobOffline(worker framework.WorkerHandle, needFailover bool) 
 		delete(fsm.waitAckJobs, worker.ID())
 	}
 	if needFailover {
-		fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+		fsm.pendingJobs[worker.ID()] = job.masterMeta
 	}
 }
 
@@ -277,23 +235,21 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
-	fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+	fsm.pendingJobs[worker.ID()] = job.masterMeta
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
 }
 
 // JobCount queries job count based on job status
-func (fsm *JobFsm) JobCount(status pb.QueryJobResponse_JobStatus) int {
+func (fsm *JobFsm) JobCount(status pb.Job_Status) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	switch status {
-	case pb.QueryJobResponse_pending:
-		return len(fsm.pendingJobs)
-	case pb.QueryJobResponse_dispatched:
-		return len(fsm.waitAckJobs)
-	case pb.QueryJobResponse_online:
+	case pb.Job_Created:
+		return len(fsm.pendingJobs) + len(fsm.waitAckJobs)
+	case pb.Job_Running:
 		return len(fsm.onlineJobs)
 	default:
 		// TODO: support other job status count

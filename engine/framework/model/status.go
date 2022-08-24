@@ -53,33 +53,32 @@ var WorkerUpdateColumns = []string{
 	"type",
 	"status",
 	"epoch",
-	"errmsg",
-	"ext_bytes",
+	"error_message",
+	"extend_bytes",
 }
 
 // WorkerStatus records worker information, including master id, worker id,
 // worker type, project id(tenant), worker status(used in master worker framework),
 // error message and ext bytes(passed from business logic) in metastore.
-// TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
-	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null"`
-	JobID        MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
-	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:2"`
-	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
-	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
-	Epoch        Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
-	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:text"`
+	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null"`
+	JobID     MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
+	ID        WorkerID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:2"`
+	Type      WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
+	Code      WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
+	Epoch     Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
+	ErrorMsg  string           `json:"error-message" gorm:"column:error_message;type:text"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
 	// business logic only.
 	// Business logic can parse the raw bytes and decode into business Go object
-	ExtBytes []byte `json:"ext-bytes" gorm:"column:ext_bytes;type:blob"`
+	ExtBytes []byte `json:"extend-bytes" gorm:"column:extend_bytes;type:blob"`
 }
 
 // HasSignificantChange indicates whether `s` has significant changes worth persisting.
-func (s *WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
-	return s.Code != other.Code || s.ErrorMessage != other.ErrorMessage
+func (s WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
+	return s.Code != other.Code || s.ErrorMsg != other.ErrorMsg
 }
 
 // InTerminateState returns whether worker is in a terminate state, including
@@ -109,13 +108,13 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 // Map is used for update the orm model
 func (s *WorkerStatus) Map() map[string]interface{} {
 	return map[string]interface{}{
-		"project_id": s.ProjectID,
-		"job_id":     s.JobID,
-		"id":         s.ID,
-		"type":       s.Type,
-		"status":     s.Code,
-		"epoch":      s.Epoch,
-		"errmsg":     s.ErrorMessage,
-		"ext_bytes":  s.ExtBytes,
+		"project_id":    s.ProjectID,
+		"job_id":        s.JobID,
+		"id":            s.ID,
+		"type":          s.Type,
+		"status":        s.Code,
+		"epoch":         s.Epoch,
+		"error_message": s.ErrorMsg,
+		"extend_bytes":  s.ExtBytes,
 	}
 }

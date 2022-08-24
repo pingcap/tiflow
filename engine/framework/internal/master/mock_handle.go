@@ -18,7 +18,6 @@ import (
 
 	"go.uber.org/atomic"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -48,7 +47,10 @@ func (h *MockHandle) GetTombstone() TombstoneHandle {
 // Unwrap implements WorkerHandle.Unwrap
 func (h *MockHandle) Unwrap() RunningHandle {
 	if !h.IsTombstone {
-		return h
+		return mockRunningHandle{
+			BaseHandle: h,
+			handler:    h,
+		}
 	}
 	return nil
 }
@@ -63,23 +65,25 @@ func (h *MockHandle) ID() frameModel.WorkerID {
 	return h.WorkerID
 }
 
-// ToPB implements WorkerHandle.ToPB
-func (h *MockHandle) ToPB() (*pb.WorkerInfo, error) {
-	statusBytes, err := h.Status().Marshal()
-	if err != nil {
-		return nil, err
-	}
+// CleanTombstone implements TombstoneHandle.CleanTombstone
+func (h *MockHandle) CleanTombstone(ctx context.Context) error {
+	// TODO implement me
+	panic("implement me")
+}
 
-	ret := &pb.WorkerInfo{
-		Id:         h.WorkerID,
-		ExecutorId: string(h.ExecutorID),
-		Status:     statusBytes,
-	}
-	return ret, nil
+// SendMessageCount returns the send message count, used in unit test only.
+func (h *MockHandle) SendMessageCount() int {
+	return int(h.sendMessageCount.Load())
+}
+
+type mockRunningHandle struct {
+	BaseHandle
+	handler *MockHandle
 }
 
 // SendMessage implements RunningHandle.SendMessage
-func (h *MockHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+func (rh mockRunningHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+	h := rh.handler
 	if h.IsTombstone {
 		return errors.ErrSendingMessageToTombstone.GenWithStackByCause(h.WorkerID)
 	}
@@ -96,15 +100,4 @@ func (h *MockHandle) SendMessage(ctx context.Context, topic p2p.Topic, message i
 		err = h.MessageSender.SendToNodeB(ctx, p2p.NodeID(h.ExecutorID), topic, message)
 	}
 	return err
-}
-
-// CleanTombstone implements TombstoneHandle.CleanTombstone
-func (h *MockHandle) CleanTombstone(ctx context.Context) error {
-	// TODO implement me
-	panic("implement me")
-}
-
-// SendMessageCount returns the send message count, used in unit test only.
-func (h *MockHandle) SendMessageCount() int {
-	return int(h.sendMessageCount.Load())
 }

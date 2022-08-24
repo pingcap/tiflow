@@ -507,11 +507,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Info("event feed started",
-		zap.Stringer("span", s.totalSpan), zap.Uint64("startTs", ts),
-		zap.String("namespace", s.client.changefeed.Namespace),
-		zap.String("changefeed", s.client.changefeed.ID))
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -562,7 +557,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 					if errInfo.logRateLimitedHint() {
 						zapFieldAddr := zap.Skip()
 						if errInfo.singleRegionInfo.rpcCtx != nil {
-							// rpcCtx may be nil if we fails to get region info
+							// rpcCtx may be nil if we failed to get region info
 							// from pd. It could cause by pd down or the region
 							// has been merged.
 							zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
@@ -594,6 +589,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
+
+	log.Info("event feed started",
+		zap.String("namespace", s.client.changefeed.Namespace),
+		zap.String("changefeed", s.client.changefeed.ID),
+		zap.Uint64("startTs", ts),
+		zap.Stringer("span", s.totalSpan))
 
 	return g.Wait()
 }
@@ -1138,10 +1139,10 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 // receiveFromStream receives gRPC messages from a stream continuously and sends
 // messages to region worker, if `stream.Recv` meets error, this routine will exit
 // silently. As for regions managed by this routine, there are two situations:
-// 1. established regions: a `nil` event will be sent to region worker, and region
-//    worker call `s.onRegionFail` to re-establish these regions.
-// 2. pending regions: call `s.onRegionFail` for each pending region before this
-//    routine exits to establish these regions.
+//  1. established regions: a `nil` event will be sent to region worker, and region
+//     worker call `s.onRegionFail` to re-establish these regions.
+//  2. pending regions: call `s.onRegionFail` for each pending region before this
+//     routine exits to establish these regions.
 func (s *eventFeedSession) receiveFromStream(
 	ctx context.Context,
 	g *errgroup.Group,

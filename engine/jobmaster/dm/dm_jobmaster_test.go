@@ -187,7 +187,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
-	checkpoint.NewCheckpointAgent = func(*config.JobCfg, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
+	checkpoint.NewCheckpointAgent = func(*zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
@@ -208,12 +208,14 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	precheckError := errors.New("precheck error")
+	exitError := errors.New("exit error")
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "", precheckError
 	}
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
-	require.EqualError(t.T(), jm.InitImpl(context.Background()), precheckError.Error())
+	mockBaseJobmaster.On("Exit").Return(exitError).Once()
+	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
 
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
@@ -227,9 +229,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
-		messageAgent:  mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -332,10 +332,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
-		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -357,24 +355,36 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
-	mockMessageAgent.On("SendMessage").Return(nil).Once()
-	mockMessageAgent.On("SendMessage").Return(nil).Once()
+	require.NoError(t.T(), jm.CloseImpl(context.Background()))
+
+	// OnCancel
+	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendMessage").Return(nil).Twice()
+	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), jm.CloseImpl(context.Background()))
+		require.NoError(t.T(), jm.OnCancel(context.Background()))
 	}()
 	require.Eventually(t.T(), func() bool {
 		mockMessageAgent.Lock()
-		defer mockMessageAgent.Unlock()
-		return len(mockMessageAgent.Calls) == 2
-	}, 5*time.Second, 10*time.Millisecond)
+		if len(mockMessageAgent.Calls) == 4 {
+			mockMessageAgent.Unlock()
+			return true
+		}
+		mockMessageAgent.Unlock()
+		jm.workerManager.Tick(context.Background())
+		return false
+	}, 10*time.Second, 1*time.Second)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	jm.OnWorkerOffline(workerHandle2, errors.New("offline error"))
 	wg.Wait()
+
+	// Stop
+	require.NoError(t.T(), jm.StopImpl(context.Background()))
 
 	mockBaseJobmaster.AssertExpectations(t.T())
 	workerHandle1.AssertExpectations(t.T())
@@ -423,16 +433,23 @@ func (m *MockBaseJobmaster) Logger() *zap.Logger {
 	return log.L()
 }
 
+func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitReason, err error, extMsg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Error(0)
+}
+
 type MockCheckpointAgent struct {
 	mu sync.Mutex
 	mock.Mock
 }
 
-func (m *MockCheckpointAgent) Create(ctx context.Context) error {
+func (m *MockCheckpointAgent) Create(ctx context.Context, cfg *config.JobCfg) error {
 	return nil
 }
 
-func (m *MockCheckpointAgent) Remove(ctx context.Context) error {
+func (m *MockCheckpointAgent) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	return nil
 }
 
@@ -441,11 +458,4 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
-}
-
-func (m *MockCheckpointAgent) Update(ctx context.Context, jobCfg *config.JobCfg) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	args := m.Called()
-	return args.Error(0)
 }

@@ -35,11 +35,10 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
@@ -53,9 +52,6 @@ const (
 )
 
 func TestDMJob(t *testing.T) {
-	client, err := e2e.NewJobManagerClient("http://127.0.0.1:10245")
-	require.NoError(t, err)
-
 	mysqlCfg := util.DBConfig{
 		Host:     "127.0.0.1",
 		Port:     3306,
@@ -88,11 +84,11 @@ func TestDMJob(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, client, mysql, tidb, "test1")
+		testSimpleAllModeTask(t, mysql, tidb, "test1")
 	}()
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, client, mysql, tidb, "test2")
+		testSimpleAllModeTask(t, mysql, tidb, "test2")
 	}()
 	wg.Wait()
 
@@ -122,7 +118,6 @@ func TestDMJob(t *testing.T) {
 // `db` should not contain special character.
 func testSimpleAllModeTask(
 	t *testing.T,
-	client enginepb.JobManagerClient,
 	mysql, tidb *sql.DB,
 	db string,
 ) {
@@ -151,8 +146,8 @@ func testSimpleAllModeTask(
 	var jobID string
 	require.Eventually(t, func() bool {
 		var err error
-		jobID, err = e2e.CreateJobViaOpenAPI(ctx, masterAddr, tenantID, projectID,
-			engineModel.JobTypeDM, string(dmJobCfg))
+		jobID, err = e2e.CreateJobViaHTTP(ctx, masterAddr, tenantID, projectID,
+			pb.Job_DM, dmJobCfg)
 		return err == nil
 	}, time.Second*5, time.Millisecond*100)
 
@@ -177,28 +172,29 @@ func testSimpleAllModeTask(
 	}
 	waitRow("c = 1", db)
 
-	// check load finished
-	source1 := "mysql-replica-01"
-	source2 := "mysql-replica-02"
+	// load finished and job exits
+	// TODO: check load status after framework supports it
+	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
-		jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
-		return err == nil && jobStatus.TaskStatus[source1].Status.Stage == metadata.StageFinished
+		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
+		return err == nil && job.Status == pb.Job_Finished
 	}, time.Second*30, time.Millisecond*100)
 
-	// check load finished status equals master status
+	source1 := "mysql-replica-01"
+	source2 := "mysql-replica-02"
+
 	binlogName, binlogPos, err := getMasterStatus(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
 	require.NoError(t, err)
-	jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
-	require.NoError(t, err)
-	// only check binlog-name, because binlog-pos will be changed by other test cases.
-	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), fmt.Sprintf(`"metaBinlog": "(%s,`, binlogName))
 
-	// start incremental job via updateJobConfig
+	// start incremental job
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: full"), []byte("task-mode: incremental"))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-name: ON.000001"), []byte(fmt.Sprintf("binlog-name: %s", binlogName)))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-pos: 4"), []byte(fmt.Sprintf("binlog-pos: %d", binlogPos)))
-	err = updateJobCfg(httpClient, jobID, string(dmJobCfg))
-	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		var err error
+		jobID, err = e2e.CreateJobViaHTTP(ctx, masterAddr, tenantID, projectID, pb.Job_DM, dmJobCfg)
+		return err == nil
+	}, time.Second*5, time.Millisecond*100)
 
 	// incremental phase
 	noError(mysql.Exec("insert into " + db + ".t1 values(2)"))
@@ -214,9 +210,12 @@ func testSimpleAllModeTask(
 	// check auto resume
 	waitRow("c = 3", db)
 
-	jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
-	require.NoError(t, err)
-	require.Equal(t, jobID, jobStatus.JobID)
+	var jobStatus *dm.JobStatus
+	// wait job online
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
+		return err == nil && jobStatus.JobID == jobID
+	}, time.Second*5, time.Millisecond*100)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
@@ -344,7 +343,7 @@ func testSimpleAllModeTask(
 	jobCfg, err = getJobCfg(httpClient, jobID)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, newDB)
-	require.Contains(t, jobCfg, `mod-revision: 2`)
+	require.Contains(t, jobCfg, `mod-revision: 1`)
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(httpClient, jobID, nil)
@@ -383,6 +382,10 @@ func queryStatus(client *http.Client, jobID string, tasks []string) (*dm.JobStat
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("status code %d, body %s", resp.StatusCode, string(respBody))
+	}
+
 	var jobStatus dm.JobStatus
 	err = json.Unmarshal(respBody, &jobStatus)
 	return &jobStatus, err

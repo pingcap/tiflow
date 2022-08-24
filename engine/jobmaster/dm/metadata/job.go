@@ -15,6 +15,7 @@ package metadata
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/errors"
 
@@ -26,19 +27,19 @@ import (
 
 // TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
-type TaskStage int
+type TaskStage string
 
-// These stages may updated in later pr.
+// These stages may be updated in later pr.
 const (
-	StageInit TaskStage = iota + 1
-	StageRunning
-	StagePaused
-	StageFinished
-	StageError
-	StagePausing
+	StageInit     TaskStage = "init"
+	StageRunning  TaskStage = "running"
+	StagePaused   TaskStage = "paused"
+	StageFinished TaskStage = "finished"
+	StageError    TaskStage = "error"
+	StagePausing  TaskStage = "pausing"
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled
+	StageUnscheduled TaskStage = "unscheduled"
 )
 
 // Job represents the state of a job.
@@ -47,6 +48,9 @@ type Job struct {
 
 	// taskID -> task
 	Tasks map[string]*Task
+
+	// Deleting represents whether the job is being deleted.
+	Deleting bool
 }
 
 // NewJob creates a new Job instance
@@ -82,6 +86,7 @@ type JobStore struct {
 	*TomlStore
 
 	id frameModel.MasterID
+	mu sync.Mutex
 }
 
 // NewJobStore creates a new JobStore instance
@@ -106,12 +111,17 @@ func (jobStore *JobStore) Key() string {
 
 // UpdateStages will be called if user operate job.
 func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, stage TaskStage) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	job := state.(*Job)
+	if job.Deleting {
+		return errors.New("failed to update stages because job is being deleted")
+	}
 	if len(taskIDs) == 0 {
 		for task := range job.Tasks {
 			taskIDs = append(taskIDs, task)
@@ -130,11 +140,16 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 
 // UpdateConfig will be called if user update job config.
 func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCfg) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	oldJob := state.(*Job)
+	if oldJob.Deleting {
+		return errors.New("failed to update config because job is being deleted")
+	}
 
 	// TODO: we may diff the config at task level in the future, that way different tasks will have different modify revisions.
 	// so that changing the configuration of one task will not affect other tasks.
@@ -154,4 +169,17 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 	}
 
 	return jobStore.Put(ctx, newJob)
+}
+
+// MarkDeleting marks the job as deleting.
+func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
+	state, err := jobStore.Get(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	job := state.(*Job)
+	job.Deleting = true
+	return jobStore.Put(ctx, job)
 }

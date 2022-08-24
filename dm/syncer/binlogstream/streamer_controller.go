@@ -309,6 +309,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 // can be found in the comment of locations struct in binlog_locations.go .
 //
 // When return events from streamModifier, 3 locations are maintained as below:
+//
 //   - Inject
 //     if we inject events [DDL1, DDL2] at (start) position 900, where start position
 //     900 has Insert1 event whose LogPos (end position) is 1000, we should return
@@ -336,7 +337,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 	event, suffix, op, err := c.getEvent(tctx)
 
 	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
-	if event != nil {
+	if err != nil {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
 			// nolint:dogsled
 			_, relaySubDirSuffix, _, _ := utils.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))

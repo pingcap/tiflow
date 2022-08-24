@@ -36,6 +36,7 @@ const (
 	MasterStatusInit     = MasterStatusCode(2)
 	MasterStatusFinished = MasterStatusCode(3)
 	MasterStatusStopped  = MasterStatusCode(4)
+	MasterStatusFailed   = MasterStatusCode(5)
 	// extend the status code here
 )
 
@@ -52,7 +53,12 @@ type MasterMetaKVData struct {
 
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
-	// TODO: add master status and checkpoint data
+
+	// error message for the job
+	ErrorMsg string `json:"error-message" gorm:"column:error_message;type:text"`
+
+	// if job is finished or canceled, business logic can set self-defined job info to `ExtMsg`
+	ExtMsg string `json:"extend-message" gorm:"column:extend_message;type:text"`
 
 	// Deleted is a nullable timestamp. Then master is deleted
 	// if Deleted is not null.
@@ -72,14 +78,16 @@ func (m *MasterMetaKVData) Unmarshal(data []byte) error {
 // Map is used for update the orm model
 func (m *MasterMetaKVData) Map() map[string]interface{} {
 	return map[string]interface{}{
-		"project_id": m.ProjectID,
-		"id":         m.ID,
-		"type":       m.Tp,
-		"status":     m.StatusCode,
-		"node_id":    m.NodeID,
-		"address":    m.Addr,
-		"epoch":      m.Epoch,
-		"config":     m.Config,
+		"project_id":     m.ProjectID,
+		"id":             m.ID,
+		"type":           m.Tp,
+		"status":         m.StatusCode,
+		"node_id":        m.NodeID,
+		"address":        m.Addr,
+		"epoch":          m.Epoch,
+		"config":         m.Config,
+		"error_message":  m.ErrorMsg,
+		"extend_message": m.ExtMsg,
 	}
 }
 
@@ -96,4 +104,6 @@ var MasterUpdateColumns = []string{
 	"address",
 	"epoch",
 	"config",
+	"error_message",
+	"extend_message",
 }

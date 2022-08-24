@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -186,7 +186,7 @@ func (ctx *throwContext) Throw(err error) {
 func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-test",
+			ID:            "capture-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 			// suppose the current version is `v6.3.0`
 			Version: "v6.3.0",

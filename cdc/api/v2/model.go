@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	tidbModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -146,7 +145,6 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			Rules:                 c.Filter.Rules,
 			MySQLReplicationRules: mySQLReplicationRules,
 			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
-			DDLAllowlist:          c.Filter.DDLAllowlist,
 			EventFilters:          efs,
 		}
 	}
@@ -235,7 +233,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MySQLReplicationRules: mySQLReplicationRules,
 			Rules:                 cloned.Filter.Rules,
 			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
-			DDLAllowlist:          cloned.Filter.DDLAllowlist,
 			EventFilters:          efs,
 		}
 	}
@@ -297,10 +294,9 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
 	*MySQLReplicationRules
-	Rules            []string               `json:"rules,omitempty"`
-	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts,omitempty"`
-	DDLAllowlist     []tidbModel.ActionType `json:"ddl_allow_list,omitempty"`
-	EventFilters     []EventFilterRule      `json:"event_filters"`
+	Rules            []string          `json:"rules,omitempty"`
+	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
+	EventFilters     []EventFilterRule `json:"event_filters"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter

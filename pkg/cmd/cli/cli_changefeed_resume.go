@@ -24,6 +24,7 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -151,7 +152,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 	if !o.noConfirm {
 		if len(o.overwriteCheckpointTs) == 0 {
 			return confirmLargeDataGap(cmd, o.currentTso.Timestamp,
-				o.changefeedDetail.CheckpointTSO)
+				o.changefeedDetail.CheckpointTSO, "resume")
 		}
 
 		return confirmOverwriteCheckpointTs(cmd, o.changefeedID, o.checkpointTs)
@@ -225,13 +226,9 @@ func newCmdResumeChangefeed(f factory.Factory) *cobra.Command {
 		Use:   "resume",
 		Short: "Resume a paused replication task (changefeed)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(f)
-			if err != nil {
-				return err
-			}
-
-			return o.run(cmd)
+		Run: func(cmd *cobra.Command, args []string) {
+			util.CheckErr(o.complete(f))
+			util.CheckErr(o.run(cmd))
 		},
 	}
 

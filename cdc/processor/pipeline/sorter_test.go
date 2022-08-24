@@ -69,10 +69,8 @@ func TestSorterResolvedTs(t *testing.T) {
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 	require.Equal(t, TableStatePreparing, sn.State())
 
-	msg := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
-	ok, err := sn.TryHandleDataMessage(context.Background(), msg)
-	require.True(t, ok)
-	require.Nil(t, err)
+	msg := model.NewResolvedPolymorphicEvent(0, 2)
+	sn.handleRawEvent(context.Background(), msg)
 	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
 	require.Equal(t, TableStatePrepared, sn.State())
 }
@@ -89,17 +87,6 @@ func (c *checkSorter) Run(ctx context.Context) error {
 
 func (c *checkSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	c.ch <- entry
-}
-
-func (c *checkSorter) TryAddEntry(
-	ctx context.Context, entry *model.PolymorphicEvent,
-) (bool, error) {
-	select {
-	case c.ch <- entry:
-		return true, nil
-	default:
-		return false, nil
-	}
 }
 
 func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
@@ -214,51 +201,31 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
 		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
 	sn.sorter = s
-
-	ch := make(chan pmessage.Message, 1)
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 
 	// Resolved ts must not regress even if there is no barrier ts message.
-	resolvedTs1 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
-	ok, err := sn.TryHandleDataMessage(context.Background(), resolvedTs1)
-	require.True(t, ok)
-	require.Nil(t, err)
+	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
+	sn.handleRawEvent(context.Background(), resolvedTs1)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
 	require.Equal(t, TableStatePrepared, sn.State())
 
 	// Advance barrier ts.
-	nctx := pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil),
-		pmessage.BarrierMessage(2),
-		ch,
-	)
-	msg := nctx.Message()
-	ok, err = sn.TryHandleDataMessage(nctx, msg)
-	require.True(t, ok)
-	require.Nil(t, err)
+	sn.updateBarrierTs(2)
 	require.EqualValues(t, 2, sn.BarrierTs())
-	// Barrier message must be passed to the next node.
-	require.EqualValues(t, pmessage.BarrierMessage(2), <-ch)
 
-	resolvedTs2 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
-	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs2)
-	require.True(t, ok)
-	require.Nil(t, err)
-	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
+	resolvedTs2 := model.NewResolvedPolymorphicEvent(0, 2)
+	sn.handleRawEvent(context.Background(), resolvedTs2)
+	require.EqualValues(t, resolvedTs2, <-s.Output())
 
-	resolvedTs3 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 3))
-	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs3)
-	require.True(t, ok)
-	require.Nil(t, err)
-	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
+	resolvedTs3 := model.NewResolvedPolymorphicEvent(0, 3)
+	sn.handleRawEvent(context.Background(), resolvedTs3)
+	require.EqualValues(t, resolvedTs2, <-s.Output())
 
-	resolvedTs4 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
+	resolvedTs4 := model.NewResolvedPolymorphicEvent(0, 4)
 	sn.redoLogEnabled = true
-	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs4)
-	require.True(t, ok)
-	require.Nil(t, err)
-	resolvedTs4 = pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
-	require.EqualValues(t, resolvedTs4.PolymorphicEvent, <-s.Output())
+	sn.handleRawEvent(context.Background(), resolvedTs4)
+	resolvedTs4 = model.NewResolvedPolymorphicEvent(0, 4)
+	require.EqualValues(t, resolvedTs4, <-s.Output())
 }
 
 func TestSorterUpdateBarrierTs(t *testing.T) {

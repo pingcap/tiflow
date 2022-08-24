@@ -232,7 +232,8 @@ func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[i
 
 // decodeRowV2 decodes value data using new encoding format.
 // Ref: https://github.com/pingcap/tidb/pull/12634
-//      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
+//
+//	https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
 func decodeRowV2(data []byte, columns []rowcodec.ColInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	decoder := rowcodec.NewDatumMapDecoder(columns, tz)
 	datums, err := decoder.DecodeToDatumMap(data, nil)

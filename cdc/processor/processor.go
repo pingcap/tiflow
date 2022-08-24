@@ -401,12 +401,14 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 
 // newProcessor creates a new processor
 func newProcessor(
+	state *orchestrator.ChangefeedReactorState,
 	captureInfo *model.CaptureInfo,
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
 ) *processor {
 	p := &processor{
+		changefeed:   state,
 		upstream:     up,
 		tables:       make(map[model.TableID]pipeline.TablePipeline),
 		errCh:        make(chan error, 1),
@@ -474,11 +476,10 @@ func isProcessorIgnorableError(err error) bool {
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
-func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
-	p.changefeed = state
+func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
-		return p.handleErr(state, err)
+		return p.handleErr(err)
 	}
 	if p.upstream.IsClosed() {
 		log.Panic("upstream is closed",
@@ -491,16 +492,11 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		log.Warn("upstream is not ready, skip",
 			zap.Uint64("id", p.upstream.ID),
 			zap.Strings("pd", p.upstream.PdEndpoints))
-		return state, nil
+		return nil
 	}
 	startTime := time.Now()
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID:   state.ID,
-		Info: state.Info,
-	})
-	err := p.tick(ctx, state)
-
+	p.changefeed.CheckCaptureAlive(p.captureInfo.ID)
+	err := p.tick(ctx)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
 		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
@@ -511,21 +507,18 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.refreshMetrics()
 
 	if err == nil {
-		return state, nil
+		return nil
 	}
-	return p.handleErr(state, err)
+	return p.handleErr(err)
 }
 
-func (p *processor) handleErr(
-	state *orchestrator.ChangefeedReactorState,
-	err error,
-) (orchestrator.ReactorState, error) {
+func (p *processor) handleErr(err error) error {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
-		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
+		return cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
@@ -535,27 +528,27 @@ func (p *processor) handleErr(
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
-	state.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		if position == nil {
-			position = &model.TaskPosition{}
-		}
-		position.Error = &model.RunningError{
-			Addr:    p.captureInfo.AdvertiseAddr,
-			Code:    code,
-			Message: err.Error(),
-		}
-		return position, true, nil
-	})
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
 	log.Error("run processor failed",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Error(err))
-	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
+	return cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) error {
-	p.changefeed = state
+func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
@@ -577,6 +570,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage()
+
+	if p.redoManager != nil && p.redoManager.Enabled() {
+		ckpt := p.changefeed.Status.CheckpointTs
+		p.redoManager.UpdateCheckpointTs(ckpt)
+	}
 
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
@@ -604,12 +602,13 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	if p.initialized {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		if position == nil {
-			return &model.TaskPosition{}, true, nil
-		}
-		return position, false, nil
-	})
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				return &model.TaskPosition{}, true, nil
+			}
+			return position, false, nil
+		})
 	return true
 }
 
@@ -666,10 +665,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.changefeed.Info.Config.EnableOldValue,
 	)
 
-	log.Info("processor try new sink",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
-
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableNewSink {
@@ -689,20 +684,25 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	if err != nil {
-		log.Info("processor new sink failed",
+		log.Info("processor create sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
-	log.Info("processor try new sink success",
+	log.Info("processor create sink success",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeed.ID.ID),
 		zap.Duration("duration", time.Since(start)))
 
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
@@ -850,7 +850,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
-			minResolvedTableID, _ = table.ID()
+			minResolvedTableID = table.ID()
 		}
 	}
 
@@ -860,7 +860,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
-			minCheckpointTableID, _ = table.ID()
+			minCheckpointTableID = table.ID()
 		}
 	}
 
@@ -1046,13 +1046,12 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 
-	if p.agent == nil {
-		return nil
+	if p.agent != nil {
+		if err := p.agent.Close(); err != nil {
+			log.Warn("close agent meet error", zap.Error(err))
+		}
+		p.agent = nil
 	}
-	if err := p.agent.Close(); err != nil {
-		return errors.Trace(err)
-	}
-	p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
 	if p.sinkV1 != nil {
@@ -1074,7 +1073,7 @@ func (p *processor) Close() error {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
-	} else {
+	} else if p.sinkV2Factory != nil { // maybe nil in test
 		log.Info("processor try to close the sinkV2",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))

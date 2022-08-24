@@ -145,7 +145,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 				" and the pd address(es) \"%s\"")
 	}
 
-	return &client, err
+	return client, err
 }
 
 // PdClient creates new pd client.
@@ -235,11 +235,12 @@ func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 // findServerAddr find the cdc server address by the following logic
 // a) Only the cdc server address is specified: use it;
 // b) Only the PD address is specified:
-//   1) check the address and create a etcdClient
-// 	 2) check the etcd keys and find cdc cluster addresses:
-//	 	If there are multiple CDC clusters exist, report an error; otherwise,
-//	 	cache the server address in f.fetchedServerAddr and return it (since
-//	 	some cli cmds use both apiV1 and apiV2)
+//  1. check the address and create a etcdClient
+//  2. check the etcd keys and find cdc cluster addresses:
+//     If there are multiple CDC clusters exist, report an error; otherwise,
+//     cache the server address in f.fetchedServerAddr and return it (since
+//     some cli cmds use both apiV1 and apiV2)
+//
 // c) Both PD and cdc server addresses are specified: report an error
 func (f *factoryImpl) findServerAddr() (string, error) {
 	if f.fetchedServerAddr != "" {

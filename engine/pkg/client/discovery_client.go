@@ -124,7 +124,7 @@ func (c *discoveryClient) RegisterMetaStore(
 		return err
 	}
 	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-		return errors.Errorf("RegisterMetaStore: %d", resp.Err.Size())
+		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Message)
 	}
 	return nil
 }

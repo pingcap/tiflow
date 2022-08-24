@@ -15,6 +15,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -544,19 +545,115 @@ func TestExitWithoutReturn(t *testing.T) {
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
-	_ = worker.DefaultBaseWorker.Exit(ctx, frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusFinished,
-	}, errors.New("Exit error"))
+	_ = worker.DefaultBaseWorker.Exit(ctx, ExitReasonFailed, errors.New("Exit error"), nil)
 
 	err = worker.Poll(ctx)
 	require.Error(t, err)
-	require.Regexp(t, ".*worker finished.*", err)
+	require.Regexp(t, "Exit error", err)
 }
 
 func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
 	require.Equal(t, expect.Worker, msg.Worker)
 	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
 	require.Equal(t, expect.Status.Code, expect.Status.Code)
-	require.Equal(t, expect.Status.ErrorMessage, expect.Status.ErrorMessage)
+	require.Equal(t, expect.Status.ErrorMsg, expect.Status.ErrorMsg)
 	require.Equal(t, expect.Status.ExtBytes, expect.Status.ExtBytes)
+}
+
+func TestWorkerExit(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		exitReason       ExitReason
+		err              error
+		extMsg           []byte
+		expectedStatus   frameModel.WorkerStatusCode
+		expectedErrorMsg string
+		expectedExtMsg   []byte
+	}{
+		{
+			exitReason:       ExitReasonFinished,
+			err:              nil,
+			extMsg:           []byte("test finished"),
+			expectedStatus:   frameModel.WorkerStatusFinished,
+			expectedErrorMsg: "",
+			expectedExtMsg:   []byte("test finished"),
+		},
+		{
+			exitReason:       ExitReasonFinished,
+			err:              errors.New("test finished with error"),
+			extMsg:           []byte("test finished"),
+			expectedStatus:   frameModel.WorkerStatusFinished,
+			expectedErrorMsg: "test finished with error",
+			expectedExtMsg:   []byte("test finished"),
+		},
+		{
+			exitReason:       ExitReasonCanceled,
+			err:              nil,
+			extMsg:           []byte("test canceled"),
+			expectedStatus:   frameModel.WorkerStatusStopped,
+			expectedErrorMsg: "",
+			expectedExtMsg:   []byte("test canceled"),
+		},
+		{
+			exitReason:       ExitReasonCanceled,
+			err:              errors.New("test canceled with error"),
+			extMsg:           []byte("test canceled"),
+			expectedStatus:   frameModel.WorkerStatusStopped,
+			expectedErrorMsg: "test canceled with error",
+			expectedExtMsg:   []byte("test canceled"),
+		},
+		{
+			exitReason:       ExitReasonFailed,
+			err:              nil,
+			extMsg:           []byte("test failed"),
+			expectedStatus:   frameModel.WorkerStatusError,
+			expectedErrorMsg: "",
+			expectedExtMsg:   []byte("test failed"),
+		},
+		{
+			exitReason:       ExitReasonFailed,
+			err:              errors.New("test failed with error"),
+			extMsg:           []byte("test failed"),
+			expectedStatus:   frameModel.WorkerStatusError,
+			expectedErrorMsg: "test failed with error",
+			expectedExtMsg:   []byte("test failed"),
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for i, cs := range cases {
+		worker := newMockWorkerImpl(fmt.Sprintf("worker-%d", i), masterName)
+		worker.clock = clock.NewMock()
+		worker.clock.(*clock.Mock).Set(time.Now())
+		putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
+			ID:         masterName,
+			NodeID:     masterNodeName,
+			Epoch:      1,
+			StatusCode: frameModel.MasterStatusInit,
+		})
+
+		worker.On("InitImpl", mock.Anything).Return(nil)
+		worker.On("Status").Return(frameModel.WorkerStatus{
+			Code: frameModel.WorkerStatusNormal,
+		}, nil)
+
+		err := worker.Init(ctx)
+		require.NoError(t, err)
+
+		worker.On("Tick", mock.Anything).Return(nil)
+		worker.On("CloseImpl", mock.Anything).Return(nil).Once()
+
+		err = worker.DefaultBaseWorker.Exit(ctx, cs.exitReason, cs.err, cs.extMsg)
+		require.NoError(t, err)
+
+		meta, err := worker.metaClient.GetWorkerByID(ctx, masterName, worker.ID())
+		require.NoError(t, err)
+		require.Equal(t, cs.expectedStatus, meta.Code)
+		require.Equal(t, cs.expectedErrorMsg, meta.ErrorMsg)
+		require.Equal(t, cs.expectedExtMsg, meta.ExtBytes)
+
+		require.NoError(t, worker.Close(ctx))
+	}
 }

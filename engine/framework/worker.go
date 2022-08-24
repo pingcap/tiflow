@@ -66,8 +66,7 @@ type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker
-	// will be stopped.
+	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
@@ -82,20 +81,32 @@ type WorkerImpl interface {
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
 // more utility methods
+// TODO: decouple the BaseWorker and WorkerService(for business)
 type BaseWorker interface {
 	Worker
 
+	// MetaKVClient return business metastore kv client with job-level isolation
 	MetaKVClient() metaModel.KVClient
+
+	// MetricFactory return a promethus factory with some underlying labels(e.g. job-id, work-id)
 	MetricFactory() promutil.Factory
+
+	// Logger return a zap logger with some underlying fields(e.g. job-id)
 	Logger() *zap.Logger
+
+	// UpdateStatus persists the status to framework metastore if worker status is changed and
+	// sends 'status updated message' to master.
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
+
+	// SendMessage sends a message of specific topic to master in a blocking or nonblocking way
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+
+	// OpenStorage creates a resource and return the resource handle
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+
 	// Exit should be called when worker (in user logic) wants to exit.
-	// When `err` is not nil, the status code is assigned WorkerStatusError.
-	// Otherwise worker should set its status code to a meaningful value.
-	Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error
-	NotifyExit(ctx context.Context, errIn error) error
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
+	Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -437,7 +448,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
-// The status is persisted if Code or ErrorMessage has changed. Refer to (*WorkerStatus).HasSignificantChange.
+// The status is persisted if Code or ErrorMsg has changed. Refer to (*WorkerStatus).HasSignificantChange.
 //
 // If UpdateStatus returns without an error, then the status must have been persisted,
 // but there is no guarantee that the master has received a notification.
@@ -448,7 +459,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 	defer cancel()
 
 	w.workerStatus.Code = status.Code
-	w.workerStatus.ErrorMessage = status.ErrorMessage
+	w.workerStatus.ErrorMsg = status.ErrorMsg
 	w.workerStatus.ExtBytes = status.ExtBytes
 	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
 	if err != nil {
@@ -483,25 +494,34 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) (errRet error) {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
-		w.onError(errRet)
+		// keep the original error or ErrWorkerFinish in error center
+		if err == nil {
+			err = derror.ErrWorkerFinish.FastGenByArgs()
+		}
+		w.onError(err)
 	}()
 
+	switch exitReason {
+	case ExitReasonFinished:
+		w.workerStatus.Code = frameModel.WorkerStatusFinished
+	case ExitReasonCanceled:
+		// TODO: replace stop with cancel
+		w.workerStatus.Code = frameModel.WorkerStatusStopped
+	case ExitReasonFailed:
+		// TODO: replace error with failed
+		w.workerStatus.Code = frameModel.WorkerStatusError
+	default:
+		w.workerStatus.Code = frameModel.WorkerStatusError
+	}
+
 	if err != nil {
-		status.Code = frameModel.WorkerStatusError
+		w.workerStatus.ErrorMsg = err.Error()
 	}
-
-	w.workerStatus.Code = status.Code
-	w.workerStatus.ErrorMessage = status.ErrorMessage
-	w.workerStatus.ExtBytes = status.ExtBytes
-	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
-		return
-	}
-
-	errRet = derror.ErrWorkerFinish.FastGenByArgs()
-	return
+	w.workerStatus.ExtBytes = extBytes
+	return w.statusSender.UpdateStatus(ctx, w.workerStatus)
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {

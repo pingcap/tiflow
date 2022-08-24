@@ -45,9 +45,6 @@ func GenerateResponse(id messageID, command string, msg interface{}) interface{}
 	return &resp2
 }
 
-// Init implement MessageAgent.Init.
-func (m *MockMessageAgent) Init(ctx context.Context) error { return nil }
-
 // Tick implement MessageAgent.Tick.
 func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
 

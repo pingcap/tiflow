@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // task modes.
@@ -292,6 +293,7 @@ type SubTaskConfig struct {
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
+//
 //go:embed subtask.toml
 var SampleSubtaskConfig string
 
@@ -506,7 +508,7 @@ func (c *SubTaskConfig) Parse(arguments []string, verifyDecryptPassword bool) er
 	}
 
 	if c.printVersion {
-		fmt.Println(utils.GetRawInfo())
+		fmt.Println(version.GetRawInfo())
 		return flag.ErrHelp
 	}
 
