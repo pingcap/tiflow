@@ -323,7 +323,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	}, nil
 }
 
-// ListExecutors implements grpc interface, and passes request onto executor manager.
+// ListExecutors implements DiscoveryServer.ListMasters.
 func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest) (*pb.ListExecutorsResponse, error) {
 	resp := &pb.ListExecutorsResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
@@ -350,6 +350,7 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 	return resp, nil
 }
 
+// ListMasters implements DiscoveryServer.ListMasters.
 func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*pb.ListMastersResponse, error) {
 	resp := &pb.ListMastersResponse{}
 	leaderAddr, ok := s.LeaderAddr()

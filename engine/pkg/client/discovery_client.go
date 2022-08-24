@@ -33,6 +33,12 @@ type DiscoveryClient interface {
 		request *enginepb.RegisterExecutorRequest,
 	) (model.ExecutorID, error)
 
+	// ListExecutors lists all executors.
+	ListExecutors(ctx context.Context) ([]*enginepb.Executor, error)
+
+	// ListMasters lists all masters.
+	ListMasters(ctx context.Context) ([]*enginepb.Master, error)
+
 	// Heartbeat sends a heartbeat message to the server.
 	Heartbeat(
 		ctx context.Context,
@@ -88,6 +94,24 @@ func (c *discoveryClient) RegisterExecutor(
 		return "", errors.Trace(err)
 	}
 	return ret, nil
+}
+
+func (c *discoveryClient) ListExecutors(ctx context.Context) ([]*enginepb.Executor, error) {
+	call := internal.NewCall(c.cli.ListExecutors, &enginepb.ListExecutorsRequest{})
+	resp, err := call.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Executors, nil
+}
+
+func (c *discoveryClient) ListMasters(ctx context.Context) ([]*enginepb.Master, error) {
+	call := internal.NewCall(c.cli.ListMasters, &enginepb.ListMastersRequest{})
+	resp, err := call.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Masters, nil
 }
 
 // Heartbeat sends a heartbeat to the DiscoveryService.
