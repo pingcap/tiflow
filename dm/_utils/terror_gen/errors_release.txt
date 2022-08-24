@@ -26,6 +26,7 @@ ErrReaderAlreadyRunning,[code=11019:class=functional:scope=internal:level=high],
 ErrReaderAlreadyStarted,[code=11020:class=functional:scope=internal:level=high], "Message: stage %s, expect %s, already started"
 ErrReaderStateCannotClose,[code=11021:class=functional:scope=internal:level=high], "Message: stage %s, expect %s, can not close"
 ErrReaderShouldStartSync,[code=11022:class=functional:scope=internal:level=high], "Message: stage %s, expect %s"
+ErrCancelledDDL,[code=11129:class=functional:scope=internal:level=high], "Message: DDL %s executed in background and met error, Workaround: Please manually check the error from TiDB and handle it."
 ErrEmptyRelayDir,[code=11023:class=functional:scope=internal:level=high], "Message: empty relay dir, Workaround: Please check `relay-dir` config in task configuration file."
 ErrReadDir,[code=11024:class=functional:scope=internal:level=high], "Message: read dir: %s"
 ErrBaseFileNotFound,[code=11025:class=functional:scope=internal:level=high], "Message: base file %s in directory %s not found"

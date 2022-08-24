@@ -31,7 +31,6 @@ const (
 	codeRenameMultipleTables
 	codeAlterMultipleTables
 	codeParseSQL
-	codeCancelledDDL
 	codeUnknownTypeDDL
 	codeRestoreASTNode
 	codeParseGTID
@@ -196,6 +195,9 @@ const (
 	// pkg/shardddl/optimism.
 	codeShardDDLOptimismNeedSkipAndRedirect
 	codeShardDDLOptimismAddNotFullyDroppedColumn
+
+	// syncer.
+	codeCancelledDDL
 )
 
 // Config related error code list.
@@ -733,7 +735,6 @@ var (
 	ErrRenameMultipleTables   = New(codeRenameMultipleTables, ClassFunctional, ScopeInternal, LevelHigh, "not allowed operation: rename multiple tables in one statement", "It is recommended to include only one DDL operation in a statement executed upstream. Please manually handle it using dmctl (skipping the DDL statement or replacing the DDL statement with a specified DDL statement). For details, see https://docs.pingcap.com/tidb-data-migration/stable/handle-failed-sql-statements")
 	ErrAlterMultipleTables    = New(codeAlterMultipleTables, ClassFunctional, ScopeInternal, LevelHigh, "not allowed operation: alter multiple tables in one statement", "It is recommended to include only one DDL operation in a statement executed upstream. Please manually handle it using dmctl (skipping the DDL statement or replacing the DDL statement with a specified DDL statement). For details, see https://docs.pingcap.com/tidb-data-migration/stable/handle-failed-sql-statements")
 	ErrParseSQL               = New(codeParseSQL, ClassFunctional, ScopeInternal, LevelHigh, "parse statement: %s", "")
-	ErrCancelledDDL           = New(codeCancelledDDL, ClassFunctional, ScopeInternal, LevelHigh, "DDL %s executed in background and met error", "Please manually check the error from TiDB and handle it.")
 	ErrUnknownTypeDDL         = New(codeUnknownTypeDDL, ClassFunctional, ScopeInternal, LevelHigh, "unknown type ddl %+v", "Please manually handle it using dmctl (skipping the DDL statement or replacing the DDL statement with a specified DDL statement). For details, see https://docs.pingcap.com/tidb-data-migration/stable/handle-failed-sql-statements")
 	ErrRestoreASTNode         = New(codeRestoreASTNode, ClassFunctional, ScopeInternal, LevelHigh, "restore ast node", "")
 	ErrParseGTID              = New(codeParseGTID, ClassFunctional, ScopeInternal, LevelHigh, "parse GTID %s", "")
@@ -750,6 +751,7 @@ var (
 	ErrReaderAlreadyStarted   = New(codeReaderAlreadyStarted, ClassFunctional, ScopeInternal, LevelHigh, "stage %s, expect %s, already started", "")
 	ErrReaderStateCannotClose = New(codeReaderStateCannotClose, ClassFunctional, ScopeInternal, LevelHigh, "stage %s, expect %s, can not close", "")
 	ErrReaderShouldStartSync  = New(codeReaderShouldStartSync, ClassFunctional, ScopeInternal, LevelHigh, "stage %s, expect %s", "")
+	ErrCancelledDDL           = New(codeCancelledDDL, ClassFunctional, ScopeInternal, LevelHigh, "DDL %s executed in background and met error", "Please manually check the error from TiDB and handle it.")
 	// pkg/streamer.
 	ErrEmptyRelayDir            = New(codeEmptyRelayDir, ClassFunctional, ScopeInternal, LevelHigh, "empty relay dir", "Please check `relay-dir` config in task configuration file.")
 	ErrReadDir                  = New(codeReadDir, ClassFunctional, ScopeInternal, LevelHigh, "read dir: %s", "")

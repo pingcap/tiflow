@@ -1396,13 +1396,11 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				s.tctx.L().Info("test handle special DDL error", zap.Strings("DDL", ddlJob.ddls), zap.String("affected", fmt.Sprint(affected)), zap.String("failpoint", "TestHandleSpecialDDLError"))
 			})
 			if err != nil {
-				var ddlCreateTime int
 				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
-				var createTimeResults [][]string
-				createTimeResults, err2 = export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
-				ddlCreateTimeFloat, err2 := strconv.ParseFloat(createTimeResults[0][0], 64)
-				ddlCreateTime, err2 = strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
-				if err2 != nil {
+				createTimeResults, err3 := export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
+				ddlCreateTimeFloat, err4 := strconv.ParseFloat(createTimeResults[0][0], 64)
+				ddlCreateTime, err5 := strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
+				if err2 != nil || err3 != nil || err4 != nil || err5 != nil {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				} else {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, int64(ddlCreateTime))

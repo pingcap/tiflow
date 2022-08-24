@@ -94,7 +94,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 2"
+	echo "start task 2"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -109,10 +109,10 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
-  echo "check test invalid connection with status synced successfully"
+	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	echo "check test invalid connection with status synced successfully"
 
-  dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
@@ -130,7 +130,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 3"
+	echo "start task 3"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -145,10 +145,10 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
-  echo "check test invalid connection with status running successfully"
+	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	echo "check test invalid connection with status running successfully"
 
-  dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
@@ -166,7 +166,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 4"
+	echo "start task 4"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -181,10 +181,10 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
-  echo "check test invalid connection with status cancelled successfully"
+	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	echo "check test invalid connection with status cancelled successfully"
 
-  dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
@@ -202,7 +202,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 5"
+	echo "start task 5"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -217,10 +217,10 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
-  echo "check test invalid connection with status queueing successfully"
+	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	echo "check test invalid connection with status queueing successfully"
 
-  dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
@@ -238,7 +238,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 6"
+	echo "start task 6"
 	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -253,10 +253,10 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
-  echo "check test invalid connection with status none successfully"
+	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	echo "check test invalid connection with status none successfully"
 
-  dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
