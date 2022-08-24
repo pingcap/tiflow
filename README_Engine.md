@@ -1,10 +1,10 @@
-# dataflow engine
+# Tiflow engine
 
 ## Introduction
 
-This repo implements a new prototype of distributed task scheduler.
+This repo implements a new engine of distributed task scheduler.
 
-### ServerMaster
+### Master
 
 Master is set to process the requests from outside and to schedule and dispatch tasks.
 
