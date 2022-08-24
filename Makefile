@@ -1,4 +1,6 @@
 ### Makefile for tiflow
+include Makefile.engine
+
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
@@ -481,7 +483,7 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow tiflow-demo
+engine: tiflow tiflow-demo tiflow-chaos-case
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
@@ -494,28 +496,6 @@ tiflow-chaos-case:
 
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
-
-engine_image:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build
-
-engine_image_amd64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./ 
-
-engine_image_arm64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/arm64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./
-
-engine_image_from_local:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build-local
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
