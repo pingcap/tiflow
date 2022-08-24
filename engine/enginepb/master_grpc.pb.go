@@ -24,8 +24,9 @@ type DiscoveryClient interface {
 	// Executors will use this API to discover other executors.
 	// Currently, we assume that there aren't too many executors.
 	// If the number of executors becomes very large in the future,
-	// we can consider implement a mechanism to watch the changes of the executors.
+	// we can consider a mechanism to watch the changes of the executors.
 	ListExecutors(ctx context.Context, in *ListExecutorsRequest, opts ...grpc.CallOption) (*ListExecutorsResponse, error)
+	ListMasters(ctx context.Context, in *ListMastersRequest, opts ...grpc.CallOption) (*ListMastersResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	// RegisterMetaStore is called from backend metastore and
 	// registers to server master metastore manager
@@ -57,6 +58,15 @@ func (c *discoveryClient) RegisterExecutor(ctx context.Context, in *RegisterExec
 func (c *discoveryClient) ListExecutors(ctx context.Context, in *ListExecutorsRequest, opts ...grpc.CallOption) (*ListExecutorsResponse, error) {
 	out := new(ListExecutorsResponse)
 	err := c.cc.Invoke(ctx, "/enginepb.Discovery/ListExecutors", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *discoveryClient) ListMasters(ctx context.Context, in *ListMastersRequest, opts ...grpc.CallOption) (*ListMastersResponse, error) {
+	out := new(ListMastersResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/ListMasters", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +127,9 @@ type DiscoveryServer interface {
 	// Executors will use this API to discover other executors.
 	// Currently, we assume that there aren't too many executors.
 	// If the number of executors becomes very large in the future,
-	// we can consider implement a mechanism to watch the changes of the executors.
+	// we can consider a mechanism to watch the changes of the executors.
 	ListExecutors(context.Context, *ListExecutorsRequest) (*ListExecutorsResponse, error)
+	ListMasters(context.Context, *ListMastersRequest) (*ListMastersResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	// RegisterMetaStore is called from backend metastore and
 	// registers to server master metastore manager
@@ -139,6 +150,9 @@ func (UnimplementedDiscoveryServer) RegisterExecutor(context.Context, *RegisterE
 }
 func (UnimplementedDiscoveryServer) ListExecutors(context.Context, *ListExecutorsRequest) (*ListExecutorsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListExecutors not implemented")
+}
+func (UnimplementedDiscoveryServer) ListMasters(context.Context, *ListMastersRequest) (*ListMastersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMasters not implemented")
 }
 func (UnimplementedDiscoveryServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
@@ -199,6 +213,24 @@ func _Discovery_ListExecutors_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DiscoveryServer).ListExecutors(ctx, req.(*ListExecutorsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Discovery_ListMasters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMastersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DiscoveryServer).ListMasters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.Discovery/ListMasters",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DiscoveryServer).ListMasters(ctx, req.(*ListMastersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -307,6 +339,10 @@ var Discovery_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListExecutors",
 			Handler:    _Discovery_ListExecutors_Handler,
+		},
+		{
+			MethodName: "ListMasters",
+			Handler:    _Discovery_ListMasters_Handler,
 		},
 		{
 			MethodName: "Heartbeat",

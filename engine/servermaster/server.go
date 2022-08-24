@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -343,6 +344,29 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 			Capability: int64(nodeInfo.Capability),
 		})
 	}
+	sort.Slice(resp.Executors, func(i, j int) bool {
+		return resp.Executors[i].Id < resp.Executors[j].Id
+	})
+	return resp, nil
+}
+
+func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*pb.ListMastersResponse, error) {
+	resp := &pb.ListMastersResponse{}
+	leaderAddr, ok := s.LeaderAddr()
+	for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
+		if nodeInfo.Type == model.NodeTypeServerMaster {
+			isLeader := ok && nodeInfo.Addr == leaderAddr
+			resp.Masters = append(resp.Masters, &pb.Master{
+				Id:       string(nodeInfo.ID),
+				Name:     nodeInfo.Name,
+				Address:  nodeInfo.Addr,
+				IsLeader: isLeader,
+			})
+		}
+	}
+	sort.Slice(resp.Masters, func(i, j int) bool {
+		return resp.Masters[i].Id < resp.Masters[j].Id
+	})
 	return resp, nil
 }
 
@@ -669,7 +693,7 @@ func (s *Server) createGRPCServer() *grpc.Server {
 func (s *Server) createHTTPServer() (*http.Server, error) {
 	grpcMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
-			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true},
+			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true},
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
 	)

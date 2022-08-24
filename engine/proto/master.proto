@@ -31,6 +31,12 @@ service Discovery {
         };
     }
 
+    rpc ListMasters(ListMastersRequest) returns(ListMastersResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/masters"
+        };
+    }
+
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
 
     /* Metastore manager API */
@@ -129,6 +135,22 @@ message ListExecutorsRequest {
 message ListExecutorsResponse {
     repeated Executor executors = 1;
 }
+
+message Master {
+    string id = 1;
+    // name is the readable name of the master.
+    string name = 2;
+    string address = 3;
+    bool is_leader = 4;
+}
+
+message ListMastersRequest {
+}
+
+message ListMastersResponse {
+    repeated Master masters = 1;
+}
+
 
 message ScheduleTaskRequest {
     string task_id = 1;

@@ -39,7 +39,7 @@
   "paths": {
     "/api/v1/executors": {
       "get": {
-        "summary": "ListExecutors lists all executors.\nExecutors will use this API to discover other executors.\nCurrently, we assume that there aren't too many executors.\nIf the number of executors becomes very large in the future,\nwe can consider implement a mechanism to watch the changes of the executors.",
+        "summary": "ListExecutors lists all executors.\nExecutors will use this API to discover other executors.\nCurrently, we assume that there aren't too many executors.\nIf the number of executors becomes very large in the future,\nwe can consider a mechanism to watch the changes of the executors.",
         "operationId": "Discovery_ListExecutors",
         "responses": {
           "200": {
@@ -357,6 +357,28 @@
           "Discovery"
         ]
       }
+    },
+    "/api/v1/masters": {
+      "get": {
+        "operationId": "Discovery_ListMasters",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListMastersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
     }
   },
   "definitions": {
@@ -573,6 +595,35 @@
         "next_page_token": {
           "type": "string",
           "description": "A token to retrieve next page of results."
+        }
+      }
+    },
+    "enginepbListMastersResponse": {
+      "type": "object",
+      "properties": {
+        "masters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbMaster"
+          }
+        }
+      }
+    },
+    "enginepbMaster": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "description": "name is the readable name of the master."
+        },
+        "address": {
+          "type": "string"
+        },
+        "is_leader": {
+          "type": "boolean"
         }
       }
     },
