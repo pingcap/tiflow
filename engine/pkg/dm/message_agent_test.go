@@ -133,7 +133,7 @@ func TestUpdateClient(t *testing.T) {
 	client, err = messageAgent.getClient("task2")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle2.Unwrap())
-	messageAgent.UpdateClient("task2", nil)
+	messageAgent.RemoveClient("task2")
 	require.Len(t, messageAgent.clients.clients, 1)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
