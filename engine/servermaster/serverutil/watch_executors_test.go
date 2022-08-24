@@ -147,3 +147,31 @@ func TestWatchExecutors(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestCloseWatchExecutors(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	watcher := newMockExecutorWatcher()
+	user := newMockExecutorInfoUser()
+
+	evNotifier := notifier.NewNotifier[model.ExecutorStatusChange]()
+
+	snap := map[model.ExecutorID]string{}
+	watcher.On("WatchExecutors", mock.Anything).
+		Return(snap, evNotifier.NewReceiver(), nil).Times(1)
+	user.On("UpdateExecutorList", snap).Return(nil).Times(1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := WatchExecutors(ctx, watcher, user)
+		require.NoError(t, err)
+	}()
+
+	evNotifier.Close()
+	wg.Wait()
+}
