@@ -528,7 +528,7 @@ check_third_party_binary_for_engine:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	@which go || (echo "go not found in ${PATH}"; exit 1)
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
-	@which jq || (echo "mysql not found in ${PATH}"; exit 1)
+	@which jq || (echo "jq not found in ${PATH}"; exit 1)
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

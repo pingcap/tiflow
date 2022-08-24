@@ -4,14 +4,12 @@
 # parameter 2: test name which is used to generate the sub directory
 # other parameters: deployment files
 
-set -eux
+set -eu
 
 if [ $# -lt 3 ]; then
 	echo "<<<<<< can not adjust empty config >>>>>>"
 	exit 1
 fi
-
-set +x
 
 # 1. cleanup and init work directory.
 OUT_DIR=$1 && shift

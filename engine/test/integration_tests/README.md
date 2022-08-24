@@ -22,7 +22,7 @@ Besides, make sure you have run the docker daemon. We recommend that you provide
    > You can specify multiple tests to run in CASE, for example: `CASE="e2e_basic e2e_worker_error"`. You can even
    > use `CASE="*"` to indicate that you are running all tests.
    >
-3. Check logs in `tmp/tiflow_engine_test/${TEST_NAME}`
+3. Check logs in `/tmp/tiflow_engine_test/${TEST_NAME}`
 
 ## Writing new tests
 
@@ -39,4 +39,4 @@ configs="../../../deployments/engine/docker-compose/3m3e.yaml ../../../deploymen
 ```
 
 2. Run test scripts
-3. Check logs in `tmp/tiflow_engine_test/debug`
+3. Check logs in `/tmp/tiflow_engine_test/debug`
