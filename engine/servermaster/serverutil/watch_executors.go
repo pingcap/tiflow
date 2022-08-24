@@ -82,7 +82,6 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		}
 
 		if !ok {
-			log.Info("receive empty executor change")
 			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
 		}
 		if change.Tp == model.EventExecutorOnline {
