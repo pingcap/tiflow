@@ -39,7 +39,7 @@ jobs:
           go test -count=1 -v -run=TestSubmitTest
 
       - name: Upload logs to GitHub
-        if: ${{ always() }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: basic-workflow-logs
@@ -67,7 +67,7 @@ jobs:
           go test -count=1 -v -run=TestNodeFailure
 
       - name: Upload logs to GitHub
-        if: ${{ always() }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: node-failure-workflow-logs
@@ -95,7 +95,7 @@ jobs:
           go test -count=1 -v -run=TestWorkerExit
 
       - name: Upload logs to GitHub
-        if: ${{ always() }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: worker-errror-workflow-logs
@@ -126,7 +126,7 @@ jobs:
           go test -count=1 -v -run=TestDMJob
 
       - name: Upload logs to GitHub
-        if: ${{ always() }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: dm-workflow-logs
