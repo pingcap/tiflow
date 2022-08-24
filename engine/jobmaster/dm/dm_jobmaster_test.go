@@ -433,7 +433,7 @@ func (m *MockBaseJobmaster) Logger() *zap.Logger {
 	return log.L()
 }
 
-func (m *MockBaseJobmaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
+func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitReason, err error, extMsg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()

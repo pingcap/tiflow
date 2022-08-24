@@ -166,12 +166,23 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		}
 		return err
 	}
+
+	exitReason := framework.ExitReasonUnknown
 	switch task.getStatusCode() {
-	case frameModel.WorkerStatusFinished, frameModel.WorkerStatusError, frameModel.WorkerStatusStopped:
-		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
+	case frameModel.WorkerStatusFinished:
+		exitReason = framework.ExitReasonFinished
+	case frameModel.WorkerStatusError:
+		exitReason = framework.ExitReasonFailed
+	case frameModel.WorkerStatusStopped:
+		exitReason = framework.ExitReasonCanceled
 	default:
 	}
-	return nil
+
+	if exitReason == framework.ExitReasonUnknown {
+		return nil
+	}
+
+	return task.BaseWorker.Exit(ctx, exitReason, task.getRunError(), task.Status().ExtBytes)
 }
 
 // Status returns a short worker status to be periodically sent to the master.
@@ -186,7 +197,8 @@ func (task *cvsTask) Status() frameModel.WorkerStatus {
 		log.Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
-		Code: task.getStatusCode(), ErrorMessage: "",
+		Code:     task.getStatusCode(),
+		ErrorMsg: "",
 		ExtBytes: statsBytes,
 	}
 }
