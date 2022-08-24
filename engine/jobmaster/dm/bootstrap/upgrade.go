@@ -58,7 +58,7 @@ func (upgradable *DefaultUpgradable) Upgrade(ctx context.Context, fromVer semver
 		if upgradeFunc.Version.Compare(fromVer) <= 0 {
 			continue
 		}
-		upgradable.logger.Info("start upgrading", zap.String("internal_version", upgradeFunc.Version.String()))
+		upgradable.logger.Info("start upgrading", zap.Stringer("internal_version", upgradeFunc.Version))
 		rollbackFuncs = append(rollbackFuncs, upgradeFunc.Rollback)
 		if err = upgradeFunc.Upgrade(ctx); err != nil {
 			upgradable.logger.Error("upgrade failed", zap.Error(err))
