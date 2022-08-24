@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -28,6 +29,7 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -62,7 +64,8 @@ func isDropColumnWithIndexError(err error) bool {
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
-// handleSpecialDDLError handles special errors for DDL execution.
+// handleSpecialDDLError handles special errors for DDL execution
+// if createTime equals to -1, skip the handle procedure for waitAsyncDDL.
 func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
@@ -73,7 +76,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	// if we have other methods to judge the DDL dispatched but timeout for executing, we can update this method.
 	// NOTE: we must ensure other PK/UK exists for correctness.
 	// NOTE: when we are refactoring the shard DDL algorithm, we also need to consider supporting non-blocking `ADD INDEX`.
-	invalidConnF := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+	ignoreAddIndexTimeout := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		// must ensure only the last statement executed failed with the `invalid connection` error
 		if len(ddls) == 0 || index != len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn {
 			return err // return the original error
@@ -212,52 +215,32 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	}
 	// TODO: add support for downstream alter pk without schema
 
-	// it handles the operations of DDL when encountering `invalid connection`
-	invalidConnF2 := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+	// it handles the operations for DDL when encountering `invalid connection` by waiting the asynchronous ddl to synchronize
+	waitAsyncDDL := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		if len(ddls) == 0 || index > len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
 			return err // return the original error
 		}
-
-		statusChan := make(chan string)
-		var status string
-		var err2 error
+		ticker := time.NewTicker(time.Duration(30) * time.Second)
+		defer ticker.Stop()
 
 		for {
-			status, err2 = getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime) // status is synced
-			failpoint.Inject("TestStatusRunning", func() {
-				status = "running"
-			})
-			failpoint.Inject("TestStatusCancelled", func() {
-				status = "cancelled"
-			})
-			failpoint.Inject("TestStatusQueueing", func() {
-				status = "queueing"
-			})
-			failpoint.Inject("TestStatusNone", func() {
-				status = "none"
+			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime) // status is synced
+			failpoint.Inject("TestStatus", func(val failpoint.Value) {
+				status = val.(string)
 			})
 			if err != nil {
 				return err2
 			}
-			statusChan <- status
 			select {
 			case <-tctx.Ctx.Done():
 				return nil
-			case status = <-statusChan:
+			case <-ticker.C:
 				switch status {
-				case "running":
-				case "rollingback":
-				case "rollback done":
+				case "rollback done", "done", "synced":
 					return nil
-				case "done":
-					return nil
-				case "cancelled":
-					return err
-				case "cancelling":
-				case "synced":
-					return nil
-				case "queueing":
-				case "none":
+				case "cancelled", "rollingback", "cancelling":
+					return terror.ErrCancelledDDL.Generate(ddls[index])
+				case "running", "queueing", "none":
 				default:
 				}
 			}
@@ -267,8 +250,8 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	retErr := err
 	toHandle := []func(*tcontext.Context, error, []string, int, *dbconn.DBConn, int64) error{
 		dropColumnF,
-		invalidConnF,
-		invalidConnF2,
+		ignoreAddIndexTimeout,
+		waitAsyncDDL,
 	}
 	for _, f := range toHandle {
 		retErr = f(tctx, retErr, ddls, index, conn, createTime)
