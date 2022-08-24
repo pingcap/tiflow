@@ -68,7 +68,7 @@ type Agent interface {
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	*bootstrap.DefaultUpgradable
+	*bootstrap.DefaultUpgrader
 
 	logger *zap.Logger
 }
@@ -77,10 +77,10 @@ type AgentImpl struct {
 func NewAgentImpl(pLogger *zap.Logger) Agent {
 	logger := pLogger.With(zap.String("component", "checkpoint_agent"))
 	c := &AgentImpl{
-		DefaultUpgradable: bootstrap.NewDefaultUpgradable(logger),
-		logger:            logger,
+		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
+		logger:          logger,
 	}
-	c.DefaultUpgradable.Upgradable = c
+	c.DefaultUpgrader.Upgrader = c
 	return c
 }
 
@@ -148,7 +148,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 	return isSyncFresh(ctx, task.Cfg, db)
 }
 
-// UpgradeFuncs implement the Upgradable interface.
+// UpgradeFuncs implement the Upgrader interface.
 func (c *AgentImpl) UpgradeFuncs() []bootstrap.UpgradeFunc {
 	return nil
 }

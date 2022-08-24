@@ -408,6 +408,7 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	state, err := infoStore.Get(ctx)
 	if err != nil {
 		// put info for new job
+		// TODO: better error handling by error code.
 		if err.Error() == "state not found" {
 			jm.Logger().Info("put info for new job", zap.Stringer("internal version", internalVersion))
 			return infoStore.Put(ctx, metadata.NewInfo(*internalVersion))
@@ -424,6 +425,10 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if err := jm.checkpointAgent.Upgrade(ctx, info.Version); err != nil {
 		return err
 	}
-	// put new version
-	return infoStore.UpdateVersion(ctx, *internalVersion)
+
+	// only update for new version
+	if info.Version.LessThan(*internalVersion) {
+		return infoStore.UpdateVersion(ctx, *internalVersion)
+	}
+	return nil
 }

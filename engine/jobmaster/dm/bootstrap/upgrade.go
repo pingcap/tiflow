@@ -28,40 +28,40 @@ type UpgradeFunc struct {
 	Rollback func(ctx context.Context) error
 }
 
-// Upgradable represents the upgradable interface.
-type Upgradable interface {
+// Upgrader represents the upgrader interface.
+type Upgrader interface {
 	UpgradeFuncs() []UpgradeFunc
 }
 
-// DefaultUpgradable defines the default Upgrade steps.
-type DefaultUpgradable struct {
-	Upgradable
+// DefaultUpgrader defines the default Upgrade steps.
+type DefaultUpgrader struct {
+	Upgrader
 
 	logger *zap.Logger
 }
 
-// NewDefaultUpgradable returns a new DefaultUpgradable.
-func NewDefaultUpgradable(pLogger *zap.Logger) *DefaultUpgradable {
-	return &DefaultUpgradable{
-		logger: pLogger.With(zap.String("component", "upgradable")),
+// NewDefaultUpgrader returns a new DefaultUpgrader.
+func NewDefaultUpgrader(pLogger *zap.Logger) *DefaultUpgrader {
+	return &DefaultUpgrader{
+		logger: pLogger.With(zap.String("component", "upgrader")),
 	}
 }
 
 // Upgrade run the upgrade function in order.
 // if any upgrade failed, try to rollback all of them.
-func (upgradable *DefaultUpgradable) Upgrade(ctx context.Context, fromVer semver.Version) error {
+func (upgrader *DefaultUpgrader) Upgrade(ctx context.Context, fromVer semver.Version) error {
 	var (
 		err           error
 		rollbackFuncs = make([]func(ctx context.Context) error, 0)
 	)
-	for _, upgradeFunc := range upgradable.upgradeFuncs() {
+	for _, upgradeFunc := range upgrader.upgradeFuncs() {
 		if upgradeFunc.Version.Compare(fromVer) <= 0 {
 			continue
 		}
-		upgradable.logger.Info("start upgrading", zap.Stringer("internal_version", upgradeFunc.Version))
+		upgrader.logger.Info("start upgrading", zap.Stringer("internal_version", upgradeFunc.Version))
 		rollbackFuncs = append(rollbackFuncs, upgradeFunc.Rollback)
 		if err = upgradeFunc.Upgrade(ctx); err != nil {
-			upgradable.logger.Error("upgrade failed", zap.Error(err))
+			upgrader.logger.Error("upgrade failed", zap.Error(err))
 			break
 		}
 	}
@@ -70,7 +70,7 @@ func (upgradable *DefaultUpgradable) Upgrade(ctx context.Context, fromVer semver
 			rollback := rollbackFuncs[i]
 			if rollback != nil {
 				if err2 := rollback(ctx); err2 != nil {
-					upgradable.logger.Error("rollback failed", zap.Error(err2))
+					upgrader.logger.Error("rollback failed", zap.Error(err2))
 					break
 				}
 			}
@@ -79,14 +79,14 @@ func (upgradable *DefaultUpgradable) Upgrade(ctx context.Context, fromVer semver
 	return err
 }
 
-// upgradeFuncs sort the upgrade functions for Upgradable.
+// upgradeFuncs sort the upgrade functions for Upgrader.
 // NOTE: though we sort the upgrade functions, the upgrade order should still be linear.
 // e.g. If we release in such order: v6.1.0, v6.2.0, v6.1.1
 // the upgrade order should be: v6.1.0, v6.1.1, v6.2.0
 // but it's impossible to do that since v6.2.0 was released before v6.1.1
 // That is to say, we should not upgrade patch version after we upgrade minor version, as well as minor and major.
-func (upgradable *DefaultUpgradable) upgradeFuncs() []UpgradeFunc {
-	funcs := upgradable.UpgradeFuncs()
+func (upgrader *DefaultUpgrader) upgradeFuncs() []UpgradeFunc {
+	funcs := upgrader.UpgradeFuncs()
 	sort.Slice(funcs, func(i, j int) bool {
 		return funcs[i].Version.LessThan(funcs[j].Version)
 	})

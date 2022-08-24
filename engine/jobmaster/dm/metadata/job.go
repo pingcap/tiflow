@@ -86,7 +86,7 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 // JobStore manages the state of a job.
 type JobStore struct {
 	*TomlStore
-	*bootstrap.DefaultUpgradable
+	*bootstrap.DefaultUpgrader
 
 	id     frameModel.MasterID
 	mu     sync.Mutex
@@ -97,13 +97,13 @@ type JobStore struct {
 func NewJobStore(id frameModel.MasterID, kvClient metaModel.KVClient, pLogger *zap.Logger) *JobStore {
 	logger := pLogger.With(zap.String("component", "job_store"))
 	jobStore := &JobStore{
-		TomlStore:         NewTomlStore(kvClient),
-		DefaultUpgradable: bootstrap.NewDefaultUpgradable(logger),
-		id:                id,
-		logger:            logger,
+		TomlStore:       NewTomlStore(kvClient),
+		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
+		id:              id,
+		logger:          logger,
 	}
 	jobStore.TomlStore.Store = jobStore
-	jobStore.DefaultUpgradable.Upgradable = jobStore
+	jobStore.DefaultUpgrader.Upgrader = jobStore
 	return jobStore
 }
 
@@ -192,7 +192,7 @@ func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
 	return jobStore.Put(ctx, job)
 }
 
-// UpgradeFuncs implement the Upgradable interface.
+// UpgradeFuncs implement the Upgrader interface.
 func (jobStore *JobStore) UpgradeFuncs() []bootstrap.UpgradeFunc {
 	return nil
 }

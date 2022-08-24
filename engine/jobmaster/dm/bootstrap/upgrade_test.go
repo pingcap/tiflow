@@ -27,15 +27,15 @@ import (
 
 func TestUpgrade(t *testing.T) {
 	var (
-		dummyUpgrable = NewDummyUpgrable()
+		dummyUpgrader = NewDummyUpgrader()
 		fromVer       = semver.New("6.1.0")
 		ver           = "6.2.0"
 	)
 
-	dummyUpgrable.On("UpgradeFuncs").Return([]UpgradeFunc{}).Once()
-	require.NoError(t, dummyUpgrable.Upgrade(context.Background(), *fromVer))
+	dummyUpgrader.On("UpgradeFuncs").Return([]UpgradeFunc{}).Once()
+	require.NoError(t, dummyUpgrader.Upgrade(context.Background(), *fromVer))
 
-	dummyUpgrable.On("UpgradeFuncs").Return([]UpgradeFunc{
+	dummyUpgrader.On("UpgradeFuncs").Return([]UpgradeFunc{
 		{
 			Version: *semver.New("6.1.0"),
 			Upgrade: func(ctx context.Context) error {
@@ -58,10 +58,10 @@ func TestUpgrade(t *testing.T) {
 			},
 		},
 	}).Once()
-	require.NoError(t, dummyUpgrable.Upgrade(context.Background(), *fromVer))
+	require.NoError(t, dummyUpgrader.Upgrade(context.Background(), *fromVer))
 	require.Equal(t, "6.3.0", ver)
 
-	dummyUpgrable.On("UpgradeFuncs").Return([]UpgradeFunc{
+	dummyUpgrader.On("UpgradeFuncs").Return([]UpgradeFunc{
 		{
 			Version: *semver.New("6.3.0"),
 			Upgrade: func(ctx context.Context) error {
@@ -77,10 +77,10 @@ func TestUpgrade(t *testing.T) {
 			},
 		},
 	}).Once()
-	require.EqualError(t, dummyUpgrable.Upgrade(context.Background(), *fromVer), "failed to upgrade to v6.3.0")
+	require.EqualError(t, dummyUpgrader.Upgrade(context.Background(), *fromVer), "failed to upgrade to v6.3.0")
 	require.Equal(t, "6.3.0", ver)
 
-	dummyUpgrable.On("UpgradeFuncs").Return([]UpgradeFunc{
+	dummyUpgrader.On("UpgradeFuncs").Return([]UpgradeFunc{
 		{
 			Version: *semver.New("6.3.0"),
 			Upgrade: func(ctx context.Context) error {
@@ -103,28 +103,28 @@ func TestUpgrade(t *testing.T) {
 			},
 		},
 	}).Once()
-	require.EqualError(t, dummyUpgrable.Upgrade(context.Background(), *fromVer), "failed to upgrade to v6.3.0")
+	require.EqualError(t, dummyUpgrader.Upgrade(context.Background(), *fromVer), "failed to upgrade to v6.3.0")
 	require.Equal(t, "6.2.1", ver)
 }
 
-type DummyUpgradable struct {
-	*DefaultUpgradable
+type DummyUpgrader struct {
+	*DefaultUpgrader
 
 	mock.Mock
 	mu sync.Mutex
 }
 
-func NewDummyUpgrable() *DummyUpgradable {
-	u := &DummyUpgradable{
-		DefaultUpgradable: NewDefaultUpgradable(log.L()),
+func NewDummyUpgrader() *DummyUpgrader {
+	u := &DummyUpgrader{
+		DefaultUpgrader: NewDefaultUpgrader(log.L()),
 	}
-	u.DefaultUpgradable.Upgradable = u
+	u.DefaultUpgrader.Upgrader = u
 	return u
 }
 
-func (upgradable *DummyUpgradable) UpgradeFuncs() []UpgradeFunc {
-	upgradable.mu.Lock()
-	defer upgradable.mu.Unlock()
-	args := upgradable.Called()
+func (upgrader *DummyUpgrader) UpgradeFuncs() []UpgradeFunc {
+	upgrader.mu.Lock()
+	defer upgrader.mu.Unlock()
+	args := upgrader.Called()
 	return args.Get(0).([]UpgradeFunc)
 }
