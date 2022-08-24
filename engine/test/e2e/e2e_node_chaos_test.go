@@ -196,9 +196,9 @@ func TestNodeFailure(t *testing.T) {
 }
 
 func masterContainerName(index int) string {
-	return fmt.Sprintf("3m3e-server-master-%d", index)
+	return fmt.Sprintf("server-master-%d", index)
 }
 
 func executorContainerName(index int) string {
-	return fmt.Sprintf("3m3e-server-executor-%d", index)
+	return fmt.Sprintf("server-executor-%d", index)
 }
