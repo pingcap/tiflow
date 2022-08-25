@@ -286,6 +286,11 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
 	if ddl.Done {
+		// the DDL event is executed successfully, and done is true
+		log.Info("ddl already executed",
+			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.Any("DDL", ddl))
 		delete(s.ddlSentTsMap, ddl)
 		s.mu.Unlock()
 		return true, nil
@@ -294,6 +299,10 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
+		log.Debug("ddl is not finished yet",
+			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -302,6 +311,10 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
 		s.ddlSentTsMap[ddl] = ddl.CommitTs
+		log.Info("ddl is sent",
+			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
