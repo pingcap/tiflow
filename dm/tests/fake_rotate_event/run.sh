@@ -36,11 +36,11 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 
 	# make fake rotate event and rewrite binlog filename to mysql-bin.000001
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/MakeFakeRotateEvent=return("mysql-bin.000001")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/binlogstream/MakeFakeRotateEvent=return("mysql-bin.000001")'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
-	# make a fake rotae event
+	# make a fake rotate event
 	run_sql_source1 "flush logs;"
 	run_sql_source1 "use $db;alter table $tb add column info2 varchar(40);" # trigger a flush job
 	run_sql_source1 "use $db; insert into $tb values (4, 4, 4,'info')"
