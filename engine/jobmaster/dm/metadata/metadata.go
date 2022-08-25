@@ -24,23 +24,23 @@ import (
 
 // MetaData is the metadata of dm.
 type MetaData struct {
-	infoStore *InfoStore
-	jobStore  *JobStore
-	ddlStore  *DDLStore
+	clusterInfoStore *ClusterInfoStore
+	jobStore         *JobStore
+	ddlStore         *DDLStore
 }
 
 // NewMetaData creates a new MetaData instance
 func NewMetaData(id frameModel.WorkerID, kvClient metaModel.KVClient, pLogger *zap.Logger) *MetaData {
 	return &MetaData{
-		infoStore: NewInfoStore(id, kvClient),
-		jobStore:  NewJobStore(id, kvClient, pLogger),
-		ddlStore:  NewDDLStore(id, kvClient),
+		clusterInfoStore: NewClusterInfoStore(id, kvClient),
+		jobStore:         NewJobStore(id, kvClient, pLogger),
+		ddlStore:         NewDDLStore(id, kvClient),
 	}
 }
 
-// InfoStore returns internal infoStore
-func (m *MetaData) InfoStore() *InfoStore {
-	return m.infoStore
+// ClusterInfoStore returns internal infoStore
+func (m *MetaData) ClusterInfoStore() *ClusterInfoStore {
+	return m.clusterInfoStore
 }
 
 // JobStore returns internal jobStore

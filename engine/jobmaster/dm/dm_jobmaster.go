@@ -401,34 +401,35 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	return errors.New("no task found in job")
 }
 
+// bootstrap should be invoked after initComponents.
 func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	jm.Logger().Info("start bootstraping")
 	// get old version
-	infoStore := jm.metadata.InfoStore()
-	state, err := infoStore.Get(ctx)
+	clusterInfoStore := jm.metadata.ClusterInfoStore()
+	state, err := clusterInfoStore.Get(ctx)
 	if err != nil {
-		// put info for new job
+		// put cluster info for new job
 		// TODO: better error handling by error code.
 		if err.Error() == "state not found" {
-			jm.Logger().Info("put info for new job", zap.Stringer("internal version", internalVersion))
-			return infoStore.Put(ctx, metadata.NewInfo(*internalVersion))
+			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
+			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
 		}
-		jm.Logger().Info("get info error", zap.Error(err))
+		jm.Logger().Info("get cluster info error", zap.Error(err))
 		return err
 	}
-	info := state.(*metadata.Info)
-	jm.Logger().Info("get info for job", zap.Any("info", info))
+	clusterInfo := state.(*metadata.ClusterInfo)
+	jm.Logger().Info("get cluster info for job", zap.Any("cluster_info", clusterInfo))
 
-	if err := jm.metadata.Upgrade(ctx, info.Version); err != nil {
+	if err := jm.metadata.Upgrade(ctx, clusterInfo.Version); err != nil {
 		return err
 	}
-	if err := jm.checkpointAgent.Upgrade(ctx, info.Version); err != nil {
+	if err := jm.checkpointAgent.Upgrade(ctx, clusterInfo.Version); err != nil {
 		return err
 	}
 
 	// only update for new version
-	if info.Version.LessThan(*internalVersion) {
-		return infoStore.UpdateVersion(ctx, *internalVersion)
+	if clusterInfo.Version.LessThan(*internalVersion) {
+		return clusterInfoStore.UpdateVersion(ctx, *internalVersion)
 	}
 	return nil
 }
