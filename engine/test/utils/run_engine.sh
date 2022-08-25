@@ -53,6 +53,7 @@ case $1 in
 	;;
 *)
 	echo "Unknown parameter: ${1}" >&2
+	echo "Only support 'build-local','build','deploy','stop'" >&2
 	exit 1
 	;;
 esac
