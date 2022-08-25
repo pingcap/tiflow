@@ -33,10 +33,10 @@ import (
 var globalModels = []interface{}{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
-	&model.LogicEpoch{},
 	&frameModel.MasterMetaKVData{},
 	&frameModel.WorkerStatus{},
 	&resModel.ResourceMeta{},
+	&model.LogicEpoch{},
 }
 
 // TODO: retry and idempotent??
