@@ -329,6 +329,7 @@ func getMockServerIDs(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 		2: {},
 	}, nil
 }
+
 func TestAdjustCaseSensitive(t *testing.T) {
 	cfg, err := ParseYaml(SampleSourceConfig)
 	require.NoError(t, err)
