@@ -268,7 +268,7 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 	}
 
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
-	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
+	ddlWorker := NewDDLWorker(&syncer.tctx.Logger, syncer)
 	for _, cs := range cases {
 		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, statusVars, cs.schema, cs.query)
 		c.Assert(err, IsNil)
@@ -283,7 +283,7 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 			ddlSchema:       schema,
 			eventStatusVars: ev.StatusVars,
 		}
-		ddlInfo, err := shardDDL.genDDLInfo(qec, sql)
+		ddlInfo, err := ddlWorker.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
 		qec.originSQL = sql
@@ -411,7 +411,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 	i := 0
 
-	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
+	ddlWorker := NewDDLWorker(&syncer.tctx.Logger, syncer)
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		ev, ok := e.Event.(*replication.QueryEvent)
@@ -425,7 +425,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 			ddlSchema:       schema,
 			eventStatusVars: statusVars,
 		}
-		ddlInfo, err := shardDDL.genDDLInfo(qec, sql)
+		ddlInfo, err := ddlWorker.genDDLInfo(qec, sql)
 		c.Assert(err, IsNil)
 
 		qec.originSQL = sql
@@ -843,7 +843,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
-	syncer.shardDDL = NewShardDDL(&syncer.tctx.Logger, syncer)
+	syncer.ddlWorker = NewDDLWorker(&syncer.tctx.Logger, syncer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1183,7 +1183,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
-	syncer.shardDDL = NewShardDDL(&syncer.tctx.Logger, syncer)
+	syncer.ddlWorker = NewDDLWorker(&syncer.tctx.Logger, syncer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1414,9 +1414,9 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 		}},
 	}
 
-	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
+	ddlWorker := NewDDLWorker(&syncer.tctx.Logger, syncer)
 	for _, ca := range cases {
-		ddlInfo, err := shardDDL.genDDLInfo(qec, ca.sql)
+		ddlInfo, err := ddlWorker.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		ca.callback()
 
@@ -1434,7 +1434,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 		tctx: tctx,
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
-	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
+	ddlWorker := NewDDLWorker(&syncer.tctx.Logger, syncer)
 	for _, e := range allEvents {
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:
@@ -1454,7 +1454,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 			c.Assert(err, IsNil)
 			for _, sql := range qec.splitDDLs {
-				sqls, err := shardDDL.processOneDDL(qec, sql)
+				sqls, err := ddlWorker.processOneDDL(qec, sql)
 				c.Assert(err, IsNil)
 				qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 			}
@@ -1466,7 +1466,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			}
 
 			for j, sql := range qec.appliedDDLs {
-				ddlInfo, err := shardDDL.genDDLInfo(qec, sql)
+				ddlInfo, err := ddlWorker.genDDLInfo(qec, sql)
 				c.Assert(err, IsNil)
 
 				needSkip, err := syncer.skipQueryEvent(qec, ddlInfo)

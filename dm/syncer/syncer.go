@@ -238,7 +238,7 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	shardDDL *ShardDDL
+	ddlWorker *DDLWorker
 }
 
 // NewSyncer creates a new Syncer.
@@ -486,7 +486,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
-	s.shardDDL = NewShardDDL(&s.tctx.Logger, s)
+	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
 
@@ -2229,7 +2229,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.shardDDL.HandleQueryEvent(ev, ec, originSQL)
+			err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2771,7 +2771,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 
 	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
-		ddlInfo, err := s.shardDDL.genDDLInfo(qec, sql)
+		ddlInfo, err := s.ddlWorker.genDDLInfo(qec, sql)
 		if err != nil {
 			return nil, err
 		}

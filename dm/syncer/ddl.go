@@ -45,15 +45,15 @@ import (
 	"go.uber.org/zap"
 )
 
-type ShardDDLStrategy interface {
+type shardDDLStrategy interface {
 	preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceTable *filter.Table, targetTable *filter.Table) (bool, error)
 	handleDDL(qec *queryEventContext) error
 }
 
-type ShardDDL struct {
+type DDLWorker struct {
 	logger log.Logger
 
-	strategy ShardDDLStrategy
+	strategy shardDDLStrategy
 
 	binlogFilter               *bf.BinlogEvent
 	metricsProxies             *metrics.Proxies
@@ -78,9 +78,9 @@ type ShardDDL struct {
 	flushJobs              func() error
 }
 
-// NewShardDDL creates a new ShardDDL instance.
-func NewShardDDL(pLogger *log.Logger, syncer *Syncer) *ShardDDL {
-	shardDDL := &ShardDDL{
+// NewDDLWorker creates a new DDLWorker instance.
+func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
+	ddlWorker := &DDLWorker{
 		logger:                     pLogger.WithFields(zap.String("component", "ddl")),
 		binlogFilter:               syncer.binlogFilter,
 		metricsProxies:             syncer.metricsProxies,
@@ -105,18 +105,16 @@ func NewShardDDL(pLogger *log.Logger, syncer *Syncer) *ShardDDL {
 	}
 	switch syncer.cfg.ShardMode {
 	case config.ShardPessimistic:
-		shardDDL.strategy = NewPessimistDDL(&shardDDL.logger, syncer)
+		ddlWorker.strategy = NewPessimistDDL(&ddlWorker.logger, syncer)
 	case config.ShardOptimistic:
-		shardDDL.strategy = NewOptimistDDL(&shardDDL.logger, syncer)
+		ddlWorker.strategy = NewOptimistDDL(&ddlWorker.logger, syncer)
 	default:
-		shardDDL.strategy = NewNormalDDL(&shardDDL.logger, syncer)
+		ddlWorker.strategy = NewNormalDDL(&ddlWorker.logger, syncer)
 	}
-	return shardDDL
+	return ddlWorker
 }
 
 type Normal struct {
-	ShardDDLStrategy
-
 	logger log.Logger
 
 	trackDDL      func(usedSchema string, trackInfo *ddlInfo, ec *eventContext) error
@@ -136,8 +134,6 @@ func NewNormalDDL(pLogger *log.Logger, syncer *Syncer) *Normal {
 }
 
 type Pessimist struct {
-	ShardDDLStrategy
-
 	logger         log.Logger
 	sgk            *ShardingGroupKeeper
 	checkpoint     CheckPoint
@@ -175,8 +171,6 @@ func NewPessimistDDL(pLogger *log.Logger, syncer *Syncer) *Pessimist {
 }
 
 type Optimist struct {
-	ShardDDLStrategy
-
 	logger log.Logger
 
 	schemaTracker *schema.Tracker
@@ -209,7 +203,7 @@ func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {
 	}
 }
 
-func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
+func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
 		return nil
 	}
@@ -949,7 +943,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 // skipQueryEvent if skip by binlog-filter:
 // * track the ddlInfo;
 // * changes ddlInfo.originDDL to empty string.
-func (ddl *ShardDDL) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool, error) {
+func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool, error) {
 	if utils.IsBuildInSkipDDL(qec.originSQL) {
 		return true, nil
 	}
@@ -998,7 +992,7 @@ func (ddl *ShardDDL) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (b
 // 2. skip sql by skipQueryEvent;
 // 3. apply online ddl if onlineDDL is not nil:
 //    - specially, if skip, apply empty string;
-func (ddl *ShardDDL) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
+func (ddl *DDLWorker) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
 	ddlInfo, err := ddl.genDDLInfo(qec, sql)
 	if err != nil {
 		return nil, err
@@ -1049,7 +1043,7 @@ func (ddl *ShardDDL) processOneDDL(qec *queryEventContext, sql string) ([]string
 }
 
 // genDDLInfo generates ddl info by given sql.
-func (ddl *ShardDDL) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error) {
+func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error) {
 	stmt, err := qec.p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
@@ -1149,7 +1143,7 @@ func (ddl *Pessimist) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter
 }
 
 // adjustCollation adds collation for create database and check create table.
-func (ddl *ShardDDL) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string, idAndCollationMap map[int]string) {
+func (ddl *DDLWorker) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string, idAndCollationMap map[int]string) {
 	switch createStmt := ddlInfo.stmtCache.(type) {
 	case *ast.CreateTableStmt:
 		if createStmt.ReferTable != nil {
@@ -1220,7 +1214,7 @@ func (ddl *ShardDDL) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charse
 }
 
 // adjustColumnsCollation adds column's collation.
-func (ddl *ShardDDL) adjustColumnsCollation(createStmt *ast.CreateTableStmt, charsetAndDefaultCollationMap map[string]string) {
+func (ddl *DDLWorker) adjustColumnsCollation(createStmt *ast.CreateTableStmt, charsetAndDefaultCollationMap map[string]string) {
 ColumnLoop:
 	for _, col := range createStmt.Cols {
 		for _, options := range col.Options {
