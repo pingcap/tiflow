@@ -306,6 +306,8 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 		return executor, err
 	}
 
+	// TODO remove
+	log.Info("RegisterExecutor", zap.Any("req", req))
 	nodeInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
 		return nil, err
