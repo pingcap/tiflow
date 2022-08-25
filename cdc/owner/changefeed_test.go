@@ -21,7 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/pingcap/check"
+=======
+	"github.com/labstack/gommon/log"
+>>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -363,8 +367,63 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 	c.Assert(state.Info.State, check.Equals, model.StateFinished)
 }
 
+<<<<<<< HEAD
 func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func TestRemovePausedChangefeed(t *testing.T) {
+	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx := cdcContext.NewContext4Test(baseCtx, true)
+	info := ctx.ChangefeedVars().Info
+	info.State = model.StateStopped
+	dir := t.TempDir()
+	info.Config.Consistent = &config.ConsistentConfig{
+		Level:   "eventual",
+		Storage: filepath.Join("nfs://", dir),
+	}
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   ctx.ChangefeedVars().ID,
+		Info: info,
+	})
+	testChangefeedReleaseResource(t, ctx, cancel, dir, false /*expectedInitialized*/)
+}
+
+func testChangefeedReleaseResource(
+	t *testing.T,
+	ctx cdcContext.Context,
+	cancel context.CancelFunc,
+	redoLogDir string,
+	expectedInitialized bool,
+) {
+	cf, captures, tester := createChangefeed4Test(ctx, t)
+
+	// pre check
+	cf.Tick(ctx, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, captures)
+	tester.MustApplyPatches()
+	require.Equal(t, cf.initialized, expectedInitialized)
+
+	// remove changefeed from state manager by admin job
+	cf.feedStateManager.PushAdminJob(&model.AdminJob{
+		CfID: cf.id,
+		Type: model.AdminRemove,
+	})
+	cf.isReleased = false
+	// changefeed tick will release resources
+	err := cf.tick(ctx, captures)
+	require.Nil(t, err)
+	cancel()
+	// check redo log dir is deleted
+	_, err = os.Stat(redoLogDir)
+	log.Error(err)
+	require.True(t, os.IsNotExist(err))
+}
+
+func TestAddSpecialComment(t *testing.T) {
+>>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 	testCase := []struct {
 		input  string
 		result string
