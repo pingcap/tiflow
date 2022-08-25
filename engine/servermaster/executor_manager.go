@@ -15,9 +15,8 @@ package servermaster
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
-	"io"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -32,6 +31,10 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
@@ -193,12 +196,8 @@ func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (
 }
 
 func generateExecutorID(name string) model.ExecutorID {
-	var buf [4]byte
-	_, err := io.ReadFull(rand.Reader, buf[:])
-	if err != nil {
-		panic(err)
-	}
-	id := fmt.Sprintf("%s-%x", name, buf[:])
+	val := rand.Uint32()
+	id := fmt.Sprintf("%s-%08x", name, val)
 	return model.ExecutorID(id)
 }
 
