@@ -378,17 +378,10 @@ LOOP:
 		//
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
-<<<<<<< HEAD
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upStream.PDClient,
 			gc.EnsureGCServiceInitializing,
 			c.state.ID, ensureTTL, checkpointTs)
-=======
-		err = gc.EnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
-			c.id, ensureTTL, checkpointTs)
->>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -414,11 +407,7 @@ LOOP:
 	// TODO: get DDL barrier based on resolvedTs.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
-<<<<<<< HEAD
-	var err error
-=======
 
->>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
@@ -479,12 +468,7 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
 	log.Info("initialize changefeed",
-=======
-	c.initialized = true
-	log.Info("changefeed initialized",
->>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Stringer("info", c.state.Info),
@@ -498,40 +482,11 @@ LOOP:
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.isReleased {
-		log.Info("fizzzz")
 		return
 	}
-	log.Info("fizzzz2")
 	// Must clean redo manager before calling cancel, otherwise
 	// the manager can be closed internally.
 	c.cleanupRedoManager(ctx)
-<<<<<<< HEAD
-
-	if !c.initialized {
-		c.cleanupChangefeedServiceGCSafePoints(ctx)
-		return
-	}
-	log.Info("close changefeed",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
-	c.cancel()
-	c.cancel = func() {}
-	c.ddlPuller.Close()
-	c.schema = nil
-	c.cleanupChangefeedServiceGCSafePoints(ctx)
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner",
-			zap.String("namespace", c.state.ID.Namespace),
-			zap.String("changefeed", c.state.ID.ID),
-			zap.Error(err))
-	}
-	c.wg.Wait()
-	c.scheduler.Close(ctx)
-=======
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
 	c.cancel()
@@ -545,7 +500,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.sink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
-		// TODO(dongmen): remove ctx from func sink.close(), it is useless.
 		// We don't need to wait sink Close, pass a canceled context is ok
 		if err := c.sink.close(canceledCtx); err != nil {
 			log.Warn("owner close sink failed",
@@ -557,15 +511,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	if c.scheduler != nil {
 		c.scheduler.Close(ctx)
-		c.scheduler = nil
 	}
 
-	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
->>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
