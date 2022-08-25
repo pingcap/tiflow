@@ -19,3 +19,4 @@
 | idc-jenkins-ci-ticdc/dm-integration-test    | /run-dm-integration-test<br />/run-all-tests<br />/merge    | Yes                       |
 | idc-jenkins-ci-ticdc/integration-test       | /run-integration-test<br />/run-all-tests<br />/merge       | Yes                       |
 | idc-jenkins-ci-ticdc/kafka-integration-test | /run-kafka-integration-test<br />/run-all-tests<br />/merge | Yes                       |
+| tiflow/engine-integration-test              | /run-engine-integration-test<br />/run-all-tests            | Yes                       |
