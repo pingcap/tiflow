@@ -482,7 +482,7 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow tiflow-demo tiflow-chaos-case
+engine: tiflow tiflow-demo
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
