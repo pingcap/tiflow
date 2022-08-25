@@ -95,6 +95,7 @@ func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID m
 			if err2 != nil {
 				return nil, terror.Annotatef(err2, "generate QueryEvent for %s", data.Query)
 			}
+			latestPos = dmlQueryEv.Header.LogPos
 			events = append(events, dmlQueryEv)
 			continue
 		}

@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -50,7 +51,9 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 	if w.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
-	return w.Exit(ctx, w.workerStatus(ctx), nil)
+
+	workerStatus := w.workerStatus(ctx)
+	return w.Exit(ctx, framework.ExitReasonCanceled, nil, workerStatus.ExtBytes)
 }
 
 // OperateTask implements the api of operate task message.

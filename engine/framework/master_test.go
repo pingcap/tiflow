@@ -169,7 +169,13 @@ func TestMasterCreateWorker(t *testing.T) {
 	master.On("OnWorkerOnline", mock.AnythingOfType("*master.runningHandleImpl")).Return(nil)
 
 	require.Eventuallyf(t, func() bool {
-		MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
+		// master creates worker asynchronously, the worker may be not available
+		// so add some retry for mock heartbeat.
+		if err = MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster,
+			masterName, workerID1, executorNodeID1); err != nil {
+			t.Logf("mock worker heartbeat failed: %s", err)
+			return false
+		}
 		master.On("Tick", mock.Anything).Return(nil)
 		err = master.Poll(ctx)
 		require.NoError(t, err)

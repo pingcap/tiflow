@@ -267,7 +267,7 @@ func (t *testPositionSuite) TestAdjustPosition(c *C) {
 	}
 
 	for _, cs := range cases {
-		adjustedPos := AdjustPosition(cs.pos)
+		adjustedPos := RemoveRelaySubDirSuffix(cs.pos)
 		c.Assert(adjustedPos.Name, Equals, cs.adjustedPos.Name)
 		c.Assert(adjustedPos.Pos, Equals, cs.adjustedPos.Pos)
 	}

@@ -1,8 +1,8 @@
-# dataflow engine
+# Tiflow engine
 
 ## Introduction
 
-This repo implements a new prototype of distributed task scheduler.
+This repo implements a new engine of distributed task scheduler.
 
 ### Master
 
@@ -11,10 +11,6 @@ Master is set to process the requests from outside and to schedule and dispatch 
 ### Executor
 
 Executor is the worker process to run the tasks.
-
-### Master-Client
-
-Master-Client is set to interact with master.
 
 ## Build
 
@@ -93,11 +89,13 @@ If you have build the binary on your local Linux, you can try `../run-engine.sh 
 
 ### Deploy
 
-There are several configure files to use. The file name suggests the number of running server-master and executor nodes. For example, `1m1e.yaml` means this file contains one server-master and one executor. Use `../run-engine.sh deploy 1m1e.yaml` to deploy cluster.
+There are several configure files to use. The file name suggests the number of running server-master and executor nodes.   
+For example, `1m1e.yaml` means this file contains one server-master and one executor.   
+Use `../run-engine.sh deploy ./deployments/engine/docker-compose/1m1e.yaml` to deploy cluster.
 
 ### Destroy
 
-Use `../run-engine.sh stop 1m1e.yaml` to destroy the cluster.
+Use `../run-engine.sh stop ./deployments/engine/docker-compose/1m1e.yaml` to destroy the cluster.
 
 ### Cleanup
 
@@ -107,7 +105,7 @@ sudo rm -rf /tmp/df/master
 
 ```bash
 sudo rm -rf /tmp/df/master
-../run-engine.sh deploy ./3m3e.yaml ./demo.yaml
+../run-engine.sh deploy ./deployments/engine/docker-compose/3m3e.yaml ./deployments/engine/docker-compose/demo.yaml
 
 cd ../../../ # root dir of tiflow
 ./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./deployments/engine/docker-compose/config/demo.json
