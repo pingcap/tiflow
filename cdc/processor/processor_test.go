@@ -145,8 +145,8 @@ type mockTablePipeline struct {
 	sinkStartTs model.Ts
 }
 
-func (m *mockTablePipeline) ID() (tableID int64, markTableID int64) {
-	return m.tableID, 0
+func (m *mockTablePipeline) ID() int64 {
+	return m.tableID
 }
 
 func (m *mockTablePipeline) Name() string {

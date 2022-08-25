@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# parameter 1: out directory
+# parameter 2: test name which is used to generate the sub directory
+# other parameters: deployment files
+
+set -eu
+
+if [ $# -lt 3 ]; then
+	echo "<<<<<< can not adjust empty config >>>>>>"
+	exit 1
+fi
+
+# 1. cleanup and init work directory.
+OUT_DIR=$1 && shift
+TEST_NAME=$1 && shift
+WORK_DIR=$OUT_DIR/$TEST_NAME # typical working directory is /tmp/tiflow_engine_test/${test_name}
+rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+
+# 2. move config files to working directory.
+# CONFIG_DIR is directory where the deployment files are located, and it needs to contain a
+# subdirectory `config` to store the additional configuration files.
+CONFIG_DIR=$(dirname $1)
+cp -fr ${CONFIG_DIR}/config ${WORK_DIR} || exit 1
+
+# 3. generate new deploy files and replace `tmp/tiflow_engine_test` with
+# `tmp/tiflow_engine_test/${TEST_NAME}` which is used to store log files.
+new_configs=
+while [[ $# -gt 0 ]]; do
+	old_path=$1 && shift
+	new_path="${WORK_DIR}/$(basename ${old_path})"
+	cat ${old_path} | sed -e "s, /tmp/tiflow_engine_test.*:, /tmp/tiflow_engine_test/${TEST_NAME}:, g" >${new_path}
+	new_configs="${new_configs} ${new_path}"
+done
+echo "$new_configs"

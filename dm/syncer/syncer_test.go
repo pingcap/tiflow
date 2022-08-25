@@ -124,7 +124,7 @@ type MockStreamProducer struct {
 	events []*replication.BinlogEvent
 }
 
-func (mp *MockStreamProducer) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (mp *MockStreamProducer) GenerateStreamFrom(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
 		return &MockStreamer{mp.events, 0, false}, nil
 	}
@@ -828,7 +828,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
-	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = binlogstream.NewStreamerController4Test(
 		mockStreamerProducer,
@@ -980,7 +980,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.reset()
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
-	mockStreamer, err = mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err = mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = binlogstream.NewStreamerController4Test(
 		mockStreamerProducer,
@@ -1168,7 +1168,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents = append(generatedEvents, generatedEvents2...)
 
 	mockStreamerProducer := &MockStreamProducer{generatedEvents}
-	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = binlogstream.NewStreamerController4Test(
 		mockStreamerProducer,
@@ -1861,7 +1861,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, syncer.genRouter())
 
 	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 	// let getEvent pending until ctx.Done()
 	mockStreamer.(*MockStreamer).pending = true

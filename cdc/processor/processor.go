@@ -850,7 +850,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
-			minResolvedTableID, _ = table.ID()
+			minResolvedTableID = table.ID()
 		}
 	}
 
@@ -860,7 +860,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
-			minCheckpointTableID, _ = table.ID()
+			minCheckpointTableID = table.ID()
 		}
 	}
 

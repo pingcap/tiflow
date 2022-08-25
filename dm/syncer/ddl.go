@@ -211,16 +211,6 @@ func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {
 
 func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
-		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
-			// directly return nil without update latest GTID here
-			failpoint.Return(nil)
-		})
-		// GTID event: GTID_NEXT = xxx:11
-		// Query event: BEGIN (GTID set = xxx:1-11)
-		// Rows event: ... (GTID set = xxx:1-11)  if we update lastLocation below,
-		//                                        otherwise that is xxx:1-10 when dealing with table checkpoints
-		// Xid event: GTID set = xxx:1-11  this event is related to global checkpoint
-		*ec.lastLocation = *ec.currentLocation
 		return nil
 	}
 
@@ -264,7 +254,6 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 		// don't return error if filter success
 		ddl.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", ddl.name, ddl.sourceID).Observe(time.Since(ec.startTime).Seconds())
 		ddl.logger.Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
 		err = ddl.recordSkipSQLsLocation(&ec)
 	}()
 
@@ -290,7 +279,6 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 	}
 
 	if qec.shardingReSync != nil {
-		qec.shardingReSync.currLocation = *qec.currentLocation
 		// TODO: refactor this, see https://github.com/pingcap/tiflow/issues/6691
 		// for optimistic ddl, we can resync idemponent ddl.
 		cmp := binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, ddl.enableGTID)
@@ -298,11 +286,6 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 			ddl.logger.Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			return qec.closeShardingResync()
 		} else if ddl.shardMode != config.ShardOptimistic {
-			// in re-syncing, we can simply skip all DDLs.
-			// for pessimistic shard mode,
-			// all ddls have been added to sharding DDL sequence
-			// only update lastPos when the query is a real DDL
-			*qec.lastLocation = qec.shardingReSync.currLocation
 			ddl.logger.Debug("skip event in re-replicating sharding group", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			return nil
 		}
@@ -311,7 +294,6 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 	}
 
 	ddl.logger.Info("ready to split ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
-	*qec.lastLocation = *qec.currentLocation // update lastLocation, because we have checked `isDDL`
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
@@ -371,8 +353,8 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 
 		// DDL is sequentially synchronized in this syncer's main process goroutine
 		// filter DDL that is older or same as table checkpoint, to avoid sync again for already synced DDLs
-		if ddl.checkpoint.IsOlderThanTablePoint(sourceTable, *qec.currentLocation) {
-			ddl.logger.Info("filter obsolete DDL", zap.String("event", "query"), zap.String("statement", sql), log.WrapStringerField("location", qec.currentLocation))
+		if ddl.checkpoint.IsOlderThanTablePoint(sourceTable, qec.endLocation) {
+			ddl.logger.Info("filter obsolete DDL", zap.String("event", "query"), zap.String("statement", sql), log.WrapStringerField("location", qec.endLocation))
 			continue
 		}
 
@@ -526,8 +508,8 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 		needHandleDDLs = qec.needHandleDDLs
 		// for sharding DDL, the firstPos should be the `Pos` of the binlog, not the `End_log_pos`
 		// so when restarting before sharding DDLs synced, this binlog can be re-sync again to trigger the TrySync
-		startLocation   = qec.startLocation
-		currentLocation = qec.currentLocation
+		startLocation = qec.startLocation
+		endLocation   = qec.endLocation
 	)
 
 	var annotate string
@@ -542,7 +524,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 		}
 		annotate = "add table to shard group"
 	default:
-		needShardingHandle, group, synced, active, remain, err = ddl.sgk.TrySync(ddlInfo.sourceTables[0], ddlInfo.targetTables[0], *startLocation, *qec.currentLocation, needHandleDDLs)
+		needShardingHandle, group, synced, active, remain, err = ddl.sgk.TrySync(ddlInfo.sourceTables[0], ddlInfo.targetTables[0], startLocation, qec.endLocation, needHandleDDLs)
 		if err != nil {
 			return err
 		}
@@ -596,14 +578,14 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 			zap.String("event", "query"),
 			zap.String("sourceTableID", sourceTableID),
 			zap.Stringer("start location", startLocation),
-			log.WrapStringerField("end location", currentLocation))
-		ddl.saveTablePoint(ddlInfo.sourceTables[0], *currentLocation)
+			log.WrapStringerField("end location", endLocation))
+		ddl.saveTablePoint(ddlInfo.sourceTables[0], endLocation)
 		if !synced {
 			ddl.logger.Info("source shard group is not synced",
 				zap.String("event", "query"),
 				zap.String("sourceTableID", sourceTableID),
 				zap.Stringer("start location", startLocation),
-				log.WrapStringerField("end location", currentLocation))
+				log.WrapStringerField("end location", endLocation))
 			return nil
 		}
 
@@ -611,7 +593,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 			zap.String("event", "query"),
 			zap.String("sourceTableID", sourceTableID),
 			zap.Stringer("start location", startLocation),
-			log.WrapStringerField("end location", currentLocation))
+			log.WrapStringerField("end location", endLocation))
 		err = ddl.safeMode.DescForTable(qec.tctx, ddlInfo.targetTables[0]) // try disable safe-mode after sharding group synced
 		if err != nil {
 			return err
@@ -631,7 +613,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 		}
 		*qec.shardingReSyncCh <- &ShardingReSync{
 			currLocation:   *firstEndLocation,
-			latestLocation: *currentLocation,
+			latestLocation: endLocation,
 			targetTable:    ddlInfo.targetTables[0],
 			allResolved:    allResolved,
 		}
@@ -732,7 +714,7 @@ func (ddl *Optimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceT
 		ddl.logger.Info("replicate sharding DDL, filter Conflicted table's ddl events",
 			zap.String("event", "query"),
 			zap.Stringer("source", sourceTable),
-			log.WrapStringerField("location", qec.currentLocation))
+			log.WrapStringerField("location", qec.endLocation))
 		return true, nil
 	} else if qec.shardingReSync != nil && qec.shardingReSync.targetTable.String() != targetTable.String() {
 		// in re-syncing, ignore non current sharding group's events
@@ -878,6 +860,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	// To do this, we append this table to osgk to prevent the following ddl/dmls from being executed.
 	// conflict location must be the start location for current received ddl event.
 	case optimism.ConflictSkipWaitRedirect:
+		// TODO: check if we don't need Clone for startLocation
 		first := ddl.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), ddl.flavor, ddl.enableGTID)
 		if first {
 			ddl.optimist.GetRedirectOperation(qec.tctx.Ctx, info, op.Revision+1)
@@ -1001,7 +984,7 @@ func (ddl *ShardDDL) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (b
 			if err != nil {
 				ddl.logger.Warn("track ddl failed", zap.Stringer("ddl info", ddlInfo))
 			}
-			ddl.saveTablePoint(table, *qec.lastLocation)
+			ddl.saveTablePoint(table, qec.lastLocation)
 			ddl.logger.Warn("track skipped ddl and return empty string", zap.String("origin sql", qec.originSQL), zap.Stringer("ddl info", ddlInfo))
 			ddlInfo.originDDL = ""
 			return true, nil
@@ -1238,11 +1221,12 @@ func (ddl *ShardDDL) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charse
 
 // adjustColumnsCollation adds column's collation.
 func (ddl *ShardDDL) adjustColumnsCollation(createStmt *ast.CreateTableStmt, charsetAndDefaultCollationMap map[string]string) {
+ColumnLoop:
 	for _, col := range createStmt.Cols {
 		for _, options := range col.Options {
 			// already have 'Collation'
 			if options.Tp == ast.ColumnOptionCollate {
-				continue
+				continue ColumnLoop
 			}
 		}
 		fieldType := col.Tp

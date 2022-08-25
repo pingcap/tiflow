@@ -35,7 +35,7 @@ type (
 	AbortWorkerCallback = func(error)
 )
 
-// ExecutorServiceClient wraps a pb.ExecutorClient and
+// ExecutorServiceClient wraps a pb.ExecutorServiceClient and
 // provides a DispatchTask method, which will call PreDispatchTask
 // and ConfirmDispatchTask.
 // TODO The service called "Executor" should be renamed "Dispatch", so that
@@ -61,11 +61,11 @@ type DispatchTaskArgs struct {
 }
 
 type executorServiceClient struct {
-	cli pb.ExecutorClient
+	cli pb.ExecutorServiceClient
 }
 
 // NewExecutorServiceClient creates a new ExecutorServiceClient.
-func NewExecutorServiceClient(cli pb.ExecutorClient) ExecutorServiceClient {
+func NewExecutorServiceClient(cli pb.ExecutorServiceClient) ExecutorServiceClient {
 	return &executorServiceClient{
 		cli: cli,
 	}
