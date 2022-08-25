@@ -107,7 +107,7 @@ function run() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ChangefeedNewRedoManagerError=2*return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	changfeedid_3="changefeed-initialize-error"
+	changefeedid_3="changefeed-initialize-error"
 	run_cdc_cli changefeed create --start-ts=0 --sink-uri="$SINK_URI" -c $changefeedid_3
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_3} "normal" "" ""
 	run_cdc_cli changefeed pause -c $changefeedid_3
