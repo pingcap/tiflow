@@ -245,7 +245,7 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 ) (DDLPuller, error) {
-	// It is no matter to use a empty as timezone here because DDLPuller
+	// It is no matter to use an empty as timezone here because DDLPuller
 	// doesn't use expression filter's method.
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {

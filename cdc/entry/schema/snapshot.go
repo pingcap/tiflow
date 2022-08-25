@@ -63,12 +63,12 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil, nil
 		}
 		tbInfo := binlogInfo.TableInfo
 		if tbInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil, nil
 		}
 		tableID := tbInfo.ID

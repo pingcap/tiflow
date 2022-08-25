@@ -108,9 +108,9 @@ func (b *basicScheduler) Schedule(
 			tableField = zap.Int64s("tableIDs", newTables)
 		}
 		log.Info("schedulerv3: burst add table",
+			tableField,
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
-			tableField,
 			zap.Strings("captureIDs", captureIDs))
 		tasks = append(
 			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))

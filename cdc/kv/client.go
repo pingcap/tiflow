@@ -68,7 +68,7 @@ const (
 
 	// TiCDC always interacts with region leader, every time something goes wrong,
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
-	// don't need to force reload region any more.
+	// don't need to force reload region anymore.
 	regionScheduleReload = false
 
 	// defaultRegionChanSize is the default channel size for region channel, including
