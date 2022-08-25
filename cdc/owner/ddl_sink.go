@@ -228,8 +228,16 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+<<<<<<< HEAD
 	if s.sink != nil {
 		err = s.sink.Close(ctx)
+=======
+	// they will both be nil if changefeed return an error in initializing
+	if s.sinkV1 != nil {
+		err = s.sinkV1.Close(ctx)
+	} else if s.sinkV2 != nil {
+		err = s.sinkV2.Close()
+>>>>>>> 48a12ea8a (changefeed (ticdc): fix owner stuck when closing a changefeed (#6882))
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
