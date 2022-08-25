@@ -619,99 +619,12 @@ func (c *captureImpl) AsyncClose() {
 
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
-	log.Info("draining capture, removing all tables on the capture",
-		zap.String("captureID", c.info.ID))
-
-	const drainInterval = 100 * time.Millisecond
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(drainInterval)
-		defer ticker.Stop()
-		for {
-			complete := c.drainImpl(ctx)
-			if complete {
-				return
-			}
-			ticker.Reset(drainInterval)
-			select {
-			case <-ctx.Done():
-				// Give up when the context cancels. In the current
-				// implementation, it is caused TiCDC receives a second signal
-				// and begins force shutdown.
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-	return done
-}
-
-func (c *captureImpl) drainImpl(ctx context.Context) bool {
-	if !c.config.Debug.EnableSchedulerV3 {
-		// Skip drain as two phase scheduler is disabled.
-		return true
-	}
-
-	// Step 1, resign ownership.
-	o, _ := c.GetOwner()
-	if o != nil {
-		doneCh := make(chan error, 1)
-		query := &owner.Query{Tp: owner.QueryCaptures, Data: []*model.CaptureInfo{}}
-		o.Query(query, doneCh)
-		select {
-		case <-ctx.Done():
-		case err := <-doneCh:
-			if err != nil {
-				log.Warn("query capture count failed, retry", zap.Error(err))
-				return false
-			}
-		}
-		if len(query.Data.([]*model.CaptureInfo)) <= 1 {
-			// There is only one capture, the owner itself. It's impossible to
-			// resign owner nor move out tables, give up drain.
-			log.Warn("there is only one capture, skip drain")
-			return true
-		}
-		o.AsyncStop()
-		// Make sure it's not the owner before step 2.
-		return false
-	}
-	// Step 2, wait for moving out all tables.
 	// Set liveness stopping, owners will move all tables out in the capture.
 	c.liveness.Store(model.LivenessCaptureStopping)
-	// Check if there is an owner.
-	_, err := c.GetEtcdClient().GetOwnerID(ctx)
-	if err != nil {
-		if errors.Cause(err) != concurrency.ErrElectionNoLeader {
-			log.Error("fail to get owner ID, retry")
-			return false
-		}
-		// There is no owner. It's impossible to move tables out, give up drain.
-		log.Warn("there is no owner, skip drain")
-		return true
-	}
 
-	queryDone := make(chan error, 1)
-	tableCh := make(chan int, 1)
-	c.processorManager.QueryTableCount(ctx, tableCh, queryDone)
-	select {
-	case <-ctx.Done():
-	case err := <-queryDone:
-		if err != nil {
-			log.Warn("query table count failed, retry", zap.Error(err))
-			return false
-		}
-	}
-	select {
-	case <-ctx.Done():
-	case tableCount := <-tableCh:
-		if tableCount == 0 {
-			log.Info("all tables removed, drain capture complete")
-			return true
-		}
-	}
-	return false
+	done := make(chan struct{})
+	close(done)
+	return done
 }
 
 // Liveness returns liveness of the capture.
