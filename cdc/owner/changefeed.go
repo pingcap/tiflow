@@ -85,9 +85,12 @@ type changefeed struct {
 	sink        DDLSink
 	ddlPuller   puller.DDLPuller
 	initialized bool
-	// isRemoved is true if the changefeed is removed
+	// isRemoved is true if the changefeed is removed,
+	// which means it will be removed from memory forever
 	isRemoved bool
 	// isReleased is true if the changefeed's resource is released
+	// but it will still be kept in the memory and it will be check
+	// in every tick
 	isReleased bool
 
 	// only used for asyncExecDDL function
@@ -385,16 +388,6 @@ func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
 		return nil
 	}
 	c.isReleased = false
-	defer func() {
-		if err != nil {
-			log.Error("an error occur when changefeed initializing, release resource",
-				zap.String("namespace", c.id.Namespace),
-				zap.String("changefeed", c.id.ID),
-				zap.Error(err),
-			)
-			c.releaseResources(ctx)
-		}
-	}()
 	// clean the errCh
 	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
 	// So we should make sure that the errCh is empty when the changefeed is restarting
