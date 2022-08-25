@@ -2,8 +2,10 @@ version: "2.3"
 services:
   server-master:
     image: dataflow:test
+    container_name: server-master-0
     volumes:
       - ./config/master.toml:/config.toml
+      - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
       - "master"
@@ -11,6 +13,7 @@ services:
       - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
+      - "--log-file=/log/server-master-0.log"
     ports:
       - "10240:10240"
     depends_on:
@@ -20,8 +23,10 @@ services:
         condition: service_healthy
   server-executor:
     image: dataflow:test
+    container_name: server-executor-0
     volumes:
       - ./config/executor.toml:/config.toml
+      - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
       - "executor"
@@ -30,6 +35,7 @@ services:
       - "--join=server-master:10240"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor:10241"
+      - "--log-file=/log/server-executor-0.log"
     ports:
       - "10241:10241"
     depends_on:
