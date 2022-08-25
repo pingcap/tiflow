@@ -47,12 +47,13 @@ func TestNodeInfoFromRegisterExecutorRequest(t *testing.T) {
 	require.Equal(t, NodeTypeExecutor, nodeInfo.Type)
 
 	req := &enginepb.RegisterExecutorRequest{
-		Address:    "123.123.123.123:1234",
-		Version:    "v6.1.2",
-		Capability: 15,
-		Labels: map[string]string{
-			"label1": "value1",
-			"label2": "value2",
+		Executor: &enginepb.Executor{
+			Address:    "123.123.123.123:1234",
+			Capability: 15,
+			Labels: map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+			},
 		},
 	}
 	err := nodeInfo.FromRegisterExecutorRequest(req)
@@ -74,11 +75,12 @@ func TestNodeInfoFromRegisterExecutorRequestError(t *testing.T) {
 	require.Equal(t, NodeTypeExecutor, nodeInfo.Type)
 
 	req := &enginepb.RegisterExecutorRequest{
-		Address:    "123.123.123.123:1234",
-		Version:    "v6.1.2",
-		Capability: 15,
-		Labels: map[string]string{
-			"~": "value1", // invalid
+		Executor: &enginepb.Executor{
+			Address:    "123.123.123.123:1234",
+			Capability: 15,
+			Labels: map[string]string{
+				"~": "value1", // invalid
+			},
 		},
 	}
 	err := nodeInfo.FromRegisterExecutorRequest(req)
@@ -92,19 +94,21 @@ func TestNodeInfoToJSON(t *testing.T) {
 	require.Equal(t, NodeTypeExecutor, nodeInfo.Type)
 
 	req := &enginepb.RegisterExecutorRequest{
-		Address:    "123.123.123.123:1234",
-		Version:    "v6.1.2",
-		Capability: 15,
-		Labels: map[string]string{
-			"label1": "value1",
-			"label2": "value2",
+		Executor: &enginepb.Executor{
+			Name:       "test",
+			Address:    "123.123.123.123:1234",
+			Capability: 15,
+			Labels: map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+			},
 		},
 	}
 	err := nodeInfo.FromRegisterExecutorRequest(req)
 	require.NoError(t, err)
 
 	expected := `{"type":2,"id":"executor-1","addr":"123.123.123.123:1234",` +
-		`"cap":15,"labels":{"label1":"value1","label2":"value2"}}`
+		`"name":"test","cap":15,"labels":{"label1":"value1","label2":"value2"}}`
 	actual, err := nodeInfo.ToJSON()
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)

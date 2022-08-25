@@ -46,6 +46,7 @@ type NodeInfo struct {
 	Type NodeType     `json:"type"`
 	ID   DeployNodeID `json:"id"`
 	Addr string       `json:"addr"`
+	Name string       `json:"name"`
 
 	// The capability of executor, including
 	// 1. cpu (goroutines)
@@ -73,11 +74,12 @@ func (e *NodeInfo) FromRegisterExecutorRequest(req *pb.RegisterExecutorRequest) 
 	if e.Type != NodeTypeExecutor {
 		panic("FromRegisterExecutorRequest must be called with Type == NodeTypeExecutor")
 	}
-	e.Addr = req.Address
-	e.Capability = int(req.Capability)
+	e.Name = req.GetExecutor().Name
+	e.Addr = req.GetExecutor().Address
+	e.Capability = int(req.GetExecutor().Capability)
 
 	var err error
-	e.Labels, err = label.NewSetFromMap(req.GetLabels())
+	e.Labels, err = label.NewSetFromMap(req.GetExecutor().GetLabels())
 	if err != nil {
 		return errors.Annotate(err, "FromRegisterExecutorRequest")
 	}

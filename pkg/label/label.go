@@ -135,3 +135,16 @@ func (s Set) Get(key Key) (value Value, exists bool) {
 	}
 	return retVal, true
 }
+
+// ToMap converts a Set to a plain map that can be used to
+// produce a protobuf message.
+func (s Set) ToMap() map[string]string {
+	if len(s) == 0 {
+		return nil
+	}
+	ret := make(map[string]string, len(s))
+	for k, v := range s {
+		ret[string(k)] = string(v)
+	}
+	return ret
+}

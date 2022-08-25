@@ -14,120 +14,120 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// ExecutorClient is the client API for Executor service.
+// ExecutorServiceClient is the client API for ExecutorService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ExecutorClient interface {
+type ExecutorServiceClient interface {
 	PreDispatchTask(ctx context.Context, in *PreDispatchTaskRequest, opts ...grpc.CallOption) (*PreDispatchTaskResponse, error)
 	ConfirmDispatchTask(ctx context.Context, in *ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*ConfirmDispatchTaskResponse, error)
 }
 
-type executorClient struct {
+type executorServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewExecutorClient(cc grpc.ClientConnInterface) ExecutorClient {
-	return &executorClient{cc}
+func NewExecutorServiceClient(cc grpc.ClientConnInterface) ExecutorServiceClient {
+	return &executorServiceClient{cc}
 }
 
-func (c *executorClient) PreDispatchTask(ctx context.Context, in *PreDispatchTaskRequest, opts ...grpc.CallOption) (*PreDispatchTaskResponse, error) {
+func (c *executorServiceClient) PreDispatchTask(ctx context.Context, in *PreDispatchTaskRequest, opts ...grpc.CallOption) (*PreDispatchTaskResponse, error) {
 	out := new(PreDispatchTaskResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Executor/PreDispatchTask", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.ExecutorService/PreDispatchTask", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *executorClient) ConfirmDispatchTask(ctx context.Context, in *ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*ConfirmDispatchTaskResponse, error) {
+func (c *executorServiceClient) ConfirmDispatchTask(ctx context.Context, in *ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*ConfirmDispatchTaskResponse, error) {
 	out := new(ConfirmDispatchTaskResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Executor/ConfirmDispatchTask", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.ExecutorService/ConfirmDispatchTask", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ExecutorServer is the server API for Executor service.
-// All implementations should embed UnimplementedExecutorServer
+// ExecutorServiceServer is the server API for ExecutorService service.
+// All implementations should embed UnimplementedExecutorServiceServer
 // for forward compatibility
-type ExecutorServer interface {
+type ExecutorServiceServer interface {
 	PreDispatchTask(context.Context, *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error)
 	ConfirmDispatchTask(context.Context, *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error)
 }
 
-// UnimplementedExecutorServer should be embedded to have forward compatible implementations.
-type UnimplementedExecutorServer struct {
+// UnimplementedExecutorServiceServer should be embedded to have forward compatible implementations.
+type UnimplementedExecutorServiceServer struct {
 }
 
-func (UnimplementedExecutorServer) PreDispatchTask(context.Context, *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error) {
+func (UnimplementedExecutorServiceServer) PreDispatchTask(context.Context, *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreDispatchTask not implemented")
 }
-func (UnimplementedExecutorServer) ConfirmDispatchTask(context.Context, *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error) {
+func (UnimplementedExecutorServiceServer) ConfirmDispatchTask(context.Context, *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConfirmDispatchTask not implemented")
 }
 
-// UnsafeExecutorServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ExecutorServer will
+// UnsafeExecutorServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ExecutorServiceServer will
 // result in compilation errors.
-type UnsafeExecutorServer interface {
-	mustEmbedUnimplementedExecutorServer()
+type UnsafeExecutorServiceServer interface {
+	mustEmbedUnimplementedExecutorServiceServer()
 }
 
-func RegisterExecutorServer(s grpc.ServiceRegistrar, srv ExecutorServer) {
-	s.RegisterService(&Executor_ServiceDesc, srv)
+func RegisterExecutorServiceServer(s grpc.ServiceRegistrar, srv ExecutorServiceServer) {
+	s.RegisterService(&ExecutorService_ServiceDesc, srv)
 }
 
-func _Executor_PreDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ExecutorService_PreDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PreDispatchTaskRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ExecutorServer).PreDispatchTask(ctx, in)
+		return srv.(ExecutorServiceServer).PreDispatchTask(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Executor/PreDispatchTask",
+		FullMethod: "/enginepb.ExecutorService/PreDispatchTask",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExecutorServer).PreDispatchTask(ctx, req.(*PreDispatchTaskRequest))
+		return srv.(ExecutorServiceServer).PreDispatchTask(ctx, req.(*PreDispatchTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Executor_ConfirmDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ExecutorService_ConfirmDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConfirmDispatchTaskRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ExecutorServer).ConfirmDispatchTask(ctx, in)
+		return srv.(ExecutorServiceServer).ConfirmDispatchTask(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Executor/ConfirmDispatchTask",
+		FullMethod: "/enginepb.ExecutorService/ConfirmDispatchTask",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExecutorServer).ConfirmDispatchTask(ctx, req.(*ConfirmDispatchTaskRequest))
+		return srv.(ExecutorServiceServer).ConfirmDispatchTask(ctx, req.(*ConfirmDispatchTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Executor_ServiceDesc is the grpc.ServiceDesc for Executor service.
+// ExecutorService_ServiceDesc is the grpc.ServiceDesc for ExecutorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Executor_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "enginepb.Executor",
-	HandlerType: (*ExecutorServer)(nil),
+var ExecutorService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "enginepb.ExecutorService",
+	HandlerType: (*ExecutorServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "PreDispatchTask",
-			Handler:    _Executor_PreDispatchTask_Handler,
+			Handler:    _ExecutorService_PreDispatchTask_Handler,
 		},
 		{
 			MethodName: "ConfirmDispatchTask",
-			Handler:    _Executor_ConfirmDispatchTask_Handler,
+			Handler:    _ExecutorService_ConfirmDispatchTask_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -9,7 +9,7 @@
       "name": "DataRWService"
     },
     {
-      "name": "Executor"
+      "name": "ExecutorService"
     },
     {
       "name": "BrokerService"
@@ -37,6 +37,61 @@
     "application/json"
   ],
   "paths": {
+    "/api/v1/executors": {
+      "get": {
+        "summary": "ListExecutors lists all executors.\nExecutors will use this API to discover other executors.\nCurrently, we assume that there aren't too many executors.\nIf the number of executors becomes very large in the future,\nwe can consider a mechanism to watch the changes of the executors.",
+        "operationId": "Discovery_ListExecutors",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListExecutorsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
+    "/api/v1/executors/register": {
+      "post": {
+        "operationId": "Discovery_RegisterExecutor",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbExecutor"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "executor",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/enginepbExecutor"
+            }
+          }
+        ],
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
     "/api/v1/jobs": {
       "get": {
         "operationId": "JobManager_ListJobs",
@@ -302,6 +357,28 @@
           "Discovery"
         ]
       }
+    },
+    "/api/v1/masters": {
+      "get": {
+        "operationId": "Discovery_ListMasters",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListMastersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
     }
   },
   "definitions": {
@@ -389,6 +466,32 @@
       "properties": {
         "err": {
           "$ref": "#/definitions/enginepbError"
+        }
+      }
+    },
+    "enginepbExecutor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string",
+          "description": "name is the readable name of the executor."
+        },
+        "address": {
+          "type": "string"
+        },
+        "capability": {
+          "type": "string",
+          "format": "int64"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -480,6 +583,17 @@
         "FakeJob"
       ]
     },
+    "enginepbListExecutorsResponse": {
+      "type": "object",
+      "properties": {
+        "executors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbExecutor"
+          }
+        }
+      }
+    },
     "enginepbListFilesResponse": {
       "type": "object",
       "properties": {
@@ -501,6 +615,35 @@
         "next_page_token": {
           "type": "string",
           "description": "A token to retrieve next page of results."
+        }
+      }
+    },
+    "enginepbListMastersResponse": {
+      "type": "object",
+      "properties": {
+        "masters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbMaster"
+          }
+        }
+      }
+    },
+    "enginepbMaster": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "description": "name is the readable name of the master."
+        },
+        "address": {
+          "type": "string"
+        },
+        "is_leader": {
+          "type": "boolean"
         }
       }
     },
@@ -608,17 +751,6 @@
         "err": {
           "$ref": "#/definitions/enginepbError",
           "title": "error"
-        }
-      }
-    },
-    "enginepbRegisterExecutorResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
-        "executor_id": {
-          "type": "string"
         }
       }
     },

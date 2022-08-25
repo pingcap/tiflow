@@ -15,6 +15,8 @@ package servermaster
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -26,10 +28,13 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
@@ -39,7 +44,7 @@ type ExecutorManager interface {
 	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
-	ListExecutors() []string
+	ListExecutors() []*model.NodeInfo
 	GetAddr(executorID model.ExecutorID) (string, bool)
 	Start(ctx context.Context)
 	Stop()
@@ -64,7 +69,6 @@ type ExecutorManagerImpl struct {
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
 
-	idAllocator       uuid.Generator
 	initHeartbeatTTL  time.Duration
 	keepAliveInterval time.Duration
 
@@ -79,7 +83,6 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 	return &ExecutorManagerImpl{
 		testContext:       ctx,
 		executors:         make(map[model.ExecutorID]*Executor),
-		idAllocator:       uuid.NewGenerator(),
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
@@ -169,24 +172,32 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
 func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
-	log.Info("allocate new executor", zap.Stringer("req", req))
+	executor := req.Executor
+	log.Info("allocate new executor", zap.Stringer("executor", executor))
 
 	e.mu.Lock()
-	newExecutorID := model.ExecutorID(e.idAllocator.NewString())
-	info := model.NewNodeInfoForExecutor(newExecutorID)
+	var executorID model.ExecutorID
+	for {
+		executorID = generateExecutorID(executor.GetName())
+		if _, ok := e.executors[executorID]; !ok {
+			break
+		}
+	}
+	info := model.NewNodeInfoForExecutor(executorID)
 
 	if err := info.FromRegisterExecutorRequest(req); err != nil {
 		return nil, err
-	}
-
-	if _, ok := e.executors[info.ID]; ok {
-		e.mu.Unlock()
-		return nil, errors.ErrExecutorDupRegister.GenWithStackByArgs()
 	}
 	e.mu.Unlock()
 
 	e.RegisterExec(info)
 	return info, nil
+}
+
+func generateExecutorID(name string) model.ExecutorID {
+	val := rand.Uint32()
+	id := fmt.Sprintf("%s-%08x", name, val)
+	return model.ExecutorID(id)
 }
 
 // HasExecutor implements ExecutorManager.HasExecutor
@@ -198,12 +209,13 @@ func (e *ExecutorManagerImpl) HasExecutor(executorID string) bool {
 }
 
 // ListExecutors implements ExecutorManager.ListExecutors
-func (e *ExecutorManagerImpl) ListExecutors() []string {
+func (e *ExecutorManagerImpl) ListExecutors() []*model.NodeInfo {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	ret := make([]string, 0, len(e.executors))
-	for id := range e.executors {
-		ret = append(ret, string(id))
+	ret := make([]*model.NodeInfo, 0, len(e.executors))
+	for _, exec := range e.executors {
+		info := exec.NodeInfo
+		ret = append(ret, &info)
 	}
 	return ret
 }
