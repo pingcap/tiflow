@@ -254,6 +254,8 @@ func TestSourceConfigForDowngrade(t *testing.T) {
 }
 
 func subtestFlavor(t *testing.T, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedError string) {
+	t.Helper()
+
 	cfg.Flavor = ""
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
