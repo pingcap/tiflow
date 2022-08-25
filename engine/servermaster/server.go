@@ -303,16 +303,11 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	executor := &pb.Executor{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &executor)
 	if shouldRet {
-		if err != nil {
-			log.Warn("RegisterExecutor failed", zap.Error(err))
-			return nil, err
-		}
 		return executor, err
 	}
 
 	nodeInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.Error("register executor failed", zap.Error(err))
 		return nil, err
 	}
 	return &pb.Executor{
@@ -323,15 +318,11 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	}, nil
 }
 
-// ListExecutors implements DiscoveryServer.ListMasters.
+// ListExecutors implements DiscoveryServer.ListExecutors.
 func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest) (*pb.ListExecutorsResponse, error) {
 	resp := &pb.ListExecutorsResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
 	if shouldRet {
-		if err != nil {
-			log.Warn("ListExecutors failed", zap.Error(err))
-			return nil, err
-		}
 		return resp, err
 	}
 
@@ -681,7 +672,7 @@ func (s *Server) serve(ctx context.Context) error {
 func (s *Server) createGRPCServer() *grpc.Server {
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
-		grpc.ChainUnaryInterceptor(rpcerror.UnaryServerInterceptor, grpcprometheus.UnaryServerInterceptor),
+		grpc.ChainUnaryInterceptor(grpcprometheus.UnaryServerInterceptor, rpcerror.UnaryServerInterceptor),
 	)
 	pb.RegisterDiscoveryServer(grpcServer, s)
 	pb.RegisterTaskSchedulerServer(grpcServer, s)
