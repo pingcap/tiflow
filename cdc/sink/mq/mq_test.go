@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	kafkap "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -93,9 +93,9 @@ func TestKafkaSink(t *testing.T) {
 
 	encoder := sink.encoderBuilder.Build()
 
-	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 1048576, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &open.BatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*open.BatchEncoder).MaxBatchSize)
+	require.Equal(t, 1048576, encoder.(*open.BatchEncoder).MaxMessageBytes)
 
 	// mock kafka broker processes 1 row changed event
 	tableID := model.TableID(1)
@@ -184,9 +184,9 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
-	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 4194304, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &open.BatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*open.BatchEncoder).MaxBatchSize)
+	require.Equal(t, 4194304, encoder.(*open.BatchEncoder).MaxMessageBytes)
 
 	// FIXME: mock pulsar client doesn't support close,
 	// so we can't call sink.Close() to close it.

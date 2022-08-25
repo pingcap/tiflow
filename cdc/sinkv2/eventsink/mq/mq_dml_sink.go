@@ -20,8 +20,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -57,12 +59,12 @@ func newSink(ctx context.Context,
 	producer dmlproducer.DMLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *codec.Config,
+	encoderConfig *common.Config,
 	errCh chan error,
 ) (*sink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -72,7 +74,7 @@ func newSink(ctx context.Context,
 
 	s := &sink{
 		id:             changefeedID,
-		protocol:       encoderConfig.Protocol(),
+		protocol:       encoderConfig.Protocol,
 		worker:         w,
 		eventRouter:    eventRouter,
 		topicManager:   topicManager,

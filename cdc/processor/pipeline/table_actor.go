@@ -78,7 +78,6 @@ type tableActor struct {
 
 	// TODO: try to reduce these config fields below in the future
 	tableID        int64
-	markTableID    int64
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
@@ -131,7 +130,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 		state:         TableStatePreparing,
 		tableID:       tableID,
-		markTableID:   replicaInfo.MarkTableID,
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
@@ -461,8 +459,8 @@ func (t *tableActor) State() TableState {
 }
 
 // ID returns the ID of source table and mark table
-func (t *tableActor) ID() (tableID, markTableID int64) {
-	return t.tableID, t.markTableID
+func (t *tableActor) ID() int64 {
+	return t.tableID
 }
 
 // Name returns the quoted schema and table name
