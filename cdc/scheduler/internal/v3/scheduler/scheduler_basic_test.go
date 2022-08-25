@@ -214,7 +214,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		}
 		replications = map[model.TableID]*replication.ReplicationSet{}
 		name = fmt.Sprintf("AddTable %d", total)
-		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -240,7 +240,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("RemoveTable %d", total)
-		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -269,7 +269,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("AddRemoveTable %d", total)
-		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
+		sched = newBasicScheduler(50, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
