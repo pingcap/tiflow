@@ -1336,6 +1336,11 @@ error = '''
 executor %s session done
 '''
 
+["DFLOW:ErrExecutorWatcherClosed"]
+error = '''
+executor watcher is closed
+'''
+
 ["DFLOW:ErrFailToCreateExternalStorage"]
 error = '''
 failed to create external storage

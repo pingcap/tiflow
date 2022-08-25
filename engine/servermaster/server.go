@@ -941,7 +941,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 
 	errg.Go(func() error {
-		return serverutil2.WatchExecutors(ctx, s.executorManager, executorClients)
+		return serverutil2.WatchExecutors(errgCtx, s.executorManager, executorClients)
 	})
 
 	s.leaderInitialized.Store(true)

@@ -69,7 +69,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 	}
 
 	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ec := &eventContext{startLocation: location, endLocation: location, lastLocation: location}
 	p := parser.New()
 	se := mock.NewContext()
 	sourceTable := &cdcmodel.TableName{Schema: "test", Table: "tb1"}
