@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
@@ -358,6 +360,17 @@ func TestJob(t *testing.T) {
 	createdAt := tm.Add(time.Duration(1))
 	updatedAt := tm.Add(time.Duration(1))
 
+	extForTest := frameModel.MasterMetaExt{
+		Selectors: []*label.Selector{
+			{
+				Key:    "test",
+				Target: "test-val",
+				Op:     label.OpEq,
+			},
+		},
+	}
+	extJSONForTest := `{"selectors":[{"label":"test","target":"test-val","op":"eq"}]}`
+
 	testCases := []tCase{
 		{
 			fn: "UpsertJob",
@@ -371,6 +384,7 @@ func TestJob(t *testing.T) {
 					StatusCode: 1,
 					Addr:       "127.0.0.1",
 					Config:     []byte{0x11, 0x22},
+					Ext:        extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -443,15 +457,17 @@ func TestJob(t *testing.T) {
 				StatusCode: 1,
 				Addr:       "127.0.0.1",
 				Config:     []byte{0x11, 0x22},
+				Ext:        extForTest,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
 				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "status", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1,
+						extJSONForTest))
 			},
 		},
 		{
@@ -486,15 +502,16 @@ func TestJob(t *testing.T) {
 					StatusCode: 1,
 					Addr:       "1.1.1.1",
 					Config:     []byte{0x11, 0x22},
+					Ext:        extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE project_id").WithArgs("p111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "status", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "1.1.1.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "1.1.1.1", 1, []byte{0x11, 0x22}, 1, extJSONForTest))
 			},
 		},
 		{
@@ -530,6 +547,7 @@ func TestJob(t *testing.T) {
 					StatusCode: 1,
 					Addr:       "127.0.0.1",
 					Config:     []byte{0x11, 0x22},
+					Ext:        extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -537,9 +555,9 @@ func TestJob(t *testing.T) {
 				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "status", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1, extJSONForTest))
 			},
 		},
 		{
