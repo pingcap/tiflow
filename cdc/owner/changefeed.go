@@ -254,6 +254,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	if !c.feedStateManager.ShouldRunning() {
 		c.isRemoved = c.feedStateManager.ShouldRemoved()
+		log.Info("fizz should running is false")
 		c.releaseResources(ctx)
 		return nil
 	}
@@ -533,8 +534,10 @@ LOOP:
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.isReleased {
+		log.Info("fizzzz")
 		return
 	}
+	log.Info("fizzzz2")
 	// Must clean redo manager before calling cancel, otherwise
 	// the manager can be closed internally.
 	c.cleanupRedoManager(ctx)
@@ -545,7 +548,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
-		c.ddlPuller = nil
 	}
 	c.ddlWg.Wait()
 
