@@ -28,7 +28,6 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
@@ -97,7 +96,6 @@ type MasterImpl interface {
 const (
 	createWorkerWaitQuotaTimeout = 5 * time.Second
 	createWorkerTimeout          = 10 * time.Second
-	genEpochTimeout              = 5 * time.Second
 	maxCreateWorkerConcurrency   = 100
 )
 
@@ -157,6 +155,8 @@ type DefaultBaseMaster struct {
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
 	masterMeta    *frameModel.MasterMetaKVData
+
+	workerCreator *master.WorkerCreator
 
 	// workerProjectMap keep the <WorkerID, ProjectInfo> map
 	// It's only used by JobManager who has workers(jobmaster) with different project info
@@ -335,6 +335,16 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		func(_ context.Context, handle master.WorkerHandle, err error) error {
 			return m.Impl.OnWorkerDispatched(handle, err)
 		}, isInit, m.timeoutConfig, m.clock)
+
+	workerCreator := master.NewWorkerCreatorBuilder().
+		WithMasterID(m.id).
+		WithHooks(&master.WorkerCreationHooks{BeforeStartingWorker: m.workerManager.BeforeStartingWorker}).
+		WithExecutorGroup(m.executorGroup).
+		WithServerMasterClient(m.serverMasterClient).
+		WithFrameMetaClient(m.frameMetaClient).
+		WithLogger(m.Logger()).
+		Build()
+	m.workerCreator = workerCreator
 
 	if err := m.registerMessageHandlers(ctx); err != nil {
 		return false, errors.Trace(err)
@@ -533,12 +543,12 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	return metaClient.Update(ctx, masterMeta)
 }
 
-// prepareWorkerConfig extracts information from WorkerConfig into detail fields.
+// PrepareWorkerConfig extracts information from WorkerConfig into detail fields.
 //   - If workerType is master type, the config is a `*MasterMetaKVData` struct and
 //     contains pre allocated maseter ID, and json marshalled config.
 //   - If workerType is worker type, the config is a user defined config struct, we
 //     marshal it to byte slice as returned config, and generate a random WorkerID.
-func (m *DefaultBaseMaster) prepareWorkerConfig(
+func (m *DefaultBaseMaster) PrepareWorkerConfig(
 	workerType frameModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
@@ -582,6 +592,11 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
+	rawConfig, workerID, err := m.PrepareWorkerConfig(workerType, config)
+	if err != nil {
+		return "", err
+	}
+
 	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
 	defer cancel()
 	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
@@ -590,76 +605,24 @@ func (m *DefaultBaseMaster) CreateWorker(
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
 	}
 
-	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
-	if err != nil {
-		return "", err
-	}
-
 	go func() {
 		defer func() {
 			m.createWorkerQuota.Release()
 		}()
 
-		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
-		defer cancel()
-		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
-		defer cancel()
+		errCtx, cancelErrCtx := m.errCenter.WithCancelOnFirstError(context.Background())
+		defer cancelErrCtx()
 
-		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
-			TaskId:               workerID,
-			Cost:                 int64(cost),
-			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
-		})
-		if err != nil {
-			// TODO log the gRPC errors from a lower level such as by an interceptor.
-			m.Logger().Warn("ScheduleTask returned error", zap.Error(err))
-			m.workerManager.AbortCreatingWorker(workerID, err)
-			return
-		}
-		m.Logger().Debug("ScheduleTask succeeded", zap.Any("response", resp))
+		requestCtx, cancelRequestCtx := context.WithTimeout(errCtx, createWorkerTimeout)
+		defer cancelRequestCtx()
 
-		executorID := model.ExecutorID(resp.ExecutorId)
-		executorClient, err := m.executorGroup.GetExecutorClientB(requestCtx, executorID)
-		if err != nil {
-			m.workerManager.AbortCreatingWorker(workerID, errors.Annotate(err, "CreateWorker"))
-			return
-		}
-
-		genEpochCtx, cancel := context.WithTimeout(errCtx, genEpochTimeout)
-		defer cancel()
-		epoch, err := m.frameMetaClient.GenEpoch(genEpochCtx)
+		err := m.workerCreator.CreateWorker(
+			requestCtx, m.GetProjectInfo(workerID), workerType, workerID, rawConfig,
+			master.CreateWorkerWithCost(cost),
+			master.CreateWorkerWithResourceRequirements(resources...))
 		if err != nil {
 			m.workerManager.AbortCreatingWorker(workerID, err)
-			return
 		}
-
-		dispatchArgs := &client.DispatchTaskArgs{
-			// [NOTICE]:
-			// For JobManager, <JobID, ProjectInfo> pair is set in advance
-			// For JobMaster, we always get the 'masterProjectInfo'
-			ProjectInfo:  m.GetProjectInfo(workerID),
-			WorkerID:     workerID,
-			MasterID:     m.id,
-			WorkerType:   int64(workerType),
-			WorkerConfig: configBytes,
-			WorkerEpoch:  epoch,
-		}
-
-		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
-			m.workerManager.BeforeStartingWorker(workerID, executorID, epoch)
-		}, func(err error) {
-			m.workerManager.AbortCreatingWorker(workerID, err)
-		})
-
-		if err != nil {
-			// All cleaning up should have been done in AbortCreatingWorker.
-			m.Logger().Info("DispatchTask failed",
-				zap.Error(err))
-			return
-		}
-
-		m.Logger().Info("Dispatch Worker succeeded",
-			zap.Any("args", dispatchArgs))
 	}()
 
 	return workerID, nil

@@ -258,7 +258,12 @@ func (d *DefaultBaseJobMaster) OnError(err error) {
 }
 
 // CreateWorker implements BaseJobMaster.CreateWorker
-func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	resources ...resourcemeta.ResourceID,
+) (frameModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
 }
 

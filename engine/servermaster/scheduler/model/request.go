@@ -14,6 +14,7 @@
 package model
 
 import (
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -99,6 +100,31 @@ func SelectorFromPB(req *enginepb.Selector) (*label.Selector, error) {
 			})
 	}
 	return ret, nil
+}
+
+// SelectorToPB converts a label.Selector to a protobuf message Selector.
+func SelectorToPB(sel *label.Selector) (*enginepb.Selector, error) {
+	if err := sel.Validate(); err != nil {
+		return nil, errors.Annotate(err, "SelectorToPB")
+	}
+
+	var pbOp enginepb.Selector_Op
+	switch sel.Op {
+	case label.OpEq:
+		pbOp = enginepb.Selector_SelectorEq
+	case label.OpNeq:
+		pbOp = enginepb.Selector_SelectorNeq
+	case label.OpRegex:
+		pbOp = enginepb.Selector_SelectorRegex
+	default:
+		return nil, errors.Errorf("unknown selector op %s", sel.Op)
+	}
+
+	return &enginepb.Selector{
+		Label:  string(sel.Key),
+		Target: sel.Target,
+		Op:     pbOp,
+	}, nil
 }
 
 // SchedulerResponse represents a response to a task scheduling request.
