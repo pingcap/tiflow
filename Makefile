@@ -1,6 +1,4 @@
 ### Makefile for tiflow
-include Makefile.engine
-
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
@@ -106,6 +104,7 @@ LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
 include tools/Makefile
+include Makefile.engine
 
 default: build buildsucc
 
