@@ -27,7 +27,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // commonConfig collects common item for both new config and old config.
@@ -132,7 +132,7 @@ func (c *commonConfig) parse(args []string) (*config.SubTaskConfig, error) {
 		return nil, errors.Trace(err)
 	}
 	if c.printVersion {
-		fmt.Println(utils.GetRawInfo())
+		fmt.Println(version.GetRawInfo())
 		return nil, flag.ErrHelp
 	}
 

@@ -186,6 +186,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrCliAborted"]
+error = '''
+command '%s' is aborted by user
+'''
+
 ["CDC:ErrCliCheckpointTsIsInFuture"]
 error = '''
 the overwrite-checkpoint-ts %d must be smaller than current TSO
@@ -209,6 +214,11 @@ TiCDC cluster is unhealthy
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
+'''
+
+["CDC:ErrCodecInvalidConfig"]
+error = '''
+Codec invalid config
 '''
 
 ["CDC:ErrConsistentLevel"]
@@ -579,16 +589,6 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
-'''
-
-["CDC:ErrMQCodecInvalidConfig"]
-error = '''
-MQ Codec invalid config
-'''
-
-["CDC:ErrMQSinkUnknownProtocol"]
-error = '''
-unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -1036,6 +1036,11 @@ error = '''
 sink uri invalid '%s'
 '''
 
+["CDC:ErrSinkUnknownProtocol"]
+error = '''
+unknown '%s' message protocol for sink
+'''
+
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
 fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
@@ -1311,11 +1316,6 @@ error = '''
 decode config file failed
 '''
 
-["DFLOW:ErrExecutorDupRegister"]
-error = '''
-executor %s has been registered
-'''
-
 ["DFLOW:ErrExecutorEtcdConnFail"]
 error = '''
 executor conn inner etcd fail
@@ -1334,6 +1334,11 @@ PreDispatchTask failed
 ["DFLOW:ErrExecutorSessionDone"]
 error = '''
 executor %s session done
+'''
+
+["DFLOW:ErrExecutorWatcherClosed"]
+error = '''
+executor watcher is closed
 '''
 
 ["DFLOW:ErrFailToCreateExternalStorage"]

@@ -20,10 +20,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
@@ -49,11 +50,16 @@ type worker struct {
 	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka/Pulsar broker.
 	producer dmlproducer.DMLProducer
+	// statistics is used to record DML metrics.
+	statistics *metrics.Statistics
 }
 
 // newWorker creates a new flush worker.
-func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
+func newWorker(
+	id model.ChangeFeedID,
+	encoder codec.EventBatchEncoder,
 	producer dmlproducer.DMLProducer,
+	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID: id,
@@ -61,6 +67,7 @@ func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 		ticker:       time.NewTicker(mqv1.FlushInterval),
 		encoder:      encoder,
 		producer:     producer,
+		statistics:   statistics,
 	}
 
 	return w
@@ -167,6 +174,7 @@ func (w *worker) asyncSend(
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
 ) error {
 	for key, events := range partitionedRows {
+		rowsCount := 0
 		for _, event := range events {
 			// Skip this event when the table is stopping.
 			if event.GetTableSinkState() == state.TableSinkStopping {
@@ -178,15 +186,22 @@ func (w *worker) asyncSend(
 			if err != nil {
 				return err
 			}
+			rowsCount++
+			w.statistics.ObserveRows(event.Event)
 		}
+		w.statistics.AddRowsCount(rowsCount)
 
-		thisBatchSize := 0
 		for _, message := range w.encoder.Build() {
-			err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
+			err := w.statistics.RecordBatchExecution(func() (int, error) {
+				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
+				if err != nil {
+					return 0, err
+				}
+				return message.GetRowsCount(), nil
+			})
 			if err != nil {
 				return err
 			}
-			thisBatchSize += message.GetRowsCount()
 		}
 	}
 

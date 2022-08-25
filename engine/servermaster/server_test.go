@@ -207,29 +207,18 @@ func testRunLeaderService(t *testing.T) {
 
 type mockJobManager struct {
 	framework.BaseMaster
+	pb.UnimplementedJobManagerServer
 	jobMu sync.RWMutex
-	jobs  map[pb.QueryJobResponse_JobStatus]int
+	jobs  map[pb.Job_Status]int
 }
 
-func (m *mockJobManager) JobCount(status pb.QueryJobResponse_JobStatus) int {
+func (m *mockJobManager) JobCount(status pb.Job_Status) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
 	return m.jobs[status]
 }
 
-func (m *mockJobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
+func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error) {
 	panic("not implemented")
 }
 
@@ -282,7 +271,7 @@ func (m *mockExecutorManager) HasExecutor(executorID string) bool {
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) ListExecutors() []string {
+func (m *mockExecutorManager) ListExecutors() []*model.NodeInfo {
 	panic("not implemented")
 }
 
@@ -314,8 +303,8 @@ func TestCollectMetric(t *testing.T) {
 	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.QueryJobResponse_JobStatus]int{
-			pb.QueryJobResponse_online: 3,
+		jobs: map[pb.Job_Status]int{
+			pb.Job_Running: 3,
 		},
 	}
 	executorManager := &mockExecutorManager{

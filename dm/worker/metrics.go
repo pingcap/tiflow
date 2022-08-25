@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 const (
@@ -73,7 +73,7 @@ type statusHandler struct{}
 
 func (h *statusHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	text := utils.GetRawInfo()
+	text := version.GetRawInfo()
 	_, err := w.Write([]byte(text))
 	if err != nil && !common.IsErrNetClosing(err) {
 		log.L().Error("fail to write status response", log.ShortError(err))

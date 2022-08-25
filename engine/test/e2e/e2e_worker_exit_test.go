@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
@@ -66,7 +66,7 @@ func TestWorkerExit(t *testing.T) {
 
 	ctx1, cancel := context.WithTimeout(ctx, defaultTimeoutForTest)
 	defer cancel()
-	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
+	jobID, err := cli.CreateJob(ctx1, pb.Job_FakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	err = cli.InitializeMetaClient(jobID)
@@ -90,6 +90,6 @@ func TestWorkerExit(t *testing.T) {
 
 	ctx1, cancel = context.WithTimeout(ctx, defaultTimeoutForTest)
 	defer cancel()
-	err = cli.PauseJob(ctx1, jobID)
+	err = cli.CancelJob(ctx1, jobID)
 	require.NoError(t, err)
 }

@@ -32,7 +32,10 @@ func TestChangefeedPauseCli(t *testing.T) {
 	cf.EXPECT().Pause(gomock.Any(), "abc").Return(nil)
 	os.Args = []string{"pause", "--changefeed-id=abc"}
 	require.Nil(t, cmd.Execute())
+
 	cf.EXPECT().Pause(gomock.Any(), "abc").Return(errors.New("test"))
-	os.Args = []string{"pause", "--changefeed-id=abc"}
-	require.NotNil(t, cmd.Execute())
+	o := newPauseChangefeedOptions()
+	o.changefeedID = "abc"
+	require.Nil(t, o.complete(f))
+	require.NotNil(t, o.run())
 }

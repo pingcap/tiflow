@@ -130,6 +130,9 @@ func TestCaptureListCli(t *testing.T) {
 	}, nil)
 	os.Args = []string{"list"}
 	require.Nil(t, cmd.Execute())
+
 	cf.EXPECT().List(gomock.Any()).Return(nil, errors.New("test"))
-	require.NotNil(t, cmd.Execute())
+	o := newListCaptureOptions()
+	o.complete(f)
+	require.NotNil(t, o.run(cmd))
 }

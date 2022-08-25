@@ -17,15 +17,15 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // DMLProducer is the interface for message producer.
 type DMLProducer interface {
 	// AsyncSendMessage sends a message asynchronously.
 	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+		ctx context.Context, topic string, partition int32, message *common.Message,
 	) error
 
 	// Close closes the producer and client(s).

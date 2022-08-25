@@ -20,13 +20,17 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -48,34 +52,39 @@ type ddlSink struct {
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
+	// statistics is used to record DDL metrics.
+	statistics *metrics.Statistics
 }
 
 func newDDLSink(ctx context.Context,
 	producer ddlproducer.DDLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *codec.Config,
+	encoderConfig *common.Config,
 ) (*ddlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	s := &ddlSink{
 		id:             changefeedID,
-		protocol:       encoderConfig.Protocol(),
+		protocol:       encoderConfig.Protocol,
 		eventRouter:    eventRouter,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,
 		producer:       producer,
+		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
 	}
 
 	return s, nil
 }
 
 func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	k.statistics.AddDDLCount()
+
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {

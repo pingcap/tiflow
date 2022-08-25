@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -132,12 +132,12 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Nil(t, err)
 
 	for i := 0; i < 100; i++ {
-		err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
 		require.Nil(t, err)
-		err = producer.AsyncSendMessage(ctx, topic, int32(1), &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(1), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
@@ -161,7 +161,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Equal(t, int64(0), producer.mu.inflight)
 	producer.mu.Unlock()
 
-	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &common.Message{
 		Key:   []byte("test-broadcast"),
 		Value: nil,
 	})
@@ -175,14 +175,14 @@ func TestNewSaramaProducer(t *testing.T) {
 	cancel()
 
 	// check send messages when context is canceled or producer closed
-	err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
+	err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
 	if err != nil {
 		require.Equal(t, context.Canceled, err)
 	}
-	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &common.Message{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
@@ -430,7 +430,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	go func(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
-			err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
+			err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
 			})

@@ -14,14 +14,18 @@
 package rpcerror
 
 import (
+	"context"
 	gerrors "errors"
 	"fmt"
 	"reflect"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func tryUnwrapNormalizedError(errIn error) (typeErasedNormalizedError, bool) {
@@ -129,4 +133,20 @@ func GRPCStatusCode(errIn error) (codes.Code, bool) {
 		return st.Code(), true
 	}
 	return codes.Unknown, false
+}
+
+// UnaryServerInterceptor is a gRPC server-side interceptor that tries to convert errors to the standard grpc error.
+func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	if err != nil {
+		errOut := ToGRPCError(err)
+		logger := log.With(zap.String("method", info.FullMethod), zap.Error(errOut), zap.Any("request", req))
+		if s, ok := status.FromError(errOut); ok && s.Code() == codes.Internal {
+			logger.Warn("request handled with an internal error")
+		} else {
+			logger.Debug("request handled with an error")
+		}
+		return nil, errOut
+	}
+	return resp, nil
 }

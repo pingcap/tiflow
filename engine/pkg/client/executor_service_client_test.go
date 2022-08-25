@@ -17,22 +17,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
-	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/pingcap/tiflow/engine/enginepb"
+	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
 )
 
 func TestDispatchTaskNormal(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	var (
@@ -74,7 +75,7 @@ func TestPreDispatchAborted(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	args := &DispatchTaskArgs{
@@ -137,7 +138,7 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 	}
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	for _, tc := range testCases {

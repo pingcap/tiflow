@@ -18,12 +18,12 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // GetTopic returns the topic name from the sink URI.
@@ -53,8 +53,8 @@ func GetEncoderConfig(
 	protocol config.Protocol,
 	replicaConfig *config.ReplicaConfig,
 	maxMsgBytes int,
-) (*codec.Config, error) {
-	encoderConfig := codec.NewConfig(protocol)
+) (*common.Config, error) {
+	encoderConfig := common.NewConfig(protocol)
 	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
