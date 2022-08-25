@@ -33,7 +33,7 @@ func TestDispatchTaskNormal(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	var (
@@ -75,7 +75,7 @@ func TestPreDispatchAborted(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	args := &DispatchTaskArgs{
@@ -138,7 +138,7 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 	}
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	for _, tc := range testCases {

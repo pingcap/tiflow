@@ -506,7 +506,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		return err
 	}
 	s.tcpServer = tcpServer
-	pb.RegisterExecutorServer(s.grpcSrv, s)
+	pb.RegisterExecutorServiceServer(s.grpcSrv, s)
 	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
 	log.Info("listen address", zap.String("addr", s.cfg.Addr))
 
@@ -561,8 +561,11 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 
 func (s *Server) selfRegister(ctx context.Context) error {
 	registerReq := &pb.RegisterExecutorRequest{
-		Address:    s.cfg.AdvertiseAddr,
-		Capability: defaultCapability,
+		Executor: &pb.Executor{
+			Name:       s.cfg.Name,
+			Address:    s.cfg.AdvertiseAddr,
+			Capability: defaultCapability,
+		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
 	if err != nil {

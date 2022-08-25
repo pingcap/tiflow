@@ -88,9 +88,9 @@ func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.ScheduleT
 	return resp.(*pb.ScheduleTaskResponse), err
 }
 
-func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
+func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.Executor, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.RegisterExecutorResponse), err
+	return resp.(*pb.Executor), err
 }
 
 func (c *masterServerClient) CreateJob(ctx context.Context, req *pb.CreateJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
@@ -157,7 +157,7 @@ func NewMasterClient(conn Conn) pb.MasterClient {
 
 type executorServer struct {
 	*baseServer
-	pb.ExecutorServer
+	pb.ExecutorServiceServer
 }
 
 type executorServerConn struct {
@@ -200,7 +200,7 @@ func (s *executorServerConn) Close() error {
 }
 
 // NewExecutorClient returns executor client based on Conn
-func NewExecutorClient(conn Conn) pb.ExecutorClient {
+func NewExecutorClient(conn Conn) pb.ExecutorServiceClient {
 	return &executorClient{conn}
 }
 
@@ -242,7 +242,7 @@ func NewMasterServer(addr string, server masterServices) (GrpcServer, error) {
 
 // NewExecutorServer returns a mock executor gRPC server for given address, if it
 // doesn't exist, create a new one
-func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error) {
+func NewExecutorServer(addr string, server pb.ExecutorServiceServer) (GrpcServer, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[addr]
