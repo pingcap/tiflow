@@ -14,6 +14,7 @@
 package model
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 
 	"gorm.io/gorm"
@@ -21,6 +22,7 @@ import (
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/label"
 )
 
 type (
@@ -39,6 +41,27 @@ const (
 	MasterStatusFailed   = MasterStatusCode(5)
 	// extend the status code here
 )
+
+// MasterMetaExt stores some attributes of job masters that do not need
+// to be indexed.
+type MasterMetaExt struct {
+	Selectors []*label.Selector `json:"selectors"`
+}
+
+// Value implements driver.Valuer.
+func (e MasterMetaExt) Value() (driver.Value, error) {
+	b, err := json.Marshal(e)
+	return string(b), err
+}
+
+// Scan implements sql.Scanner.
+func (e *MasterMetaExt) Scan(input interface{}) error {
+	str := input.(string)
+	if len(str) == 0 {
+		return nil
+	}
+	return json.Unmarshal([]byte(input.(string)), e)
+}
 
 // MasterMetaKVData defines the metadata of job master
 type MasterMetaKVData struct {
@@ -59,6 +82,8 @@ type MasterMetaKVData struct {
 
 	// if job is finished or canceled, business logic can set self-defined job info to `ExtMsg`
 	ExtMsg string `json:"extend-message" gorm:"column:extend_message;type:text"`
+
+	Ext MasterMetaExt `json:"ext" gorm:"column:ext;type:JSON"`
 
 	// Deleted is a nullable timestamp. Then master is deleted
 	// if Deleted is not null.
@@ -88,6 +113,7 @@ func (m *MasterMetaKVData) Map() map[string]interface{} {
 		"config":         m.Config,
 		"error_message":  m.ErrorMsg,
 		"extend_message": m.ExtMsg,
+		"ext":            m.Ext,
 	}
 }
 
@@ -106,4 +132,5 @@ var MasterUpdateColumns = []string{
 	"config",
 	"error_message",
 	"extend_message",
+	"ext",
 }
