@@ -419,7 +419,6 @@ func TestJob(t *testing.T) {
 			},
 		},
 		{
-			// "UPDATE `master_meta_kv_data` SET `addr`=?,`config`=?,`epoch`=?,`id`=?,`node_id`=?,`project-id`=?,`status`=?,`type`=?,`updated_at`=? WHERE id = ?"
 			fn: "UpdateJob",
 			inputs: []interface{}{
 				&frameModel.MasterMetaKVData{
@@ -597,10 +596,10 @@ func TestWorker(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`id`,`type`,`status`,`epoch`,`errmsg`,`ext_bytes`)
+			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`id`,`type`,`status`,`epoch`,`error_message`,`extend_bytes`)
 			// VALUES ('2022-04-29 18:49:40.932','2022-04-29 18:49:40.932','p111','j111','w222',1,'1',10,'error','<binary>') ON DUPLICATE KEY
 			// UPDATE `updated_at`=VALUES(`updated_at`),`project_id`=VALUES(`project_id`),`job_id`=VALUES(`job_id`),`id`=VALUES(`id`),
-			// `type`=VALUES(`type`),`status`=VALUES(`status`),`epoch`=VALUES(`epoch`),`errmsg`=VALUES(`errmsg`),`ext_bytes`=VALUES(`ext_bytes`)
+			// `type`=VALUES(`type`),`status`=VALUES(`status`),`epoch`=VALUES(`epoch`),`error_message`=VALUES(`error_message`),`extend_bytes`=VALUES(`extend_bytes`)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
 				&frameModel.WorkerStatus{
@@ -608,14 +607,14 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					Code:      1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -631,20 +630,20 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					Code:      1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO `worker_statuses` [(]`created_at`,`updated_at`,`project_id`,`job_id`," +
-					"`id`,`type`,`status`,`epoch`,`errmsg`,`ext_bytes`,`seq_id`[)]").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
+					"`id`,`type`,`status`,`epoch`,`error_message`,`extend_bytes`,`seq_id`[)]").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
 			},
 		},
 		{
@@ -675,18 +674,18 @@ func TestWorker(t *testing.T) {
 			},
 		},
 		{
-			// 'UPDATE `worker_statuses` SET `epoch`=?,`error-message`=?,`ext-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
+			// 'UPDATE `worker_statuses` SET `epoch`=?,`error-message`=?,`extend-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
 			fn: "UpdateWorker",
 			inputs: []interface{}{
 				&frameModel.WorkerStatus{
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w111",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w111",
+					Type:      1,
+					Code:      1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -707,20 +706,20 @@ func TestWorker(t *testing.T) {
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
 				},
-				ProjectID:    "p111",
-				JobID:        "j111",
-				ID:           "w222",
-				Type:         1,
-				Code:         1,
-				Epoch:        10,
-				ErrorMessage: "error",
-				ExtBytes:     []byte{0x11, 0x22},
+				ProjectID: "p111",
+				JobID:     "j111",
+				ID:        "w222",
+				Type:      1,
+				Code:      1,
+				Epoch:     10,
+				ErrorMsg:  "error",
+				ExtBytes:  []byte{0x11, 0x22},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "status", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},
@@ -750,21 +749,21 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					Code:      1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "status", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},
@@ -794,21 +793,21 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					Code:      1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "status", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},

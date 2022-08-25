@@ -38,24 +38,12 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestSubmitTest
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: 'logs'
-
       - name: Upload logs to GitHub
         if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: basic-workflow-logs
-          path: logs/*
+          path: /tmp/tiflow_engine_test/*log
 
   Node-failure-workflow:
     runs-on: ubuntu-latest
@@ -78,24 +66,12 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestNodeFailure
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: 'logs'
-
       - name: Upload logs to GitHub
         if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: node-failure-workflow-logs
-          path: logs/*
+          path: /tmp/tiflow_engine_test/*log
 
   Worker-error-workflow:
     runs-on: ubuntu-latest
@@ -118,24 +94,12 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestWorkerExit
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: 'logs'
-
       - name: Upload logs to GitHub
         if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: worker-errror-workflow-logs
-          path: logs/*
+          path: /tmp/tiflow_engine_test/*log
 
   DM-workflow:
     runs-on: ubuntu-latest
@@ -161,21 +125,9 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestDMJob
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: 'logs'
-
       - name: Upload logs to GitHub
         if: ${{ failure() }}
         uses: actions/upload-artifact@master
         with:
           name: dm-workflow-logs
-          path: logs/*
+          path: /tmp/tiflow_engine_test/*log

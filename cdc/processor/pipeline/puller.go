@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -53,7 +52,7 @@ func newPullerNode(
 	}
 }
 
-func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
+func (n *pullerNode) tableSpan() []regionspan.Span {
 	// start table puller
 	spans := make([]regionspan.Span, 0, 4)
 	spans = append(spans, regionspan.GetTableSpan(n.tableID))
@@ -81,7 +80,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		up.KVStorage,
 		up.PDClock,
 		n.startTs,
-		n.tableSpan(ctx),
+		n.tableSpan(),
 		kvCfg,
 		n.changefeed,
 	)

@@ -77,7 +77,7 @@ START:
 	fmt.Printf("starting demo, dir %s addr %s\n", demoDir, demoAddress)
 	err := logutil.InitLogger(&logutil.Config{
 		Level: "info",
-		// File:  demoDir + "demo.log",
+		File:  demoDir + "/demo.log",
 	})
 	if err != nil {
 		fmt.Printf("err: %v", err)
