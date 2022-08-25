@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -298,28 +299,67 @@ func (s *Server) DeleteJob(ctx context.Context, req *pb.DeleteJobRequest) (*empt
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
-func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
-	resp2 := &pb.RegisterExecutorResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.Executor, error) {
+	executor := &pb.Executor{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &executor)
 	if shouldRet {
-		if err != nil {
-			log.Warn("RegisterExecutor failed", zap.Error(err))
-			return nil, err
-		}
-		return resp2, err
+		return executor, err
 	}
-	// register executor to scheduler
-	// TODO: check leader, if not leader, return notLeader error.
-	execInfo, err := s.executorManager.AllocateNewExec(req)
+
+	nodeInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.Error("add executor failed", zap.Error(err))
-		return &pb.RegisterExecutorResponse{
-			Err: cerrors.ToPBError(err),
-		}, nil
+		return nil, err
 	}
-	return &pb.RegisterExecutorResponse{
-		ExecutorId: string(execInfo.ID),
+	return &pb.Executor{
+		Id:         string(nodeInfo.ID),
+		Name:       nodeInfo.Name,
+		Address:    nodeInfo.Addr,
+		Capability: int64(nodeInfo.Capability),
 	}, nil
+}
+
+// ListExecutors implements DiscoveryServer.ListExecutors.
+func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest) (*pb.ListExecutorsResponse, error) {
+	resp := &pb.ListExecutorsResponse{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
+	if shouldRet {
+		return resp, err
+	}
+
+	nodeInfos := s.executorManager.ListExecutors()
+	for _, nodeInfo := range nodeInfos {
+		resp.Executors = append(resp.Executors, &pb.Executor{
+			Id:         string(nodeInfo.ID),
+			Name:       nodeInfo.Name,
+			Address:    nodeInfo.Addr,
+			Capability: int64(nodeInfo.Capability),
+		})
+	}
+	sort.Slice(resp.Executors, func(i, j int) bool {
+		return resp.Executors[i].Id < resp.Executors[j].Id
+	})
+	return resp, nil
+}
+
+// ListMasters implements DiscoveryServer.ListMasters.
+func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*pb.ListMastersResponse, error) {
+	resp := &pb.ListMastersResponse{}
+	leaderAddr, ok := s.LeaderAddr()
+	for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
+		if nodeInfo.Type == model.NodeTypeServerMaster {
+			isLeader := ok && nodeInfo.Addr == leaderAddr
+			resp.Masters = append(resp.Masters, &pb.Master{
+				Id:       string(nodeInfo.ID),
+				Name:     nodeInfo.Name,
+				Address:  nodeInfo.Addr,
+				IsLeader: isLeader,
+			})
+		}
+	}
+	sort.Slice(resp.Masters, func(i, j int) bool {
+		return resp.Masters[i].Id < resp.Masters[j].Id
+	})
+	return resp, nil
 }
 
 // ScheduleTask implements grpc interface. It works as follows
@@ -632,7 +672,7 @@ func (s *Server) serve(ctx context.Context) error {
 func (s *Server) createGRPCServer() *grpc.Server {
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
-		grpc.ChainUnaryInterceptor(rpcerror.UnaryServerInterceptor, grpcprometheus.UnaryServerInterceptor),
+		grpc.ChainUnaryInterceptor(grpcprometheus.UnaryServerInterceptor, rpcerror.UnaryServerInterceptor),
 	)
 	pb.RegisterDiscoveryServer(grpcServer, s)
 	pb.RegisterTaskSchedulerServer(grpcServer, s)
@@ -645,7 +685,7 @@ func (s *Server) createGRPCServer() *grpc.Server {
 func (s *Server) createHTTPServer() (*http.Server, error) {
 	grpcMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
-			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true},
+			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true},
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
 	)
