@@ -38,6 +38,7 @@ case $1 in
 "stop")
 	flag=()
 	generate_flag "$@"
+	$COMPOSECMD "${flag[@]}" kill
 	$COMPOSECMD "${flag[@]}" down
 
 	echo -e "\n\n[$(date)] <<<<<< stop engine cluster success! >>>>>>"
