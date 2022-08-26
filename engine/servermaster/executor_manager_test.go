@@ -35,8 +35,10 @@ func TestExecutorManager(t *testing.T) {
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
 	registerReq := &pb.RegisterExecutorRequest{
-		Address:    executorAddr,
-		Capability: 2,
+		Executor: &pb.Executor{
+			Address:    executorAddr,
+			Capability: 2,
+		},
 	}
 	info, err := mgr.AllocateNewExec(registerReq)
 	require.Nil(t, err)
@@ -92,8 +94,10 @@ func TestExecutorManagerWatch(t *testing.T) {
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
 	registerReq := &pb.RegisterExecutorRequest{
-		Address:    executorAddr,
-		Capability: 2,
+		Executor: &pb.Executor{
+			Address:    executorAddr,
+			Capability: 2,
+		},
 	}
 	info, err := mgr.AllocateNewExec(registerReq)
 	require.Nil(t, err)
@@ -108,8 +112,10 @@ func TestExecutorManagerWatch(t *testing.T) {
 	// register another executor server
 	executorAddr = "127.0.0.1:10002"
 	registerReq = &pb.RegisterExecutorRequest{
-		Address:    executorAddr,
-		Capability: 2,
+		Executor: &pb.Executor{
+			Address:    executorAddr,
+			Capability: 2,
+		},
 	}
 	info, err = mgr.AllocateNewExec(registerReq)
 	require.Nil(t, err)
