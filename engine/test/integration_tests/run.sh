@@ -36,14 +36,7 @@ run_case() {
 	local script=$2
 
 	# validate the case script
-	validated=$(
-		cat $script | grep "adjust_config " | grep -v "^#" &>/dev/null
-		echo $?
-	)
-	if [ $validated -ne 0 ]; then
-		echo "[Error] need adjust_config in $script"
-		exit 1
-	fi
+	check_case.sh
 
 	echo "=================>> Running test $script... <<================="
 	PATH="$PATH:$CUR_DIR/../utils" \
