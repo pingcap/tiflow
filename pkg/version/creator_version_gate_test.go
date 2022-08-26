@@ -181,6 +181,10 @@ func TestChangefeedAcceptProtocolInMysqlSinURI(t *testing.T) {
 			expected:       true,
 		},
 		{
+			creatorVersion: "6.1.1",
+			expected:       false,
+		},
+		{
 			creatorVersion: "6.2.0",
 			expected:       false,
 		},
