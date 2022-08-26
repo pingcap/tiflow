@@ -349,14 +349,14 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
 func (t *tableActor) stop(err error) {
-	log.Info("table actor begin to stop....",
+	log.Debug("table actor begin to stop....",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName))
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadUint32(&t.stopped) == stopped {
-		log.Info("table actor is already stopped",
+		log.Warn("table actor is already stopped",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName))
@@ -377,7 +377,7 @@ func (t *tableActor) stop(err error) {
 				zap.Error(err))
 		}
 	}
-	log.Info("table actor stopped",
+	log.Debug("table actor stopped",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),

@@ -256,8 +256,6 @@ func NewDDLPuller(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// add "_ddl_puller" to make it different from table pullers.
-	changefeed.ID += "_ddl_puller"
 
 	var puller DDLJobPuller
 	storage := up.KVStorage

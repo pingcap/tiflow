@@ -153,11 +153,11 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
@@ -490,7 +490,27 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	// init metrics
+	// create scheduler
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.initMetrics()
+
+	c.initialized = true
+
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Stringer("info", c.state.Info))
+
+	return nil
+}
+
+func (c *changefeed) initMetrics() {
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
@@ -504,22 +524,6 @@ LOOP:
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
-	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.initialized = true
-
-	log.Info("changefeed initialized",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs),
-		zap.Stringer("info", c.state.Info))
-
-	return nil
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {

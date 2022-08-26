@@ -335,7 +335,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
-					if rbErr := tx.Rollback(); rbErr != nil {
+					if rbErr := tx.Rollback(); rbErr != nil && rbErr != context.Canceled {
 						log.Warn("failed to rollback txn", zap.Error(rbErr))
 					}
 					return 0, err

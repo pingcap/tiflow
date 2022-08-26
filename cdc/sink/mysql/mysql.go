@@ -668,7 +668,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-					if rbErr := tx.Rollback(); rbErr != nil {
+					if rbErr := tx.Rollback(); rbErr != nil && rbErr != context.Canceled {
 						log.Warn("failed to rollback txn", zap.Error(err))
 						_ = logDMLTxnErr(
 							cerror.WrapError(cerror.ErrMySQLTxnError, err),
