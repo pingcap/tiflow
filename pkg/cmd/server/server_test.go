@@ -211,6 +211,7 @@ func TestParseCfg(t *testing.T) {
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 			},
+			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -365,6 +366,7 @@ check-balance-interval = "10s"
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 			},
+			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -511,6 +513,7 @@ cert-allowed-cn = ["dd","ee"]
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 			},
+			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -574,5 +577,6 @@ unknown3 = 3
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 		},
+		EnableNewSink: true,
 	}, o.serverConfig.Debug)
 }

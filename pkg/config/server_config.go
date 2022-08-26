@@ -146,6 +146,7 @@ var defaultServerConfig = &ServerConfig{
 
 		EnableSchedulerV3: true,
 		Scheduler:         NewDefaultSchedulerConfig(),
+		EnableNewSink:     true,
 	},
 	ClusterID: "default",
 }

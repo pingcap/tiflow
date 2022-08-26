@@ -15,6 +15,7 @@ package factory
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -53,8 +55,18 @@ func New(ctx context.Context,
 
 	s := &SinkFactory{}
 	schema := strings.ToLower(sinkURI.Scheme)
-	// TODO: add more sink factory here.
 	switch schema {
+	case sink.MySQLSchema, sink.MySQLSSLSchema, sink.TiDBSchema, sink.TiDBSSLSchema:
+		sinkURI, err := url.Parse(sinkURIStr)
+		if err != nil {
+			return nil, err
+		}
+		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
+		if err != nil {
+			return nil, err
+		}
+		s.txnSink = txnSink
+		s.sinkType = sink.TxnSink
 	case sink.KafkaSchema, sink.KafkaSSLSchema:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)

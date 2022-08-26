@@ -322,6 +322,7 @@ generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
+	tools/bin/mockgen -source cdc/sinkv2/eventsink/txn/backend.go -destination cdc/sinkv2/eventsink/txn/mock/backend_mock.go
 
 clean:
 	go clean -i ./...

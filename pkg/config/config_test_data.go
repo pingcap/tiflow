@@ -131,7 +131,7 @@ const (
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000
     },
-    "enable-new-sink": false
+    "enable-new-sink": true
   },
   "cluster-id": "default"
 }`
