@@ -16,13 +16,14 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"reflect"
 
-	"gorm.io/gorm"
-
+	"github.com/pingcap/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/label"
+	"gorm.io/gorm"
 )
 
 type (
@@ -56,7 +57,14 @@ func (e MasterMetaExt) Value() (driver.Value, error) {
 
 // Scan implements sql.Scanner.
 func (e *MasterMetaExt) Scan(input interface{}) error {
-	str := input.(string)
+	if input == nil {
+		return nil
+	}
+	str, ok := input.(string)
+	if !ok {
+		return errors.Errorf("failed to scan. Expected string, got %s",
+			reflect.TypeOf(input))
+	}
 	if len(str) == 0 {
 		return nil
 	}
