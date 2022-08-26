@@ -56,19 +56,29 @@ func (e MasterMetaExt) Value() (driver.Value, error) {
 }
 
 // Scan implements sql.Scanner.
-func (e *MasterMetaExt) Scan(input interface{}) error {
-	if input == nil {
+func (e *MasterMetaExt) Scan(rawInput interface{}) error {
+	if rawInput == nil {
 		return nil
 	}
-	str, ok := input.(string)
-	if !ok {
+
+	var bytes []byte
+	switch input := rawInput.(type) {
+	case string:
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = []byte(input)
+	case []byte:
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = input
+	default:
 		return errors.Errorf("failed to scan. Expected string, got %s",
-			reflect.TypeOf(input))
+			reflect.TypeOf(rawInput))
 	}
-	if len(str) == 0 {
-		return nil
-	}
-	return json.Unmarshal([]byte(input.(string)), e)
+
+	return json.Unmarshal(bytes, e)
 }
 
 // MasterMetaKVData defines the metadata of job master
