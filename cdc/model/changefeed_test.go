@@ -564,7 +564,7 @@ func TestFixMysqlSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range configTestCases {
-		tc.info.fixMysqlSinkProtocol()
+		tc.info.fixMySQLSinkProtocol()
 		require.Equal(t, tc.expectedProtocol, tc.info.Config.Sink.Protocol)
 	}
 
@@ -593,12 +593,12 @@ func TestFixMysqlSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range sinkURITestCases {
-		tc.info.fixMysqlSinkProtocol()
+		tc.info.fixMySQLSinkProtocol()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
 	}
 }
 
-func TestFixSinkProtocol(t *testing.T) {
+func TestFixMQSinkProtocol(t *testing.T) {
 	t.Parallel()
 
 	// Test fixing the protocol in the configuration.

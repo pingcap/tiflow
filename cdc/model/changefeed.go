@@ -291,14 +291,14 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	}
 
 	if creatorVersionGate.ChangefeedAcceptUnknownProtocols() {
-		log.Info("Start fixing incompatible changefeed sink protocol", zap.String("changefeed", info.String()))
+		log.Info("Start fixing incompatible changefeed MQ sink protocol", zap.String("changefeed", info.String()))
 		info.fixMQSinkProtocol()
-		log.Info("Fix incompatibility changefeed sink protocol completed", zap.String("changefeed", info.String()))
+		log.Info("Fix incompatibility changefeed MQ sink protocol completed", zap.String("changefeed", info.String()))
 	}
 
 	if creatorVersionGate.ChangefeedAcceptProtocolInMysqlSinURI() {
 		log.Info("Start fixing incompatible changefeed sink uri", zap.String("changefeed", info.String()))
-		info.fixMysqlSinkProtocol()
+		info.fixMySQLSinkProtocol()
 		log.Info("Fix incompatibility changefeed sink uri completed", zap.String("changefeed", info.String()))
 	}
 }
@@ -341,7 +341,7 @@ func (info *ChangeFeedInfo) fixState() {
 	}
 }
 
-func (info *ChangeFeedInfo) fixMysqlSinkProtocol() {
+func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
 		log.Warn("parse sink URI failed", zap.Error(err))
@@ -367,7 +367,7 @@ func (info *ChangeFeedInfo) fixMysqlSinkProtocol() {
 			zap.Any("sinkConfig", info.Config.Sink))
 		// always set protocol of mysql sink to ""
 		query.Del(config.ProtocolKey)
-		info.fixSinkURIAndConfig(uri, "", query)
+		info.updateSinkURIAndConfigProtocol(uri, "", query)
 	}
 }
 
@@ -399,7 +399,7 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	// The sinkURI always has a higher priority.
 	if protocol != "" && needsFix(protocol) {
 		query.Set(config.ProtocolKey, openProtocol)
-		info.fixSinkURIAndConfig(uri, openProtocol, query)
+		info.updateSinkURIAndConfigProtocol(uri, openProtocol, query)
 		return
 	}
 
@@ -411,7 +411,7 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	}
 }
 
-func (info *ChangeFeedInfo) fixSinkURIAndConfig(uri *url.URL, newProtocol string, newQuery url.Values) {
+func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
 	oldRawQuery := uri.RawQuery
 	newRawQuery := newQuery.Encode()
 	log.Info("handle incompatible protocol from sink URI",
