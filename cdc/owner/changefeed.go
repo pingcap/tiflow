@@ -213,7 +213,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 
 	if !c.feedStateManager.ShouldRunning() {
 		c.isRemoved = c.feedStateManager.ShouldRemoved()
-		log.Info("fizz should running is false")
 		c.releaseResources(ctx)
 		return nil
 	}
@@ -514,9 +513,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 
 	c.schema = nil
-	c.barriers = nil
-	c.initialized = false
-	c.isReleased = true
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
@@ -534,6 +530,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
 
+	c.isReleased = true
 	c.initialized = false
 }
 
