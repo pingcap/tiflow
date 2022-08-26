@@ -564,13 +564,12 @@ func TestFixState(t *testing.T) {
 	}
 }
 
-func TestFixSinkProtocol(t *testing.T) {
+func TestFixMysqlSinkProtocol(t *testing.T) {
 	t.Parallel()
-
 	// Test fixing the protocol in the configuration.
 	configTestCases := []struct {
 		info             *ChangeFeedInfo
-		expectedProtocol config.Protocol
+		expectedProtocol string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -579,8 +578,62 @@ func TestFixSinkProtocol(t *testing.T) {
 					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
 				},
 			},
-			expectedProtocol: config.ProtocolOpen,
+			expectedProtocol: "",
 		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "whatever"},
+				},
+			},
+			expectedProtocol: "",
+		},
+	}
+
+	for _, tc := range configTestCases {
+		tc.info.fixMySQLSinkProtocol()
+		require.Equal(t, tc.expectedProtocol, tc.info.Config.Sink.Protocol)
+	}
+
+	sinkURITestCases := []struct {
+		info            *ChangeFeedInfo
+		expectedSinkURI string
+	}{
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/?protocol=open-protocol",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/?protocol=default",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: ""},
+				},
+			},
+			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
+		},
+	}
+
+	for _, tc := range sinkURITestCases {
+		tc.info.fixMySQLSinkProtocol()
+		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+	}
+}
+
+func TestFixMQSinkProtocol(t *testing.T) {
+	t.Parallel()
+
+	// Test fixing the protocol in the configuration.
+	configTestCases := []struct {
+		info             *ChangeFeedInfo
+		expectedProtocol config.Protocol
+	}{
 		{
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
@@ -611,9 +664,10 @@ func TestFixSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range configTestCases {
-		tc.info.fixSinkProtocol()
+		tc.info.fixMQSinkProtocol()
 		var protocol config.Protocol
 		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+<<<<<<< HEAD
 		if strings.Contains(tc.info.SinkURI, "kafka") {
 			require.Nil(t, err)
 			require.Equal(t, tc.expectedProtocol, protocol)
@@ -621,6 +675,10 @@ func TestFixSinkProtocol(t *testing.T) {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
 		}
+=======
+		require.Nil(t, err)
+		require.Equal(t, tc.expectedProtocol, protocol)
+>>>>>>> a1a9f1f29 (changefeed (ticdc): fix mysql sink config contains protocol error (#6896))
 	}
 
 	// Test fixing the protocol in SinkURI.
@@ -628,15 +686,6 @@ func TestFixSinkProtocol(t *testing.T) {
 		info            *ChangeFeedInfo
 		expectedSinkURI string
 	}{
-		{
-			info: &ChangeFeedInfo{
-				SinkURI: "mysql://root:test@127.0.0.1:3306/",
-				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
-				},
-			},
-			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
-		},
 		{
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
@@ -685,7 +734,7 @@ func TestFixSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range sinkURITestCases {
-		tc.info.fixSinkProtocol()
+		tc.info.fixMQSinkProtocol()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
 	}
 }
