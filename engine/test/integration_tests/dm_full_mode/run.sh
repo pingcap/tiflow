@@ -2,14 +2,15 @@
 
 set -eu
 
-CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORK_DIR=$OUT_DIR/$TEST_NAME
+CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
+echo "using adjusted configs to deploy cluster: $CONFIG"
 TABLE_NUM=500
 
 function run() {
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
 	start_engine_cluster $CONFIG
 	wait_mysql_online.sh --port 3306
 	wait_mysql_online.sh --port 4000
@@ -42,8 +43,6 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
-trap "stop_engine_cluster $CONFIG" EXIT
-run $*
-# TODO: handle log properly
-# check_logs $WORK_DIR
+trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
+# run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

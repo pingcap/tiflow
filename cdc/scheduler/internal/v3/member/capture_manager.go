@@ -93,14 +93,14 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
 		log.Info("schedulerv3: capture initialized",
-			zap.String("captureAddr", c.Addr),
-			zap.String("capture", c.ID))
+			zap.String("capture", c.ID),
+			zap.String("captureAddr", c.Addr))
 	}
 	if resp.Liveness == model.LivenessCaptureStopping {
 		c.State = CaptureStateStopping
 		log.Info("schedulerv3: capture stopping",
-			zap.String("captureAddr", c.Addr),
-			zap.String("capture", c.ID))
+			zap.String("capture", c.ID),
+			zap.String("captureAddr", c.Addr))
 	}
 	c.Tables = resp.Tables
 }

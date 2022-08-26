@@ -74,7 +74,7 @@ func TestJob(t *testing.T) {
 	}
 	table := &cdcmodel.TableName{Schema: "test", Table: "t1"}
 	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location, safeMode: true}
+	ec := &eventContext{startLocation: location, endLocation: location, lastLocation: location, safeMode: true}
 	qec := &queryEventContext{
 		eventContext:    ec,
 		originSQL:       "create database test",

@@ -127,9 +127,9 @@ func newDMLJob(rowChange *sqlmodel.RowChange, ec *eventContext) *job {
 		retry:       true,
 		safeMode:    ec.safeMode,
 
-		location:        *ec.lastLocation,
-		startLocation:   *ec.startLocation,
-		currentLocation: *ec.currentLocation,
+		location:        ec.lastLocation,
+		startLocation:   ec.startLocation,
+		currentLocation: ec.endLocation,
 		eventHeader:     ec.header,
 		jobAddTime:      time.Now(),
 	}
@@ -145,9 +145,9 @@ func newDDLJob(qec *queryEventContext) *job {
 		ddls:        qec.needHandleDDLs,
 		originSQL:   qec.originSQL,
 
-		location:        *qec.lastLocation,
-		startLocation:   *qec.startLocation,
-		currentLocation: *qec.currentLocation,
+		location:        qec.lastLocation,
+		startLocation:   qec.startLocation,
+		currentLocation: qec.endLocation,
 		eventHeader:     qec.header,
 		jobAddTime:      time.Now(),
 	}
@@ -177,7 +177,7 @@ func newDDLJob(qec *queryEventContext) *job {
 func newSkipJob(ec *eventContext) *job {
 	return &job{
 		tp:          skip,
-		location:    *ec.lastLocation,
+		location:    ec.lastLocation,
 		eventHeader: ec.header,
 		jobAddTime:  time.Now(),
 	}

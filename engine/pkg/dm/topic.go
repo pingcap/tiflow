@@ -68,13 +68,53 @@ type QueryStatusRequest struct {
 	Task string
 }
 
+// ProcessError copies pb.ProcessError expect for JSON tag.
+type ProcessError struct {
+	ErrCode    int32  `json:"error_code,omitempty"`
+	ErrClass   string `json:"error_class,omitempty"`
+	ErrScope   string `json:"error_scope,omitempty"`
+	ErrLevel   string `json:"error_level,omitempty"`
+	Message    string `json:"message,omitempty"`
+	RawCause   string `json:"raw_cause,omitempty"`
+	Workaround string `json:"workaround,omitempty"`
+}
+
+// ProcessResult copies pb.ProcessResult expect for JSON tag.
+type ProcessResult struct {
+	IsCanceled bool            `protobuf:"varint,1,opt,name=isCanceled,proto3" json:"is_canceled,omitempty"`
+	Errors     []*ProcessError `protobuf:"bytes,2,rep,name=errors,proto3" json:"errors,omitempty"`
+	Detail     []byte          `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+}
+
+func NewProcessResultFromPB(result *pb.ProcessResult) *ProcessResult {
+	if result == nil {
+		return nil
+	}
+	ret := &ProcessResult{
+		IsCanceled: result.IsCanceled,
+		Detail:     result.Detail,
+	}
+	for _, err := range result.Errors {
+		ret.Errors = append(ret.Errors, &ProcessError{
+			ErrCode:    err.ErrCode,
+			ErrClass:   err.ErrClass,
+			ErrScope:   err.ErrScope,
+			ErrLevel:   err.ErrLevel,
+			Message:    err.Message,
+			RawCause:   err.RawCause,
+			Workaround: err.Workaround,
+		})
+	}
+	return ret
+}
+
 // QueryStatusResponse is query status response
 type QueryStatusResponse struct {
-	ErrorMsg string
-	Unit     frameModel.WorkerType
-	Stage    metadata.TaskStage
-	Result   *pb.ProcessResult
-	Status   json.RawMessage
+	ErrorMsg string                `json:"error_message"`
+	Unit     frameModel.WorkerType `json:"unit"`
+	Stage    metadata.TaskStage    `json:"stage"`
+	Result   *ProcessResult        `json:"result"`
+	Status   json.RawMessage       `json:"status"`
 }
 
 // BinlogRequest is binlog request

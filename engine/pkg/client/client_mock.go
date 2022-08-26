@@ -140,6 +140,36 @@ func (mr *MockServerMasterClientMockRecorder) Heartbeat(arg0, arg1 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Heartbeat", reflect.TypeOf((*MockServerMasterClient)(nil).Heartbeat), arg0, arg1)
 }
 
+// ListExecutors mocks base method.
+func (m *MockServerMasterClient) ListExecutors(arg0 context.Context) ([]*enginepb.Executor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExecutors", arg0)
+	ret0, _ := ret[0].([]*enginepb.Executor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExecutors indicates an expected call of ListExecutors.
+func (mr *MockServerMasterClientMockRecorder) ListExecutors(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutors", reflect.TypeOf((*MockServerMasterClient)(nil).ListExecutors), arg0)
+}
+
+// ListMasters mocks base method.
+func (m *MockServerMasterClient) ListMasters(arg0 context.Context) ([]*enginepb.Master, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMasters", arg0)
+	ret0, _ := ret[0].([]*enginepb.Master)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMasters indicates an expected call of ListMasters.
+func (mr *MockServerMasterClientMockRecorder) ListMasters(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMasters", reflect.TypeOf((*MockServerMasterClient)(nil).ListMasters), arg0)
+}
+
 // QueryMetaStore mocks base method.
 func (m *MockServerMasterClient) QueryMetaStore(arg0 context.Context, arg1 *enginepb.QueryMetaStoreRequest) (*enginepb.QueryMetaStoreResponse, error) {
 	m.ctrl.T.Helper()

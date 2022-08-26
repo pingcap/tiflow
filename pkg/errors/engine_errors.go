@@ -54,10 +54,6 @@ var (
 		errors.RFCCodeText("DFLOW:ErrBuildJobFailed"),
 	)
 
-	ErrExecutorDupRegister = errors.Normalize(
-		"executor %s has been registered",
-		errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"),
-	)
 	ErrGrpcBuildConn = errors.Normalize(
 		"dial grpc connection to %s failed",
 		errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"),
@@ -187,6 +183,10 @@ var (
 	ErrMasterInterfaceNotFound = errors.Normalize(
 		"basemaster interface not found",
 		errors.RFCCodeText("DFLOW:ErrMasterInterfaceNotFound"),
+	)
+	ErrExecutorWatcherClosed = errors.Normalize(
+		"executor watcher is closed",
+		errors.RFCCodeText("DFLOW:ErrExecutorWatcherClosed"),
 	)
 
 	ErrWorkerTypeNotFound = errors.Normalize(

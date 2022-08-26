@@ -491,7 +491,9 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	if !p.upstream.IsNormal() {
 		log.Warn("upstream is not ready, skip",
 			zap.Uint64("id", p.upstream.ID),
-			zap.Strings("pd", p.upstream.PdEndpoints))
+			zap.Strings("pd", p.upstream.PdEndpoints),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		return nil
 	}
 	startTime := time.Now()
@@ -499,8 +501,11 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	err := p.tick(ctx)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
-		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
-			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
+		log.Warn("processor tick took too long",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("capture", p.captureInfo.ID),
+			zap.Duration("duration", costTime))
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
@@ -684,13 +689,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	if err != nil {
-		log.Info("processor create sink failed",
+		log.Info("processor creates sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
-	log.Info("processor create sink success",
+	log.Info("processor creates sink success",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID),
 		zap.Duration("duration", time.Since(start)))
@@ -850,7 +855,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
-			minResolvedTableID, _ = table.ID()
+			minResolvedTableID = table.ID()
 		}
 	}
 
@@ -860,7 +865,7 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
-			minCheckpointTableID, _ = table.ID()
+			minCheckpointTableID = table.ID()
 		}
 	}
 
