@@ -728,15 +728,14 @@ func (p *processor) newAgentImpl(
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
-	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
 	if cfg.EnableSchedulerV3 {
 		ret, err = scheduler.NewAgentV3(
-			ctx, captureID, liveness,
+			ctx, p.captureInfo.ID, liveness,
 			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(
-			ctx, captureID, liveness,
+			ctx, p.captureInfo.ID, liveness,
 			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	}
 	return ret, errors.Trace(err)
@@ -765,15 +764,14 @@ func (p *processor) handleErrorCh() error {
 	return cerror.ErrReactorFinished
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.SchemaStorage, error) {
 	kvStorage := p.upstream.KVStorage
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
-	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
-	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
 	ddlPuller, err := puller.NewDDLJobPuller(
-		stdCtx,
+		ctx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
 		p.upstream.RegionCache,
@@ -798,7 +796,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(stdCtx))
+		p.sendError(ddlPuller.Run(ctx))
 	}()
 	p.wg.Add(1)
 	go func() {
