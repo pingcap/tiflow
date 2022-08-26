@@ -1316,11 +1316,6 @@ error = '''
 decode config file failed
 '''
 
-["DFLOW:ErrExecutorDupRegister"]
-error = '''
-executor %s has been registered
-'''
-
 ["DFLOW:ErrExecutorEtcdConnFail"]
 error = '''
 executor conn inner etcd fail
@@ -1339,6 +1334,11 @@ PreDispatchTask failed
 ["DFLOW:ErrExecutorSessionDone"]
 error = '''
 executor %s session done
+'''
+
+["DFLOW:ErrExecutorWatcherClosed"]
+error = '''
+executor watcher is closed
 '''
 
 ["DFLOW:ErrFailToCreateExternalStorage"]

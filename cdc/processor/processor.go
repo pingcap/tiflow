@@ -483,7 +483,9 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	if !p.upstream.IsNormal() {
 		log.Warn("upstream is not ready, skip",
 			zap.Uint64("id", p.upstream.ID),
-			zap.Strings("pd", p.upstream.PdEndpoints))
+			zap.Strings("pd", p.upstream.PdEndpoints),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		return nil
 	}
 	startTime := time.Now()
@@ -491,8 +493,11 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	err := p.tick(ctx)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
-		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
-			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
+		log.Warn("processor tick took too long",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("capture", p.captureInfo.ID),
+			zap.Duration("duration", costTime))
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
@@ -702,7 +707,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	p.initialized = true
-	log.Info("run processor",
+	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))

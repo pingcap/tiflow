@@ -23,6 +23,8 @@ import (
 // Reader is a binlog event reader, it may read binlog events from a TCP stream, binlog files or any other in-memory buffer.
 // One reader should read binlog events either through position mode or GTID mode.
 type Reader interface {
+	Streamer
+
 	// StartSyncByPos prepares the reader for reading binlog from the specified position.
 	StartSyncByPos(pos gmysql.Position) error
 
@@ -32,10 +34,6 @@ type Reader interface {
 	// Close closes the reader and release the resource.
 	// Close will be blocked if `GetEvent` has not returned.
 	Close() error
-
-	// GetEvent gets the binlog event one by one, it will block if no event can be read.
-	// You can pass a context (like Cancel or Timeout) to break the block.
-	GetEvent(ctx context.Context) (*replication.BinlogEvent, error)
 
 	// Status returns the status of the reader.
 	Status() interface{}

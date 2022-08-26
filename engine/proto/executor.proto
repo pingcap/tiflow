@@ -6,7 +6,7 @@ import "engine/proto/projects.proto";
 
 option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
-service Executor {
+service ExecutorService {
     rpc PreDispatchTask(PreDispatchTaskRequest) returns (PreDispatchTaskResponse) {}
     rpc ConfirmDispatchTask(ConfirmDispatchTaskRequest) returns (ConfirmDispatchTaskResponse) {}
 }

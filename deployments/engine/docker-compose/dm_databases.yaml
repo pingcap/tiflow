@@ -14,13 +14,14 @@ services:
     dm_upstream_mysql2:
         image: mysql:8.0
         container_name: dm_upstream_mysql2
+        command: --default-authentication-plugin=mysql_native_password
         ports:
             - "3307:3306"
         environment:
             MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
 
     dm_downstream_pd:
-        image: pingcap/pd:v5.4.0
+        image: pingcap/pd:nightly
         ports:
             - "2379"
         command:
@@ -34,7 +35,7 @@ services:
         restart: on-failure
 
     dm_downstream_tikv:
-        image: pingcap/tikv:v5.4.0
+        image: pingcap/tikv:nightly
         command:
             - --addr=0.0.0.0:20160
             - --advertise-addr=dm_downstream_tikv:20160
@@ -44,7 +45,7 @@ services:
         restart: on-failure
 
     dm_downstream_tidb:
-        image: pingcap/tidb:v5.4.0
+        image: pingcap/tidb:nightly
         ports:
             - "4000:4000"
             - "10080:10080"

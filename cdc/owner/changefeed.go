@@ -85,8 +85,13 @@ type changefeed struct {
 	sink        DDLSink
 	ddlPuller   puller.DDLPuller
 	initialized bool
-	// isRemoved is true if the changefeed is removed
+	// isRemoved is true if the changefeed is removed,
+	// which means it will be removed from memory forever
 	isRemoved bool
+	// isReleased is true if the changefeed's resource is released
+	// but it will still be kept in the memory and it will be check
+	// in every tick
+	isReleased bool
 
 	// only used for asyncExecDDL function
 	// ddlEventCache is not nil when the changefeed is executing
@@ -103,10 +108,9 @@ type changefeed struct {
 	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
-	// The changefeed will start some backend goroutines in the function `initialize`,
-	// such as DDLPuller, DDLSink, etc.
-	// `wg` is used to manage those backend goroutines.
-	wg sync.WaitGroup
+	// The changefeed will start a backend goroutine in the function `initialize` for DDLPuller
+	// `ddlWg` is used to manage this backend goroutine.
+	ddlWg sync.WaitGroup
 
 	metricsChangefeedBarrierTsGauge       prometheus.Gauge
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
@@ -153,11 +157,11 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
-	up *upstream.Upstream,
-	startTs uint64,
-	changefeed model.ChangeFeedID,
-) (puller.DDLPuller, error),
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
@@ -375,10 +379,15 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	return nil
 }
 
-func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if c.initialized {
+func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
+	if c.initialized || c.state.Status == nil {
+		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
+		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
+		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
+		// And then it can continue to initialize.
 		return nil
 	}
+	c.isReleased = false
 	// clean the errCh
 	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
 	// So we should make sure that the errCh is empty when the changefeed is restarting
@@ -391,11 +400,8 @@ LOOP:
 		}
 	}
 
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	resolvedTs := checkpointTs
-	if c.state.Status != nil {
-		resolvedTs = c.state.Status.ResolvedTs
-	}
+	checkpointTs := c.state.Status.CheckpointTs
+	resolvedTs := c.state.Status.ResolvedTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -416,7 +422,7 @@ LOOP:
 		//
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
-		err := gc.EnsureChangefeedStartTsSafety(
+		err = gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
 			c.id, ensureTTL, checkpointTs)
@@ -443,15 +449,15 @@ LOOP:
 	}
 	c.barriers = newBarriers()
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, checkpointTs)
+		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	// Since we are starting DDL puller from (checkpointTs-1) to make
 	// the DDL committed at checkpointTs executable by CDC, we need to set
 	// the DDL barrier to the correct start point.
+	// TODO: get DDL barrier based on resolvedTs.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
@@ -473,9 +479,9 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.wg.Add(1)
+	c.ddlWg.Add(1)
 	go func() {
-		defer c.wg.Done()
+		defer c.ddlWg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
@@ -483,6 +489,9 @@ LOOP:
 	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
 	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
 	c.redoManager = mgr
+	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
+		err = errors.New("changefeed new redo manager injected error")
+	})
 	if err != nil {
 		return err
 	}
@@ -499,7 +508,6 @@ LOOP:
 	c.initMetrics()
 
 	c.initialized = true
-
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
@@ -523,40 +531,49 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-
 }
 
+// releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	if c.isReleased {
+		return
+	}
 	// Must clean redo manager before calling cancel, otherwise
 	// the manager can be closed internally.
 	c.cleanupRedoManager(ctx)
-
-	if !c.initialized {
-		c.cleanupChangefeedServiceGCSafePoints(ctx)
-		return
-	}
+	c.cleanupChangefeedServiceGCSafePoints(ctx)
 
 	c.cancel()
 	c.cancel = func() {}
-	c.ddlPuller.Close()
-	c.schema = nil
-	c.cleanupChangefeedServiceGCSafePoints(ctx)
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("owner close sink failed",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID),
-			zap.Error(err))
+
+	if c.ddlPuller != nil {
+		c.ddlPuller.Close()
 	}
-	c.wg.Wait()
-	c.scheduler.Close(ctx)
-	c.scheduler = nil
-	c.barriers = nil
+	c.ddlWg.Wait()
+
+	if c.sink != nil {
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		// TODO(dongmen): remove ctx from func sink.close(), it is useless.
+		// We don't need to wait sink Close, pass a canceled context is ok
+		if err := c.sink.close(canceledCtx); err != nil {
+			log.Warn("owner close sink failed",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Error(err))
+		}
+	}
+
+	if c.scheduler != nil {
+		c.scheduler.Close(ctx)
+		c.scheduler = nil
+	}
 
 	c.cleanupMetrics()
+	c.schema = nil
+	c.barriers = nil
 	c.initialized = false
+	c.isReleased = true
 
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
@@ -751,7 +768,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
 		c.currentTableNames = c.schema.AllTableNames()
-		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+		checkpointTs := c.state.Status.CheckpointTs
 		// refresh checkpointTs and currentTableNames when a ddl job is received
 		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 		// we apply ddl to update changefeed schema here.

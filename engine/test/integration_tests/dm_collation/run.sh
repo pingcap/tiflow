@@ -2,14 +2,15 @@
 
 set -eu
 
-CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORK_DIR=$OUT_DIR/$TEST_NAME
+CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
+echo "using adjusted configs to deploy cluster: $CONFIG"
 TABLE_NUM=500
 
 function run() {
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
 	start_engine_cluster $CONFIG
 	wait_mysql_online.sh --port 3306
 	wait_mysql_online.sh --port 3307
@@ -30,9 +31,18 @@ function run() {
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
 	echo "job_id: $job_id"
 
+	# TODO: blocked by https://github.com/pingcap/tiflow/issues/6856
+	#	# utf8mb4_0900_as_cs is not supported, should display error message
+	#
+	#	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -r '.task_status.\"mysql-02\".status.result.errors[0].message' | grep -q \"Error 1273: Unknown collation: 'utf8mb4_0900_as_cs'\""
+	#	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
+	#	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
+	#	# change allow-list
+	#	# clean downstraem data
+
 	# wait for dump and load finished
 
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Unit == 12 and .TaskStatus.\"mysql-02\".Status.Unit == 12'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == 12 and .task_status.\"mysql-02\".status.unit == 12'"
 
 	# check data
 
@@ -56,8 +66,6 @@ function run() {
 	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_server2.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
 }
 
-trap "stop_engine_cluster $CONFIG" EXIT
-run $*
-# TODO: handle log properly
-# check_logs $WORK_DIR
+trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
+# run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

@@ -29,7 +29,7 @@ echo "generate dataflow engine mock code..."
 	>engine/pkg/meta/mock/client_mock.go
 "$MOCKGEN" -package mocks github.com/pingcap/tiflow/engine/executor/server MetastoreCreator \
 	>engine/executor/server/mocks/metastore_mock.go
-"$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/enginepb ExecutorClient \
+"$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/enginepb ExecutorServiceClient \
 	>engine/enginepb/mock/executor_mock.go
 "$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/enginepb BrokerServiceClient \
 	>engine/enginepb/mock/broker_mock.go
