@@ -1389,6 +1389,25 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
+			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
+			if err2 != nil {
+				s.tctx.L().Info("select timestamp failed", zap.String("err", err2.Error()))
+			}
+			var createTimeResults [][]string
+			createTimeResults, err2 = export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
+			if err2 != nil {
+				s.tctx.L().Info("GetSpecifiedColumnValuesAndClose failed", zap.String("err", err2.Error()))
+			}
+			var ddlCreateTimeFloat float64
+			ddlCreateTimeFloat, err2 = strconv.ParseFloat(createTimeResults[0][0], 64)
+			if err2 != nil {
+				s.tctx.L().Info("ddlCreateTime ParseFloat failed", zap.String("err", err2.Error()))
+			}
+			var ddlCreateTime int
+			ddlCreateTime, err2 = strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
+			if err2 != nil {
+				s.tctx.L().Info("ddlCreateTime Atoi failed", zap.String("err", err2.Error()))
+			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
@@ -1396,11 +1415,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				s.tctx.L().Info("test handle special DDL error", zap.Strings("DDL", ddlJob.ddls), zap.String("affected", fmt.Sprint(affected)), zap.String("failpoint", "TestHandleSpecialDDLError"))
 			})
 			if err != nil {
-				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
-				createTimeResults, err3 := export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
-				ddlCreateTimeFloat, err4 := strconv.ParseFloat(createTimeResults[0][0], 64)
-				ddlCreateTime, err5 := strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
-				if err2 != nil || err3 != nil || err4 != nil || err5 != nil {
+				if err2 != nil {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				} else {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, int64(ddlCreateTime))

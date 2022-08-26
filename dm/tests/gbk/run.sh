@@ -71,14 +71,7 @@ function run() {
 	echo "prepare data for invalid connection test"
 	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test1(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
 	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test2(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test3(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test4(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test5(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test6(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT)"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
 
 	# test invalid connection with status synced
@@ -88,33 +81,15 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	echo "start task 2"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection with status synced"
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
 	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check test invalid connection with status synced successfully"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
 
 	# test invalid connection with status running
@@ -124,33 +99,15 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	echo "start task 3"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection with status running"
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
 	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check test invalid connection with status running successfully"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
 
 	# test invalid connection with status cancelled
@@ -160,33 +117,15 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	echo "start task 4"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection with status cancelled"
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
 	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check test invalid connection with status cancelled successfully"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
 
 	# test invalid connection with status queueing
@@ -196,33 +135,15 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	echo "start task 5"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection with status queueing"
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
 	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check test invalid connection with status queueing successfully"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker
 
 	# test invalid connection with status none
@@ -232,31 +153,16 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	echo "start task 6"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection with status none"
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count contains"
 	count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check test invalid connection with status none successfully"
 
-	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
+	dmctl_stop_task $cur/conf/dm-task.yaml
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
 	kill_dm_worker

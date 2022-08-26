@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -236,12 +237,13 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 				return nil
 			case <-ticker.C:
 				switch status {
-				case "rollback done", "done", "synced":
+				case model.JobStateDone.String(), model.JobStateSynced.String():
 					return nil
-				case "cancelled", "rollingback", "cancelling":
+				case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
 					return terror.ErrCancelledDDL.Generate(ddls[index])
-				case "running", "queueing", "none":
+				case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
 				default:
+					tctx.L().Warn("Unexpected DDL status", zap.String("status", status))
 				}
 			}
 		}
