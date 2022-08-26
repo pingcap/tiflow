@@ -22,6 +22,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -32,19 +38,16 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	engineHTTPUtil "github.com/pingcap/tiflow/engine/pkg/httputil"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // JobManager defines manager of job master
@@ -92,6 +95,9 @@ type JobManagerImpl struct {
 	jobStatusChangeMu *ctxmu.CtxMutex
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 	wg                *errgroup.Group
+
+	// http client for the job detail
+	jobHTTPClient engineHTTPUtil.JobHTTPClient
 }
 
 // CancelJob implements JobManagerServer.CancelJob.
@@ -108,7 +114,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 	if err != nil {
 		return nil, err
 	}
-	if pbJob.Status == pb.Job_Finished || pbJob.Status == pb.Job_Canceled {
+	if pbJob.State == pb.Job_Finished || pbJob.State == pb.Job_Canceled {
 		return pbJob, nil
 	}
 
@@ -116,7 +122,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 		return nil, err
 	}
 	jm.jobOperatorNotifier.Notify()
-	pbJob.Status = pb.Job_Canceling
+	pbJob.State = pb.Job_Canceling
 	return pbJob, nil
 }
 
@@ -190,6 +196,10 @@ func (jm *JobManagerImpl) deleteJobMeta(ctx context.Context, jobID string) error
 	return nil
 }
 
+func canQueryJobDetail(masterState frameModel.MasterState) bool {
+	return masterState == frameModel.MasterStateInit
+}
+
 // GetJob implements JobManagerServer.GetJob.
 func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
 	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
@@ -198,6 +208,12 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
 		}
 		return nil, err
+	}
+
+	// if job status is running, forward the request to jobmaster openapi
+	if canQueryJobDetail(masterMeta.State) {
+		detail, err := jm.jobHTTPClient.GetJobDetail(ctx, masterMeta.Addr, req.Id)
+		setDetailToMasterMeta(masterMeta, detail, err)
 	}
 
 	return buildPBJob(masterMeta)
@@ -229,7 +245,6 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	}
 	switch job.Type {
 	case pb.Job_CVSDemo:
-		// TODO: check config is valid, refine it later
 		extConfig := &cvs.Config{}
 		if err := json.Unmarshal(job.Config, extConfig); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "failed to decode config: %v", err)
@@ -303,6 +318,7 @@ func validateCreateJobRequest(req *pb.CreateJobRequest) error {
 
 // ListJobs implements JobManagerServer.ListJobs.
 func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
+	var err error
 	masterMetas, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err
@@ -318,11 +334,20 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 	firstIdx := sort.Search(len(masterMetas), func(i int) bool {
 		return masterMetas[i].ID > req.PageToken
 	})
+
+	var job *pb.Job
 	for i := firstIdx; i < len(masterMetas); i++ {
 		if masterMetas[i].Type == framework.JobManager {
 			continue
 		}
-		job, err := buildPBJob(masterMetas[i])
+
+		// if job status is running, forward the request to jobmaster openapi
+		if canQueryJobDetail(masterMetas[i].State) {
+			detail, errJob := jm.jobHTTPClient.GetJobDetail(ctx, masterMetas[i].Addr, masterMetas[i].ID)
+			setDetailToMasterMeta(masterMetas[i], detail, errJob)
+		}
+
+		job, err = buildPBJob(masterMetas[i])
 		if err != nil {
 			return nil, err
 		}
@@ -334,6 +359,24 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 	}
 
 	return resp, nil
+}
+
+// setDetailToMasterMeta sets the results from GetJobDetail to master meta
+func setDetailToMasterMeta(masterMeta *frameModel.MasterMeta, detail []byte, errJob error) {
+	if errJob != nil {
+		// Currently, we simply ignore 404 error
+		if derrors.ErrJobManagerRespStatusCode404.Equal(errJob) {
+			log.Warn("get job detail from jobmaster fail", zap.Error(errJob))
+			return
+		}
+
+		// TODO: deal the response body here after we has normalized the error response format
+		log.Error("get job detail from jobmaster fail", zap.Error(errJob))
+		// TODO: we should not put the error message here directly
+		masterMeta.ErrorMsg = errJob.Error()
+	} else if detail != nil {
+		masterMeta.Detail = detail
+	}
 }
 
 func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
@@ -351,7 +394,7 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.Type)
 	}
 
-	var jobStatus pb.Job_Status
+	var jobStatus pb.Job_State
 	switch masterMeta.State {
 	case frameModel.MasterStateUninit:
 		jobStatus = pb.Job_Created
@@ -368,9 +411,12 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 	return &pb.Job{
 		Id:     masterMeta.ID,
 		Type:   jobType,
-		Status: jobStatus,
+		State:  jobStatus,
 		Config: masterMeta.Config,
-		Error:  nil, // TODO: Fill error field.
+		Detail: masterMeta.Detail,
+		Error: &pb.Error{
+			Message: masterMeta.ErrorMsg,
+		},
 	}, nil
 }
 
@@ -421,6 +467,12 @@ func NewJobManagerImpl(
 
 	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
+
+	httpCli, err := httputil.NewClient(nil)
+	if err != nil {
+		return nil, err
+	}
+
 	impl := &JobManagerImpl{
 		JobFsm:              NewJobFsm(),
 		uuidGen:             uuid.NewGenerator(),
@@ -430,6 +482,7 @@ func NewJobManagerImpl(
 		jobStatusChangeMu:   ctxmu.New(),
 		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 		jobOperatorNotifier: new(notify.Notifier),
+		jobHTTPClient:       engineHTTPUtil.NewJobHTTPClient(httpCli),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
@@ -611,6 +664,7 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 // CloseImpl implements frame.MasterImpl.CloseImpl
 func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
+	jm.jobHTTPClient.Close()
 	return jm.wg.Wait()
 }
 

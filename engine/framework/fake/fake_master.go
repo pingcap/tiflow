@@ -364,13 +364,13 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if m.getState() == frameModel.WorkerStateStopped {
 		log.Info("FakeMaster: received pause command, stop now")
 		m.setState(frameModel.WorkerStateStopped)
-		return m.Exit(ctx, framework.ExitReasonCanceled, nil, "FakeMaster: received pause command")
+		return m.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("FakeMaster: received pause command"))
 	}
 
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
 		m.setState(frameModel.WorkerStateFinished)
-		return m.Exit(ctx, framework.ExitReasonFinished, nil, "all workers have been finished")
+		return m.Exit(ctx, framework.ExitReasonFinished, nil, []byte("all workers have been finished"))
 	}
 
 	return nil

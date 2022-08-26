@@ -73,7 +73,7 @@ type BaseJobMaster interface {
 
 	// Exit should be called when jobmaster (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
-	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
 	// IsMasterReady returns whether the master has received heartbeats for all
 	// workers after a fail-over. If this is the first time the JobMaster started up,
@@ -349,16 +349,16 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseJobMaster.Exit
-func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error {
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
 	// Don't set error center for master to make worker.Exit work well
-	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg); errTmp != nil {
+	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, detail); errTmp != nil {
 		return errTmp
 	}
 
-	return d.worker.Exit(ctx, exitReason, err, []byte(extMsg))
+	return d.worker.Exit(ctx, exitReason, err, detail)
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.

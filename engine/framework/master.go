@@ -135,7 +135,7 @@ type BaseMaster interface {
 	// Exit should be called when master (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -700,7 +700,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 
 // Exit implements BaseMaster.Exit
 // NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	// keep the original error in errCenter if possible
 	defer func() {
@@ -710,10 +710,10 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 		m.errCenter.OnError(err)
 	}()
 
-	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)
+	return m.exitWithoutSetErrCenter(ctx, exitReason, err, detail)
 }
 
-func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
+func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, detail []byte) (errRet error) {
 	switch exitReason {
 	case ExitReasonFinished:
 		m.masterMeta.State = frameModel.MasterStateFinished
@@ -729,7 +729,7 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 	if err != nil {
 		m.masterMeta.ErrorMsg = err.Error()
 	}
-	m.masterMeta.ExtMsg = extMsg
+	m.masterMeta.Detail = detail
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	return metaClient.Update(ctx, m.masterMeta)
