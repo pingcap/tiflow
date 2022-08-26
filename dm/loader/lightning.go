@@ -216,8 +216,10 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	var opts []lightning.Option
 	if l.cfg.MetricsFactory != nil {
 		// this branch means dataflow engine has set a Factory, the Factory itself
-		// will register and deregister metrics, so we must use NoopRegistry
-		// to avoid duplicated registration.
+		// will register and deregister metrics, but lightning will expect the
+		// register and deregister at the beginning and end of its lifetime.
+		// So we use dataflow engine's Factory to register, and use dataflow engine's
+		// global metrics to manually deregister.
 		opts = append(opts,
 			lightning.WithPromFactory(
 				promutil.NewWrappingFactory(
@@ -225,7 +227,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 					"",
 					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
 				)),
-			lightning.WithPromRegistry(tidbpromutil.NewNoopRegistry()))
+			lightning.WithPromRegistry(promutil.GetGlobalMetricRegistry()))
 	} else {
 		registry := prometheus.DefaultGatherer.(prometheus.Registerer)
 		failpoint.Inject("DontUnregister", func() {

@@ -1,19 +1,11 @@
 name: test
 task-mode: all
-collation_compatible: "strict"
 target-database:
   host: host.docker.internal
   port: 4000
   user: root
   password: ''
 upstreams:
-  - db-config:
-      host: host.docker.internal
-      port: 3306
-      user: root
-      password: ''
-    source-id: mysql-01
-    block-allow-list: global
   - db-config:
       host: host.docker.internal
       port: 3307
@@ -23,6 +15,4 @@ upstreams:
     block-allow-list: global
 block-allow-list:
   global:
-    do-dbs:
-    - "sync_collation*"
-    - "test_panic"
+    do-dbs: ["new_collation_off"]
