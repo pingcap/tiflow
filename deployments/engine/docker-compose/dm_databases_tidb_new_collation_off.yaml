@@ -21,7 +21,7 @@ services:
             MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
 
     dm_downstream_pd:
-        image: pingcap/pd:v6.1.0
+        image: pingcap/pd:nightly
         ports:
             - "2379"
         command:
@@ -35,7 +35,7 @@ services:
         restart: on-failure
 
     dm_downstream_tikv:
-        image: pingcap/tikv:v6.1.0
+        image: pingcap/tikv:nightly
         command:
             - --addr=0.0.0.0:20160
             - --advertise-addr=dm_downstream_tikv:20160
@@ -45,7 +45,7 @@ services:
         restart: on-failure
 
     dm_downstream_tidb:
-        image: pingcap/tidb:v6.1.0
+        image: pingcap/tidb:nightly
         ports:
             - "4000:4000"
             - "10080:10080"
