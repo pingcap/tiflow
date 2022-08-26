@@ -80,6 +80,8 @@ func (g *CreatorVersionGate) ChangefeedAcceptUnknownProtocols() bool {
 
 var changefeedAcceptProtocolInMysqlSinURI = *semver.New("6.2.0")
 
+// ChangefeedAcceptProtocolInMysqlSinURI determines whether to accept
+// protocol in mysql sink uri or configure based on the creator's version.
 func (g *CreatorVersionGate) ChangefeedAcceptProtocolInMysqlSinURI() bool {
 	// Introduced in https://github.com/pingcap/ticdc/pull/1341.
 	// So it was supported at the time.
