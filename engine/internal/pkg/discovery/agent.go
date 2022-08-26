@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // EventType describes the type of the event, i.e. Add or Del.
@@ -100,37 +101,31 @@ func (a *agentImpl) Run(ctx context.Context) error {
 	eventNotifier := notifier.NewNotifier[Event]()
 	defer eventNotifier.Close()
 
-	syncErr := make(chan error, 1)
-	syncDone := make(chan struct{})
-	go func() {
-		defer close(syncDone)
-		syncErr <- a.autoSync(ctx)
-	}()
+	g, gCtx := errgroup.WithContext(ctx)
 
-	defer func() {
-		<-syncDone
-		log.Info("discovery agent exited")
-	}()
-
-	snap := make(Snapshot)
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case event := <-a.eventCh:
-			eventNotifier.Notify(event)
-			applyEvent(snap, event)
-		case req := <-a.subscribeCh:
-			req.snap = snap
-			if err := eventNotifier.Flush(ctx); err != nil {
-				return errors.Trace(err)
+	g.Go(func() error {
+		return a.autoSync(gCtx)
+	})
+	g.Go(func() error {
+		snap := make(Snapshot)
+		for {
+			select {
+			case <-gCtx.Done():
+				return errors.Trace(gCtx.Err())
+			case event := <-a.eventCh:
+				eventNotifier.Notify(event)
+				applyEvent(snap, event)
+			case req := <-a.subscribeCh:
+				req.snap = snap
+				if err := eventNotifier.Flush(gCtx); err != nil {
+					return errors.Trace(err)
+				}
+				req.receiver = eventNotifier.NewReceiver()
+				close(req.doneCh)
 			}
-			req.receiver = eventNotifier.NewReceiver()
-			close(req.doneCh)
-		case err := <-syncErr:
-			return errors.Trace(err)
 		}
-	}
+	})
+	return g.Wait()
 }
 
 func (a *agentImpl) autoSync(ctx context.Context) error {
