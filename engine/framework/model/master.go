@@ -52,7 +52,10 @@ type MasterMetaExt struct {
 // Value implements driver.Valuer.
 func (e MasterMetaExt) Value() (driver.Value, error) {
 	b, err := json.Marshal(e)
-	return string(b), err
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to marshal MasterMetaExt")
+	}
+	return string(b), nil
 }
 
 // Scan implements sql.Scanner.
@@ -61,24 +64,33 @@ func (e *MasterMetaExt) Scan(rawInput interface{}) error {
 		return nil
 	}
 
+	// As different SQL drivers might treat the JSON value differently,
+	// we need to handle two cases where the JSON value is passed as a string
+	// and a byte slice respectively.
 	var bytes []byte
 	switch input := rawInput.(type) {
 	case string:
+		// SQLite is this case.
 		if len(input) == 0 {
 			return nil
 		}
 		bytes = []byte(input)
 	case []byte:
+		// MySQL is this case.
 		if len(input) == 0 {
 			return nil
 		}
 		bytes = input
 	default:
-		return errors.Errorf("failed to scan. Expected string, got %s",
-			reflect.TypeOf(rawInput))
+		return errors.Errorf("failed to scan MasterMetaExt. "+
+			"Expected string, got %s", reflect.TypeOf(rawInput))
 	}
 
-	return json.Unmarshal(bytes, e)
+	if err := json.Unmarshal(bytes, e); err != nil {
+		return errors.Annotate(err, "failed to unmarshal MasterMetaExt")
+	}
+
+	return nil
 }
 
 // MasterMetaKVData defines the metadata of job master
