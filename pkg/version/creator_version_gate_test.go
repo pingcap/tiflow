@@ -132,3 +132,66 @@ func TestChangefeedAcceptUnknownProtocols(t *testing.T) {
 		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedAcceptUnknownProtocols())
 	}
 }
+
+func TestChangefeedAcceptProtocolInMysqlSinURI(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		creatorVersion string
+		expected       bool
+	}{
+		{
+			creatorVersion: "",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.12",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.14",
+			expected:       true,
+		},
+		{
+			creatorVersion: "4.0.15",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.0.1",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.1.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.2.0-nightly",
+			expected:       true,
+		},
+		{
+			creatorVersion: "5.3.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "6.1.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "6.1.1",
+			expected:       false,
+		},
+		{
+			creatorVersion: "6.2.0",
+			expected:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		creatorVersionGate := CreatorVersionGate{version: tc.creatorVersion}
+		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedAcceptProtocolInMysqlSinURI())
+	}
+}

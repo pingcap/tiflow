@@ -338,9 +338,10 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+	// they will both be nil if changefeed return an error in initializing
 	if s.sinkV1 != nil {
 		err = s.sinkV1.Close(ctx)
-	} else {
+	} else if s.sinkV2 != nil {
 		err = s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {
