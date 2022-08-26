@@ -89,7 +89,7 @@ func TestUpgrade(t *testing.T) {
 			},
 			Rollback: func(ctx context.Context) error {
 				ver = "6.2.1"
-				return nil
+				return errors.New("failed to rollback to v6.2.1")
 			},
 		},
 		{
@@ -99,12 +99,13 @@ func TestUpgrade(t *testing.T) {
 				return nil
 			},
 			Rollback: func(ctx context.Context) error {
-				return errors.New("failed to rollback to v6.2.1")
+				ver = "6.2.0"
+				return errors.New("failed to rollback to v6.2.0")
 			},
 		},
 	}).Once()
 	require.EqualError(t, dummyUpgrader.Upgrade(context.Background(), *fromVer), "failed to upgrade to v6.3.0")
-	require.Equal(t, "6.2.1", ver)
+	require.Equal(t, "6.2.0", ver)
 }
 
 type DummyUpgrader struct {
