@@ -51,7 +51,7 @@ import (
 type Capture interface {
 	Run(ctx context.Context) error
 	AsyncClose()
-	Drain(ctx context.Context) <-chan struct{}
+	Drain() <-chan struct{}
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
@@ -618,7 +618,7 @@ func (c *captureImpl) AsyncClose() {
 }
 
 // Drain removes tables in the current TiCDC instance.
-func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
+func (c *captureImpl) Drain() <-chan struct{} {
 	// Set liveness stopping, owners will move all tables out in the capture.
 	c.liveness.Store(model.LivenessCaptureStopping)
 

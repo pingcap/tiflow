@@ -249,6 +249,9 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		}
 	}
 
+	// todo: this may cause the cluster has no owner
+	// 2 captures alive, if the owner crashed, and this one is stopping, cannot become the owner.
+	// the whole cluster become unavailable.
 	if request.IsStopping {
 		a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	}
@@ -307,7 +310,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 		ok    bool
 	)
 	// make the assumption that all tables are tracked by the agent now.
-	// this should be guaranteed by the caller of this method.
+	// this should be guaranteed by the caller of the method.
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		tableID := req.AddTable.GetTableID()
@@ -326,10 +329,10 @@ func (a *agent) handleMessageDispatchTableRequest(
 		if !ok {
 			log.Warn("schedulerv3: agent ignore remove table request,"+
 				"since the table not found",
-				zap.Any("tableID", tableID),
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.Any("tableID", tableID),
 				zap.Any("request", request))
 			return
 		}

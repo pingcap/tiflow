@@ -68,7 +68,7 @@ type Server interface {
 	Close()
 	// Drain removes tables in the current TiCDC instance.
 	// It's part of graceful shutdown, should be called before Close.
-	Drain(ctx context.Context) <-chan struct{}
+	Drain() <-chan struct{}
 }
 
 // server implement the TiCDC Server interface
@@ -313,8 +313,8 @@ func (s *server) run(ctx context.Context) (err error) {
 
 // Drain removes tables in the current TiCDC instance.
 // It's part of graceful shutdown, should be called before Close.
-func (s *server) Drain(ctx context.Context) <-chan struct{} {
-	return s.capture.Drain(ctx)
+func (s *server) Drain() <-chan struct{} {
+	return s.capture.Drain()
 }
 
 // Close closes the server.
