@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -116,7 +117,7 @@ func (a *agentImpl) Run(ctx context.Context) error {
 				eventNotifier.Notify(event)
 				applyEvent(snap, event)
 			case req := <-a.subscribeCh:
-				req.snap = snap
+				req.snap = maps.Clone(snap)
 				if err := eventNotifier.Flush(gCtx); err != nil {
 					return errors.Trace(err)
 				}
