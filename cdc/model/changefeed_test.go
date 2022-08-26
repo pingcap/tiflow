@@ -667,18 +667,8 @@ func TestFixMQSinkProtocol(t *testing.T) {
 		tc.info.fixMQSinkProtocol()
 		var protocol config.Protocol
 		err := protocol.FromString(tc.info.Config.Sink.Protocol)
-<<<<<<< HEAD
-		if strings.Contains(tc.info.SinkURI, "kafka") {
-			require.Nil(t, err)
-			require.Equal(t, tc.expectedProtocol, protocol)
-		} else {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
-		}
-=======
 		require.Nil(t, err)
 		require.Equal(t, tc.expectedProtocol, protocol)
->>>>>>> a1a9f1f29 (changefeed (ticdc): fix mysql sink config contains protocol error (#6896))
 	}
 
 	// Test fixing the protocol in SinkURI.
