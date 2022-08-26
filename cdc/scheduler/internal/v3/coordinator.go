@@ -45,10 +45,17 @@ type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
+<<<<<<< HEAD
 	trans        transport
 	replicationM *replicationManager
 	captureM     *captureManager
 	schedulerM   *schedulerManager
+=======
+	trans        transport.Transport
+	replicationM *replication.Manager
+	captureM     *member.CaptureManager
+	schedulerM   *scheduler.Manager
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836))
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID

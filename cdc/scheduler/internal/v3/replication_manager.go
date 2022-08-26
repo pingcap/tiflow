@@ -72,7 +72,12 @@ func (s *scheduleTask) Name() string {
 	return "unknown"
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 type replicationManager struct {
+=======
+// Manager manages replications and running scheduling tasks.
+type Manager struct { //nolint:revive
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	tables map[model.TableID]*ReplicationSet
 
 	runningTasks       map[model.TableID]*scheduleTask
@@ -89,8 +94,13 @@ type replicationManager struct {
 
 func newReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 ) *replicationManager {
 	return &replicationManager{
+=======
+) *Manager {
+	return &Manager{
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 		tables:             make(map[int64]*ReplicationSet),
 		runningTasks:       make(map[int64]*scheduleTask),
 		maxTaskConcurrency: maxTaskConcurrency,
@@ -98,8 +108,16 @@ func newReplicationManager(
 	}
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) HandleCaptureChanges(
 	changes *captureChanges, checkpointTs model.Ts,
+=======
+// HandleCaptureChanges handles capture changes.
+func (r *Manager) HandleCaptureChanges(
+	init map[model.CaptureID][]schedulepb.TableStatus,
+	removed map[model.CaptureID][]schedulepb.TableStatus,
+	checkpointTs model.Ts,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	if changes.Init != nil {
 		if len(r.tables) != 0 {
@@ -146,7 +164,12 @@ func (r *replicationManager) HandleCaptureChanges(
 	return sentMsgs, nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) HandleMessage(
+=======
+// HandleMessage handles messages sent by other captures.
+func (r *Manager) HandleMessage(
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0, len(msgs))
@@ -175,7 +198,11 @@ func (r *replicationManager) HandleMessage(
 	return sentMsgs, nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleMessageHeartbeatResponse(
+=======
+func (r *Manager) handleMessageHeartbeatResponse(
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	from model.CaptureID, msg *schedulepb.HeartbeatResponse,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
@@ -204,7 +231,11 @@ func (r *replicationManager) handleMessageHeartbeatResponse(
 	return sentMsgs, nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleMessageDispatchTableResponse(
+=======
+func (r *Manager) handleMessageDispatchTableResponse(
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	from model.CaptureID, msg *schedulepb.DispatchTableResponse,
 ) ([]*schedulepb.Message, error) {
 	var status *schedulepb.TableStatus
@@ -243,8 +274,14 @@ func (r *replicationManager) handleMessageDispatchTableResponse(
 	return msgs, nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) HandleTasks(
 	tasks []*scheduleTask,
+=======
+// HandleTasks handles schedule tasks.
+func (r *Manager) HandleTasks(
+	tasks []*ScheduleTask,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
 	for tableID := range r.runningTasks {
@@ -332,8 +369,13 @@ func (r *replicationManager) HandleTasks(
 	return sentMsgs, nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleAddTableTask(
 	task *addTable,
+=======
+func (r *Manager) handleAddTableTask(
+	task *AddTable,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
 	var err error
@@ -349,8 +391,13 @@ func (r *replicationManager) handleAddTableTask(
 	return table.handleAddTable(task.CaptureID)
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleRemoveTableTask(
 	task *removeTable,
+=======
+func (r *Manager) handleRemoveTableTask(
+	task *RemoveTable,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	r.acceptRemoveTableTask++
 	table := r.tables[task.TableID]
@@ -365,16 +412,26 @@ func (r *replicationManager) handleRemoveTableTask(
 	return table.handleRemoveTable()
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleMoveTableTask(
 	task *moveTable,
+=======
+func (r *Manager) handleMoveTableTask(
+	task *MoveTable,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	r.acceptMoveTableTask++
 	table := r.tables[task.TableID]
 	return table.handleMoveTable(task.DestCapture)
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) handleBurstBalanceTasks(
 	task *burstBalance,
+=======
+func (r *Manager) handleBurstBalanceTasks(
+	task *BurstBalance,
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 ) ([]*schedulepb.Message, error) {
 	r.acceptBurstBalanceTask++
 	perCapture := make(map[model.CaptureID]int)
@@ -443,17 +500,30 @@ func (r *replicationManager) handleBurstBalanceTasks(
 
 // ReplicationSets return all tracking replication set
 // Caller must not modify the returned map.
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
+=======
+func (r *Manager) ReplicationSets() map[model.TableID]*ReplicationSet {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	return r.tables
 }
 
 // RunningTasks return running tasks.
 // Caller must not modify the returned map.
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) RunningTasks() map[model.TableID]*scheduleTask {
 	return r.runningTasks
 }
 
 func (r *replicationManager) AdvanceCheckpoint(
+=======
+func (r *Manager) RunningTasks() map[model.TableID]*ScheduleTask {
+	return r.runningTasks
+}
+
+// AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
+func (r *Manager) AdvanceCheckpoint(
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
@@ -483,7 +553,12 @@ func (r *replicationManager) AdvanceCheckpoint(
 	return newCheckpointTs, newResolvedTs
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) CollectMetrics() {
+=======
+// CollectMetrics collects metrics.
+func (r *Manager) CollectMetrics() {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
@@ -536,7 +611,12 @@ func (r *replicationManager) CollectMetrics() {
 	}
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
 func (r *replicationManager) CleanMetrics() {
+=======
+// CleanMetrics cleans metrics.
+func (r *Manager) CleanMetrics() {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go
 	cf := r.changefeedID
 	tableGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	slowestTableIDGauge.DeleteLabelValues(cf.Namespace, cf.ID)
@@ -573,3 +653,16 @@ func (r *replicationManager) CleanMetrics() {
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
 }
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_manager.go
+=======
+
+// SetReplicationSetForTests is only used in tests.
+func (r *Manager) SetReplicationSetForTests(rs *ReplicationSet) {
+	r.tables[rs.TableID] = rs
+}
+
+// GetReplicationSetForTests is only used in tests.
+func (r *Manager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
+	return r.tables
+}
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_manager.go

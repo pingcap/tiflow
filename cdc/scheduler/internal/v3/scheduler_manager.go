@@ -23,7 +23,12 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 type schedulerManager struct {
+=======
+// Manager manages schedulers and generates schedule tasks.
+type Manager struct { //nolint:revive
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	changefeedID model.ChangeFeedID
 
 	schedulers         []scheduler
@@ -33,8 +38,13 @@ type schedulerManager struct {
 
 func newSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 ) *schedulerManager {
 	sm := &schedulerManager{
+=======
+) *Manager {
+	sm := &Manager{
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 		maxTaskConcurrency: cfg.MaxTaskConcurrency,
 		changefeedID:       changefeedID,
 		schedulers:         make([]scheduler, schedulerPriorityMax),
@@ -44,7 +54,8 @@ func newSchedulerManager(
 		}]int),
 	}
 
-	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(changefeedID)
+	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(
+		cfg.AddTableBatchSize, changefeedID)
 	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(
 		cfg.MaxTaskConcurrency, changefeedID)
 	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(
@@ -55,7 +66,12 @@ func newSchedulerManager(
 	return sm
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) Schedule(
+=======
+// Schedule generates schedule tasks based on the inputs.
+func (sm *Manager) Schedule(
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*CaptureStatus,
@@ -64,7 +80,7 @@ func (sm *schedulerManager) Schedule(
 ) []*scheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
-		// critical scheduling, eg. add table via CREATE TABLE DDL.
+		// critical scheduling, e.g. add table via CREATE TABLE DDL.
 		if sid != int(schedulerPriorityBasic) {
 			if len(runTasking) >= sm.maxTaskConcurrency {
 				// Do not generate more scheduling tasks if there are too many
@@ -92,7 +108,12 @@ func (sm *schedulerManager) Schedule(
 	return nil
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
+=======
+// MoveTable moves a table to the target capture.
+func (sm *Manager) MoveTable(tableID model.TableID, target model.CaptureID) {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
@@ -110,7 +131,12 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	}
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) Rebalance() {
+=======
+// Rebalance rebalance tables.
+func (sm *Manager) Rebalance() {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
@@ -122,7 +148,12 @@ func (sm *schedulerManager) Rebalance() {
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
+=======
+// DrainCapture drains all tables in the target capture.
+func (sm *Manager) DrainCapture(target model.CaptureID) bool {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
@@ -134,11 +165,21 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 	return drainCaptureScheduler.setTarget(target)
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
 func (sm *schedulerManager) CollectMetrics() {
+=======
+// DrainingTarget returns a capture id that is currently been draining.
+func (sm *Manager) DrainingTarget() model.CaptureID {
+	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
+}
+
+// CollectMetrics collects metrics.
+func (sm *Manager) CollectMetrics() {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	cf := sm.changefeedID
 	for name, counter := range sm.tasksCounter {
 		scheduleTaskCounter.
@@ -148,7 +189,12 @@ func (sm *schedulerManager) CollectMetrics() {
 	}
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/scheduler_manager.go
 func (sm *schedulerManager) CleanMetrics() {
+=======
+// CleanMetrics cleans metrics.
+func (sm *Manager) CleanMetrics() {
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/scheduler/scheduler_manager.go
 	cf := sm.changefeedID
 	for name := range sm.tasksCounter {
 		scheduleTaskCounter.DeleteLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task)

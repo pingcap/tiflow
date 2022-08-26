@@ -89,6 +89,41 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.String())
 }
 
+<<<<<<< HEAD:cdc/scheduler/internal/v3/replication_set.go
+=======
+// Role is the role of a capture.
+type Role int
+
+const (
+	// RolePrimary primary role.
+	RolePrimary = 1
+	// RoleSecondary secondary role.
+	RoleSecondary = 2
+	// RoleUndetermined means that we don't know its state, it may be
+	// replicating, stopping or stopped.
+	RoleUndetermined = 3
+)
+
+func (r Role) String() string {
+	switch r {
+	case RolePrimary:
+		return "Primary"
+	case RoleSecondary:
+		return "Secondary"
+	case RoleUndetermined:
+		return "Undetermined"
+	default:
+		return fmt.Sprintf("Unknown %d", r)
+	}
+}
+
+// MarshalJSON returns r as the JSON encoding of CaptureRole.
+// Only used for pretty print in zap log.
+func (r Role) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.String())
+}
+
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836)):cdc/scheduler/internal/v3/replication/replication_set.go
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
 	Changefeed model.ChangeFeedID

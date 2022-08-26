@@ -133,8 +133,15 @@ const (
     "scheduler": {
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,
+<<<<<<< HEAD
       "check-balance-interval": 60000000000
     }
+=======
+      "check-balance-interval": 60000000000,
+      "add-table-batch-size": 50
+    },
+    "enable-new-sink": false
+>>>>>>> ce736c3f5 (schedulerV3(ticdc): burst add table in a batch way to delay resource allocation (#6836))
   },
   "cluster-id": "default"
 }`

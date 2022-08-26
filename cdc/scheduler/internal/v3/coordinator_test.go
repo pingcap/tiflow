@@ -146,6 +146,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
 	})
 	trans := &mockTrans{}
 	coord.trans = trans
@@ -260,6 +261,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
 	})
 	trans := &mockTrans{}
 	coord.trans = trans
