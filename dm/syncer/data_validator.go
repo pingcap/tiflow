@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -629,18 +628,11 @@ func (v *DataValidator) doValidate() {
 		}
 	}()
 
-	// when gtid is enabled:
-	// gtid of currLoc need to be updated when meet gtid event, so we can compare with syncer
-	// gtid of locationForFlush is updated when we meet xid event, if error happened, we start sync from this location
-	//
-	// some events maybe processed again, but it doesn't matter for validation
-	// todo: maybe we can use curStartLocation/curEndLocation in locationRecorder
-	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
 	// we don't flush checkpoint&data on exist, since checkpoint and pending data may not correspond with each other.
-	locationForFlush := currLoc.Clone()
+	locationForFlush := location.CloneWithFlavor(v.cfg.Flavor)
 	v.lastFlushTime = time.Now()
 	for {
-		e, _, _, err := v.streamerController.GetEvent(v.tctx)
+		e, _, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
 			switch {
 			case err == context.Canceled:
@@ -676,22 +668,11 @@ func (v *DataValidator) doValidate() {
 			}
 		}
 
-		switch ev := e.Event.(type) {
-		case *replication.RotateEvent:
-			currLoc.Position.Name = string(ev.NextLogName)
-			currLoc.Position.Pos = uint32(ev.Position)
-		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
-			currLoc.Position.Pos = e.Header.LogPos
-			gtidStr, _ := event.GetGTIDStr(e)
-			if err = currLoc.Update(gtidStr); err != nil {
-				v.sendError(terror.Annotate(err, "failed to update gtid set"))
-				return
-			}
-		default:
-			currLoc.Position.Pos = e.Header.LogPos
-		}
+		currEndLoc := v.streamerController.GetCurEndLocation()
+		locationForFlush = v.streamerController.GetTxnEndLocation()
+
 		// wait until syncer synced current event
-		err = v.waitSyncerSynced(currLoc)
+		err = v.waitSyncerSynced(currEndLoc)
 		if err != nil {
 			// no need to wrap it in error_list, since err can be context.Canceled only.
 			v.sendError(err)
@@ -704,8 +685,8 @@ func (v *DataValidator) doValidate() {
 			}
 		})
 		// update validator metric
-		v.updateValidatorBinlogMetric(currLoc)
-		v.updateValidatorBinlogLag(currLoc)
+		v.updateValidatorBinlogMetric(currEndLoc)
+		v.updateValidatorBinlogLag(currEndLoc)
 		v.processedBinlogSize.Add(int64(e.Header.EventSize))
 
 		switch ev := e.Event.(type) {
@@ -715,30 +696,12 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.ErrValidatorProcessRowEvent.Delegate(err))
 				return
 			}
-			// update on success processed
-			locationForFlush.Position = currLoc.Position
 		case *replication.XIDEvent:
-			locationForFlush.Position = currLoc.Position
-			err = locationForFlush.SetGTID(ev.GSet)
-			if err != nil {
-				v.sendError(terror.Annotate(err, "failed to set gtid"))
-				return
-			}
 			if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
 		case *replication.QueryEvent:
-			locationForFlush.Position = currLoc.Position
-			query := string(ev.Query)
-			if query == "COMMIT" || query == "BEGIN" {
-				break
-			}
-			err = locationForFlush.SetGTID(ev.GSet)
-			if err != nil {
-				v.sendError(terror.Annotate(err, "failed to set gtid"))
-				return
-			}
 			if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
@@ -750,8 +713,6 @@ func (v *DataValidator) doValidate() {
 					return
 				}
 			}
-		default:
-			locationForFlush.Position = currLoc.Position
 		}
 	}
 }

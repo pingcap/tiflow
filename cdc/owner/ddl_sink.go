@@ -280,9 +280,9 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.
-// For a rename tables job, the events in that job have identical StartTs
+// For the `rename tables` job, the events in that job have identical StartTs
 // and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
-// from a map in order to check whether that event is finshed or not.
+// from a map in order to check whether that event is finished or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
 	if ddl.Done {
@@ -338,9 +338,10 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+	// they will both be nil if changefeed return an error in initializing
 	if s.sinkV1 != nil {
 		err = s.sinkV1.Close(ctx)
-	} else {
+	} else if s.sinkV2 != nil {
 		err = s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {

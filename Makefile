@@ -104,6 +104,7 @@ LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
 include tools/Makefile
+include Makefile.engine
 
 default: build buildsucc
 
@@ -290,7 +291,7 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec check-makefiles
+	swagger-spec check-makefiles check_engine_integration_test
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -495,34 +496,21 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build
-
-engine_image_amd64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./ 
-
-engine_image_arm64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/arm64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./
-
-engine_image_from_local:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build-local
-
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: bin/sync_diff_inspector
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+engine_integration_test: check_third_party_binary_for_engine
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+
+check_third_party_binary_for_engine:
+	@which bash || (echo "bash not found in ${PATH}"; exit 1)
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	@which go || (echo "go not found in ${PATH}"; exit 1)
+	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
+	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+
+check_engine_integration_test:
+	./engine/test/utils/check_case.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

@@ -271,7 +271,7 @@ func (m *mockExecutorManager) HasExecutor(executorID string) bool {
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) ListExecutors() []string {
+func (m *mockExecutorManager) ListExecutors() []*model.NodeInfo {
 	panic("not implemented")
 }
 
