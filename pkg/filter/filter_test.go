@@ -177,6 +177,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRebaseAutoID))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAlterIndexVisibility))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionMultiSchemaChange))
+	require.False(t, filter.ShouldDiscardDDL(timodel.ActionExchangeTablePartition))
 
 	// Discard sequence DDL.
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionCreateSequence))
