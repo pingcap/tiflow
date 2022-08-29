@@ -855,7 +855,7 @@ var (
 	ErrShardDDLOptimismTrySyncFail = New(codeShardDDLOptimismTrySyncFail, ClassFunctional, ScopeInternal, LevelMedium, "fail to try sync the optimistic shard ddl lock %s: %s", "Please use `show-ddl-locks` command for more details.")
 
 	// pkg/conn.
-	ErrConnInvalidTLSConfig  = New(codeConnInvalidTLSConfig, ClassFunctional, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config.")
+	ErrConnInvalidTLSConfig  = New(codeConnInvalidTLSConfig, ClassFunctional, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-cert` and `ssl-key` config.")
 	ErrConnRegistryTLSConfig = New(codeConnRegistryTLSConfig, ClassFunctional, ScopeInternal, LevelMedium, "fail to registry TLS config", "")
 
 	// pkg/upgrade.

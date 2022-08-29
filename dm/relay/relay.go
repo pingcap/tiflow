@@ -1134,7 +1134,7 @@ func (r *Relay) setSyncConfig() error {
 			return terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
 		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
-			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes, r.cfg.From.Security.CertAllowedCN)
+			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKeyBytes, r.cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}

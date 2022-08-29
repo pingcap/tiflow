@@ -145,7 +145,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 			return replication.BinlogSyncerConfig{}, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
 		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
-			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKEYBytes, cfg.From.Security.CertAllowedCN)
+			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKeyBytes, cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
