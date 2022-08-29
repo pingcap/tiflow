@@ -46,7 +46,9 @@ import (
 )
 
 type shardDDLStrategy interface {
+	// when preFilter returns true, it means we should skip this DDL
 	preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceTable *filter.Table, targetTable *filter.Table) (bool, error)
+	// handle DDL handles query event
 	handleDDL(qec *queryEventContext) error
 }
 
