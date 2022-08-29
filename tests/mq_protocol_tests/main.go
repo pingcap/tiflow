@@ -137,8 +137,6 @@ func main() {
 		testCanalJSONWatermark()
 	} else if *testProtocol == "mysql" {
 		testMySQL()
-	} else if *testProtocol == "simple-mysql-checking-old-value" {
-		testMySQLWithCheckingOldValue()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}
