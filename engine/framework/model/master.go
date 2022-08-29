@@ -43,6 +43,16 @@ const (
 	// extend the status code here
 )
 
+// IsTerminatedState checks whether master state is terminated
+func (code MasterState) IsTerminatedState() bool {
+	switch code {
+	case MasterStateFinished, MasterStateStopped, MasterStateFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // MasterMetaExt stores some attributes of job masters that do not need
 // to be indexed.
 type MasterMetaExt struct {

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -43,6 +44,9 @@ type Registry interface {
 		config []byte,
 		epoch frameModel.Epoch,
 	) (framework.Worker, error)
+	// AnalyzeError parses error, checks whether this error is retryable and
+	// returns rpc error based on it.
+	AnalyzeError(err error, tp framework.WorkerType) error
 }
 
 type registryImpl struct {
@@ -130,6 +134,29 @@ func (r *registryImpl) CreateWorker(
 		zap.String("reason", "impl has no member BaseWorker or BaseJobMaster"),
 		zap.Any("workerType", tp))
 	return nil, nil
+}
+
+// AnalyzeError implements Registry.AnalyzeError
+func (r *registryImpl) AnalyzeError(err error, tp frameModel.WorkerType) error {
+	switch tp {
+	case framework.DMJobMaster:
+		err = derror.ToDMError(err)
+	default:
+	}
+	factory, ok := r.getWorkerFactory(tp)
+	if !ok {
+		return derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+	}
+	if factory.IsRetryableError(err) {
+		return rpcerror.ToGRPCError(
+			ErrCreateWorkerRetryable.GenWithStack(&CreateWorkerRetryableError{
+				Details: err.Error(),
+			}))
+	}
+	return rpcerror.ToGRPCError(
+		ErrCreateWorkerTerminate.GenWithStack(&CreateWorkerTerminateError{
+			Details: err.Error(),
+		}))
 }
 
 func (r *registryImpl) getWorkerFactory(tp frameModel.WorkerType) (factory WorkerFactory, ok bool) {

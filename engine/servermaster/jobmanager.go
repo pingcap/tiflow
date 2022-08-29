@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -52,6 +53,7 @@ type JobManager interface {
 
 	GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error)
 	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error)
+	UpdateJobStatus(ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState) error
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
@@ -338,6 +340,8 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		jobStatus = pb.Job_Finished
 	case frameModel.MasterStateStopped:
 		jobStatus = pb.Job_Canceled
+	case frameModel.MasterStateFailed:
+		jobStatus = pb.Job_Failed
 	default:
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
 	}
@@ -382,6 +386,19 @@ func (jm *JobManagerImpl) GetJobStatuses(
 		ret[jobMeta.ID] = jobMeta.State
 	}
 	return ret, nil
+}
+
+// UpdateJobStatus implements JobManager.UpdateJobStatus
+func (jm *JobManagerImpl) UpdateJobStatus(
+	ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState,
+) error {
+	// Note since the job is not online, it is safe to get from metastore and then update
+	meta, err := jm.frameMetaClient.GetJobByID(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	meta.State = code
+	return jm.frameMetaClient.UpsertJob(ctx, meta)
 }
 
 // NewJobManagerImpl creates a new JobManagerImpl instance
@@ -518,8 +535,8 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 			continue
 		}
 		// TODO: filter the job in backend
-		if job.State == frameModel.MasterStateFinished || job.State == frameModel.MasterStateStopped {
-			log.Info("skip finished or stopped job", zap.Any("job", job))
+		if job.State.IsTerminatedState() {
+			log.Info("skip job in terminated status", zap.Any("job", job))
 			continue
 		}
 		jm.JobFsm.JobDispatched(job, true /*addFromFailover*/)
@@ -532,6 +549,16 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		log.Warn("dispatch worker met error", zap.Error(result))
+		if registry.ErrCreateWorkerTerminate.Is(result) {
+			log.Info("job master terminated", zap.String("job-id", worker.ID()))
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			defer cancel()
+			if err := jm.UpdateJobStatus(ctx, worker.ID(), frameModel.MasterStateFailed); err != nil {
+				return err
+			}
+			jm.JobFsm.JobOffline(worker, false /* needFailover */)
+			return nil
+		}
 		return jm.JobFsm.JobDispatchFailed(worker)
 	}
 	return nil

@@ -24,6 +24,10 @@ const (
 	errBaseFormat = "[code=%d:class=%s:scope=%s:level=%s]"
 )
 
+// CodeToErrorMap maps from error code to base error, it is used for error
+// retrieval by error code.
+var CodeToErrorMap map[ErrCode]*Error = make(map[ErrCode]*Error)
+
 // ErrCode is used as the unique identifier of a specific error type.
 type ErrCode int
 
@@ -155,7 +159,7 @@ type Error struct {
 
 // New creates a new *Error instance.
 func New(code ErrCode, class ErrClass, scope ErrScope, level ErrLevel, message string, workaround string) *Error {
-	return &Error{
+	err := &Error{
 		code:       code,
 		class:      class,
 		scope:      scope,
@@ -163,6 +167,8 @@ func New(code ErrCode, class ErrClass, scope ErrScope, level ErrLevel, message s
 		message:    message,
 		workaround: workaround,
 	}
+	CodeToErrorMap[code] = err
+	return err
 }
 
 // Code returns ErrCode.

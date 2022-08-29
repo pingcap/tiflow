@@ -225,21 +225,23 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 		return nil, status.Error(codes.Unavailable, "executor server is not ready")
 	}
 
+	workerType := frameModel.WorkerType(req.GetTaskTypeId())
 	task, err := s.makeTask(
 		ctx,
 		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		frameModel.WorkerType(req.GetTaskTypeId()),
+		workerType,
 		req.GetTaskConfig(),
 		req.GetWorkerEpoch(),
 	)
 	if err != nil {
-		// We use the code Aborted here per the suggestion in gRPC's documentation
+		// AnalyzeError will return a gRPC error with code Aborted, which
+		// follows the suggestion in gRPC's documentation.
 		// "Use Aborted if the client should retry at a higher-level".
 		// Failure to make task is usually a problem that the business logic
 		// should be notified of.
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, registry.GlobalWorkerRegistry().AnalyzeError(err, workerType)
 	}
 
 	if !s.taskCommitter.PreDispatchTask(req.GetRequestId(), task) {

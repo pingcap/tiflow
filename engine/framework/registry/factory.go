@@ -15,6 +15,8 @@ package registry
 
 import (
 	"encoding/json"
+	libErrors "errors"
+	"fmt"
 	"reflect"
 
 	"github.com/pingcap/errors"
@@ -38,6 +40,9 @@ type WorkerFactory interface {
 		config WorkerConfig, // the config used to initialize the worker.
 	) (framework.WorkerImpl, error)
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
+	// IsRetryableError passes in an error to business logic, and returns whether
+	// job should be re-created or terminated permanently when meeting this error.
+	IsRetryableError(err error) bool
 }
 
 // WorkerConstructor alias to the function that can construct a WorkerImpl
@@ -76,12 +81,30 @@ func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config.(C)), nil
 }
 
+// used in fake job and unit test only
+type deserializeConfigError struct {
+	inErr error
+}
+
+func (e *deserializeConfigError) Error() string {
+	return fmt.Sprintf("deserialize config failed: %s", e.inErr)
+}
+
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	var config C
 	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(&deserializeConfigError{inErr: err})
 	}
 	return config, nil
+}
+
+// IsRetryableError implements WorkerFactory.IsRetryableError
+func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
+	var errOut *deserializeConfigError
+	if libErrors.As(err, &errOut) {
+		return false
+	}
+	return true
 }

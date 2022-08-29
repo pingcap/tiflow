@@ -225,6 +225,12 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.Mas
 	panic("not implemented")
 }
 
+func (m *mockJobManager) UpdateJobStatus(
+	ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState,
+) error {
+	panic("not implemented")
+}
+
 func (m *mockJobManager) WatchJobStatuses(
 	ctx context.Context,
 ) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {

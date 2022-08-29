@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -448,4 +449,41 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 		EventType: resManager.JobRemovedEvent,
 		JobID:     "job-to-be-deleted",
 	}, event)
+}
+
+func TestOnWorkerDispatchedFastFail(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	masterID := "job-fast-fail-test"
+	mockMaster := framework.NewMockMasterImpl(t, "", masterID)
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mgr := &JobManagerImpl{
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		masterMetaClient:  metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
+	}
+
+	// simulate a job is created.
+	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
+	mockHandle := &framework.MockHandle{WorkerID: masterID}
+	nerr := registry.ErrCreateWorkerTerminate.Gen(
+		&registry.CreateWorkerTerminateError{
+			Details: "unit test fast fail error",
+		})
+	// OnWorkerDispatched callback on job manager, a terminated error will make
+	// job fast fail.
+	err := mgr.OnWorkerDispatched(mockHandle, nerr)
+	require.NoError(t, err)
+	meta, err := mgr.frameMetaClient.QueryJobsByState(ctx,
+		mockMaster.MasterMeta().ProjectID, int(frameModel.MasterStateFailed))
+	require.NoError(t, err)
+	require.Len(t, meta, 1)
 }

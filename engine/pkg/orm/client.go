@@ -370,7 +370,7 @@ func (c *metaOpsClient) QueryJobsByState(ctx context.Context,
 ) ([]*frameModel.MasterMeta, error) {
 	var jobs []*frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
-		Where("id = ? AND state = ?", jobID, state).
+		Where("project_id = ? AND state = ?", jobID, state).
 		Find(&jobs).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}

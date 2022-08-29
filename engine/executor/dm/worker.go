@@ -78,6 +78,11 @@ func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.
 	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
 }
 
+// IsRetryableError implements WorkerFactory.IsRetryableError
+func (f workerFactory) IsRetryableError(err error) bool {
+	return true
+}
+
 // dmWorker implements methods for framework.WorkerImpl
 type dmWorker struct {
 	framework.BaseWorker
