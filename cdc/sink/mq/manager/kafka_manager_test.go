@@ -119,6 +119,8 @@ func TestCreateTopic(t *testing.T) {
 		err,
 	)
 
+	// Invalid replication factor.
+	// It happens when replication-factor is greater than the number of brokers.
 	cfg = &kafkaconfig.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
