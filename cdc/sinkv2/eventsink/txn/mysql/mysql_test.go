@@ -263,9 +263,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
-		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`,`b`) VALUES (?,?),(?,?)").
-			WithArgs(1, "test", 2, "test").
-			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
 		mock.ExpectClose()
 		return db, nil
@@ -320,44 +317,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 				},
 			},
 		},
-		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 1,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
-		{
-			StartTs:  7,
-			CommitTs: 8,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 2,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
 	}
 
 	var flushedTs uint64 = 0
@@ -374,7 +333,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 
 	err = sink.Flush(context.Background())
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), flushedTs)
+	require.Equal(t, uint64(6), flushedTs)
 
 	require.Nil(t, sink.Close())
 }
@@ -1202,7 +1161,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				startTs: []model.Ts{418658114257813506, 418658114257813516},
+				startTs: []model.Ts{418658114257813516, 418658114257813506},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",

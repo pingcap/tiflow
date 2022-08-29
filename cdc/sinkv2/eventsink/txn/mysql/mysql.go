@@ -19,7 +19,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"sort"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -176,7 +175,7 @@ type preparedDMLs struct {
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// TODO: use a sync.Pool to reduce allocations.
-	startTsSet := make(map[uint64]struct{}, s.rows)
+	startTs := make([]uint64, 0, s.rows)
 	sqls := make([]string, 0, s.rows)
 	values := make([][]interface{}, 0, s.rows)
 	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
@@ -213,11 +212,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		for _, row := range event.Event.Rows {
+			if len(startTs) == 0 || startTs[len(startTs)-1] != row.StartTs {
+				startTs = append(startTs, row.StartTs)
+			}
+
 			var query string
 			var args []interface{}
 			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-
-			startTsSet[row.StartTs] = struct{}{}
 
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
@@ -278,12 +279,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 	}
 	flushCacheDMLs()
-
-	startTs := make([]uint64, 0, len(startTsSet))
-	for k := range startTsSet {
-		startTs = append(startTs, k)
-	}
-	sort.Slice(startTs, func(i, j int) bool { return startTs[i] < startTs[j] })
 
 	if len(callbacks) == 0 {
 		callbacks = nil
