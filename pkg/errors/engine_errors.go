@@ -160,6 +160,10 @@ var (
 		"master has reached concurrency quota",
 		errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"),
 	)
+	ErrMasterCreateWorkerBackoff = errors.Normalize(
+		"create worker is being backoff, retry later",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerBackoff"),
+	)
 	ErrMasterInvalidMeta = errors.Normalize(
 		"invalid master meta data: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"),

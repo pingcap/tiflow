@@ -102,7 +102,7 @@ type MasterMeta struct {
 	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;index:idx_mst,priority:1"`
 	ID        MasterID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_mid"`
 	Type      WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)"`
-	State     MasterState      `json:"state" gorm:"column:state;type:tinyint not null;index:idx_mst,priority:2;comment:Uninit(1),Init(2),Finished(3),Stopped(4)"`
+	State     MasterState      `json:"state" gorm:"column:state;type:tinyint not null;index:idx_mst,priority:2;comment:Uninit(1),Init(2),Finished(3),Stopped(4),Failed(5)"`
 	NodeID    p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(128) not null"`
 	Addr      string           `json:"addr" gorm:"column:address;type:varchar(256) not null"`
 	Epoch     Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`

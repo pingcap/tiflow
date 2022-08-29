@@ -36,6 +36,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
@@ -76,6 +77,7 @@ type JobManagerImpl struct {
 	clocker          clock.Clock
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
+	JobBackoffMgr    *jobop.BackoffManager
 
 	// jobStatusChangeMu must be taken when we try to create, delete,
 	// pause or resume a job.
@@ -406,6 +408,7 @@ func NewJobManagerImpl(
 		frameMetaClient:   metaClient,
 		jobStatusChangeMu: ctxmu.New(),
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
+		JobBackoffMgr:     jobop.NewBackoffManager(),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
@@ -452,6 +455,9 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *frameModel.MasterMeta) (string, error) {
+			if !jm.JobBackoffMgr.Allow(job.ID) {
+				return "", derrors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
+			}
 			return jm.BaseMaster.CreateWorker(
 				job.Type, job, defaultJobMasterCost)
 		})
@@ -532,6 +538,7 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		log.Warn("dispatch worker met error", zap.Error(result))
+		jm.JobBackoffMgr.JobFail(worker.ID())
 		return jm.JobFsm.JobDispatchFailed(worker)
 	}
 	return nil
@@ -540,6 +547,7 @@ func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, resu
 // OnWorkerOnline implements frame.MasterImpl.OnWorkerOnline
 func (jm *JobManagerImpl) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.Info("on worker online", zap.Any("id", worker.ID()))
+	jm.JobBackoffMgr.JobOnline(worker.ID())
 	return jm.JobFsm.JobOnline(worker)
 }
 
@@ -559,6 +567,11 @@ func (jm *JobManagerImpl) OnWorkerOffline(worker framework.WorkerHandle, reason 
 	defer cancel()
 	if err := worker.GetTombstone().CleanTombstone(ctx); err != nil {
 		return err
+	}
+	if needFailover {
+		jm.JobBackoffMgr.JobFail(worker.ID())
+	} else {
+		jm.JobBackoffMgr.JobTerminate(worker.ID())
 	}
 	jm.JobFsm.JobOffline(worker, needFailover)
 	return nil
