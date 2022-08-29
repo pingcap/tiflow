@@ -19,12 +19,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/pkg/srvdiscovery"
-	"github.com/pingcap/tiflow/pkg/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
 // EventType describes the type of the event, i.e. Add or Del.
@@ -38,174 +37,152 @@ const (
 	EventTypeDel = EventType("del")
 )
 
+// NodeType describes the type of the node.
+type NodeType string
+
+const (
+	// NodeTypeMaster indicates that the node is a master.
+	NodeTypeMaster = NodeType("master")
+	// NodeTypeExecutor indicates that the node is an executor.
+	NodeTypeExecutor = NodeType("executor")
+)
+
 // Event is a node membership change event.
 type Event struct {
 	Tp   EventType
-	Info model.NodeInfo
+	Node Node
 }
 
-// Agent registers the current node and receives membership changes of all nodes.
+// Node describes the information of a node.
+type Node struct {
+	Tp   NodeType
+	ID   string
+	Addr string
+}
+
+// Snapshot is the current service membership snapshot.
+type Snapshot map[string]Node
+
+// Agent registers receives membership changes of all nodes.
 type Agent interface {
 	Run(ctx context.Context) error
-	Subscribe(ctx context.Context) (srvdiscovery.Snapshot, *notifier.Receiver[Event], error)
-}
-
-type runnerFactory interface {
-	Build(etcdCli *clientv3.Client,
-		sessionTTL int,
-		watchDur time.Duration,
-		key string,
-		value string,
-	) srvdiscovery.DiscoveryRunner
-}
-
-type runnerFactoryImpl struct{}
-
-func (f runnerFactoryImpl) Build(
-	etcdCli *clientv3.Client,
-	sessionTTL int,
-	watchDur time.Duration,
-	key string,
-	value string,
-) srvdiscovery.DiscoveryRunner {
-	return srvdiscovery.NewDiscoveryRunnerImpl(
-		etcdCli, sessionTTL, watchDur, key, value)
+	Subscribe(ctx context.Context) (Snapshot, *notifier.Receiver[Event], error)
 }
 
 type agentImpl struct {
-	selfInfo   *model.NodeInfo
-	etcdCli    *clientv3.Client
-	sessionTTL int
-	watchDur   time.Duration
-
-	discoveryRunnerFactory runnerFactory
-
-	subscribeCh chan *subscribeReq
+	discoveryClient  client.DiscoveryClient
+	autoSyncInterval time.Duration
+	eventCh          chan Event
+	subscribeCh      chan *subscribeReq
 }
 
 type subscribeReq struct {
-	snap     srvdiscovery.Snapshot
+	snap     Snapshot
 	receiver *notifier.Receiver[Event]
 	doneCh   chan struct{}
 }
 
-// NewAgent creates a new Agent that registers the current node to the
-// discovery service and receives membership changes from the discovery service.
+// NewAgent creates a new Agent that receives membership changes from the discovery service.
+// autoSyncInterval is the interval to update membership with the latest information and notify subscribers.
 func NewAgent(
-	selfInfo *model.NodeInfo,
-	etcdCli *clientv3.Client,
-	sessionTTL int,
-	watchDur time.Duration,
+	discoveryClient client.DiscoveryClient,
+	autoSyncInterval time.Duration,
 ) Agent {
 	return &agentImpl{
-		selfInfo:   selfInfo,
-		etcdCli:    etcdCli,
-		sessionTTL: sessionTTL,
-		watchDur:   watchDur,
-
-		discoveryRunnerFactory: runnerFactoryImpl{},
-		subscribeCh:            make(chan *subscribeReq, 1),
+		discoveryClient:  discoveryClient,
+		eventCh:          make(chan Event, 16),
+		subscribeCh:      make(chan *subscribeReq, 1),
+		autoSyncInterval: autoSyncInterval,
 	}
 }
 
 // Run runs the internal logic of an Agent. It blocks
 // until an error has occurred, or it has been canceled.
 func (a *agentImpl) Run(ctx context.Context) error {
-	selfInfoStr, err := a.selfInfo.ToJSON()
-	if err != nil {
-		return errors.Annotate(err, "run discovery agent")
-	}
-
-	runner := a.discoveryRunnerFactory.Build(
-		a.etcdCli, a.sessionTTL, a.watchDur, a.selfInfo.EtcdKey(), selfInfoStr,
-	)
-
-	discoveryCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// FIXME The semantics of ResetDiscovery is confusing. We will deal with this later.
-	startTime := time.Now()
-	session, err := runner.ResetDiscovery(discoveryCtx, true)
-	duration := time.Since(startTime)
-	if err != nil {
-		log.Warn("establish discovery session failed",
-			zap.Duration("duration", duration), logutil.ShortError(err))
-		return errors.Trace(err)
-	}
-	log.Info("discovery session established", zap.Duration("duration", duration))
-	defer func() {
-		_ = session.Close()
-	}()
-
 	eventNotifier := notifier.NewNotifier[Event]()
 	defer eventNotifier.Close()
 
+	g, gCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		return a.autoSync(gCtx)
+	})
+	g.Go(func() error {
+		snap := make(Snapshot)
+		for {
+			select {
+			case <-gCtx.Done():
+				return errors.Trace(gCtx.Err())
+			case event := <-a.eventCh:
+				eventNotifier.Notify(event)
+				applyEvent(snap, event)
+			case req := <-a.subscribeCh:
+				req.snap = maps.Clone(snap)
+				if err := eventNotifier.Flush(gCtx); err != nil {
+					return errors.Trace(err)
+				}
+				req.receiver = eventNotifier.NewReceiver()
+				close(req.doneCh)
+			}
+		}
+	})
+	return g.Wait()
+}
+
+func (a *agentImpl) autoSync(ctx context.Context) error {
+	snap := make(Snapshot)
 	for {
+		newSnap, err := a.getSnapshot(ctx)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
+				return errors.Trace(err)
+			}
+			log.Warn("failed to get snapshot", zap.Error(err))
+		} else {
+			events := computeEvents(snap, newSnap)
+			for _, event := range events {
+				select {
+				case a.eventCh <- event:
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				}
+			}
+			snap = newSnap
+		}
+
 		select {
-		case <-discoveryCtx.Done():
-			return errors.Trace(discoveryCtx.Err())
-		case <-session.Done():
-			log.Warn("metastore session is done", zap.String("executor-id", string(a.selfInfo.ID)))
-
-			startTime := time.Now()
-			session, err = runner.ResetDiscovery(ctx, true /* resetSession*/)
-			duration := time.Since(startTime)
-
-			if err != nil {
-				log.Warn("reset discovery session failed",
-					zap.Duration("duration", duration),
-					logutil.ShortError(err))
-				return errors.Annotate(err, "discovery agent session done")
-			}
-			log.Info("reset discovery session", zap.Duration("duration", duration))
-		case req := <-a.subscribeCh:
-			req.snap = runner.GetSnapshot()
-			req.receiver = eventNotifier.NewReceiver()
-			close(req.doneCh)
-		case resp := <-runner.GetWatcher():
-			if err := a.handleWatchResp(resp, runner, eventNotifier); err != nil {
-				return err
-			}
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-time.After(a.autoSyncInterval):
 		}
 	}
 }
 
-func (a *agentImpl) handleWatchResp(
-	resp srvdiscovery.WatchResp,
-	runner srvdiscovery.DiscoveryRunner,
-	eventNotifier *notifier.Notifier[Event],
-) error {
-	startTime := time.Now()
-	defer func() {
-		duration := time.Since(startTime)
-		if duration > 1*time.Second {
-			// Print a warning to indicate that there might be a
-			// congestion problem.
-			log.Warn("discovery agent broadcast took too long",
-				zap.Duration("duration", duration))
+func (a *agentImpl) getSnapshot(ctx context.Context) (Snapshot, error) {
+	masters, err := a.discoveryClient.ListMasters(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	executors, err := a.discoveryClient.ListExecutors(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snap := make(Snapshot)
+	for _, m := range masters {
+		snap[m.Id] = Node{
+			Tp:   NodeTypeMaster,
+			ID:   m.Id,
+			Addr: m.Address,
 		}
-	}()
-
-	if resp.Err != nil {
-		return errors.Annotate(resp.Err, "discovery agent handleWatchResp")
 	}
-
-	for _, res := range resp.DelSet {
-		eventNotifier.Notify(Event{
-			Tp:   EventTypeDel,
-			Info: res,
-		})
+	for _, e := range executors {
+		snap[e.Id] = Node{
+			Tp:   NodeTypeExecutor,
+			ID:   e.Id,
+			Addr: e.Address,
+		}
 	}
-
-	for _, res := range resp.AddSet {
-		eventNotifier.Notify(Event{
-			Tp:   EventTypeAdd,
-			Info: res,
-		})
-	}
-
-	runner.ApplyWatchResult(resp)
-	return nil
+	return snap, nil
 }
 
 const (
@@ -213,7 +190,7 @@ const (
 )
 
 // Subscribe subscribes to the service membership changes.
-func (a *agentImpl) Subscribe(ctx context.Context) (srvdiscovery.Snapshot, *notifier.Receiver[Event], error) {
+func (a *agentImpl) Subscribe(ctx context.Context) (Snapshot, *notifier.Receiver[Event], error) {
 	ctx, cancel := context.WithTimeout(ctx, subscribeTimeout)
 	defer cancel()
 
@@ -233,4 +210,34 @@ func (a *agentImpl) Subscribe(ctx context.Context) (srvdiscovery.Snapshot, *noti
 	}
 
 	return req.snap, req.receiver, nil
+}
+
+func applyEvent(snap Snapshot, event Event) {
+	switch event.Tp {
+	case EventTypeAdd:
+		snap[event.Node.ID] = event.Node
+	case EventTypeDel:
+		delete(snap, event.Node.ID)
+	}
+}
+
+func computeEvents(old, new Snapshot) []Event {
+	var events []Event
+	for id, node := range new {
+		if _, ok := old[id]; !ok {
+			events = append(events, Event{
+				Tp:   EventTypeAdd,
+				Node: node,
+			})
+		}
+	}
+	for id := range old {
+		if _, ok := new[id]; !ok {
+			events = append(events, Event{
+				Tp:   EventTypeDel,
+				Node: old[id],
+			})
+		}
+	}
+	return events
 }

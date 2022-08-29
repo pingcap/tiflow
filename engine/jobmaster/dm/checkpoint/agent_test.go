@@ -180,6 +180,8 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
 	require.Error(t, checkpointAgent.Remove(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
+
+	require.Len(t, checkpointAgent.UpgradeFuncs(), 0)
 }
 
 func TestIsFresh(t *testing.T) {

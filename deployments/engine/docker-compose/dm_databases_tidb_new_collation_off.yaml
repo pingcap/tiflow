@@ -50,7 +50,7 @@ services:
             - "4000:4000"
             - "10080:10080"
         volumes:
-            - ./config/tidb.toml:/tidb.toml
+            - ./config/tidb_new_collation_off.toml:/tidb.toml
         command:
             - --store=tikv
             - --path=dm_downstream_pd:2379
