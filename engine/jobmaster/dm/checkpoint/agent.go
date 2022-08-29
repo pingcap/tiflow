@@ -18,11 +18,13 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"go.uber.org/zap"
@@ -61,18 +63,24 @@ type Agent interface {
 	Create(ctx context.Context, cfg *config.JobCfg) error
 	Remove(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
+	Upgrade(ctx context.Context, preVer semver.Version) error
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
+	*bootstrap.DefaultUpgrader
+
 	logger *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
 func NewAgentImpl(pLogger *zap.Logger) Agent {
+	logger := pLogger.With(zap.String("component", "checkpoint_agent"))
 	c := &AgentImpl{
-		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
+		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
+		logger:          logger,
 	}
+	c.DefaultUpgrader.Upgrader = c
 	return c
 }
 
@@ -138,6 +146,11 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 		return isLoadFresh(ctx, task.Cfg, db)
 	}
 	return isSyncFresh(ctx, task.Cfg, db)
+}
+
+// UpgradeFuncs implement the Upgrader interface.
+func (c *AgentImpl) UpgradeFuncs() []bootstrap.UpgradeFunc {
+	return nil
 }
 
 func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {

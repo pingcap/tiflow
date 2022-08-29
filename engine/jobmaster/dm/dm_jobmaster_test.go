@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/coreos/go-semver/semver"
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
@@ -458,4 +459,8 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) Upgrade(ctx context.Context, preVer semver.Version) error {
+	return nil
 }
