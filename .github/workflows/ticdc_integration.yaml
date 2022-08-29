@@ -125,12 +125,6 @@ jobs:
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
 
-      - name: Run Integration Framework
-        timeout-minutes: 45
-        run: |
-          cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
-          ./mq_protocol_tests -protocol=simple-mysql-checking-old-value
-
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
