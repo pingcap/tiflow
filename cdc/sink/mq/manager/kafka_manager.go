@@ -197,6 +197,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 
 		return nil
 	}, retry.WithBackoffBaseDelay(500), // sleep 500ms for one run
+		retry.WithBackoffMaxDelay(60*1000),
 		retry.WithMaxTries(6), // 3s in total
 	)
 
@@ -278,7 +279,8 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
-	if err != nil && gerrors.Is(err, sarama.ErrTopicAlreadyExists) {
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !gerrors.Is(err, sarama.ErrTopicAlreadyExists) {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),
