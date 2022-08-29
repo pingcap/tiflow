@@ -98,7 +98,7 @@ func NewMySQLBackends(
 		})
 	}
 
-	log.Info("mysql backends is created",
+	log.Info("MySQL backends is created",
 		zap.String("changefeed", changefeed),
 		zap.Int("workerCount", cfg.WorkerCount),
 		zap.Bool("forceReplicate", cfg.ForceReplicate),

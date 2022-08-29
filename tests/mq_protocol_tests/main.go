@@ -111,22 +111,6 @@ func testMySQL() {
 	runTests(testCases, env)
 }
 
-func testMySQLWithCheckingOldValue() {
-	env := mysql.NewDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/tiflow/cdc/sink/SimpleMySQLSinkTester=return(true)"}
-	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
-	testCases := []framework.Task{
-		cases.NewSimpleCase(task),
-		cases.NewDeleteCase(task),
-		cases.NewManyTypesCase(task),
-		cases.NewUnsignedCase(task),
-		cases.NewCompositePKeyCase(task),
-		cases.NewAlterCase(task),
-	}
-
-	runTests(testCases, env)
-}
-
 func runTests(cases []framework.Task, env framework.Environment) {
 	log.SetLevel(zapcore.DebugLevel)
 

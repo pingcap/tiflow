@@ -15,7 +15,6 @@ package factory
 
 import (
 	"context"
-	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -57,10 +56,6 @@ func New(ctx context.Context,
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.MySQLSchema, sink.MySQLSSLSchema, sink.TiDBSchema, sink.TiDBSSLSchema:
-		sinkURI, err := url.Parse(sinkURIStr)
-		if err != nil {
-			return nil, err
-		}
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {
 			return nil, err
