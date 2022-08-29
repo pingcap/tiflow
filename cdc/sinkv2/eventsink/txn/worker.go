@@ -122,14 +122,14 @@ func (w *worker) runBackgroundLoop() {
 				metrics.ConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 				wantMoreCallbacks = append(wantMoreCallbacks, txn.wantMore)
 				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-					if w.doFlush() {
+					if w.doFlush(true) {
 						break LOOP
 					}
 				} else {
 					continue LOOP
 				}
 			case <-w.timer.C:
-				if w.doFlush() {
+				if w.doFlush(false) {
 					break LOOP
 				}
 			}
@@ -149,7 +149,7 @@ func (w *worker) runBackgroundLoop() {
 }
 
 // doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush() bool {
+func (w *worker) doFlush(needStopTimer bool) bool {
 	if err := w.backend.Flush(w.ctx); err != nil {
 		log.Warn("Transaction sink backend flush fail",
 			zap.String("changefeedID", w.changefeed),
@@ -161,11 +161,8 @@ func (w *worker) doFlush() bool {
 		}
 		return true
 	}
-	if !w.timer.Stop() {
-		select {
-		case <-w.timer.C:
-		default:
-		}
+	if needStopTimer && !w.timer.Stop() {
+		<-w.timer.C
 	}
 	w.timer.Reset(w.flushInterval)
 	return false

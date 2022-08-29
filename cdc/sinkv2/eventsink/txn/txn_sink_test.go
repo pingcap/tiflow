@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -283,14 +282,14 @@ func TestTxnSinkClose(t *testing.T) {
 	select {
 	case <-errCh:
 	default:
-		log.Fatal("a flush error is expected")
+		t.Fatal("a flush error is expected")
 	}
 
 	// sink.Close can close all background goroutines. No goroutines should be leak.
 	require.Nil(t, sink.Close())
 	select {
 	case <-errCh:
-		log.Fatal("no error is expected")
+		t.Fatal("no error is expected")
 	default:
 	}
 
@@ -313,7 +312,7 @@ func TestBackendPanic(t *testing.T) {
 	select {
 	case <-errCh:
 	default:
-		panic("should get an error")
+		t.Fatal("should get an error")
 	}
 	require.Nil(t, sink.Close())
 }

@@ -82,7 +82,8 @@ func (t *TxnEventAppender) Append(
 				zap.Any("row", row))
 		}
 
-		// Split on big transactions or a new one.
+		// Split on big transactions or a new one. For 2 transactions,
+		// their commitTs can be same but startTs will be never same.
 		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
 			buffer = append(buffer, &model.SingleTableTxn{
 				StartTs:  row.StartTs,
