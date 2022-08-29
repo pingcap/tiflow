@@ -60,6 +60,9 @@ func (e MasterMetaExt) Value() (driver.Value, error) {
 
 // Scan implements sql.Scanner.
 func (e *MasterMetaExt) Scan(rawInput interface{}) error {
+	// Zero the fields.
+	*e = MasterMetaExt{}
+
 	if rawInput == nil {
 		return nil
 	}
@@ -83,7 +86,7 @@ func (e *MasterMetaExt) Scan(rawInput interface{}) error {
 		bytes = input
 	default:
 		return errors.Errorf("failed to scan MasterMetaExt. "+
-			"Expected string, got %s", reflect.TypeOf(rawInput))
+			"Expected string or []byte, got %s", reflect.TypeOf(rawInput))
 	}
 
 	if err := json.Unmarshal(bytes, e); err != nil {

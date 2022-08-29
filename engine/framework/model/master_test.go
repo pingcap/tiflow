@@ -56,7 +56,7 @@ func TestMasterMetaExtScan(t *testing.T) {
 			checkErr: func(t *testing.T, err error) {
 				require.Regexp(
 					t,
-					regexp.QuoteMeta("failed to scan MasterMetaExt. Expected string, got int"),
+					regexp.QuoteMeta("failed to scan MasterMetaExt. Expected string or []byte, got int"),
 					err)
 			},
 			result: &MasterMetaExt{},
