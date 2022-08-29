@@ -39,7 +39,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("worker_manager_test", kvmock.NewMetaMock(), log.L())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	workerManager := NewWorkerManager(nil, jobStore, nil, nil, nil, log.L())
 
@@ -426,7 +426,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("worker_manager_test", kvmock.NewMetaMock(), log.L())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	checkpointAgent := &MockCheckpointAgent{}
