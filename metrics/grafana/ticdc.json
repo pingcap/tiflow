@@ -17553,8 +17553,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -17739,8 +17739,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [],
@@ -17846,8 +17846,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -17968,8 +17968,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "172.16.5.37:47912",
+              "value": "172.16.5.37:47912"
             }
           },
           "seriesOverrides": [
@@ -20303,7 +20303,7 @@
       "type": "row"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -20556,7 +20556,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {
@@ -20585,7 +20585,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "test-cluster-TiCDC",
+  "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
   "version": 41
 }

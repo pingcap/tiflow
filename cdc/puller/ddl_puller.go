@@ -273,7 +273,7 @@ func NewDDLPuller(ctx context.Context,
 			return nil, errors.Trace(err)
 		}
 	}
-	
+
 	return &ddlPullerImpl{
 		ddlJobPuller: puller,
 		resolvedTS:   startTs,
