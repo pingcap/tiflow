@@ -829,8 +829,13 @@ func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (codec.E
 		return nil, errors.Trace(err)
 	}
 
+	namespace := contextutil.ChangefeedIDFromCtx(ctx).Namespace
+	if len(namespace) == 0 {
+		namespace = "default"
+	}
+
 	return &batchEncoderBuilder{
-		namespace:          contextutil.ChangefeedIDFromCtx(ctx).Namespace,
+		namespace:          namespace,
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
