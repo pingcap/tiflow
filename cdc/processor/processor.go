@@ -97,6 +97,8 @@ type processor struct {
 	metricProcessorErrorCounter     prometheus.Counter
 	metricProcessorTickDuration     prometheus.Observer
 	metricsTableSinkTotalRows       prometheus.Counter
+	metricsPullerTotalRows          prometheus.Counter
+	metricsRemainTotalRows          prometheus.Gauge
 
 	metricsTableMemoryHistogram prometheus.Observer
 	metricsProcessorMemoryGauge prometheus.Gauge

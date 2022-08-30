@@ -104,7 +104,7 @@ func NewSorter(
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	metricOutputKV := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-	metricOutputResolved := sorter.InputEventCount.
+	metricOutputResolved := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
