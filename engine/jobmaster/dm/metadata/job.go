@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
@@ -88,18 +87,16 @@ type JobStore struct {
 	*TomlStore
 	*bootstrap.DefaultUpgrader
 
-	id     frameModel.MasterID
 	mu     sync.Mutex
 	logger *zap.Logger
 }
 
 // NewJobStore creates a new JobStore instance
-func NewJobStore(id frameModel.MasterID, kvClient metaModel.KVClient, pLogger *zap.Logger) *JobStore {
+func NewJobStore(kvClient metaModel.KVClient, pLogger *zap.Logger) *JobStore {
 	logger := pLogger.With(zap.String("component", "job_store"))
 	jobStore := &JobStore{
 		TomlStore:       NewTomlStore(kvClient),
 		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
-		id:              id,
 		logger:          logger,
 	}
 	jobStore.TomlStore.Store = jobStore
@@ -112,9 +109,9 @@ func (jobStore *JobStore) CreateState() State {
 	return &Job{}
 }
 
-// Key returns encoded key for job store id
+// Key returns encoded key for job store
 func (jobStore *JobStore) Key() string {
-	return adapter.DMJobKeyAdapter.Encode(jobStore.id)
+	return adapter.DMJobKeyAdapter.Encode()
 }
 
 // UpdateStages will be called if user operate job.

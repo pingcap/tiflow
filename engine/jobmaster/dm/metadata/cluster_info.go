@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/coreos/go-semver/semver"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
@@ -39,15 +38,12 @@ func NewClusterInfo(version semver.Version) *ClusterInfo {
 // ClusterInfoStore manages the state of ClusterInfo.
 type ClusterInfoStore struct {
 	*TomlStore
-
-	id frameModel.MasterID
 }
 
 // NewClusterInfoStore returns a new ClusterInfoStore instance
-func NewClusterInfoStore(id frameModel.MasterID, kvClient metaModel.KVClient) *ClusterInfoStore {
+func NewClusterInfoStore(kvClient metaModel.KVClient) *ClusterInfoStore {
 	clusterInfoStore := &ClusterInfoStore{
 		TomlStore: NewTomlStore(kvClient),
-		id:        id,
 	}
 	clusterInfoStore.TomlStore.Store = clusterInfoStore
 	return clusterInfoStore
@@ -60,7 +56,7 @@ func (clusterInfoStore *ClusterInfoStore) CreateState() State {
 
 // Key returns encoded key of ClusterInfo state store
 func (clusterInfoStore *ClusterInfoStore) Key() string {
-	return adapter.DMInfoKeyAdapter.Encode(clusterInfoStore.id)
+	return adapter.DMInfoKeyAdapter.Encode()
 }
 
 // UpdateVersion updates the version of ClusterInfo.
