@@ -343,6 +343,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	g.Go(func() error {
+		h.lastResolvedTsAdvancedTime = h.clock.Now()
 		for {
 			select {
 			case <-ctx.Done():
