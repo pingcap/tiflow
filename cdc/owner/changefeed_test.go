@@ -204,7 +204,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs}, nil
+			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
 		// new ddl sink
 		func() DDLSink {
@@ -282,6 +282,143 @@ func TestChangefeedHandleError(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Equal(t, cf.state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)
 	require.Equal(t, cf.state.Info.Error.Message, "fake error")
+}
+
+func TestExecDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	// Creates a table, which will be deleted at the start-ts of the changefeed.
+	// It is expected that the changefeed DOES NOT replicate this table.
+	helper.DDL2Job("create database test0")
+	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	startTs := job.BinlogInfo.FinishedTS + 1000
+
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+	ctx.ChangefeedVars().Info.StartTs = startTs
+
+	cf, captures, tester := createChangefeed4Test(ctx, t)
+	cf.upstream.KVStorage = helper.Storage()
+	defer cf.Close(ctx)
+	tickThreeTime := func() {
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+	}
+	// pre check and initialize
+	tickThreeTime()
+	require.Len(t, cf.schema.AllPhysicalTables(), 1)
+
+	job = helper.DDL2Job("drop table test0.table0")
+	// ddl puller resolved ts grow up
+	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs = startTs
+	mockDDLSink := cf.sink.(*mockDDLSink)
+	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
+	// three tick to make sure all barriers set in initialize is handled
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	// The ephemeral table should have left no trace in the schema cache
+	require.Len(t, cf.schema.AllPhysicalTables(), 0)
+
+	// executing the ddl finished
+	mockDDLSink.ddlDone = true
+	mockDDLPuller.resolvedTs += 1000
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+
+	// handle create database
+	job = helper.DDL2Job("create database test1")
+	mockDDLPuller.resolvedTs += 1000
+	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE DATABASE `test1`")
+
+	// executing the ddl finished
+	mockDDLSink.ddlDone = true
+	mockDDLPuller.resolvedTs += 1000
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+
+	// handle create table
+	job = helper.DDL2Job("create table test1.test1(id int primary key)")
+	mockDDLPuller.resolvedTs += 1000
+	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
+	tickThreeTime()
+
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
+
+	// executing the ddl finished
+	mockDDLSink.ddlDone = true
+	mockDDLPuller.resolvedTs += 1000
+	tickThreeTime()
+	require.Contains(t, cf.scheduler.(*mockScheduler).currentTables, job.TableID)
+}
+
+func TestEmitCheckpointTs(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	// Creates a table, which will be deleted at the start-ts of the changefeed.
+	// It is expected that the changefeed DOES NOT replicate this table.
+	helper.DDL2Job("create database test0")
+	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	startTs := job.BinlogInfo.FinishedTS + 1000
+
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+	ctx.ChangefeedVars().Info.StartTs = startTs
+
+	cf, captures, tester := createChangefeed4Test(ctx, t)
+	cf.upstream.KVStorage = helper.Storage()
+
+	defer cf.Close(ctx)
+	tickThreeTime := func() {
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+	}
+	// pre check and initialize
+	tickThreeTime()
+	mockDDLSink := cf.sink.(*mockDDLSink)
+
+	require.Len(t, cf.schema.AllTableNames(), 1)
+	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
+	require.Equal(t, ts, startTs)
+	require.Len(t, names, 1)
+
+	job = helper.DDL2Job("drop table test0.table0")
+	// ddl puller resolved ts grow up
+	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs = startTs
+	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
+	// three tick to make sure all barriers set in initialize is handled
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	// The ephemeral table should have left no trace in the schema cache
+	require.Len(t, cf.schema.AllTableNames(), 0)
+	// We can't use the new schema because the ddl hasn't been executed yet.
+	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
+	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Len(t, names, 1)
+
+	// executing the ddl finished
+	mockDDLSink.ddlDone = true
+	mockDDLPuller.resolvedTs += 1000
+	tickThreeTime()
+	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
+	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Len(t, names, 0)
 }
 
 func TestSyncPoint(t *testing.T) {
@@ -847,4 +984,58 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
 	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
+}
+
+func TestBarrierAdvance(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		ctx := cdcContext.NewBackendContext4Test(true)
+		if i == 1 {
+			ctx.ChangefeedVars().Info.SyncPointEnabled = true
+			ctx.ChangefeedVars().Info.SyncPointInterval = 100 * time.Second
+		}
+
+		cf, captures, tester := createChangefeed4Test(ctx, t)
+		defer cf.Close(ctx)
+
+		// The changefeed load the info from etcd.
+		cf.state.Status = &model.ChangeFeedStatus{
+			ResolvedTs:   cf.state.Info.StartTs + 10,
+			CheckpointTs: cf.state.Info.StartTs,
+		}
+
+		// Do the preflightCheck and initialize the changefeed.
+		cf.Tick(ctx, captures)
+		tester.MustApplyPatches()
+
+		// add 5s to resolvedTs.
+		mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+		mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
+
+		// Then the first tick barrier won't be changed.
+		barrier, err := cf.handleBarrier(ctx)
+		require.Nil(t, err)
+		require.Equal(t, cf.state.Info.StartTs-1, barrier)
+
+		// If sync-point is enabled, must tick more 1 time to advance barrier.
+		if i == 1 {
+			barrier, err := cf.handleBarrier(ctx)
+			require.Nil(t, err)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+		}
+
+		// Suppose checkpoint has been advanced.
+		cf.state.Status.CheckpointTs = cf.state.Status.ResolvedTs
+
+		// Need more 1 tick to advance barrier if sync-point is enabled.
+		if i == 1 {
+			barrier, err := cf.handleBarrier(ctx)
+			require.Nil(t, err)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+		}
+
+		// Then the last tick barrier must be advanced correctly.
+		barrier, err = cf.handleBarrier(ctx)
+		require.Nil(t, err)
+		require.Equal(t, mockDDLPuller.resolvedTs, barrier)
+	}
 }

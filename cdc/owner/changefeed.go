@@ -463,10 +463,19 @@ LOOP:
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
-	c.barriers.Update(ddlJobBarrier, resolvedTs)
+	// Since we are starting DDL puller from (checkpointTs-1) to make
+	// the DDL committed at checkpointTs executable by CDC, we need to set
+	// the DDL barrier to the correct start point.
+	// TODO: get DDL barrier based on resolvedTs.
+	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, resolvedTs, c.state.Info.Config, c.id)
+	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
+	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
+	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
+	// the schema cache.
+	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage,
+		checkpointTs-1, c.state.Info.Config, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -476,7 +485,9 @@ LOOP:
 	c.sink = c.newSink()
 	c.sink.run(cancelCtx, c.id, c.state.Info)
 
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, resolvedTs, c.id)
+	// Refer to the previous comment on why we use (checkpointTs-1).
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		c.state.Info.Config, c.upstream, checkpointTs-1, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -515,7 +526,7 @@ LOOP:
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, resolvedTs)
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -690,54 +701,35 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
 	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
-
-	if c.state.Status.ResolvedTs > barrierTs {
-		log.Error("owner global resolved timestamp should never exceed barrier",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID),
-			zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-			zap.Uint64("barrierTs", barrierTs))
-		return 0, errors.Trace(errors.New("bad owner resolved timestamp"))
-	}
-
-	blocked := barrierTs == c.state.Status.CheckpointTs
+	ddlBlocked := barrierTs == c.state.Status.CheckpointTs
+	blocked := ddlBlocked && barrierTs == c.state.Status.ResolvedTs
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
-		if ddlJob == nil { // It means no DDL is in executing.
+		if ddlJob == nil || ddlResolvedTs != barrierTs {
 			if ddlResolvedTs < barrierTs {
-				log.Error("ddlResolvedTs(job=nil) is less than barrierTs",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Uint64("ddlResolvedTs", ddlResolvedTs),
-					zap.Uint64("barrierTs", barrierTs))
-				return 0, errors.Trace(errors.New("bad owner barrier timestamp"))
+				return barrierTs, nil
 			}
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}
-		if ddlResolvedTs < barrierTs+1 {
-			log.Error("ddlResolvedTs(job!=nil) is less than barrierTs.add(1)",
-				zap.String("namespace", c.id.Namespace),
-				zap.String("changefeed", c.id.ID),
-				zap.Uint64("ddlResolvedTs", ddlResolvedTs),
-				zap.Uint64("barrierTs", barrierTs))
-			return 0, errors.Trace(errors.New("bad owner barrier timestamp"))
+		if !ddlBlocked {
+			// DDL shouldn't be blocked by resolvedTs because DDL puller is created
+			// with checkpointTs instead of resolvedTs.
+			return barrierTs, nil
 		}
-		if blocked { // It means the changefeed has been blocked on the DDL.
-			done, err := c.asyncExecDDLJob(ctx, ddlJob)
-			if err != nil {
-				return 0, errors.Trace(err)
-			}
-			if done {
-				c.lastDDLTs = ddlResolvedTs
-				c.ddlPuller.PopFrontDDL()
-				c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
-			}
-		} else { // It means a DDL is met, but the changefeed isn't blocked.
-			c.barriers.Update(ddlJobBarrier, ddlResolvedTs-1)
+		done, err := c.asyncExecDDLJob(ctx, ddlJob)
+		if err != nil {
+			return 0, errors.Trace(err)
 		}
-		return barrierTs, nil
+		if !done {
+			return barrierTs, nil
+		}
+		c.lastDDLTs = ddlResolvedTs
+		c.ddlPuller.PopFrontDDL()
+		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
+		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
+
 	case syncPointBarrier:
 		if !blocked {
 			return barrierTs, nil
@@ -747,7 +739,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-		return barrierTs, nil
+
 	case finishBarrier:
 		if blocked {
 			c.feedStateManager.MarkFinished()
@@ -755,8 +747,8 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		return barrierTs, nil
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
-		return barrierTs, nil
 	}
+	return barrierTs, nil
 }
 
 // asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
