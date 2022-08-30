@@ -408,6 +408,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
+	log.Info("Kafka producer compression algorithm", zap.String("compression", c.Compression))
 
 	if c.EnableTLS {
 		// for SSL encryption with a trust CA certificate, we must populate the
