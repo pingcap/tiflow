@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1653388230363,
+  "iteration": 1661842709661,
   "links": [],
   "panels": [
     {
@@ -7083,7 +7083,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7185,7 +7185,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -7294,7 +7294,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -7407,7 +7407,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -7520,7 +7520,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -7633,7 +7633,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -7739,7 +7739,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": true,
           "renderer": "flot",
@@ -7849,7 +7849,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -7961,7 +7961,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -8074,7 +8074,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -8181,7 +8181,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8300,7 +8300,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8424,7 +8424,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -12482,7 +12482,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 289,
@@ -12584,7 +12584,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 114,
@@ -12706,7 +12706,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 16
+            "y": 17
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12774,7 +12774,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 16
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 264,
@@ -12805,19 +12805,19 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le, instance))",
-              "interval": "",
-              "legendFormat": "{{instance}}-95",
-              "queryType": "randomWalk",
-              "refId": "A"
-            },
-            {
-              "exemplar": true,
               "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le, instance))",
               "hide": false,
               "interval": "",
               "legendFormat": "{{instance}}-99",
               "refId": "B"
+            },
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_etcd_worker_tick_reactor_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le, instance))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{instance}}-999",
+              "refId": "C"
             }
           ],
           "thresholds": [],
@@ -12886,7 +12886,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12956,7 +12956,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 258,
@@ -13071,7 +13071,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 30
+            "y": 31
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -13137,7 +13137,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 30
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 260,
@@ -13244,7 +13244,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 37
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 291,
@@ -13352,7 +13352,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 37
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 290,
@@ -17553,8 +17553,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:47912",
-              "value": "172.16.5.37:47912"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -17739,8 +17739,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:47912",
-              "value": "172.16.5.37:47912"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [],
@@ -17846,8 +17846,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:47912",
-              "value": "172.16.5.37:47912"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -17968,8 +17968,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:47912",
-              "value": "172.16.5.37:47912"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -18073,7 +18073,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 16
       },
       "id": 187,
       "panels": [
@@ -18520,7 +18520,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -18590,7 +18590,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 17
       },
       "id": 402,
       "panels": [
@@ -20303,7 +20303,7 @@
       "type": "row"
     }
   ],
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -20556,7 +20556,7 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {
@@ -20585,7 +20585,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Test-Cluster-TiCDC",
+  "title": "test-cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 40
+  "version": 41
 }

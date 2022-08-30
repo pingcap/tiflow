@@ -273,7 +273,6 @@ func NewDDLPuller(ctx context.Context,
 			return nil, errors.Trace(err)
 		}
 	}
-
 	return &ddlPullerImpl{
 		ddlJobPuller: puller,
 		resolvedTS:   startTs,
@@ -343,6 +342,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	g.Go(func() error {
+		h.lastResolvedTsAdvancedTime = h.clock.Now()
 		for {
 			select {
 			case <-ctx.Done():
