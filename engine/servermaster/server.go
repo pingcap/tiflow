@@ -823,10 +823,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
 
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Tp:        framework.JobManager,
+		Type:      framework.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()

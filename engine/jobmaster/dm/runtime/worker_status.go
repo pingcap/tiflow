@@ -96,7 +96,7 @@ func (w *WorkerStatus) RunAsExpected() bool {
 	return w.Stage == WorkerOnline || w.Stage == WorkerCreating || w.Stage == WorkerFinished
 }
 
-// InitWorkerStatus creates a new worker status and initializes it
+// InitWorkerState creates a new worker status and initializes it
 func InitWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID) WorkerStatus {
 	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating, 0)
 	workerStatus.createdTime = time.Now()

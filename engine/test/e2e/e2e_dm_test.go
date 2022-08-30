@@ -183,7 +183,7 @@ func testSimpleAllModeTask(
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
 
-	binlogName, binlogPos, err := getMasterStatus(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
+	binlogName, binlogPos, err := getMasterState(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
 	require.NoError(t, err)
 
 	// start incremental job
@@ -553,7 +553,7 @@ func setBinlogSchema(client *http.Client, jobID string, task string, req *openap
 	return &binlogSchemaResp, err
 }
 
-func getMasterStatus(ctx *tcontext.Context, db *conn.BaseDB, flavor string) (string, uint32, error) {
+func getMasterState(ctx *tcontext.Context, db *conn.BaseDB, flavor string) (string, uint32, error) {
 	binlogName, pos, _, _, _, err := conn.GetMasterStatus(ctx, db, flavor)
 	return binlogName, pos, err
 }

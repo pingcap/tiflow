@@ -62,7 +62,7 @@ type (
 		init   bool
 		cancel context.CancelFunc
 		closed int32
-		status *dummyWorkerStatus
+		status *dummyWorkerState
 		config *WorkerConfig
 		errCh  chan error
 
@@ -70,45 +70,45 @@ type (
 
 		statusCode struct {
 			sync.RWMutex
-			code frameModel.WorkerStatusCode
+			code frameModel.WorkerState
 		}
 
 		startTime time.Time
 	}
 )
 
-type dummyWorkerStatus struct {
+type dummyWorkerState struct {
 	rwm        sync.RWMutex
 	BusinessID int               `json:"business-id"`
 	Tick       int64             `json:"tick"`
 	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
-func (s *dummyWorkerStatus) tick() {
+func (s *dummyWorkerState) tick() {
 	s.rwm.Lock()
 	defer s.rwm.Unlock()
 	s.Tick++
 }
 
-func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
+func (s *dummyWorkerState) getEtcdCheckpoint() workerCheckpoint {
 	s.rwm.RLock()
 	defer s.rwm.RUnlock()
 	return *s.Checkpoint
 }
 
-func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
+func (s *dummyWorkerState) setEtcdCheckpoint(ckpt *workerCheckpoint) {
 	s.rwm.Lock()
 	defer s.rwm.Unlock()
 	s.Checkpoint = ckpt
 }
 
-func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
+func (s *dummyWorkerState) Marshal() ([]byte, error) {
 	s.rwm.RLock()
 	defer s.rwm.RUnlock()
 	return json.Marshal(s)
 }
 
-func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
+func (s *dummyWorkerState) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
@@ -121,7 +121,7 @@ func (d *dummyWorker) InitImpl(_ context.Context) error {
 			d.cancel = cancel
 		}
 		d.init = true
-		d.setStatusCode(frameModel.WorkerStatusNormal)
+		d.setState(frameModel.WorkerStateNormal)
 		d.startTime = time.Now()
 		return nil
 	}
@@ -155,13 +155,13 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return nil
 	}
 
-	if d.getStatusCode() == frameModel.WorkerStatusStopped {
-		d.setStatusCode(frameModel.WorkerStatusStopped)
+	if d.getState() == frameModel.WorkerStateStopped {
+		d.setState(frameModel.WorkerStateStopped)
 		return d.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("worker has been canceled"))
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
-		d.setStatusCode(frameModel.WorkerStatusFinished)
+		d.setState(frameModel.WorkerStateFinished)
 		return d.Exit(ctx, framework.ExitReasonFinished, nil, []byte("worker has reached target tick"))
 	}
 
@@ -180,11 +180,11 @@ func (d *dummyWorker) Status() frameModel.WorkerStatus {
 			log.Panic("unexpected error", zap.Error(err))
 		}
 		return frameModel.WorkerStatus{
-			Code:     d.getStatusCode(),
+			State:    d.getState(),
 			ExtBytes: extBytes,
 		}
 	}
-	return frameModel.WorkerStatus{Code: frameModel.WorkerStatusCreated}
+	return frameModel.WorkerStatus{State: frameModel.WorkerStateCreated}
 }
 
 func (d *dummyWorker) Workload() model.RescUnit {
@@ -196,8 +196,8 @@ func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue)
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			d.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			d.setState(frameModel.WorkerStateStopped)
 		default:
 			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -217,13 +217,13 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) setStatusCode(code frameModel.WorkerStatusCode) {
+func (d *dummyWorker) setState(code frameModel.WorkerState) {
 	d.statusCode.Lock()
 	defer d.statusCode.Unlock()
 	d.statusCode.code = code
 }
 
-func (d *dummyWorker) getStatusCode() frameModel.WorkerStatusCode {
+func (d *dummyWorker) getState() frameModel.WorkerState {
 	d.statusCode.RLock()
 	defer d.statusCode.RUnlock()
 	return d.statusCode.code
@@ -297,7 +297,7 @@ func NewDummyWorker(
 	id frameModel.WorkerID, masterID frameModel.MasterID,
 	wcfg *WorkerConfig,
 ) framework.WorkerImpl {
-	status := &dummyWorkerStatus{
+	status := &dummyWorkerState{
 		BusinessID: wcfg.ID,
 		Tick:       wcfg.Checkpoint.Tick,
 		Checkpoint: &workerCheckpoint{

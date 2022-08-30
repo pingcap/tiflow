@@ -101,15 +101,15 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 
 func (w *exampleWorker) Status() frameModel.WorkerStatus {
 	log.Info("Status")
-	code := frameModel.WorkerStatusNormal
+	code := frameModel.WorkerStateNormal
 	w.work.mu.Lock()
 	finished := w.work.finished
 	w.work.mu.Unlock()
 
 	if finished {
-		code = frameModel.WorkerStatusFinished
+		code = frameModel.WorkerStateFinished
 	}
-	return frameModel.WorkerStatus{Code: code}
+	return frameModel.WorkerStatus{State: code}
 }
 
 func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {

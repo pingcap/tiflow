@@ -46,15 +46,15 @@ func NewMasterMetadataClient(
 
 // Load queries master metadata from metastore, if the metadata does not exist,
 // create a new one and return it.
-func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMetaKVData, error) {
+func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMeta, error) {
 	masterMeta, err := c.metaClient.GetJobByID(ctx, c.masterID)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
 			// TODO refine handling the situation where the mata key does not exist at this point
-			masterMeta := &frameModel.MasterMetaKVData{
+			masterMeta := &frameModel.MasterMeta{
 				// TODO: projectID
-				ID:         c.masterID,
-				StatusCode: frameModel.MasterStatusUninit,
+				ID:    c.masterID,
+				State: frameModel.MasterStateUninit,
 			}
 			return masterMeta, nil
 		}
@@ -65,12 +65,12 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMeta
 }
 
 // Store upsert the data
-func (c *MasterMetadataClient) Store(ctx context.Context, data *frameModel.MasterMetaKVData) error {
+func (c *MasterMetadataClient) Store(ctx context.Context, data *frameModel.MasterMeta) error {
 	return errors.Trace(c.metaClient.UpsertJob(ctx, data))
 }
 
 // Update update the data
-func (c *MasterMetadataClient) Update(ctx context.Context, data *frameModel.MasterMetaKVData) error {
+func (c *MasterMetadataClient) Update(ctx context.Context, data *frameModel.MasterMeta) error {
 	return errors.Trace(c.metaClient.UpdateJob(ctx, data))
 }
 
@@ -81,7 +81,7 @@ func (c *MasterMetadataClient) Delete(ctx context.Context) error {
 }
 
 // LoadAllMasters loads all job masters from metastore
-func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*frameModel.MasterMetaKVData, error) {
+func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*frameModel.MasterMeta, error) {
 	meta, err := c.metaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -89,26 +89,26 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*frameMode
 	return meta, nil
 }
 
-// WorkerMetadataClient provides all ways to manage metadata of all workers
+// WorkerStatusdataClient provides all ways to manage metadata of all workers
 // belonging to a given master
-type WorkerMetadataClient struct {
+type WorkerStatusdataClient struct {
 	masterID   frameModel.MasterID
 	metaClient pkgOrm.Client
 }
 
-// NewWorkerMetadataClient creates a new WorkerMetadataClient instance
-func NewWorkerMetadataClient(
+// NewWorkerStatusdataClient creates a new WorkerStatusdataClient instance
+func NewWorkerStatusdataClient(
 	masterID frameModel.MasterID,
 	metaClient pkgOrm.Client,
-) *WorkerMetadataClient {
-	return &WorkerMetadataClient{
+) *WorkerStatusdataClient {
+	return &WorkerStatusdataClient{
 		masterID:   masterID,
 		metaClient: metaClient,
 	}
 }
 
 // LoadAllWorkers queries all workers of this master
-func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[frameModel.WorkerID]*frameModel.WorkerStatus, error) {
+func (c *WorkerStatusdataClient) LoadAllWorkers(ctx context.Context) (map[frameModel.WorkerID]*frameModel.WorkerStatus, error) {
 	resp, err := c.metaClient.QueryWorkersByMasterID(ctx, c.masterID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -122,7 +122,7 @@ func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[frameMod
 }
 
 // Load queries a worker by its worker id
-func (c *WorkerMetadataClient) Load(ctx context.Context, workerID frameModel.WorkerID) (*frameModel.WorkerStatus, error) {
+func (c *WorkerStatusdataClient) Load(ctx context.Context, workerID frameModel.WorkerID) (*frameModel.WorkerStatus, error) {
 	resp, err := c.metaClient.GetWorkerByID(ctx, c.masterID, workerID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -132,7 +132,7 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID frameModel.Wor
 }
 
 // Remove deletes a given worker from metastore
-func (c *WorkerMetadataClient) Remove(ctx context.Context, id frameModel.WorkerID) (bool, error) {
+func (c *WorkerStatusdataClient) Remove(ctx context.Context, id frameModel.WorkerID) (bool, error) {
 	_, err := c.metaClient.DeleteWorker(ctx, c.masterID, id)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -141,17 +141,17 @@ func (c *WorkerMetadataClient) Remove(ctx context.Context, id frameModel.WorkerI
 }
 
 // Store stores a worker metadata into metastore
-func (c *WorkerMetadataClient) Store(ctx context.Context, data *frameModel.WorkerStatus) error {
+func (c *WorkerStatusdataClient) Store(ctx context.Context, data *frameModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpsertWorker(ctx, data))
 }
 
 // Update updates a worker metadata
-func (c *WorkerMetadataClient) Update(ctx context.Context, data *frameModel.WorkerStatus) error {
+func (c *WorkerStatusdataClient) Update(ctx context.Context, data *frameModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpdateWorker(ctx, data))
 }
 
 // MasterID returns the master id of this metadata client
-func (c *WorkerMetadataClient) MasterID() frameModel.MasterID {
+func (c *WorkerStatusdataClient) MasterID() frameModel.MasterID {
 	return c.masterID
 }
 
@@ -159,7 +159,7 @@ func (c *WorkerMetadataClient) MasterID() frameModel.MasterID {
 func StoreMasterMeta(
 	ctx context.Context,
 	metaClient pkgOrm.Client,
-	meta *frameModel.MasterMetaKVData,
+	meta *frameModel.MasterMeta,
 ) error {
 	metaCli := NewMasterMetadataClient(meta.ID, metaClient)
 	masterMeta, err := metaCli.Load(ctx)

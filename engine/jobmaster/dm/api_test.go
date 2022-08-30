@@ -119,12 +119,12 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", framework.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus("task7", framework.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
 	jm.finishedStatus.Store("task7", finishedTaskStatus)
 
 	// no job

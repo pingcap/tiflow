@@ -195,7 +195,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 		if err := d.impl.InitImpl(ctx); err != nil {
 			return errors.Trace(err)
 		}
-		if err := d.master.markStatusCodeInMetadata(ctx, frameModel.MasterStatusInit); err != nil {
+		if err := d.master.markStateInMetadata(ctx, frameModel.MasterStateInit); err != nil {
 			return errors.Trace(err)
 		}
 	} else {

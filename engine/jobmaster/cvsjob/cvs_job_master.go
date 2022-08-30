@@ -81,7 +81,7 @@ type JobMaster struct {
 	launchedWorkers sync.Map
 	statusCode      struct {
 		sync.RWMutex
-		code frameModel.WorkerStatusCode
+		code frameModel.WorkerState
 	}
 	ctx     context.Context
 	clocker clock.Clock
@@ -114,7 +114,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, master
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	log.Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
-	jm.setStatusCode(frameModel.WorkerStatusInit)
+	jm.setState(frameModel.WorkerStateInit)
 	filesNum := jm.jobStatus.Config.FileNum
 	if filesNum == 0 {
 		return errors.New("no file found under the folder")
@@ -139,7 +139,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	jm.setStatusCode(frameModel.WorkerStatusNormal)
+	jm.setState(frameModel.WorkerStateNormal)
 	return nil
 }
 
@@ -156,7 +156,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.Lock()
 	defer jm.Unlock()
 	if 0 == len(jm.jobStatus.FileInfos) {
-		jm.setStatusCode(frameModel.WorkerStatusFinished)
+		jm.setState(frameModel.WorkerStateFinished)
 		log.Info("cvs job master finished")
 		status := jm.Status()
 		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonFinished, nil, string(status.ExtBytes))
@@ -181,8 +181,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		// update job status
 		handle := *(*framework.WorkerHandle)(workerInfo.handle.Load())
 		status := handle.Status()
-		switch status.Code {
-		case frameModel.WorkerStatusNormal, frameModel.WorkerStatusFinished, frameModel.WorkerStatusStopped:
+		switch status.State {
+		case frameModel.WorkerStateNormal, frameModel.WorkerStateFinished, frameModel.WorkerStateStopped:
 			taskStatus := &cvsTask.Status{}
 			err := json.Unmarshal(status.ExtBytes, taskStatus)
 			if err != nil {
@@ -193,7 +193,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			jm.counter += taskStatus.Count
 
 			log.Debug("cvs job tmp num ", zap.Any("id", idx), zap.Any("status", string(status.ExtBytes)))
-		case frameModel.WorkerStatusError:
+		case frameModel.WorkerStateError:
 			log.Error("sync file failed ", zap.Any("idx", idx))
 		default:
 			log.Info("worker status abnormal", zap.Any("status", status))
@@ -209,9 +209,9 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		if err != nil {
 			log.Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
-		log.Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
+		log.Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getState()))
 	}
-	if jm.getStatusCode() == frameModel.WorkerStatusStopped {
+	if jm.getState() == frameModel.WorkerStateStopped {
 		log.Info("cvs job master stopped")
 		status := jm.Status()
 		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, string(status.ExtBytes))
@@ -364,8 +364,8 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			jm.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			jm.setState(frameModel.WorkerStateStopped)
 			for _, worker := range jm.syncFilesInfo {
 				if worker.handle.Load() == nil {
 					continue
@@ -377,7 +377,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 					SendTime:     jm.clocker.Mono(),
 					FromMasterID: jm.BaseJobMaster.ID(),
 					Epoch:        jm.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  frameModel.WorkerStatusStopped,
+					ExpectState:  frameModel.WorkerStateStopped,
 				}
 
 				if handle := handle.Unwrap(); handle != nil {
@@ -412,7 +412,7 @@ func (jm *JobMaster) Status() frameModel.WorkerStatus {
 		log.Panic("get status failed", zap.String("id", jm.workerID), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
-		Code:     jm.getStatusCode(),
+		State:    jm.getState(),
 		ExtBytes: status,
 	}
 }
@@ -422,13 +422,13 @@ func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
-func (jm *JobMaster) setStatusCode(code frameModel.WorkerStatusCode) {
+func (jm *JobMaster) setState(code frameModel.WorkerState) {
 	jm.statusCode.Lock()
 	defer jm.statusCode.Unlock()
 	jm.statusCode.code = code
 }
 
-func (jm *JobMaster) getStatusCode() frameModel.WorkerStatusCode {
+func (jm *JobMaster) getState() frameModel.WorkerState {
 	jm.statusCode.RLock()
 	defer jm.statusCode.RUnlock()
 	return jm.statusCode.code

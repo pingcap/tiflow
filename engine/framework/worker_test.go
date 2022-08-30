@@ -35,7 +35,7 @@ import (
 
 var _ Worker = (*DefaultBaseWorker)(nil) // _ runtime.Runnable = (Worker)(nil)
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *frameModel.MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *frameModel.MasterMeta) {
 	err := metaclient.UpsertJob(ctx, metaData)
 	require.NoError(t, err)
 }
@@ -56,16 +56,16 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
 
@@ -87,7 +87,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		return hbMsg.FromWorkerID == workerID1 && hbMsg.Epoch == 1
 	}, "unexpected heartbeat %v", hbMsg)
 
-	err = worker.UpdateStatus(ctx, frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal})
+	err = worker.UpdateStatus(ctx, frameModel.WorkerStatus{State: frameModel.WorkerStateNormal})
 	require.NoError(t, err)
 
 	var statusMsg *statusutil.WorkerStatusMessage
@@ -100,10 +100,10 @@ func TestWorkerInitAndClose(t *testing.T) {
 		}
 		return !ok
 	}, time.Second, time.Millisecond*10)
-	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
-		Status:      &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
+		Status:      &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal},
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil).Once()
@@ -124,16 +124,16 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 
 	err := worker.Init(ctx)
@@ -182,16 +182,16 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -219,11 +219,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 	require.NoError(t, err)
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     executorNodeID3,
-		Epoch:      2,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: executorNodeID3,
+		Epoch:  2,
+		State:  frameModel.MasterStateInit,
 	})
 
 	// Trigger a pull from Meta for the latest master's info.
@@ -234,23 +234,23 @@ func TestWorkerMasterFailover(t *testing.T) {
 	}, time.Second*3, time.Millisecond*10)
 }
 
-func TestWorkerStatus(t *testing.T) {
+func TestWorkerState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 1),
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
@@ -262,16 +262,16 @@ func TestWorkerStatus(t *testing.T) {
 	rawStatus, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg := rawStatus.(*statusutil.WorkerStatusMessage)
-	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &frameModel.WorkerStatus{
-			Code: frameModel.WorkerStatusInit,
+			State: frameModel.WorkerStateInit,
 		},
 	}, msg)
 
 	err = worker.UpdateStatus(ctx, frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 6),
 	})
 	require.NoError(t, err)
@@ -279,11 +279,11 @@ func TestWorkerStatus(t *testing.T) {
 	rawStatus, ok = worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg = rawStatus.(*statusutil.WorkerStatusMessage)
-	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &frameModel.WorkerStatus{
-			Code:     frameModel.WorkerStatusNormal,
+			State:    frameModel.WorkerStateNormal,
 			ExtBytes: fastMarshalDummyStatus(t, 6),
 		},
 	}, msg)
@@ -299,16 +299,16 @@ func TestWorkerSuicide(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil)
 
@@ -340,16 +340,16 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(submitTime.Add(worker.timeoutConfig.WorkerTimeoutDuration * 2))
 
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil)
@@ -380,11 +380,11 @@ func TestWorkerGracefulExit(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -449,11 +449,11 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -527,16 +527,16 @@ func TestExitWithoutReturn(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		Epoch:      1,
-		StatusCode: frameModel.MasterStatusInit,
+	putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+		ID:     masterName,
+		NodeID: masterNodeName,
+		Epoch:  1,
+		State:  frameModel.MasterStateInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}, nil)
 
 	err := worker.Init(ctx)
@@ -552,10 +552,10 @@ func TestExitWithoutReturn(t *testing.T) {
 	require.Regexp(t, "Exit error", err)
 }
 
-func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
+func checkWorkerStateMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
 	require.Equal(t, expect.Worker, msg.Worker)
 	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
-	require.Equal(t, expect.Status.Code, expect.Status.Code)
+	require.Equal(t, expect.Status.State, expect.Status.State)
 	require.Equal(t, expect.Status.ErrorMsg, expect.Status.ErrorMsg)
 	require.Equal(t, expect.Status.ExtBytes, expect.Status.ExtBytes)
 }
@@ -567,7 +567,7 @@ func TestWorkerExit(t *testing.T) {
 		exitReason       ExitReason
 		err              error
 		extMsg           []byte
-		expectedStatus   frameModel.WorkerStatusCode
+		expectedStatus   frameModel.WorkerState
 		expectedErrorMsg string
 		expectedExtMsg   []byte
 	}{
@@ -575,7 +575,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              nil,
 			extMsg:           []byte("test finished"),
-			expectedStatus:   frameModel.WorkerStatusFinished,
+			expectedStatus:   frameModel.WorkerStateFinished,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test finished"),
 		},
@@ -583,7 +583,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              errors.New("test finished with error"),
 			extMsg:           []byte("test finished"),
-			expectedStatus:   frameModel.WorkerStatusFinished,
+			expectedStatus:   frameModel.WorkerStateFinished,
 			expectedErrorMsg: "test finished with error",
 			expectedExtMsg:   []byte("test finished"),
 		},
@@ -591,7 +591,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              nil,
 			extMsg:           []byte("test canceled"),
-			expectedStatus:   frameModel.WorkerStatusStopped,
+			expectedStatus:   frameModel.WorkerStateStopped,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test canceled"),
 		},
@@ -599,7 +599,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              errors.New("test canceled with error"),
 			extMsg:           []byte("test canceled"),
-			expectedStatus:   frameModel.WorkerStatusStopped,
+			expectedStatus:   frameModel.WorkerStateStopped,
 			expectedErrorMsg: "test canceled with error",
 			expectedExtMsg:   []byte("test canceled"),
 		},
@@ -607,7 +607,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              nil,
 			extMsg:           []byte("test failed"),
-			expectedStatus:   frameModel.WorkerStatusError,
+			expectedStatus:   frameModel.WorkerStateError,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test failed"),
 		},
@@ -615,7 +615,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              errors.New("test failed with error"),
 			extMsg:           []byte("test failed"),
-			expectedStatus:   frameModel.WorkerStatusError,
+			expectedStatus:   frameModel.WorkerStateError,
 			expectedErrorMsg: "test failed with error",
 			expectedExtMsg:   []byte("test failed"),
 		},
@@ -627,16 +627,16 @@ func TestWorkerExit(t *testing.T) {
 		worker := newMockWorkerImpl(fmt.Sprintf("worker-%d", i), masterName)
 		worker.clock = clock.NewMock()
 		worker.clock.(*clock.Mock).Set(time.Now())
-		putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMetaKVData{
-			ID:         masterName,
-			NodeID:     masterNodeName,
-			Epoch:      1,
-			StatusCode: frameModel.MasterStatusInit,
+		putMasterMeta(ctx, t, worker.metaClient, &frameModel.MasterMeta{
+			ID:     masterName,
+			NodeID: masterNodeName,
+			Epoch:  1,
+			State:  frameModel.MasterStateInit,
 		})
 
 		worker.On("InitImpl", mock.Anything).Return(nil)
 		worker.On("Status").Return(frameModel.WorkerStatus{
-			Code: frameModel.WorkerStatusNormal,
+			State: frameModel.WorkerStateNormal,
 		}, nil)
 
 		err := worker.Init(ctx)
@@ -650,7 +650,7 @@ func TestWorkerExit(t *testing.T) {
 
 		meta, err := worker.metaClient.GetWorkerByID(ctx, masterName, worker.ID())
 		require.NoError(t, err)
-		require.Equal(t, cs.expectedStatus, meta.Code)
+		require.Equal(t, cs.expectedStatus, meta.State)
 		require.Equal(t, cs.expectedErrorMsg, meta.ErrorMsg)
 		require.Equal(t, cs.expectedExtMsg, meta.ExtBytes)
 
