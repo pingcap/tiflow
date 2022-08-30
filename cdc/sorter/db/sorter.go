@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
@@ -86,13 +85,12 @@ type Sorter struct {
 
 // NewSorter creates a new Sorter
 func NewSorter(
-	ctx context.Context, tableID int64, startTs uint64,
+	ctx context.Context, changefeedID model.ChangeFeedID, tableID int64, startTs uint64,
 	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
 	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
 		prometheus.Labels{
 			"namespace": changefeedID.Namespace,

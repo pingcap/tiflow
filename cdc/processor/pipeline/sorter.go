@@ -120,7 +120,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			dbActorID := ssystem.DBActorID(uint64(tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
-				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
