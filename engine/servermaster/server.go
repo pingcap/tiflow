@@ -494,7 +494,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		return err
 	}
 
-	s.executorManager.Start(ctx)
 	// TODO: start job manager
 	s.leader.Store(&rpcutil.Member{Name: s.name(), IsLeader: true})
 	s.leaderInitialized.Store(true)
@@ -800,11 +799,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return
 	}
 
-	// rebuild states from existing meta if needed
-	if err := s.executorManager.ResetExecutors(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	// TODO support TLS.
 	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
 	masterClient, err := pkgClient.NewServerMasterClientWithFailOver(
@@ -914,8 +908,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			s.executorManager.Stop()
 			log.Info("executor manager exited")
 		}()
-		s.executorManager.Start(errgCtx)
-		return nil
+		return s.executorManager.Start(errgCtx)
 	})
 
 	errg.Go(func() error {

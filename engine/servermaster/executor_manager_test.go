@@ -81,6 +81,7 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, resp.Err)
 
+	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*ormModel.Executor{}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
 
 	mgr.Start(ctx)
@@ -200,10 +201,30 @@ func TestExecutorManagerWatch(t *testing.T) {
 		return cancelIn
 	}
 
+	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).
+		Return([]*ormModel.Executor{
+			{ID: executorID1, Address: "127.0.0.1:10001"},
+			{ID: executorID2, Address: "127.0.0.1:10002"},
+		}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID1).Times(1).Return(nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID2).Times(1).Return(nil)
 
 	mgr.Start(ctx)
+
+	// mgr.Start will reset executors first, so there will be two online events.
+	event = <-stream.C
+	require.Equal(t, model.ExecutorStatusChange{
+		ID:   executorID1,
+		Tp:   model.EventExecutorOnline,
+		Addr: "127.0.0.1:10001",
+	}, event)
+	event = <-stream.C
+	require.Equal(t, model.ExecutorStatusChange{
+		ID:   executorID2,
+		Tp:   model.EventExecutorOnline,
+		Addr: "127.0.0.1:10002",
+	}, event)
+
 	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
 	var wg sync.WaitGroup
 	cancel1 := bgExecutorHeartbeat(ctx, &wg, executorID1)

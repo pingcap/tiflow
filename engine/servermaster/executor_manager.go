@@ -49,11 +49,8 @@ type ExecutorManager interface {
 	HasExecutor(executorID string) bool
 	ListExecutors() []*ormModel.Executor
 	GetAddr(executorID model.ExecutorID) (string, bool)
-	Start(ctx context.Context)
+	Start(ctx context.Context) error
 	Stop()
-
-	// ResetExecutors reset all executors with the latest meta from database.
-	ResetExecutors(ctx context.Context) error
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -113,12 +110,6 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	if err := e.metaClient.DeleteExecutor(ctx, id); err != nil {
-		return perrors.Trace(err)
-	}
-
 	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
@@ -131,6 +122,25 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 		Tp:   model.EventExecutorOffline,
 		Addr: addr,
 	})
+
+	// Delete the executor from the database. This operation may take a long time,
+	// and it may fail if the database is unavailable. So we don't want to hold the lock,
+	// and do the deletion in a goroutine.
+	//
+	// We use ttl mechanism to manage the executor's life cycle. So we can tolerate
+	// that a tombstone executor may be left in the database.
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+
+		if err := e.metaClient.DeleteExecutor(ctx, id); err != nil {
+			log.Warn("failed to delete executor from database", zap.String("id", string(id)), zap.Error(err))
+		}
+	}()
+
 	return nil
 }
 
@@ -190,8 +200,6 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 	log.Info("allocate new executor", zap.Stringer("executor", pbExecutor))
 
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	var executorID model.ExecutorID
 	for {
 		executorID = generateExecutorID(pbExecutor.GetName())
@@ -205,13 +213,16 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 		Address:    pbExecutor.GetAddress(),
 		Capability: int(pbExecutor.GetCapability()),
 	}
+	e.registerExecLocked(ormExecutor)
+	e.mu.Unlock()
 
 	// Store the executor info to database.
+	// If any error occurs, client shouldn't use the executor.
+	// The executor in the map will be removed when the ttl expires.
 	if err := e.metaClient.CreateExecutor(ctx, ormExecutor); err != nil {
 		return nil, perrors.Trace(err)
 	}
 
-	e.registerExecLocked(ormExecutor)
 	return ormExecutor, nil
 }
 
@@ -290,7 +301,11 @@ func (e *Executor) statusEqual(status model.ExecutorStatus) bool {
 
 // Start implements ExecutorManager.Start. It starts a background goroutine to
 // check whether all executors are alive periodically.
-func (e *ExecutorManagerImpl) Start(ctx context.Context) {
+func (e *ExecutorManagerImpl) Start(ctx context.Context) error {
+	if err := e.resetExecutors(ctx); err != nil {
+		return perrors.Errorf("failed to reset executors: %v", err)
+	}
+
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
@@ -311,6 +326,8 @@ func (e *ExecutorManagerImpl) Start(ctx context.Context) {
 			}
 		}
 	}()
+
+	return nil
 }
 
 // Stop implements ExecutorManager.Stop
@@ -357,8 +374,7 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 	return executor.Address, true
 }
 
-// ResetExecutors implements ExecutorManager.ResetExecutors.
-func (e *ExecutorManagerImpl) ResetExecutors(ctx context.Context) error {
+func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
