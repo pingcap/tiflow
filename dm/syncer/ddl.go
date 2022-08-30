@@ -275,6 +275,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	}
 
 	if qec.shardingReSync != nil {
+		qec.shardingReSync.currLocation = qec.endLocation
 		// TODO: refactor this, see https://github.com/pingcap/tiflow/issues/6691
 		// for optimistic ddl, we can resync idemponent ddl.
 		cmp := binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, ddl.enableGTID)
