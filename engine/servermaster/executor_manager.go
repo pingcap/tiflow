@@ -124,8 +124,8 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	})
 
 	// Delete the executor from the database. This operation may take a long time,
-	// and it may fail if the database is unavailable. So we don't want to hold the lock,
-	// and do the deletion in a goroutine.
+	// and it may fail if the database is unavailable. So we don't want to hold the lock.
+	// Instead, we do the deletion in a goroutine.
 	//
 	// We use ttl mechanism to manage the executor's life cycle. So we can tolerate
 	// that a tombstone executor may be left in the database.
@@ -218,7 +218,7 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 
 	// Store the executor info to database.
 	// If any error occurs, client shouldn't use the executor.
-	// The executor in the map will be removed when the ttl expires.
+	// The executor in the map will be removed after the ttl expires.
 	if err := e.metaClient.CreateExecutor(ctx, ormExecutor); err != nil {
 		return nil, perrors.Trace(err)
 	}
