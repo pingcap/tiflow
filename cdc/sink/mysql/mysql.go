@@ -437,7 +437,6 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// avoid data race
 	select {
 	case <-ctx.Done():
-		log.Warn("context is done", zap.Error(ctx.Err()))
 		return
 	default:
 	}
@@ -669,10 +668,12 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
-						log.Warn("failed to rollback txn", zap.Error(err))
-						_ = logDMLTxnErr(
-							cerror.WrapError(cerror.ErrMySQLTxnError, err),
-							start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
+						if errors.Cause(rbErr) != context.Canceled {
+							log.Warn("failed to rollback txn", zap.Error(err))
+							_ = logDMLTxnErr(
+								cerror.WrapError(cerror.ErrMySQLTxnError, err),
+								start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
+						}
 					}
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -826,7 +827,9 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	dmls := s.prepareDMLs(rows, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
-		log.Error("execute DMLs failed", zap.String("err", err.Error()))
+		if errors.Cause(err) != context.Canceled {
+			log.Error("execute DMLs failed", zap.Error(err))
+		}
 		return errors.Trace(err)
 	}
 	return nil
