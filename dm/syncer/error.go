@@ -70,6 +70,7 @@ func isDropColumnWithIndexError(err error) bool {
 func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
+	fmt.Println("handleSpecialDDLError check")
 
 	// it only ignore `invalid connection` error (timeout or other causes) for `ADD INDEX`.
 	// `invalid connection` means some data already sent to the server,
@@ -218,20 +219,33 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 
 	// it handles the operations for DDL when encountering `invalid connection` by waiting the asynchronous ddl to synchronize
 	waitAsyncDDL := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+		fmt.Println("waitAsyncDDL precheck")
+		s.tctx.L().Info("waitAsyncDDL precheck")
 		if len(ddls) == 0 || index > len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
 			return err // return the original error
 		}
-		ticker := time.NewTicker(time.Duration(30) * time.Second)
+
+		duration := 30
+		failpoint.Inject("ChangeDuration", func() {
+			duration = 1
+			s.tctx.L().Info("Change duration to 1s", zap.String("ChangeDuration", string(duration)))
+		})
+		ticker := time.NewTicker(time.Duration(duration) * time.Second)
 		defer ticker.Stop()
+		fmt.Println("waitAsyncDDL check")
+		s.tctx.L().Info("waitAsyncDDL check")
 
 		for {
-			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime) // status is synced
+			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
+			if err2 != nil {
+				s.tctx.L().Info("error when getting DDL status fromTiDB", zap.String("err", err2.Error()))
+			}
 			failpoint.Inject("TestStatus", func(val failpoint.Value) {
 				status = val.(string)
+				s.tctx.L().Info("TestStatus:", zap.String("TestStatus", status))
 			})
-			if err != nil {
-				return err2
-			}
+			fmt.Printf("status: %s \n", status)
+			s.tctx.L().Info("statusLog:", zap.String("statusLog", status))
 			select {
 			case <-tctx.Ctx.Done():
 				return nil

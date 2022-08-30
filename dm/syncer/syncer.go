@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
@@ -1389,24 +1388,17 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
+			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
 			if err2 != nil {
-				s.tctx.L().Info("select timestamp failed", zap.String("err", err2.Error()))
-			}
-			var createTimeResults [][]string
-			createTimeResults, err2 = export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
-			if err2 != nil {
-				s.tctx.L().Info("GetSpecifiedColumnValuesAndClose failed", zap.String("err", err2.Error()))
-			}
-			var ddlCreateTimeFloat float64
-			ddlCreateTimeFloat, err2 = strconv.ParseFloat(createTimeResults[0][0], 64)
-			if err2 != nil {
-				s.tctx.L().Info("ddlCreateTime ParseFloat failed", zap.String("err", err2.Error()))
+				s.tctx.L().Info("select unix timestamp failed", zap.String("err", err2.Error()))
 			}
 			var ddlCreateTime int
-			ddlCreateTime, err2 = strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
-			if err2 != nil {
-				s.tctx.L().Info("ddlCreateTime Atoi failed", zap.String("err", err2.Error()))
+			for row.Next() {
+				err2 = row.Scan(&ddlCreateTime)
+				if err2 != nil {
+					s.tctx.L().Info("get ddlCreateTime failed", zap.String("err", err2.Error()))
+				}
+				fmt.Printf("ddlCreateTime: %d \n", ddlCreateTime)
 			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
