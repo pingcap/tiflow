@@ -189,6 +189,14 @@ func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.
 		isPointGet = true
 	}
 	if err != nil {
+		// for Get method, `record not found` error should be translated to empty resp
+		if err == gorm.ErrRecordNotFound {
+			return &metaModel.GetResponse{
+				Header: &metaModel.ResponseHeader{},
+				Kvs:    []*metaModel.KeyValue{},
+			}, nil
+		}
+
 		return nil, sqlErrorFromOpFail(err)
 	}
 

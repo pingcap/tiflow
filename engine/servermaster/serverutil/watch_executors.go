@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -70,13 +71,19 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 	}
 
 	for {
-		var change model.ExecutorStatusChange
+		var (
+			change model.ExecutorStatusChange
+			ok     bool
+		)
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case change = <-updates.C:
+		case change, ok = <-updates.C:
 		}
 
+		if !ok {
+			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
+		}
 		if change.Tp == model.EventExecutorOnline {
 			err := user.AddExecutor(change.ID, change.Addr)
 			if err != nil {

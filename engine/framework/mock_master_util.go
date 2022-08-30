@@ -22,9 +22,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -32,6 +29,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -39,6 +37,8 @@ import (
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -178,9 +178,11 @@ func MockBaseMasterWorkerHeartbeat(
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	executorID p2p.NodeID,
-) {
+) error {
 	worker, ok := master.workerManager.GetWorkers()[workerID]
-	require.True(t, ok)
+	if !ok {
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(workerID)
+	}
 	workerEpoch := worker.Status().Epoch
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
@@ -192,8 +194,7 @@ func MockBaseMasterWorkerHeartbeat(
 			Epoch:        master.currentEpoch.Load(),
 			WorkerEpoch:  workerEpoch,
 		})
-
-	require.NoError(t, err)
+	return err
 }
 
 // MockBaseMasterWorkerUpdateStatus mocks to store status in metastore and sends

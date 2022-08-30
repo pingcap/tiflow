@@ -81,7 +81,12 @@ func TestExampleMaster(t *testing.T) {
 		err = master.Poll(ctx)
 		require.NoError(t, err)
 
-		framework.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+		err = framework.MockBaseMasterWorkerHeartbeat(t,
+			master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+		if err != nil {
+			t.Logf("mock worker heartbeat failed: %s", err)
+			return false
+		}
 
 		master.worker.mu.Lock()
 		online := master.worker.online

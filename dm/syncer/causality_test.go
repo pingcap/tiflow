@@ -110,7 +110,7 @@ func TestCausality(t *testing.T) {
 	results := []opType{dml, dml, dml, dml, conflict, dml}
 	table := &cdcmodel.TableName{Schema: "test", Table: "t1"}
 	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ec := &eventContext{startLocation: location, endLocation: location, lastLocation: location}
 
 	for _, tc := range testCases {
 		change := sqlmodel.NewRowChange(table, nil, tc.preVals, tc.postVals, ti, nil, nil)

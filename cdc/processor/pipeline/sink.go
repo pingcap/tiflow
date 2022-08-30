@@ -82,10 +82,10 @@ func newSinkNode(
 	return sn
 }
 
-func (n *sinkNode) ResolvedTs() model.Ts { return n.getResolvedTs().ResolvedMark() }
-
 func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().ResolvedMark() }
 
+// BarrierTs returns the latest barrierTs.
+// Only for test.
 func (n *sinkNode) BarrierTs() model.Ts { return atomic.LoadUint64(&n.barrierTs) }
 
 func (n *sinkNode) State() TableState { return n.state.Load() }
