@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/coreos/go-semver/semver"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"go.uber.org/zap"
 )
@@ -30,11 +29,11 @@ type MetaData struct {
 }
 
 // NewMetaData creates a new MetaData instance
-func NewMetaData(id frameModel.WorkerID, kvClient metaModel.KVClient, pLogger *zap.Logger) *MetaData {
+func NewMetaData(kvClient metaModel.KVClient, pLogger *zap.Logger) *MetaData {
 	return &MetaData{
-		clusterInfoStore: NewClusterInfoStore(id, kvClient),
-		jobStore:         NewJobStore(id, kvClient, pLogger),
-		ddlStore:         NewDDLStore(id, kvClient),
+		clusterInfoStore: NewClusterInfoStore(kvClient),
+		jobStore:         NewJobStore(kvClient, pLogger),
+		ddlStore:         NewDDLStore(kvClient),
 	}
 }
 
