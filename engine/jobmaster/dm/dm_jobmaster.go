@@ -321,6 +321,13 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	jm.Logger().Info("start pre-checking job config")
 
+	// TODO: refactor this, e.g. move this check to checkpoint agent
+	// lightning create checkpoint table with name `$jobID_lightning_checkpoint_list`
+	// max table of TiDB is 64, so length of jobID should be less or equal than 64-26=38
+	if len(jm.ID()) > 38 {
+		return errors.New("job id is too long, max length is 38")
+	}
+
 	if err := master.AdjustTargetDB(ctx, cfg.TargetDB); err != nil {
 		return err
 	}
