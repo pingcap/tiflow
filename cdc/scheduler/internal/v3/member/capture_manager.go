@@ -81,6 +81,8 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	// Check epoch for initialized captures.
 	if c.State != CaptureStateUninitialized && c.Epoch.Epoch != epoch.Epoch {
 		log.Warn("schedulerv3: ignore heartbeat response",
+			zap.String("captureAddr", c.Addr),
+			zap.String("capture", c.ID),
 			zap.String("epoch", c.Epoch.Epoch),
 			zap.String("respEpoch", epoch.Epoch),
 			zap.Int64("ownerRev", c.OwnerRev.Revision))
@@ -220,7 +222,9 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 			// A new capture.
 			c.Captures[id] = newCaptureStatus(
 				c.OwnerRev, id, info.AdvertiseAddr, c.ownerID == id)
-			log.Info("schedulerv3: find a new capture", zap.String("capture", id))
+			log.Info("schedulerv3: find a new capture",
+				zap.String("captureAddr", info.AdvertiseAddr),
+				zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
 				MsgType:   schedulepb.MsgHeartbeat,
@@ -232,7 +236,9 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 	// Find removed captures.
 	for id, capture := range c.Captures {
 		if _, ok := aliveCaptures[id]; !ok {
-			log.Info("schedulerv3: removed a capture", zap.String("capture", id))
+			log.Info("schedulerv3: removed a capture",
+				zap.String("captureAddr", capture.Addr),
+				zap.String("capture", id))
 			delete(c.Captures, id)
 
 			// Only update changes after initialization.

@@ -45,7 +45,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
+			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
@@ -292,7 +292,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil, log.L()),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
 	}
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
@@ -301,7 +301,7 @@ func TestOperateTask(t *testing.T) {
 func TestGetJobCfg(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	jm := &JobMaster{
-		metadata: metadata.NewMetaData("master-id", kvClient),
+		metadata: metadata.NewMetaData(kvClient, log.L()),
 	}
 	jobCfg, err := jm.GetJobCfg(context.Background())
 	require.EqualError(t, err, "state not found")
@@ -323,7 +323,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(mockBaseJobmaster.ID(), metaKVClient)
+		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
 			checkpointAgent: mockCheckpointAgent,
@@ -375,7 +375,7 @@ func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm := &JobMaster{
-		metadata:     metadata.NewMetaData("master-id", kvClient),
+		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
 	}
 	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})

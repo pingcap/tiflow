@@ -34,14 +34,16 @@ var _ scheduler = &basicScheduler{}
 // 2. DDL CREATE/DROP/TRUNCATE TABLE
 // 3. Capture offline.
 type basicScheduler struct {
+	batchSize            int
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
 	changefeedID         model.ChangeFeedID
 }
 
-func newBasicScheduler(changefeed model.ChangeFeedID) *basicScheduler {
+func newBasicScheduler(batchSize int, changefeed model.ChangeFeedID) *basicScheduler {
 	return &basicScheduler{
+		batchSize:    batchSize,
 		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		changefeedID: changefeed,
 	}
@@ -62,6 +64,9 @@ func (b *basicScheduler) Schedule(
 	tablesAllFind := true
 	newTables := make([]model.TableID, 0)
 	for _, tableID := range currentTables {
+		if len(newTables) >= b.batchSize {
+			break
+		}
 		rep, ok := replications[tableID]
 		if !ok {
 			newTables = append(newTables, tableID)
@@ -101,23 +106,13 @@ func (b *basicScheduler) Schedule(
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
-
-		const logTableIDThreshold = 50
-		tableField := zap.Skip()
-		if len(newTables) < logTableIDThreshold {
-			tableField = zap.Int64s("tableIDs", newTables)
-		}
 		log.Info("schedulerv3: burst add table",
-			tableField,
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
-			zap.Strings("captureIDs", captureIDs))
+			zap.Strings("captureIDs", captureIDs),
+			zap.Int64s("tableIDs", newTables))
 		tasks = append(
-			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
-		if len(newTables) == len(currentTables) {
-			// The initial balance, if new tables and current tables are equal.
-			return tasks
-		}
+			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
 	}
 
 	// Build remove table tasks.
@@ -145,14 +140,14 @@ func (b *basicScheduler) Schedule(
 		}
 		if len(rmTables) > 0 {
 			tasks = append(tasks,
-				newBurstBalanceRemoveTables(rmTables, replications, b.changefeedID))
+				newBurstRemoveTables(rmTables, replications, b.changefeedID))
 		}
 	}
 	return tasks
 }
 
-// newBurstBalanceAddTables add each new table to captures in a round-robin way.
-func newBurstBalanceAddTables(
+// newBurstAddTables add each new table to captures in a round-robin way.
+func newBurstAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
@@ -173,7 +168,7 @@ func newBurstBalanceAddTables(
 	}}
 }
 
-func newBurstBalanceRemoveTables(
+func newBurstRemoveTables(
 	rmTables []model.TableID, replications map[model.TableID]*replication.ReplicationSet,
 	changefeedID model.ChangeFeedID,
 ) *replication.ScheduleTask {
