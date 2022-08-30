@@ -127,7 +127,7 @@ type Master struct {
 
 type businessStatus struct {
 	sync.RWMutex
-	status map[frameModel.WorkerID]*dummyWorkerState
+	status map[frameModel.WorkerID]*dummyWorkerStatus
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -327,7 +327,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 	for _, worker := range m.workerList {
 		if worker != nil {
 			status := worker.Status()
-			dws := &dummyWorkerState{}
+			dws := &dummyWorkerStatus{}
 			if status.ExtBytes != nil {
 				var err error
 				dws, err = parseExtBytes(status.ExtBytes)
@@ -542,8 +542,8 @@ func (m *Master) getState() frameModel.WorkerState {
 	return m.statusCode.code
 }
 
-func parseExtBytes(data []byte) (*dummyWorkerState, error) {
-	dws := &dummyWorkerState{}
+func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
+	dws := &dummyWorkerStatus{}
 	err := json.Unmarshal(data, dws)
 	return dws, err
 }
@@ -614,7 +614,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		workerID2BusinessID: make(map[frameModel.WorkerID]int),
 		config:              masterConfig,
 		statusRateLimiter:   rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
-		bStatus:             &businessStatus{status: make(map[frameModel.WorkerID]*dummyWorkerState)},
+		bStatus:             &businessStatus{status: make(map[frameModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[frameModel.WorkerID]int),
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),

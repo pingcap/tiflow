@@ -62,7 +62,7 @@ type (
 		init   bool
 		cancel context.CancelFunc
 		closed int32
-		status *dummyWorkerState
+		status *dummyWorkerStatus
 		config *WorkerConfig
 		errCh  chan error
 
@@ -77,38 +77,38 @@ type (
 	}
 )
 
-type dummyWorkerState struct {
+type dummyWorkerStatus struct {
 	rwm        sync.RWMutex
 	BusinessID int               `json:"business-id"`
 	Tick       int64             `json:"tick"`
 	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
-func (s *dummyWorkerState) tick() {
+func (s *dummyWorkerStatus) tick() {
 	s.rwm.Lock()
 	defer s.rwm.Unlock()
 	s.Tick++
 }
 
-func (s *dummyWorkerState) getEtcdCheckpoint() workerCheckpoint {
+func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
 	s.rwm.RLock()
 	defer s.rwm.RUnlock()
 	return *s.Checkpoint
 }
 
-func (s *dummyWorkerState) setEtcdCheckpoint(ckpt *workerCheckpoint) {
+func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
 	s.rwm.Lock()
 	defer s.rwm.Unlock()
 	s.Checkpoint = ckpt
 }
 
-func (s *dummyWorkerState) Marshal() ([]byte, error) {
+func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
 	s.rwm.RLock()
 	defer s.rwm.RUnlock()
 	return json.Marshal(s)
 }
 
-func (s *dummyWorkerState) Unmarshal(data []byte) error {
+func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
@@ -297,7 +297,7 @@ func NewDummyWorker(
 	id frameModel.WorkerID, masterID frameModel.MasterID,
 	wcfg *WorkerConfig,
 ) framework.WorkerImpl {
-	status := &dummyWorkerState{
+	status := &dummyWorkerStatus{
 		BusinessID: wcfg.ID,
 		Tick:       wcfg.Checkpoint.Tick,
 		Checkpoint: &workerCheckpoint{
