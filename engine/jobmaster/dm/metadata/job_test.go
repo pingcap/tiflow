@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func TestJobStore(t *testing.T) {
 	)
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", mock.NewMetaMock())
+	jobStore := NewJobStore("job_test", mock.NewMetaMock(), log.L())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
@@ -122,4 +123,6 @@ func TestJobStore(t *testing.T) {
 
 	require.EqualError(t, jobStore.UpdateStages(context.Background(), []string{source2}, StagePaused), "failed to update stages because job is being deleted")
 	require.EqualError(t, jobStore.UpdateConfig(context.Background(), jobCfg), "failed to update config because job is being deleted")
+
+	require.Len(t, jobStore.UpgradeFuncs(), 0)
 }

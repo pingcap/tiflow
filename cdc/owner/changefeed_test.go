@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/gommon/log"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -533,12 +534,14 @@ func testChangefeedReleaseResource(
 		CfID: cf.id,
 		Type: model.AdminRemove,
 	})
+	cf.isReleased = false
 	// changefeed tick will release resources
 	err := cf.tick(ctx, captures)
 	require.Nil(t, err)
 	cancel()
 	// check redo log dir is deleted
 	_, err = os.Stat(redoLogDir)
+	log.Error(err)
 	require.True(t, os.IsNotExist(err))
 }
 

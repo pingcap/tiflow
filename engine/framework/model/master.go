@@ -16,13 +16,14 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"reflect"
 
-	"gorm.io/gorm"
-
+	"github.com/pingcap/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/label"
+	"gorm.io/gorm"
 )
 
 type (
@@ -51,16 +52,48 @@ type MasterMetaExt struct {
 // Value implements driver.Valuer.
 func (e MasterMetaExt) Value() (driver.Value, error) {
 	b, err := json.Marshal(e)
-	return string(b), err
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to marshal MasterMetaExt")
+	}
+	return string(b), nil
 }
 
 // Scan implements sql.Scanner.
-func (e *MasterMetaExt) Scan(input interface{}) error {
-	str := input.(string)
-	if len(str) == 0 {
+func (e *MasterMetaExt) Scan(rawInput interface{}) error {
+	// Zero the fields.
+	*e = MasterMetaExt{}
+
+	if rawInput == nil {
 		return nil
 	}
-	return json.Unmarshal([]byte(input.(string)), e)
+
+	// As different SQL drivers might treat the JSON value differently,
+	// we need to handle two cases where the JSON value is passed as a string
+	// and a byte slice respectively.
+	var bytes []byte
+	switch input := rawInput.(type) {
+	case string:
+		// SQLite is this case.
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = []byte(input)
+	case []byte:
+		// MySQL is this case.
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = input
+	default:
+		return errors.Errorf("failed to scan MasterMetaExt. "+
+			"Expected string or []byte, got %s", reflect.TypeOf(rawInput))
+	}
+
+	if err := json.Unmarshal(bytes, e); err != nil {
+		return errors.Annotate(err, "failed to unmarshal MasterMetaExt")
+	}
+
+	return nil
 }
 
 // MasterMetaKVData defines the metadata of job master

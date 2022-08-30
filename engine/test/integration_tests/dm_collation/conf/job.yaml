@@ -23,4 +23,6 @@ upstreams:
     block-allow-list: global
 block-allow-list:
   global:
-    do-dbs: ["sync_collation*"]
+    do-dbs:
+    - "sync_collation*"
+    - "test_panic"
