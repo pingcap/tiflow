@@ -500,6 +500,7 @@ engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
 engine_integration_test: check_third_party_binary_for_engine
+	mkdir -p /tmp/tiflow_engine_test || true
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" | tee /tmp/tiflow_engine_test/engine_it.log
 	./engine/test/utils/check_log.sh
 
