@@ -238,7 +238,7 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	shardDDL *ShardDDL
+	ddlWorker *DDLWorker
 }
 
 // NewSyncer creates a new Syncer.
@@ -289,8 +289,8 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
+	syncer.safeMode = sm.NewSafeMode()
 
-	syncer.shardDDL = NewShardDDL(&logger, syncer)
 	return syncer
 }
 
@@ -486,6 +486,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
+	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
 
@@ -1326,19 +1327,19 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			s.timezoneLastTime = ddlJob.timezone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		} else if s.timezoneLastTime != "" {
 			// use last time's time zone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		}
 		// set timestamp
 		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
 		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
-		setTimestampSQLDefault := fmt.Sprintf("SET TIMESTAMP = DEFAULT")
+		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
 		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
 
 		// add this ddl ts beacause we start to exec this ddl.
@@ -1849,7 +1850,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// but there are no ways to make `update` idempotent,
 	// if we start syncer at an early position, database must bear a period of inconsistent state,
 	// it's eventual consistency.
-	s.safeMode = sm.NewSafeMode()
 	s.enableSafeModeInitializationPhase(s.runCtx)
 
 	closeShardingResync := func() error {
@@ -2229,7 +2229,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.shardDDL.HandleQueryEvent(ev, ec, originSQL)
+			err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2771,7 +2771,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 
 	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
-		ddlInfo, err := s.genDDLInfo(qec, sql)
+		ddlInfo, err := s.ddlWorker.genDDLInfo(qec, sql)
 		if err != nil {
 			return nil, err
 		}
@@ -3001,13 +3001,15 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) route(table *filter.Table) *filter.Table {
+	return route(s.tableRouter, table)
+}
+
+func route(tableRouter *regexprrouter.RouteTable, table *filter.Table) *filter.Table {
 	if table.Schema == "" {
 		return table
 	}
-	targetSchema, targetTable, err := s.tableRouter.Route(table.Schema, table.Name)
-	if err != nil {
-		s.tctx.L().Error("fail to route table", zap.Stringer("table", table), zap.Error(err)) // log the error, but still continue
-	}
+	// nolint:errcheck
+	targetSchema, targetTable, _ := tableRouter.Route(table.Schema, table.Name)
 	if targetSchema == "" {
 		return table
 	}
