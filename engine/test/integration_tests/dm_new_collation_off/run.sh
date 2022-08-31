@@ -21,16 +21,15 @@ function run() {
 	# create job
 
 	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
+	echo "create dm job"
 
 	# wait for dump and load finished
-
+	echo "check status"
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == 12'"
 
 	# check data
-
+	echo "check consistency"
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 
 	# insert increment data

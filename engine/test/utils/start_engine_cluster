@@ -19,6 +19,6 @@ if [ $i -gt $retry_times ]; then
 	echo -e "\n\n[$(date)] <<<<<< fail to start engine cluster after $retry_times times >>>>>>"
 	exit 1
 else
-	# TODO: add check logic to wait cluster ready
+	echo -e "\nWaiting for engine cluster to start...\n"
 	sleep 20
 fi
