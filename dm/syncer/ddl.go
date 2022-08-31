@@ -994,7 +994,7 @@ func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (
 // 1. generate ddl info;
 // 2. skip sql by skipQueryEvent;
 // 3. apply online ddl if onlineDDL is not nil:
-//    - specially, if skip, apply empty string;
+//   - specially, if skip, apply empty string;
 func (ddl *DDLWorker) processOneDDL(qec *queryEventContext, sql string) ([]string, error) {
 	ddlInfo, err := ddl.genDDLInfo(qec, sql)
 	if err != nil {
