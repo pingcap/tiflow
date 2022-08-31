@@ -130,7 +130,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.True(t.T(), workerManager.allTombStone())
 }
 
-func (t *testDMJobmasterSuite) TestClearWorkerState() {
+func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	messageAgent := &dmpkg.MockMessageAgent{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
