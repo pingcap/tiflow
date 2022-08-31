@@ -157,7 +157,7 @@ func (jm *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, result er
 	jm.Logger().Info("on worker dispatched", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	if result != nil {
 		jm.Logger().Error("failed to create worker", zap.String(logutil.ConstFieldWorkerKey, worker.ID()), zap.Error(result))
-		jm.workerManager.removeWorkerStateByWorkerID(worker.ID())
+		jm.workerManager.removeWorkerStatusByWorkerID(worker.ID())
 		jm.workerManager.SetNextCheckTime(time.Now())
 	}
 	return nil
@@ -177,7 +177,7 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 
 	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
 }
 
@@ -198,7 +198,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 		return jm.onWorkerFinished(finishedTaskStatus, worker)
 	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.Task))
-	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline, taskStatus.CfgModRevision))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 	taskStatus := finishedTaskStatus.TaskStatus
 	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerState(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
 		return err
 	}

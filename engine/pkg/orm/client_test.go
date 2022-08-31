@@ -526,7 +526,7 @@ func TestJob(t *testing.T) {
 		},
 		{
 			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -560,7 +560,7 @@ func TestJob(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -569,7 +569,7 @@ func TestJob(t *testing.T) {
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				expectedSQL := "SELECT * FROM `master_meta` WHERE (id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
 				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnError(
-					errors.New("QueryJobsByStatus error"))
+					errors.New("QueryJobsByState error"))
 			},
 		},
 	}
@@ -781,7 +781,7 @@ func TestWorker(t *testing.T) {
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -813,7 +813,7 @@ func TestWorker(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -821,7 +821,7 @@ func TestWorker(t *testing.T) {
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", 1).WillReturnError(
-					errors.New("QueryWorkersByStatus error"))
+					errors.New("QueryWorkersByState error"))
 			},
 		},
 	}

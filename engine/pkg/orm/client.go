@@ -98,7 +98,7 @@ type JobClient interface {
 	GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMeta, error)
 	QueryJobs(ctx context.Context) ([]*frameModel.MasterMeta, error)
 	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMeta, error)
-	QueryJobsByStatus(ctx context.Context, jobID string, state int) ([]*frameModel.MasterMeta, error)
+	QueryJobsByState(ctx context.Context, jobID string, state int) ([]*frameModel.MasterMeta, error)
 }
 
 // WorkerClient defines interface that manages worker in metastore
@@ -108,7 +108,7 @@ type WorkerClient interface {
 	DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error)
 	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*frameModel.WorkerStatus, error)
 	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*frameModel.WorkerStatus, error)
-	QueryWorkersByStatus(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error)
+	QueryWorkersByState(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error)
 }
 
 // ResourceClient defines interface that manages resource in metastore
@@ -362,8 +362,8 @@ func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID stri
 	return jobs, nil
 }
 
-// QueryJobsByStatus query all jobs with `state` of the projectID
-func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
+// QueryJobsByState query all jobs with `state` of the projectID
+func (c *metaOpsClient) QueryJobsByState(ctx context.Context,
 	jobID string, state int,
 ) ([]*frameModel.MasterMeta, error) {
 	var jobs []*frameModel.MasterMeta
@@ -449,8 +449,8 @@ func (c *metaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID str
 	return workers, nil
 }
 
-// QueryWorkersByStatus query all workers with specified state of masterID
-func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error) {
+// QueryWorkersByState query all workers with specified state of masterID
+func (c *metaOpsClient) QueryWorkersByState(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error) {
 	var workers []*frameModel.WorkerStatus
 	if err := c.db.WithContext(ctx).
 		Where("job_id = ? AND state = ?", masterID, state).

@@ -72,7 +72,7 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerState []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
+func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
 		jobStore:        jobStore,
@@ -83,14 +83,14 @@ func NewWorkerManager(initWorkerState []runtime.WorkerStatus, jobStore *metadata
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
 
-	for _, workerStatus := range initWorkerState {
-		workerManager.UpdateWorkerState(workerStatus)
+	for _, workerStatus := range initWorkerStatus {
+		workerManager.UpdateWorkerStatus(workerStatus)
 	}
 	return workerManager
 }
 
-// UpdateWorkerState is called when receive worker status.
-func (wm *WorkerManager) UpdateWorkerState(workerStatus runtime.WorkerStatus) {
+// UpdateWorkerStatus is called when receive worker status.
+func (wm *WorkerManager) UpdateWorkerStatus(workerStatus runtime.WorkerStatus) {
 	wm.logger.Debug("update worker status", zap.String("task_id", workerStatus.TaskID), zap.String(logutil.ConstFieldWorkerKey, workerStatus.ID))
 	wm.workerStatusMap.Store(workerStatus.TaskID, workerStatus)
 }
@@ -346,7 +346,7 @@ func (wm *WorkerManager) createWorker(
 		//	We need to handle the intermediate state.
 		//	We choose the second mechanism now.
 		//	If a worker is created but never receives a dispatch/online/offline event(2 ticker?), we should remove it.
-		wm.UpdateWorkerState(runtime.InitWorkerStatus(taskID, unit, workerID))
+		wm.UpdateWorkerStatus(runtime.InitWorkerStatus(taskID, unit, workerID))
 	}
 	return err
 }
@@ -365,7 +365,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 	return nil
 }
 
-func (wm *WorkerManager) removeWorkerStateByWorkerID(workerID frameModel.WorkerID) {
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.WorkerID) {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)

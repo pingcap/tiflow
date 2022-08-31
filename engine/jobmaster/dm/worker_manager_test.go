@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
+func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
@@ -52,8 +52,8 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 	require.True(t.T(), workerManager.allTombStone())
 
 	// Creating
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -65,8 +65,8 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 	// Online
 	workerStatus1.Stage = runtime.WorkerOnline
 	workerStatus2.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -77,7 +77,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 
 	// Offline
 	workerStatus1.Stage = runtime.WorkerOffline
-	workerManager.UpdateWorkerState(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -88,7 +88,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 
 	// Finished
 	workerStatus1.Stage = runtime.WorkerFinished
-	workerManager.UpdateWorkerState(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -111,14 +111,14 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 	require.False(t.T(), workerManager.allTombStone())
 
 	// mock dispatch error
-	workerManager.removeWorkerStateByWorkerID("worker-not-exist")
+	workerManager.removeWorkerStatusByWorkerID("worker-not-exist")
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
-	workerManager.removeWorkerStateByWorkerID(workerStatus1.ID)
+	workerManager.removeWorkerStatusByWorkerID(workerStatus1.ID)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 1)
 	require.Contains(t.T(), workerStatusMap, source2)
@@ -126,7 +126,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerState() {
 	require.False(t.T(), workerManager.allTombStone())
 
 	workerStatus2.Stage = runtime.WorkerFinished
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	require.True(t.T(), workerManager.allTombStone())
 }
 
@@ -147,8 +147,8 @@ func (t *testDMJobmasterSuite) TestClearWorkerState() {
 
 	workerStatus1.Stage = runtime.WorkerOffline
 	workerStatus2.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
@@ -182,7 +182,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerState() {
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	workerStatus2.Stage = runtime.WorkerOffline
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	require.NoError(t.T(), workerManager.stopUnneededWorkers(ctx, job))
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
@@ -192,24 +192,24 @@ func (t *testDMJobmasterSuite) TestClearWorkerState() {
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	workerStatus1.Stage = runtime.WorkerFinished
-	workerManager.UpdateWorkerState(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatus2.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 
 	messageAgent.On("SendMessage").Return(destroyError).Once()
 	messageAgent.On("SendMessage").Return(nil).Once()
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	err = workerManager.onJobDel(context.Background())
 	require.EqualError(t.T(), err, destroyError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	workerStatus1.Stage = runtime.WorkerOffline
-	workerManager.UpdateWorkerState(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
-	workerManager.UpdateWorkerState(runtime.InitWorkerStatus("task", framework.WorkerDMDump, "worker-id"))
+	workerManager.UpdateWorkerStatus(runtime.InitWorkerStatus("task", framework.WorkerDMDump, "worker-id"))
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
@@ -371,8 +371,8 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	// expected
 	workerStatus1.Stage = runtime.WorkerOnline
 	workerStatus2.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 2)
@@ -385,7 +385,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	worker3 := "worker3"
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerStatus3 := runtime.InitWorkerStatus(source1, framework.WorkerDMLoad, worker3)
-	workerManager.UpdateWorkerState(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerAgent.On("CreateWorker").Return(worker3, nil).Once()
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
@@ -400,7 +400,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	worker4 := "worker3"
 	workerStatus3.Stage = runtime.WorkerOffline
 	workerStatus4 := runtime.InitWorkerStatus(source1, framework.WorkerDMLoad, worker4)
-	workerManager.UpdateWorkerState(workerStatus3)
+	workerManager.UpdateWorkerStatus(workerStatus3)
 	workerAgent.On("CreateWorker").Return(worker4, nil).Once()
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
@@ -412,7 +412,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 
 	// finished
 	workerStatus4.Stage = runtime.WorkerFinished
-	workerManager.UpdateWorkerState(workerStatus4)
+	workerManager.UpdateWorkerStatus(workerStatus4)
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 2)
@@ -479,8 +479,8 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	// worker online
 	workerStatus1.Stage = runtime.WorkerOnline
 	workerStatus2.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 
 	// mock check by interval
 	workerManager.SetNextCheckTime(time.Now().Add(10 * time.Millisecond))
@@ -494,7 +494,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerStatus2.Stage = runtime.WorkerOffline
 	workerStatus3 := runtime.InitWorkerStatus(source, framework.WorkerDMDump, worker3)
 	// check by offline
-	workerManager.UpdateWorkerState(workerStatus2)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerManager.SetNextCheckTime(time.Now())
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
 	workerAgent.On("CreateWorker").Return(worker3, nil).Once()
@@ -504,7 +504,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 		return workerManager.WorkerStatus()[source].ID == workerStatus3.ID
 	}, 5*time.Second, 100*time.Millisecond)
 	workerStatus3.Stage = runtime.WorkerOnline
-	workerManager.UpdateWorkerState(workerStatus3)
+	workerManager.UpdateWorkerStatus(workerStatus3)
 
 	// mock remove task2 by update-job
 	delete(job.Tasks, source2)
@@ -521,8 +521,8 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	}, 5*time.Second, 100*time.Millisecond)
 	workerStatus1.Stage = runtime.WorkerOffline
 	workerStatus3.Stage = runtime.WorkerOffline
-	workerManager.UpdateWorkerState(workerStatus1)
-	workerManager.UpdateWorkerState(workerStatus3)
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus3)
 
 	// task1 eventually restarts
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
@@ -536,7 +536,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	worker4 := "worker4"
 	workerStatus := workerManager.WorkerStatus()[source1]
 	workerStatus.Stage = runtime.WorkerFinished
-	workerManager.UpdateWorkerState(workerStatus)
+	workerManager.UpdateWorkerStatus(workerStatus)
 	workerAgent.On("CreateWorker").Return(worker4, nil).Once()
 	// check by finished
 	workerManager.SetNextCheckTime(time.Now())
@@ -560,7 +560,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	workerStatus.Stage = runtime.WorkerOffline
-	workerManager.UpdateWorkerState(workerStatus)
+	workerManager.UpdateWorkerStatus(workerStatus)
 	// deleted eventually
 	workerManager.SetNextCheckTime(time.Now())
 	require.Eventually(t.T(), func() bool {

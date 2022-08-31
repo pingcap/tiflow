@@ -100,7 +100,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		}
 		return !ok
 	}, time.Second, time.Millisecond*10)
-	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status:      &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal},
@@ -262,7 +262,7 @@ func TestWorkerState(t *testing.T) {
 	rawStatus, ok := worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg := rawStatus.(*statusutil.WorkerStatusMessage)
-	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &frameModel.WorkerStatus{
@@ -279,7 +279,7 @@ func TestWorkerState(t *testing.T) {
 	rawStatus, ok = worker.messageSender.TryPop(masterNodeName, statusutil.WorkerStatusTopic(masterName))
 	require.True(t, ok)
 	msg = rawStatus.(*statusutil.WorkerStatusMessage)
-	checkWorkerStateMsg(t, &statusutil.WorkerStatusMessage{
+	checkWorkerStatusMsg(t, &statusutil.WorkerStatusMessage{
 		Worker:      workerID1,
 		MasterEpoch: 1,
 		Status: &frameModel.WorkerStatus{
@@ -552,7 +552,7 @@ func TestExitWithoutReturn(t *testing.T) {
 	require.Regexp(t, "Exit error", err)
 }
 
-func checkWorkerStateMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
+func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {
 	require.Equal(t, expect.Worker, msg.Worker)
 	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
 	require.Equal(t, expect.Status.State, expect.Status.State)
@@ -567,7 +567,7 @@ func TestWorkerExit(t *testing.T) {
 		exitReason       ExitReason
 		err              error
 		extMsg           []byte
-		expectedStatus   frameModel.WorkerState
+		expectedState    frameModel.WorkerState
 		expectedErrorMsg string
 		expectedExtMsg   []byte
 	}{
@@ -575,7 +575,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              nil,
 			extMsg:           []byte("test finished"),
-			expectedStatus:   frameModel.WorkerStateFinished,
+			expectedState:    frameModel.WorkerStateFinished,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test finished"),
 		},
@@ -583,7 +583,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              errors.New("test finished with error"),
 			extMsg:           []byte("test finished"),
-			expectedStatus:   frameModel.WorkerStateFinished,
+			expectedState:    frameModel.WorkerStateFinished,
 			expectedErrorMsg: "test finished with error",
 			expectedExtMsg:   []byte("test finished"),
 		},
@@ -591,7 +591,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              nil,
 			extMsg:           []byte("test canceled"),
-			expectedStatus:   frameModel.WorkerStateStopped,
+			expectedState:    frameModel.WorkerStateStopped,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test canceled"),
 		},
@@ -599,7 +599,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              errors.New("test canceled with error"),
 			extMsg:           []byte("test canceled"),
-			expectedStatus:   frameModel.WorkerStateStopped,
+			expectedState:    frameModel.WorkerStateStopped,
 			expectedErrorMsg: "test canceled with error",
 			expectedExtMsg:   []byte("test canceled"),
 		},
@@ -607,7 +607,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              nil,
 			extMsg:           []byte("test failed"),
-			expectedStatus:   frameModel.WorkerStateError,
+			expectedState:    frameModel.WorkerStateError,
 			expectedErrorMsg: "",
 			expectedExtMsg:   []byte("test failed"),
 		},
@@ -615,7 +615,7 @@ func TestWorkerExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              errors.New("test failed with error"),
 			extMsg:           []byte("test failed"),
-			expectedStatus:   frameModel.WorkerStateError,
+			expectedState:    frameModel.WorkerStateError,
 			expectedErrorMsg: "test failed with error",
 			expectedExtMsg:   []byte("test failed"),
 		},
@@ -650,7 +650,7 @@ func TestWorkerExit(t *testing.T) {
 
 		meta, err := worker.metaClient.GetWorkerByID(ctx, masterName, worker.ID())
 		require.NoError(t, err)
-		require.Equal(t, cs.expectedStatus, meta.State)
+		require.Equal(t, cs.expectedState, meta.State)
 		require.Equal(t, cs.expectedErrorMsg, meta.ErrorMsg)
 		require.Equal(t, cs.expectedExtMsg, meta.ExtBytes)
 

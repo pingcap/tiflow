@@ -366,7 +366,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j111",
 				2,
@@ -390,7 +390,7 @@ func TestJobMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j113",
 				1,
@@ -538,7 +538,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -561,7 +561,7 @@ func TestWorkerMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				4,
