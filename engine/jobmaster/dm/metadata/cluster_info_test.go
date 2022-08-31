@@ -29,12 +29,12 @@ func TestInfoStore(t *testing.T) {
 	clusterInfo := NewClusterInfo(ver1)
 	require.True(t, clusterInfo.Version.Equal(ver1))
 
-	clusterInfoStore := NewClusterInfoStore("cluster_info_test", mock.NewMetaMock())
+	clusterInfoStore := NewClusterInfoStore(mock.NewMetaMock())
 	key := clusterInfoStore.Key()
 	keys, err := adapter.DMInfoKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
-	require.Equal(t, keys[0], "cluster_info_test")
+	require.Equal(t, keys[0], "")
 
 	state := clusterInfoStore.CreateState()
 	require.IsType(t, &ClusterInfo{}, state)
