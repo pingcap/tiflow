@@ -16,65 +16,66 @@ package config
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"reflect"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-func (t *testConfig) TestConfig(c *C) {
+func TestConfigFunctions(t *testing.T) {
 	cfg, err := ParseYaml(SampleSourceConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
-	c.Assert(cfg.RelayDir, Equals, "./xx")
-	c.Assert(cfg.ServerID, Equals, uint32(101))
+	require.Equal(t, uint32(101), cfg.ServerID)
 
 	// test clone
 	clone1 := cfg.Clone()
-	c.Assert(cfg, DeepEquals, clone1)
+	require.Equal(t, cfg, clone1)
 	clone1.ServerID = 100
-	c.Assert(cfg.ServerID, Equals, uint32(101))
+	require.Equal(t, uint32(101), cfg.ServerID)
 
 	// test format
-	c.Assert(cfg.String(), Matches, `.*"server-id":101.*`)
+	require.Contains(t, cfg.String(), `server-id":101`)
 	tomlStr, err := clone1.Toml()
-	c.Assert(err, IsNil)
-	c.Assert(tomlStr, Matches, `(.|\n)*server-id = 100(.|\n)*`)
+	require.NoError(t, err)
+	require.Contains(t, tomlStr, `server-id = 100`)
 	yamlStr, err := clone1.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(yamlStr, Matches, `(.|\n)*server-id: 100(.|\n)*`)
+	require.NoError(t, err)
+	require.Contains(t, yamlStr, `server-id: 100`)
 	originCfgStr, err := cfg.Toml()
-	c.Assert(err, IsNil)
-	c.Assert(originCfgStr, Matches, `(.|\n)*server-id = 101(.|\n)*`)
+	require.NoError(t, err)
+	require.Contains(t, originCfgStr, `server-id = 101`)
 	originCfgYamlStr, err := cfg.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(originCfgYamlStr, Matches, `(.|\n)*server-id: 101(.|\n)*`)
+	require.NoError(t, err)
+	require.Contains(t, originCfgYamlStr, `server-id: 101`)
 
 	// test update config file and reload
-	c.Assert(cfg.Parse(tomlStr), IsNil)
-	c.Assert(cfg.ServerID, Equals, uint32(100))
+	require.NoError(t, cfg.Parse(tomlStr))
+	require.Equal(t, uint32(100), cfg.ServerID)
 	cfg1, err := ParseYaml(yamlStr)
-	c.Assert(err, IsNil)
-	c.Assert(cfg1.ServerID, Equals, uint32(100))
+	require.NoError(t, err)
+	require.Equal(t, uint32(100), cfg1.ServerID)
 	cfg.Filters = []*bf.BinlogEventRule{}
 	cfg.Tracer = map[string]interface{}{}
 
 	var cfg2 SourceConfig
-	c.Assert(cfg2.Parse(originCfgStr), IsNil)
-	c.Assert(cfg2.ServerID, Equals, uint32(101))
+	require.NoError(t, cfg2.Parse(originCfgStr))
+	require.Equal(t, uint32(101), cfg2.ServerID)
 
 	cfg3, err := ParseYaml(originCfgYamlStr)
-	c.Assert(err, IsNil)
-	c.Assert(cfg3.ServerID, Equals, uint32(101))
+	require.NoError(t, err)
+	require.Equal(t, uint32(101), cfg3.ServerID)
 
 	// test decrypt password
 	clone1.From.Password = "1234"
@@ -83,14 +84,14 @@ func (t *testConfig) TestConfig(c *C) {
 	clone1.Tracer = map[string]interface{}{}
 	clone1.Filters = []*bf.BinlogEventRule{}
 	clone2 := cfg.DecryptPassword()
-	c.Assert(clone2, DeepEquals, clone1)
+	require.Equal(t, clone1, clone2)
 
 	cfg.From.Password = "xxx"
 	cfg.DecryptPassword()
 
 	cfg.From.Password = ""
 	clone3 := cfg.DecryptPassword()
-	c.Assert(clone3, DeepEquals, cfg)
+	require.Equal(t, cfg, clone3)
 
 	// test toml and parse again
 	clone4 := cfg.Clone()
@@ -98,41 +99,40 @@ func (t *testConfig) TestConfig(c *C) {
 	clone4.Checker.BackoffRollback = Duration{time.Minute * 5}
 	clone4.Checker.BackoffMax = Duration{time.Minute * 5}
 	clone4toml, err := clone4.Toml()
-	c.Assert(err, IsNil)
-	c.Assert(clone4toml, Matches, "(.|\n)*backoff-rollback = \"5m(.|\n)*")
-	c.Assert(clone4toml, Matches, "(.|\n)*backoff-max = \"5m(.|\n)*")
+	require.NoError(t, err)
+	require.Contains(t, clone4toml, `backoff-rollback = "5m`)
+	require.Contains(t, clone4toml, `backoff-max = "5m`)
 
 	var clone5 SourceConfig
-	c.Assert(clone5.Parse(clone4toml), IsNil)
-	c.Assert(clone5, DeepEquals, *clone4)
+	require.NoError(t, clone5.Parse(clone4toml))
+	require.Equal(t, *clone4, clone5)
 	clone4yaml, err := clone4.Yaml()
-	c.Assert(err, IsNil)
-	c.Assert(clone4yaml, Matches, "(.|\n)*backoff-rollback: 5m(.|\n)*")
-	c.Assert(clone4yaml, Matches, "(.|\n)*backoff-max: 5m(.|\n)*")
+	require.NoError(t, err)
+	require.Contains(t, clone4yaml, `backoff-rollback: 5m`)
+	require.Contains(t, clone4yaml, `backoff-max: 5m`)
 
 	clone6, err := ParseYaml(clone4yaml)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	clone6.From.Session = nil
-	c.Assert(clone6, DeepEquals, clone4)
+	require.Equal(t, clone4, clone6)
 
 	// test invalid config
-	dir2 := c.MkDir()
+	dir2 := t.TempDir()
 	configFile := path.Join(dir2, "dm-worker-invalid.toml")
 	configContent := []byte(`
 source-id: haha
 aaa: xxx
 `)
 	err = os.WriteFile(configFile, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	_, err = LoadFromFile(configFile)
-	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "(.|\n)*field aaa not found in type config.SourceConfig(.|\n)*")
+	require.ErrorContains(t, err, "field aaa not found in type config.SourceConfig")
 }
 
-func (t *testConfig) TestConfigVerify(c *C) {
+func TestConfigVerify(t *testing.T) {
 	newConfig := func() *SourceConfig {
 		cfg, err := ParseYaml(SampleSourceConfig)
-		c.Assert(err, IsNil)
+		require.NoError(t, err)
 		cfg.RelayDir = "./xx"
 		return cfg
 	}
@@ -227,36 +227,38 @@ func (t *testConfig) TestConfigVerify(c *C) {
 		cfg := tc.genFunc()
 		err := cfg.Verify()
 		if tc.errorFormat != "" {
-			c.Assert(err, NotNil)
+			require.Error(t, err)
 			lines := strings.Split(err.Error(), "\n")
-			c.Assert(lines[0], Matches, tc.errorFormat)
+			require.Regexp(t, tc.errorFormat, lines[0])
 		} else {
-			c.Assert(err, IsNil)
+			require.NoError(t, err)
 		}
 	}
 }
 
-func (t *testConfig) TestSourceConfigForDowngrade(c *C) {
+func TestSourceConfigForDowngrade(t *testing.T) {
 	cfg, err := ParseYaml(SampleSourceConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// make sure all new field were added
 	cfgForDowngrade := NewSourceConfigForDowngrade(cfg)
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
 	// auto-fix-gtid, meta-dir are not written when downgrade
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+2)
+	require.Equal(t, cfgForDowngradeReflect.NumField()+2, cfgReflect.NumField())
 
 	// make sure all field were copied
 	cfgForClone := &SourceConfigForDowngrade{}
 	Clone(cfgForClone, cfg)
-	c.Assert(cfgForDowngrade, DeepEquals, cfgForClone)
+	require.Equal(t, cfgForClone, cfgForDowngrade)
 }
 
-func subtestFlavor(c *C, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedError string) {
+func subtestFlavor(t *testing.T, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedError string) {
+	t.Helper()
+
 	cfg.Flavor = ""
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version';").
 		WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", sqlInfo))
@@ -264,31 +266,31 @@ func subtestFlavor(c *C, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedErr
 
 	err = cfg.AdjustFlavor(context.Background(), db)
 	if expectedError == "" {
-		c.Assert(err, IsNil)
-		c.Assert(cfg.Flavor, Equals, expectedFlavor)
+		require.NoError(t, err)
+		require.Equal(t, expectedFlavor, cfg.Flavor)
 	} else {
-		c.Assert(err, ErrorMatches, expectedError)
+		require.ErrorContains(t, err, expectedError)
 	}
 }
 
-func (t *testConfig) TestAdjustFlavor(c *C) {
+func TestAdjustFlavor(t *testing.T) {
 	cfg, err := ParseYaml(SampleSourceConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
 	cfg.Flavor = "mariadb"
 	err = cfg.AdjustFlavor(context.Background(), nil)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.Flavor, Equals, mysql.MariaDBFlavor)
+	require.NoError(t, err)
+	require.Equal(t, mysql.MariaDBFlavor, cfg.Flavor)
 	cfg.Flavor = "MongoDB"
 	err = cfg.AdjustFlavor(context.Background(), nil)
-	c.Assert(err, ErrorMatches, ".*flavor MongoDB not supported.*")
+	require.ErrorContains(t, err, "flavor MongoDB not supported")
 
-	subtestFlavor(c, cfg, "10.4.8-MariaDB-1:10.4.8+maria~bionic", mysql.MariaDBFlavor, "")
-	subtestFlavor(c, cfg, "5.7.26-log", mysql.MySQLFlavor, "")
+	subtestFlavor(t, cfg, "10.4.8-MariaDB-1:10.4.8+maria~bionic", mysql.MariaDBFlavor, "")
+	subtestFlavor(t, cfg, "5.7.26-log", mysql.MySQLFlavor, "")
 }
 
-func (t *testConfig) TestAdjustServerID(c *C) {
+func TestAdjustServerID(t *testing.T) {
 	originGetAllServerIDFunc := getAllServerIDFunc
 	defer func() {
 		getAllServerIDFunc = originGetAllServerIDFunc
@@ -296,15 +298,31 @@ func (t *testConfig) TestAdjustServerID(c *C) {
 	getAllServerIDFunc = getMockServerIDs
 
 	cfg, err := ParseYaml(SampleSourceConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	cfg.RelayDir = "./xx"
 
-	c.Assert(cfg.AdjustServerID(context.Background(), nil), IsNil)
-	c.Assert(cfg.ServerID, Equals, uint32(101))
+	require.NoError(t, cfg.AdjustServerID(context.Background(), nil))
+	require.Equal(t, uint32(101), cfg.ServerID)
 
 	cfg.ServerID = 0
-	c.Assert(cfg.AdjustServerID(context.Background(), nil), IsNil)
-	c.Assert(cfg.ServerID, Not(Equals), 0)
+	require.NoError(t, cfg.AdjustServerID(context.Background(), nil))
+	require.NotEqual(t, 0, cfg.ServerID)
+}
+
+func TestAdjustServerIDFallback(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mock.ExpectQuery("SHOW SLAVE HOSTS").
+		WillReturnError(errors.New("mysql error 1227: Access denied; you need (at least one of) the REPLICATION SLAVE privilege(s) for this operation"))
+	mock.ExpectClose()
+
+	cfg, err := ParseYaml(SampleSourceConfig)
+	require.NoError(t, err)
+	cfg.ServerID = 0
+
+	err = cfg.AdjustServerID(context.Background(), db)
+	require.NoError(t, err)
+	require.NotEqual(t, 0, cfg.ServerID)
 }
 
 func getMockServerIDs(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
@@ -314,28 +332,28 @@ func getMockServerIDs(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	}, nil
 }
 
-func (t *testConfig) TestAdjustCaseSensitive(c *C) {
+func TestAdjustCaseSensitive(t *testing.T) {
 	cfg, err := ParseYaml(SampleSourceConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	mock.ExpectQuery("SELECT @@lower_case_table_names;").
 		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(utils.LCTableNamesMixed))
-	c.Assert(cfg.AdjustCaseSensitive(context.Background(), db), IsNil)
-	c.Assert(cfg.CaseSensitive, Equals, false)
+	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), db))
+	require.False(t, cfg.CaseSensitive)
 
 	mock.ExpectQuery("SELECT @@lower_case_table_names;").
 		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(utils.LCTableNamesSensitive))
-	c.Assert(cfg.AdjustCaseSensitive(context.Background(), db), IsNil)
-	c.Assert(cfg.CaseSensitive, Equals, true)
+	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), db))
+	require.True(t, cfg.CaseSensitive)
 
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func (t *testConfig) TestEmbedSampleFile(c *C) {
+func TestEmbedSampleFile(t *testing.T) {
 	data, err := os.ReadFile("./source.yaml")
-	c.Assert(err, IsNil)
-	c.Assert(SampleSourceConfig, Equals, string(data))
+	require.NoError(t, err)
+	require.Equal(t, SampleSourceConfig, string(data))
 }
