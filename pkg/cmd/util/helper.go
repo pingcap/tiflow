@@ -16,7 +16,6 @@ package util
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -119,8 +118,6 @@ func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	fmt.Printf("meta keys:%v\n", metaData.Keys())
-	fmt.Printf("meta undecoded:%v\n", metaData.Undecoded())
 
 	// check if item is a ignoreCheckItem
 	hasIgnoreItem := func(item []string) bool {

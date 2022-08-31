@@ -43,10 +43,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		},
 	}
 	conf.Sink.CSVConfig = &CSVConfig{
-		Seperator:       ",",
-		Delimiter:       "\"",
+		Delimiter:       ",",
+		Quote:           "\"",
 		Terminator:      "",
-		Null:            `\N`,
+		NullString:      `\N`,
 		DateSeparator:   "month",
 		IncludeCommitTs: true,
 	}

@@ -2,10 +2,10 @@
 transaction-atomicity = ""
 
 [sink.csv]
-# Separator between fields. Must be ASCII characters. The default value is ','.
-separator = ','
+# delimiter between fields. Must be ASCII characters. The default value is ','.
+delimiter = ','
 # Quoting delimiter. Empty value means no quoting. The default value is '"'.
-delimiter = '"'
+quote = '"'
 # Line terminator. Empty value means "\r\n" (CRLF) is line terminators. The default value is empty.
 terminator = ''
 # Representation of null values in CSV files, the default value is '\N'

@@ -40,6 +40,9 @@ type Config struct {
 	AvroSchemaRegistry             string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
+
+	// csv only
+	CSVConfig *config.CSVConfig
 }
 
 // NewConfig return a Config for codec
@@ -75,6 +78,14 @@ const (
 	BigintUnsignedHandlingModeString = "string"
 	// BigintUnsignedHandlingModeLong is the long mode for unsigned bigint handling
 	BigintUnsignedHandlingModeLong = "long"
+)
+
+const (
+	Comma           = ","
+	CR              = '\r'
+	LF              = '\n'
+	CRLF            = "\r\n"
+	DoubleQuoteChar = '"'
 )
 
 // Apply fill the Config
@@ -114,6 +125,10 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 	if config.Sink != nil && config.Sink.SchemaRegistry != "" {
 		c.AvroSchemaRegistry = config.Sink.SchemaRegistry
+	}
+
+	if config.Sink != nil && config.Sink.CSVConfig != nil {
+		c.CSVConfig = config.Sink.CSVConfig
 	}
 
 	return nil

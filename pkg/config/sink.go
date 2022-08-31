@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+
 	"go.uber.org/zap"
 )
 
@@ -48,6 +49,18 @@ const (
 
 	defaultMqTxnAtomicity    = noneTxnAtomicity
 	defaultMysqlTxnAtomicity = tableTxnAtomicity
+)
+
+const (
+	Comma = ","
+	// carriage return
+	CR = '\r'
+	// line feed
+	LF              = '\n'
+	CRLF            = "\r\n"
+	DoubleQuoteChar = '"'
+	BackSlash       = '\\'
+	NULL            = "\\N"
 )
 
 // ShouldSplitTxn returns whether the sink should split txn.
@@ -78,10 +91,10 @@ type MQConfig struct {
 }
 
 type CSVConfig struct {
-	Seperator       string `toml:"separator" json:"separator"`
 	Delimiter       string `toml:"delimiter" json:"delimiter"`
+	Quote           string `toml:"quote" json:"quote"`
 	Terminator      string `toml:"terminator" json:"terminator"`
-	Null            string `toml:"null" json:"null"`
+	NullString      string `toml:"null" json:"null"`
 	DateSeparator   string `toml:"date-separator" json:"date-separator"`
 	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
 }
@@ -175,6 +188,42 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		if rule.DispatcherRule != "" {
 			rule.PartitionRule = rule.DispatcherRule
 			rule.DispatcherRule = ""
+		}
+	}
+
+	if s.CSVConfig != nil {
+		// validate quote
+		if len(s.CSVConfig.Quote) > 1 {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote contains more than one character"))
+		}
+		if len(s.CSVConfig.Quote) == 1 {
+			quote := s.CSVConfig.Quote[0]
+			if quote == CR || quote == LF {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+					errors.New("csv config quote cannot be line break character"))
+			}
+		}
+
+		// validate delimiter
+		if len(s.CSVConfig.Delimiter) == 0 {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config delimiter cannot be empty"))
+		}
+		if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
+			strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config delimiter contains line break characters"))
+		}
+		if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote and delimiter cannot be the same"))
+		}
+
+		// validate null string
+		if len(s.CSVConfig.NullString) == 0 {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config null representation value cannot be empty"))
 		}
 	}
 

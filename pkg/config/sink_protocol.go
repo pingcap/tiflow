@@ -24,7 +24,7 @@ const (
 	ProtocolKey = "protocol"
 )
 
-// Protocol is the protocol of the mq message.
+// Protocol is the protocol of the message.
 type Protocol int
 
 // Enum types of the Protocol.
@@ -36,6 +36,7 @@ const (
 	ProtocolCanalJSON
 	ProtocolCraft
 	ProtocolOpen
+	ProtocolCsv
 )
 
 // FromString converts the protocol from string to Protocol enum type.
@@ -57,6 +58,8 @@ func (p *Protocol) FromString(protocol string) error {
 		*p = ProtocolCraft
 	case "open-protocol":
 		*p = ProtocolOpen
+	case "csv":
+		*p = ProtocolCsv
 	default:
 		return cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(protocol)
 	}
@@ -81,6 +84,8 @@ func (p Protocol) String() string {
 		return "craft"
 	case ProtocolOpen:
 		return "open-protocol"
+	case ProtocolCsv:
+		return "csv"
 	default:
 		panic("unreachable")
 	}

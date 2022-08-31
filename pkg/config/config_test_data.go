@@ -167,8 +167,8 @@ const (
     ],
     "schema-registry": "",
     "csv": {
-      "separator": ",",
-      "delimiter": "\"",
+      "delimiter": ",",
+      "quote": "\"",
       "terminator": "",
       "null": "\\N",
       "date-separator": "month",
@@ -213,8 +213,8 @@ const (
       }
     ],
     "csv": {
-      "separator": ",",
-      "delimiter": "\"",
+      "delimiter": ",",
+      "quote": "\"",
       "terminator": "",
       "null": "\\N",
       "date-separator": "month",

@@ -208,10 +208,10 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
 		CSVConfig: &config.CSVConfig{
-			Seperator:       ",",
-			Delimiter:       "\"",
+			Delimiter:       ",",
+			Quote:           "\"",
 			Terminator:      "",
-			Null:            "\\N",
+			NullString:      "\\N",
 			DateSeparator:   "day",
 			IncludeCommitTs: false,
 		},
