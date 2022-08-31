@@ -187,14 +187,6 @@ func (p *processor) AddTable(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	log.Info("adding table",
-		zap.String("captureID", p.captureInfo.ID),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("checkpointTs", startTs),
-		zap.Bool("isPrepare", isPrepare))
-
 	table, err := p.createTablePipeline(
 		ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
@@ -203,7 +195,7 @@ func (p *processor) AddTable(
 	p.tables[tableID] = table
 	if !isPrepare {
 		table.Start(startTs)
-		log.Info("start table",
+		log.Debug("start table",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -697,7 +689,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
-	log.Info("processor creates sink success",
+	log.Info("processor creates sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID),
 		zap.Duration("duration", time.Since(start)))
@@ -717,7 +709,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	p.initialized = true
-	log.Info("run processor",
+	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -1099,6 +1091,16 @@ func (p *processor) Close() error {
 	}
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
+
+	p.cleanupMetrics()
+
+	log.Info("processor closed",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+	return nil
+}
+
+func (p *processor) cleanupMetrics() {
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
@@ -1106,11 +1108,11 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	log.Info("processor is closed successfully")
-	return nil
+
+	sinkmetric.TableSinkTotalRowsCountCounter.
+		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer
