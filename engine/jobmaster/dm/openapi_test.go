@@ -63,7 +63,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
-			metadata:        metadata.NewMetaData(mockBaseJobmaster.ID(), mock.NewMetaMock(), log.L()),
+			metadata:        metadata.NewMetaData(mock.NewMetaMock(), log.L()),
 			messageAgent:    mockMessageAgent,
 			checkpointAgent: mockCheckpointAgent,
 		}

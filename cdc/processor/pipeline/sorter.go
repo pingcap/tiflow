@@ -297,7 +297,7 @@ func (n *sorterNode) start(
 					})
 					if err != nil {
 						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
+							log.Debug("flow control cancelled for table",
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
