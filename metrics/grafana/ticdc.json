@@ -3807,7 +3807,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:10939",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -3816,7 +3815,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:10940",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -4033,7 +4031,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:10588",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -4042,7 +4039,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:10589",
               "format": "short",
               "label": null,
               "logBase": 1,
