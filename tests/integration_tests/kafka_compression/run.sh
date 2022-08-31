@@ -23,7 +23,7 @@ function test_compression() {
 		echo "can't found producer compression algorithm"
 		exit 1
 	fi
-	check_table_exists test.$1finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
+	check_table_exists test.$1_finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 	run_cdc_cli changefeed pause -c $1
 	run_cdc_cli changefeed remove -c $1
