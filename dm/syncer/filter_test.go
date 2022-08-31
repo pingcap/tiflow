@@ -133,6 +133,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 
 	loc := binlog.MustZeroLocation(mysql.MySQLFlavor)
 
+	ddlWorker := NewDDLWorker(&syncer.tctx.Logger, syncer)
 	for _, ca := range cases {
 		qec := &queryEventContext{
 			eventContext: &eventContext{
@@ -142,7 +143,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 			p:         p,
 			ddlSchema: ca.schema,
 		}
-		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
+		ddlInfo, err := ddlWorker.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql
