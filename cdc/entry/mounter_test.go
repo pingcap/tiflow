@@ -964,12 +964,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if tc.Name == "mysql.TypeEnum + notnull + default" {
-			_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
-			require.Equal(t, tc.Res, val, tc.Name)
-			val = getDDLDefaultDefinition(&tc.ColInfo)
-			require.Equal(t, tc.Default, val, tc.Name)
-		}
+		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		require.Equal(t, tc.Res, val, tc.Name)
+		val = getDDLDefaultDefinition(&tc.ColInfo)
+		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
 
