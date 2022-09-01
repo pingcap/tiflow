@@ -136,7 +136,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task gbk" \
 		"\"result\": true" 3
-	sleep 30
+	sleep 60
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task gbk" \
 		"\"result\": true" 3
@@ -172,7 +172,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task gbk" \
 		"\"result\": true" 3
-	sleep 90
+	sleep 60
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task gbk" \
 		"\"result\": true" 3

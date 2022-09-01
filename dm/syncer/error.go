@@ -70,7 +70,6 @@ func isDropColumnWithIndexError(err error) bool {
 func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
-	fmt.Println("handleSpecialDDLError check")
 
 	// it only ignore `invalid connection` error (timeout or other causes) for `ADD INDEX`.
 	// `invalid connection` means some data already sent to the server,
@@ -219,8 +218,6 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 
 	// it handles the operations for DDL when encountering `invalid connection` by waiting the asynchronous ddl to synchronize
 	waitAsyncDDL := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
-		fmt.Println("waitAsyncDDL precheck")
-		s.tctx.L().Info("waitAsyncDDL precheck")
 		if len(ddls) == 0 || index > len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
 			return err // return the original error
 		}
@@ -228,37 +225,32 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		duration := 30
 		failpoint.Inject("ChangeDuration", func() {
 			duration = 1
-			s.tctx.L().Info("Change duration to 1s", zap.String("ChangeDuration", string(duration)))
 		})
 		ticker := time.NewTicker(time.Duration(duration) * time.Second)
 		defer ticker.Stop()
-		fmt.Println("waitAsyncDDL check")
-		s.tctx.L().Info("waitAsyncDDL check")
 
 		for {
 			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
 			if err2 != nil {
-				s.tctx.L().Info("error when getting DDL status fromTiDB", zap.String("err", err2.Error()))
+				s.tctx.L().Warn("error when getting DDL status fromTiDB", zap.String("error", err2.Error()))
 			}
 			failpoint.Inject("TestStatus", func(val failpoint.Value) {
 				status = val.(string)
-				s.tctx.L().Info("TestStatus:", zap.String("TestStatus", status))
+				s.tctx.L().Info("injected test status:", zap.String("TestStatus", status))
 			})
-			fmt.Printf("status: %s \n", status)
-			s.tctx.L().Info("statusLog:", zap.String("statusLog", status))
+			switch status {
+			case model.JobStateDone.String(), model.JobStateSynced.String():
+				return nil
+			case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
+				return terror.ErrCancelledDDL.Generate(ddls[index])
+			case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
+			default:
+				tctx.L().Warn("Unexpected DDL status", zap.String("DDL status", status))
+			}
 			select {
 			case <-tctx.Ctx.Done():
 				return nil
 			case <-ticker.C:
-				switch status {
-				case model.JobStateDone.String(), model.JobStateSynced.String():
-					return nil
-				case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
-					return terror.ErrCancelledDDL.Generate(ddls[index])
-				case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
-				default:
-					tctx.L().Warn("Unexpected DDL status", zap.String("status", status))
-				}
 			}
 		}
 	}
