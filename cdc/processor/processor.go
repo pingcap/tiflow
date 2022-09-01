@@ -100,6 +100,7 @@ type processor struct {
 
 	metricsTableMemoryHistogram prometheus.Observer
 	metricsProcessorMemoryGauge prometheus.Gauge
+	metricRemainKVEventGauge    prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -434,6 +435,8 @@ func newProcessor(
 		metricsTableMemoryHistogram: tableMemoryHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricRemainKVEventGauge: remainKVEventsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
@@ -1020,14 +1023,20 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
-	var total uint64
+	var totalConsumed uint64
+	var totalEvents int64
 	for _, table := range p.tables {
 		consumed := table.MemoryConsumption()
 		p.metricsTableMemoryHistogram.Observe(float64(consumed))
-		total += consumed
+		totalConsumed += consumed
+		events := table.RemainEvents()
+		if events > 0 {
+			totalEvents += events
+		}
 	}
-	p.metricsProcessorMemoryGauge.Set(float64(total))
+	p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
 func (p *processor) Close() error {

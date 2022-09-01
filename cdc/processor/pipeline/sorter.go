@@ -71,6 +71,8 @@ type sorterNode struct {
 
 	redoLogEnabled bool
 	changefeed     model.ChangeFeedID
+	// remainEvents record the amount of event remain in sorter engine
+	remainEvents int64
 }
 
 func newSorterNode(
@@ -250,6 +252,7 @@ func (n *sorterNode) start(
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
+					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
@@ -360,6 +363,8 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
+	} else {
+		atomic.AddInt64(&n.remainEvents, 1)
 	}
 	n.sorter.AddEntry(ctx, event)
 }
@@ -387,3 +392,7 @@ func (n *sorterNode) BarrierTs() model.Ts {
 }
 
 func (n *sorterNode) State() TableState { return n.state.Load() }
+
+func (n *sorterNode) remainEvent() int64 {
+	return atomic.LoadInt64(&n.remainEvents)
+}
