@@ -21,6 +21,7 @@ var (
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
 	sslPatterns      = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
 
+	// to match PEM format, ref: https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail
 	beginPattern      = `(.*?)(-{5})BEGIN( [A-Z]+)+(-{5})`
 	endPattern        = `(.*?)(-{5})END( [A-Z]+)+(-{5})[\"\']?`
 	sslStringPatterns = `(ssl-(ca|key|cert)-bytes:)` + beginPattern + endPattern
@@ -29,7 +30,7 @@ var (
 	sslRegexp       *regexp.Regexp = regexp.MustCompile(sslPatterns)
 	sslStringRegexp *regexp.Regexp = regexp.MustCompile(sslStringPatterns)
 
-	HideSensitiveFunc = func(input string) string {
+	HideSensitive = func(input string) string {
 		output := passwordRegexp.ReplaceAllString(input, "$1******$4")
 		output = sslRegexp.ReplaceAllString(output, "$1 \"******\"")
 		output = sslStringRegexp.ReplaceAllString(output, "$1 \"******\"")

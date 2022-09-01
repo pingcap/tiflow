@@ -18,16 +18,14 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var HideSensitiveFunc = logutil.HideSensitiveFunc
-
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *Job) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddString("HidePasswordObject", HideSensitiveFunc(m.String()))
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *CreateJobRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddString("HidePasswordObject", HideSensitiveFunc(m.String()))
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }

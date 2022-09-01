@@ -43,11 +43,11 @@ func TestHideSensitive(t *testing.T) {
 			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"\"\n security:\n ssl-ca-bytes:\n    - 45\n    ssl-key-bytes:\n    - 45\n    ssl-cert-bytes:\n    - 45\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
 			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n security:\n ssl-ca-bytes: "******"\n    ssl-key-bytes: "******"\n    ssl-cert-bytes: "******"\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
 		}, { // engine dm job with ssl
-			`c="id:\"test_job\" config:\"ssl-ca-bytes:  -----BEGIN CERTIFICATE-----\\nMIIFCTCCAvGgAwIBAgIUblG+wGoY2WD9PwJ9W+TXfFzWdtMwDQYJKoZIhvcNAQEL\\nBQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTIyMDkwMTA1MTEzNloXDTI1M\\nL7kXyyoGsJaeYK+eQBoSrLSUJhys7j5TFicAZjrLsvlOR/gXuI/4a7XsK4W3\\n-----END CERTIFICATE-----\\nssl-key-bytes: '-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDpEDDMI7xe4niq\\nRGlVeJuE703KyhwOZfBmcuPIsRDwWAEemQwv3JF+jpDMjoqhDzaN9szrxQNo/dgY\\nFbRIr52EnNs/QBrjQb0fSRFC8ItVJYj4bqZ7feN13bCtl2EmwWsCm5GQ+Ncf2\\necaj097pHPqtuDbOhym20jg4\\n-----END PRIVATE KEY-----'\\nssl-cert-bytes:  \\\"-----BEGIN CERTIFICATE REQUEST-----\\nMIICVjCCAT4CAQAwETEPMA0GA1UEAwwGY2xpZW50MIIBIjANBgkqhkiG9w0BAQEF\\npHSriKOYLUbFS3hbIe2e6HojpXLbZ+rvJawV258PmHJZvdOHYaC7T4QooqsYilaQ\\nyHXheA0ExxXkBYasiiI+1hbUyrkS5k92oZg=\\n-----END CERTIFICATE REQUEST-----\\\"\""`,
+			`c="id:\"test_job\" config:\"ssl-ca-bytes:  -----BEGIN CERTIFICATE-----\\nrandom1\\nrandom2\\nrandom3\\n-----END CERTIFICATE-----\\nssl-key-bytes: '-----BEGIN PRIVATE KEY-----\\nrandom1\\nrandom2\\n-----END PRIVATE KEY-----'\\nssl-cert-bytes:  \\\"-----BEGIN CERTIFICATE REQUEST-----\\nrandom1\\nrandom2\\nrandom3\\n-----END CERTIFICATE REQUEST-----\\\"\""`,
 			`c="id:\"test_job\" config:\"ssl-ca-bytes: "******"\\nssl-key-bytes: "******"\\nssl-cert-bytes: "******"\\\"\""`,
 		},
 	}
 	for _, str := range strs {
-		require.Equal(t, str.new, HideSensitiveFunc(str.old))
+		require.Equal(t, str.new, HideSensitive(str.old))
 	}
 }
