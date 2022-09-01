@@ -134,7 +134,9 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
-		log.Error("execute DMLs failed", zap.String("err", err.Error()))
+		if errors.Cause(err) != context.Canceled {
+			log.Error("execute DMLs failed", zap.Error(err))
+		}
 		return errors.Trace(err)
 	}
 
@@ -336,7 +338,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
 					if rbErr := tx.Rollback(); rbErr != nil {
-						log.Warn("failed to rollback txn", zap.Error(rbErr))
+						if errors.Cause(rbErr) != context.Canceled {
+							log.Warn("failed to rollback txn", zap.Error(rbErr))
+						}
 					}
 					return 0, err
 				}
