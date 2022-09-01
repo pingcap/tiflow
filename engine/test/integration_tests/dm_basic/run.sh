@@ -11,8 +11,8 @@ echo "using adjusted configs to deploy cluster: $CONFIG"
 
 function run() {
 	start_engine_cluster $CONFIG
-	wait_mysql_online.sh --host 127.0.0.1 --port 3306
-	wait_mysql_online.sh --host 127.0.0.1 --port 4000
+	wait_mysql_online.sh --host 127.0.0.1 --port 3306 --try-nums 100
+	wait_mysql_online.sh --host 127.0.0.1 --port 4000 --try-nums 100
 	CGO_ENABLED=0 go test -count=1 -v -run ^TestDMJob$ github.com/pingcap/tiflow/engine/test/e2e
 }
 
