@@ -511,7 +511,26 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	// init metrics
+	// create scheduler
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.initMetrics()
+
+	c.initialized = true
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Stringer("info", c.state.Info))
+
+	return nil
+}
+
+func (c *changefeed) initMetrics() {
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
@@ -524,22 +543,6 @@ LOOP:
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-
-	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.initialized = true
-	log.Info("changefeed initialized",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs),
-		zap.Stringer("info", c.state.Info))
-
-	return nil
 }
 
 // releaseResources is idempotent.
