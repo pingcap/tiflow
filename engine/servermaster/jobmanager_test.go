@@ -103,6 +103,14 @@ func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
 	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
 }
 
+func (m *mockBaseMasterCreateWorkerFailed) CreateWorkerV2(
+	workerType framework.WorkerType,
+	config framework.WorkerConfig,
+	opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
+}
+
 func TestCreateWorkerReturnError(t *testing.T) {
 	t.Parallel()
 

@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -100,6 +102,24 @@ const (
 	maxCreateWorkerConcurrency   = 100
 )
 
+// CreateWorkerOpt specifies an option for creating a worker.
+type CreateWorkerOpt = master.CreateWorkerOpt
+
+// CreateWorkerWithCost specifies the cost of a worker.
+func CreateWorkerWithCost(cost model.RescUnit) CreateWorkerOpt {
+	return master.CreateWorkerWithCost(cost)
+}
+
+// CreateWorkerWithResourceRequirements specifies the resource requirement of a worker.
+func CreateWorkerWithResourceRequirements(resources ...resModel.ResourceID) CreateWorkerOpt {
+	return master.CreateWorkerWithResourceRequirements(resources...)
+}
+
+// CreateWorkerWithSelectors specifies the selectors used to dispatch the worker.
+func CreateWorkerWithSelectors(selectors ...*label.Selector) CreateWorkerOpt {
+	return master.CreateWorkerWithSelectors(selectors...)
+}
+
 // BaseMaster defines the master interface, it embeds the Master interface and
 // contains more core logic of a master
 type BaseMaster interface {
@@ -139,6 +159,14 @@ type BaseMaster interface {
 		config WorkerConfig,
 		cost model.RescUnit,
 		resources ...resModel.ResourceID,
+	) (frameModel.WorkerID, error)
+
+	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// a more flexible way of passing options.
+	CreateWorkerV2(
+		workerType frameModel.WorkerType,
+		config WorkerConfig,
+		opts ...CreateWorkerOpt,
 	) (frameModel.WorkerID, error)
 }
 
@@ -354,6 +382,7 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 			return m.Impl.OnWorkerDispatched(handle, err)
 		}, isInit, m.timeoutConfig, m.clock)
 
+	inheritedSelectors := m.masterMeta.Ext.Selectors
 	workerCreator := master.NewWorkerCreatorBuilder().
 		WithMasterID(m.id).
 		WithHooks(&master.WorkerCreationHooks{BeforeStartingWorker: m.workerManager.BeforeStartingWorker}).
@@ -361,6 +390,7 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		WithServerMasterClient(m.serverMasterClient).
 		WithFrameMetaClient(m.frameMetaClient).
 		WithLogger(m.Logger()).
+		WithInheritedSelectors(inheritedSelectors...).
 		Build()
 	m.workerCreator = workerCreator
 
@@ -605,6 +635,21 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
+	return m.CreateWorkerV2(workerType, config,
+		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
+}
+
+// CreateWorkerV2 implements BaseMaster.CreateWorkerV2
+func (m *DefaultBaseMaster) CreateWorkerV2(
+	workerType frameModel.WorkerType,
+	config WorkerConfig,
+	opts ...CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	m.Logger().Info("CreateWorker",
+		zap.Int64("worker-type", int64(workerType)),
+		zap.Any("worker-config", config),
+		zap.String("master-id", m.id))
+
 	rawConfig, workerID, err := m.PrepareWorkerConfig(workerType, config)
 	if err != nil {
 		return "", err
@@ -631,8 +676,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		err := m.workerCreator.CreateWorker(
 			requestCtx, m.GetProjectInfo(workerID), workerType, workerID, rawConfig,
-			master.CreateWorkerWithCost(cost),
-			master.CreateWorkerWithResourceRequirements(resources...))
+			opts...)
 		if err != nil {
 			m.workerManager.AbortCreatingWorker(workerID, err)
 		}

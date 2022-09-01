@@ -20,6 +20,9 @@ import (
 	"sort"
 	"time"
 
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -186,6 +189,11 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		return nil, err
 	}
 
+	selectors, err := convertSelectors(req)
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
 	log.Info("create job", zap.String("config", string(req.Job.Config)),
 		zap.String("tenant_id", req.TenantId), zap.String("project_id", req.ProjectId))
@@ -203,6 +211,9 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		ID:         job.Id,
 		Config:     job.Config,
 		StatusCode: frameModel.MasterStatusUninit,
+		Ext: frameModel.MasterMetaExt{
+			Selectors: selectors,
+		},
 	}
 	switch job.Type {
 	case pb.Job_CVSDemo:
@@ -244,8 +255,10 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
-	workerID, err := jm.BaseMaster.CreateWorker(
-		meta.Tp, meta, defaultJobMasterCost)
+	workerID, err := jm.BaseMaster.CreateWorkerV2(
+		meta.Tp, meta,
+		framework.CreateWorkerWithCost(defaultJobMasterCost),
+		framework.CreateWorkerWithSelectors(selectors...))
 	if err != nil {
 		err2 := metadata.DeleteMasterMeta(ctx, jm.frameMetaClient, meta.ID)
 		if err2 != nil {
@@ -276,6 +289,25 @@ func validateCreateJobRequest(req *pb.CreateJobRequest) error {
 		return status.Error(codes.InvalidArgument, "job type must be specified")
 	}
 	return nil
+}
+
+func convertSelectors(req *pb.CreateJobRequest) ([]*label.Selector, error) {
+	if len(req.GetJob().Selectors) == 0 {
+		return nil, nil
+	}
+
+	ret := make([]*label.Selector, 0, len(req.GetJob().Selectors))
+	for _, pbSel := range req.Job.Selectors {
+		sel, err := schedModel.SelectorFromPB(pbSel)
+		if err != nil {
+			return nil, err
+		}
+		if err := sel.Validate(); err != nil {
+			return nil, err
+		}
+		ret = append(ret, sel)
+	}
+	return ret, nil
 }
 
 // ListJobs implements JobManagerServer.ListJobs.

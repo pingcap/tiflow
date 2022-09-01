@@ -80,8 +80,9 @@ type WorkerCreator struct {
 	serverMasterClient client.ServerMasterClient
 	frameMetaClient    pkgOrm.Client
 	logger             *zap.Logger
+	hook               *WorkerCreationHooks
 
-	hook *WorkerCreationHooks
+	inheritedSelectors []*label.Selector
 }
 
 // CreateWorker creates a worker synchronously.
@@ -98,7 +99,7 @@ func (c *WorkerCreator) CreateWorker(
 		op(options)
 	}
 
-	req, err := buildScheduleTaskRequest(c.masterID, workerID, options)
+	req, err := c.buildScheduleTaskRequest(c.masterID, workerID, options)
 	if err != nil {
 		return err
 	}
@@ -148,12 +149,16 @@ func (c *WorkerCreator) CreateWorker(
 	return nil
 }
 
-func buildScheduleTaskRequest(
+func (c *WorkerCreator) buildScheduleTaskRequest(
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	opts *createWorkerOpts,
 ) (*pb.ScheduleTaskRequest, error) {
-	selectors, err := toPBSelectors(opts.Selectors...)
+	var finalSelectors []*label.Selector
+	copy(finalSelectors, c.inheritedSelectors)
+	finalSelectors = append(finalSelectors, opts.Selectors...)
+
+	selectors, err := toPBSelectors(finalSelectors...)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +231,12 @@ func (b *WorkerCreatorBuilder) WithLogger(logger *zap.Logger) *WorkerCreatorBuil
 // WithHooks passes a WorkerCreationHooks.
 func (b *WorkerCreatorBuilder) WithHooks(hooks *WorkerCreationHooks) *WorkerCreatorBuilder {
 	b.creator.hook = hooks
+	return b
+}
+
+// WithInheritedSelectors passes the selectors that will be inherited from the master.
+func (b *WorkerCreatorBuilder) WithInheritedSelectors(selectors ...*label.Selector) *WorkerCreatorBuilder {
+	b.creator.inheritedSelectors = selectors
 	return b
 }
 
