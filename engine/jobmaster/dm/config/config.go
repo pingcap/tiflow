@@ -75,7 +75,6 @@ func (u *UpstreamCfg) adjust() error {
 // It represents a DM subtask with multiple source configs embedded as Upstreams.
 // DISCUSS: support command line args. e.g. --start-time.
 type JobCfg struct {
-	Name                string                                `yaml:"name" toml:"name" json:"name"`
 	TaskMode            string                                `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
 	ShardMode           string                                `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
 	IgnoreCheckingItems []string                              `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
@@ -189,6 +188,9 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
 	dmTaskCfg := dmconfig.NewTaskConfig()
+	// set task name for verify
+	// we will replace task name with job-id when create dm-worker
+	dmTaskCfg.Name = "engine_task"
 
 	// Copy all the fields contained in dmTaskCfg.
 	content, err := c.Yaml()
@@ -252,14 +254,14 @@ type TaskCfg JobCfg
 
 // ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
-func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
+func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}
 	cfg.ShardMode = c.ShardMode
 	cfg.OnlineDDL = c.OnlineDDL
 	cfg.ShadowTableRules = c.ShadowTableRules
 	cfg.TrashTableRules = c.TrashTableRules
 	cfg.CollationCompatible = c.CollationCompatible
-	cfg.Name = c.Name
+	cfg.Name = jobID
 	cfg.Mode = c.TaskMode
 	cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 	cfg.MetaSchema = c.MetaSchema
