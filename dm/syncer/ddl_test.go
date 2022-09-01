@@ -121,8 +121,9 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, sql := range qec.splitDDLs {
-		sqls, err := syncer.processOneDDL(qec, sql)
+		sqls, err := ddlWorker.processOneDDL(qec, sql)
 		c.Assert(err, IsNil)
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
@@ -240,6 +241,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	syncer.idAndCollationMap = map[int]string{46: "utf8mb4_bin"}
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for i, sql := range sqls {
 		qec := &queryEventContext{
 			eventContext:    testEC,
@@ -255,7 +257,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql2 := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql2)
+			sqls, err := ddlWorker.processOneDDL(qec, sql2)
 			c.Assert(err, IsNil)
 			for _, sql3 := range sqls {
 				if len(sql3) == 0 {
@@ -267,7 +269,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		c.Assert(qec.appliedDDLs, DeepEquals, expectedSQLs[i])
 		c.Assert(targetSQLs[i], HasLen, len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
-			ddlInfo, err2 := syncer.genDDLInfo(qec, sql2)
+			ddlInfo, err2 := ddlWorker.genDDLInfo(qec, sql2)
 			c.Assert(err2, IsNil)
 			c.Assert(targetSQLs[i][j], Equals, ddlInfo.routedDDL)
 		}
@@ -387,6 +389,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 	p := parser.New()
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, tc := range testCases {
 		qec := &queryEventContext{
 			eventContext: &eventContext{
@@ -403,7 +406,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql)
+			sqls, err := ddlWorker.processOneDDL(qec, sql)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -482,8 +485,9 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		c.Assert(ok, IsTrue)
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
+		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 		for _, sql := range qec.splitDDLs {
-			sqls, err := syncer.processOneDDL(qec, sql)
+			sqls, err := ddlWorker.processOneDDL(qec, sql)
 			c.Assert(err, IsNil)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
@@ -555,7 +559,8 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err := syncer.processOneDDL(qec, sql)
+		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+		sqls, err := ddlWorker.processOneDDL(qec, sql)
 		c.Assert(err, IsNil)
 		table := ca.ghostname
 		matchRules := config.ShadowTableRules
@@ -573,7 +578,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 			ddlSchema:    "test",
 			p:            p,
 		}
-		sqls, err = syncer.processOneDDL(qec, sql)
+		sqls, err = ddlWorker.processOneDDL(qec, sql)
 		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), IsTrue)
 		c.Assert(sqls, HasLen, 0)
 		c.Assert(err, ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
@@ -603,7 +608,8 @@ func (s *testDDLSuite) TestDropSchemaInSharding(c *C) {
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.sgk.Groups(), HasLen, 2)
-	c.Assert(syncer.dropSchemaInSharding(tctx, sourceDB), IsNil)
+	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
+	c.Assert(pessimist.dropSchemaInSharding(tctx, sourceDB), IsNil)
 	c.Assert(syncer.sgk.Groups(), HasLen, 0)
 }
 
@@ -635,7 +641,8 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
 	c.Assert(err, IsNil)
 
-	c.Assert(syncer.clearOnlineDDL(tctx, targetTable), IsNil)
+	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
+	c.Assert(pessimist.clearOnlineDDL(tctx, targetTable), IsNil)
 	c.Assert(mock.toFinish, HasLen, 0)
 }
 
@@ -685,6 +692,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 
 	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
 	idAndCollationMap := map[int]string{46: "utf8mb4_bin", 277: "utf8mb4_vi_0900_ai_ci"}
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for i, statusVars := range statusVarsArray {
 		for j, sql := range sqls {
 			ddlInfo := &ddlInfo{
@@ -697,7 +705,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 			c.Assert(err, IsNil)
 			c.Assert(stmt, NotNil)
 			ddlInfo.stmtCache = stmt
-			adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+			ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 			c.Assert(err, IsNil)
 			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
@@ -764,6 +772,7 @@ func TestAdjustCollation(t *testing.T) {
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci", "latin1": "latin1_swedish_ci"}
 	idAndCollationMap := map[int]string{46: "utf8mb4_bin"}
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for i, sql := range sqls {
 		ddlInfo := &ddlInfo{
 			originDDL:    sql,
@@ -775,7 +784,7 @@ func TestAdjustCollation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stmt)
 		ddlInfo.stmtCache = stmt
-		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+		ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		require.NoError(t, err)
 		require.Equal(t, expectedSQLs[i], routedDDL)

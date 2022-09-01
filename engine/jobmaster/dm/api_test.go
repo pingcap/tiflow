@@ -117,7 +117,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
@@ -307,13 +307,13 @@ func TestGetJobCfg(t *testing.T) {
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, jobCfg)
 
-	jobCfg = &config.JobCfg{Name: "job-id", Upstreams: []*config.UpstreamCfg{{}}}
+	jobCfg = &config.JobCfg{TaskMode: dmconfig.ModeFull, Upstreams: []*config.UpstreamCfg{{}}}
 	job := metadata.NewJob(jobCfg)
 	jm.metadata.JobStore().Put(context.Background(), job)
 
 	jobCfg, err = jm.GetJobCfg(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "job-id", jobCfg.Name)
+	require.Equal(t, dmconfig.ModeFull, jobCfg.TaskMode)
 }
 
 func TestUpdateJobCfg(t *testing.T) {
@@ -330,7 +330,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {
