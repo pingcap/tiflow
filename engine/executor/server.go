@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/common"
@@ -570,9 +572,15 @@ func (s *Server) selfRegister(ctx context.Context) error {
 			Name:       s.cfg.Name,
 			Address:    s.cfg.AdvertiseAddr,
 			Capability: defaultCapability,
+			Labels:     s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
+	if err != nil {
+		return err
+	}
+
+	labelSet, err := label.NewSetFromMap(s.cfg.Labels)
 	if err != nil {
 		return err
 	}
@@ -582,6 +590,7 @@ func (s *Server) selfRegister(ctx context.Context) error {
 		ID:         executorID,
 		Addr:       s.cfg.AdvertiseAddr,
 		Capability: int(defaultCapability),
+		Labels:     labelSet,
 	}
 	log.L().Info("register successful", zap.Any("info", s.info))
 	return nil
