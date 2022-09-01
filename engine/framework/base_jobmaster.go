@@ -42,21 +42,37 @@ import (
 type BaseJobMaster interface {
 	Worker
 
-	OnError(err error)
+	// MetaKVClient return business metastore kv client with job-level isolation
 	MetaKVClient() metaModel.KVClient
+
+	// MetricFactory return a promethus factory with some underlying labels(e.g. job-id, work-id)
 	MetricFactory() promutil.Factory
+
+	// Logger return a zap logger with some underlying fields(e.g. job-id)
 	Logger() *zap.Logger
+
+	// GetWorkers return the handle of all workers, from which we can get the worker status、worker id and
+	// the method for sending message to specific worker
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
+
+	// CreateWorker requires the framework to dispatch a new worker.
+	// If the worker needs to access certain file system resources,
+	// their ID's must be passed by `resources`.
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
+
+	// UpdateJobStatus updates jobmaster(worker of jobmanager) status and
+	// sends a 'status updated' message to jobmanager
 	UpdateJobStatus(ctx context.Context, status frameModel.WorkerStatus) error
+
+	// CurrentEpoch return the epoch of current job
 	CurrentEpoch() frameModel.Epoch
+
+	// SendMessage sends a message of specific topic to jobmanager in a blocking or nonblocking way
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
-	// Exit should be called when job master (in user logic) wants to exit
-	// - If err is nil, it means job master exits normally
-	// - If err is not nil, it means job master meets error, and after it exits
-	//   it will be failover.
-	Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error
+	// Exit should be called when jobmaster (in user logic) wants to exit.
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
+	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 
 	// IsMasterReady returns whether the master has received heartbeats for all
 	// workers after a fail-over. If this is the first time the JobMaster started up,
@@ -100,14 +116,19 @@ type DefaultBaseJobMaster struct {
 type JobMasterImpl interface {
 	MasterImpl
 
+	// Workload return the resource unit of the job master itself
 	Workload() model.RescUnit
+
+	// OnJobManagerMessage is called when receives a message from jobmanager
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
+
 	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
 	// This is used to for JobMaster to register its OpenAPI handler.
 	// The implementation must not retain the apiGroup. It must register
 	// its OpenAPI handler before this function returns.
 	// Note: this function is called before Init().
 	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
+
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsJobMasterImpl()
@@ -251,12 +272,6 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	return d.worker.masterClient.WaitClosed(ctx)
 }
 
-// OnError implements BaseJobMaster.OnError
-func (d *DefaultBaseJobMaster) OnError(err error) {
-	// TODO refine the OnError logic.
-	d.master.OnError(err)
-}
-
 // CreateWorker implements BaseJobMaster.CreateWorker
 func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
@@ -314,22 +329,16 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseJobMaster.Exit
-func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
+func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	var err1 error
-	switch status.Code {
-	case frameModel.WorkerStatusFinished:
-		err1 = d.master.markStatusCodeInMetadata(ctx, frameModel.MasterStatusFinished)
-	case frameModel.WorkerStatusStopped:
-		err1 = d.master.markStatusCodeInMetadata(ctx, frameModel.MasterStatusStopped)
-	}
-	if err1 != nil {
-		return err1
+	// Don't set error center for master to make worker.Exit work well
+	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg); errTmp != nil {
+		return errTmp
 	}
 
-	return d.worker.Exit(ctx, status, err)
+	return d.worker.Exit(ctx, exitReason, err, []byte(extMsg))
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.

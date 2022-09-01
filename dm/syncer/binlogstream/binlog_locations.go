@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,12 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package syncer
+package binlogstream
 
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"go.uber.org/zap"
@@ -27,16 +26,35 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-type locationRecorder struct {
-	//            +-------------+
-	//        ... |current event| ...
-	//       ^    +-------------+    ^
-	//       |                       |
-	// curStartLocation        curEndLocation
-	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
-	// implementation of DM, but in such scenario, those events should always belong to one transaction.
-	// When curStartLocation is equal to curEndLocation, it means current event is not a data change.
-	//
+func isDataEvent(e *replication.BinlogEvent) bool {
+	switch e.Event.(type) {
+	case *replication.TableMapEvent, *replication.RowsEvent, *replication.QueryEvent:
+		return true
+	}
+	return false
+}
+
+// locations provides curStartLocation, curEndLocation, txnEndLocation for binlog
+// events.
+//
+//   - for the event which isDataEvent:
+//     |          +-------------+
+//     |      ... |current event| ...
+//     |     ^    +-------------+    ^
+//     |     |                       |
+//     | curStartLocation        curEndLocation
+//
+//     there may be more events between curStartLocation and curEndLocation due
+//     to the limitation of binlog or implementation of DM, but in such scenario,
+//     those events should always belong to one transaction.
+//
+//   - for RotateEvent:
+//     the binlog filename of curEndLocation and txnEndLocation will be updated
+//     to the new NextLogName in RotateEvent.
+//
+//   - else:
+//     we do not guarantee the behaviour of 3 locations of this struct.
+type locations struct {
 	// curStartLocation is used when
 	// - display a meaningful location
 	// - match the injected location by handle-error
@@ -52,20 +70,9 @@ type locationRecorder struct {
 	// - reset binlog replication for a finer granularity
 	// - save global checkpoint
 	txnEndLocation binlog.Location
-
-	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
-	// distinguish DML query event.
-	inDML bool
-
-	// we assign startGTID := endGTID after COMMIT, so at COMMIT we turn on the flag.
-	needUpdateStartGTID bool
-
-	mu sync.Mutex // guard curEndLocation because Syncer.printStatus is reading it from another goroutine.
 }
 
-func (l *locationRecorder) reset(loc binlog.Location) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *locations) reset(loc binlog.Location) {
 	// need to clone location to avoid the modification leaking outside
 	clone := loc.Clone()
 	l.curStartLocation = clone
@@ -73,18 +80,32 @@ func (l *locationRecorder) reset(loc binlog.Location) {
 	l.txnEndLocation = clone
 }
 
-//nolint:unused
-func (l *locationRecorder) getCurEndLocation() binlog.Location {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.curEndLocation
+// String implements fmt.Stringer.
+func (l *locations) String() string {
+	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
+		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
 }
 
-//nolint:unused
-func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.curEndLocation = location
+// updateHookFunc is used to run some logic before locationRecorder.update.
+type updateHookFunc func()
+
+// locationRecorder can maintain locations along with update(BinlogEvent). For the
+// properties of locations see comments of locations struct.
+// locationRecorder is not concurrent-safe.
+type locationRecorder struct {
+	*locations
+
+	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
+	// distinguish DML query event.
+	inDMLQuery bool
+
+	preUpdateHook []updateHookFunc
+}
+
+func newLocationRecorder() *locationRecorder {
+	return &locationRecorder{
+		locations: &locations{},
+	}
 }
 
 func (l *locationRecorder) saveTxnEndLocation() {
@@ -122,15 +143,7 @@ func (l *locationRecorder) updateCurStartGTID() {
 	}
 }
 
-func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
-	gtidStr, err := event.GetGTIDStr(e)
-	if err != nil {
-		log.L().DPanic("failed to get GTID from event",
-			zap.Any("event", e),
-			zap.Error(err))
-		return
-	}
-
+func (l *locationRecorder) setCurEndGTID(gtidStr string) {
 	gset := l.curEndLocation.GetGTID()
 
 	if gset == nil {
@@ -140,7 +153,7 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 	}
 
 	clone := gset.Clone()
-	err = clone.Update(gtidStr)
+	err := clone.Update(gtidStr)
 	if err != nil {
 		log.L().DPanic("failed to update GTID set",
 			zap.String("GTID", gtidStr),
@@ -161,20 +174,15 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 // - curEndLocation is tried to be updated in-place
 // - txnEndLocation is assigned to curEndLocation when `e` is the last event of a transaction.
 func (l *locationRecorder) update(e *replication.BinlogEvent) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	for _, f := range l.preUpdateHook {
+		f()
+	}
+	// reset to zero value of slice after executed
+	l.preUpdateHook = nil
 
 	// GTID part is maintained separately
 	l.curStartLocation.Position = l.curEndLocation.Position
-
-	if l.needUpdateStartGTID {
-		l.updateCurStartGTID()
-		l.needUpdateStartGTID = false
-	}
-
-	if !shouldUpdatePos(e) {
-		return
-	}
+	l.curStartLocation.Suffix = l.curEndLocation.Suffix
 
 	if event, ok := e.Event.(*replication.RotateEvent); ok {
 		nextName := string(event.NextLogName)
@@ -186,21 +194,48 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		return
 	}
 
+	if !shouldUpdatePos(e) {
+		return
+	}
+
 	l.curEndLocation.Position.Pos = e.Header.LogPos
 
 	switch ev := e.Event.(type) {
 	case *replication.GTIDEvent:
-		l.setCurEndGTID(e)
+		// following event should have new GTID set as end location
+		gtidStr, err := event.GetGTIDStr(e)
+		if err != nil {
+			log.L().DPanic("failed to get GTID from event",
+				zap.Any("event", e),
+				zap.Error(err))
+			break
+		}
+		l.preUpdateHook = append(l.preUpdateHook, func() {
+			l.setCurEndGTID(gtidStr)
+		})
 	case *replication.MariadbGTIDEvent:
-		l.setCurEndGTID(e)
+		// following event should have new GTID set as end location
+		gtidStr, err := event.GetGTIDStr(e)
+		if err != nil {
+			log.L().DPanic("failed to get GTID from event",
+				zap.Any("event", e),
+				zap.Error(err))
+			break
+		}
+		l.preUpdateHook = append(l.preUpdateHook, func() {
+			l.setCurEndGTID(gtidStr)
+		})
+
 		if !ev.IsDDL() {
-			l.inDML = true
+			l.inDMLQuery = true
 		}
 	case *replication.XIDEvent:
 		// for transactional engines like InnoDB, COMMIT is xid event
 		l.saveTxnEndLocation()
-		l.inDML = false
-		l.needUpdateStartGTID = true
+		l.inDMLQuery = false
+
+		// next event can update its GTID set of start location
+		l.preUpdateHook = append(l.preUpdateHook, l.updateCurStartGTID)
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
 		switch query {
@@ -208,23 +243,19 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			// MySQL will write a "BEGIN" query event when it starts a DML transaction, we use this event to distinguish
 			// DML query event which comes from a session binlog_format = STATEMENT.
 			// But MariaDB will not write "BEGIN" query event, we simply hope user should not do that.
-			l.inDML = true
+			l.inDMLQuery = true
 		case "COMMIT":
 			// for non-transactional engines like MyISAM, COMMIT is query event
-			l.inDML = false
+			l.inDMLQuery = false
 		}
 
-		if l.inDML {
+		if l.inDMLQuery {
 			return
 		}
-		l.needUpdateStartGTID = true
+
+		// next event can update its GTID set of start location
+		l.preUpdateHook = append(l.preUpdateHook, l.updateCurStartGTID)
 
 		l.saveTxnEndLocation()
 	}
-}
-
-// String implements fmt.Stringer.
-func (l *locationRecorder) String() string {
-	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
-		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
 }

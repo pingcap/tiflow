@@ -45,6 +45,7 @@ type NodeInfo struct {
 	Type NodeType     `json:"type"`
 	ID   DeployNodeID `json:"id"`
 	Addr string       `json:"addr"`
+	Name string       `json:"name"`
 
 	// The capability of executor, including
 	// 1. cpu (goroutines)

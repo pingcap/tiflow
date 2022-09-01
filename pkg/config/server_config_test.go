@@ -128,6 +128,9 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.CheckBalanceInterval = TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
+
+	conf.AddTableBatchSize = 0
+	require.Error(t, conf.ValidateAndAdjust())
 }
 
 func TestIsValidClusterID(t *testing.T) {

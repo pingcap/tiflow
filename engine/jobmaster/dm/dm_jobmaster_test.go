@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/coreos/go-semver/semver"
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
@@ -433,7 +434,7 @@ func (m *MockBaseJobmaster) Logger() *zap.Logger {
 	return log.L()
 }
 
-func (m *MockBaseJobmaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
+func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitReason, err error, extMsg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
@@ -458,4 +459,8 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) Upgrade(ctx context.Context, preVer semver.Version) error {
+	return nil
 }

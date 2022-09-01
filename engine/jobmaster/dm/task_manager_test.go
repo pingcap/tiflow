@@ -42,7 +42,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	taskManager := NewTaskManager(nil, jobStore, nil, log.L())
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
@@ -134,7 +134,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L())
 
 	source1 := jobCfg.Upstreams[0].SourceID
@@ -272,7 +272,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}

@@ -546,14 +546,13 @@ func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 
 // Run the ddl puller to receive DDL events
 func (h *ddlPullerImpl) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, DDLPullerTableName)
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, h.changefeedID)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-
-	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		return h.ddlJobPuller.Run(ctx)
@@ -563,6 +562,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	g.Go(func() error {
+		h.lastResolvedTsAdvancedTime = h.clock.Now()
 		for {
 			select {
 			case <-ctx.Done():

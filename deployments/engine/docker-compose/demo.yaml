@@ -1,15 +1,17 @@
 version: "2.3"
 services:
-        demo-server:
-                image: dataflow:test
-                ports:
-                        - "1234:1234"
-                command:
-                        - /tiflow-demoserver
-                          # use following flags if you want to test locally.
-                          #- -d 
-                          #- /datax 
-                          #- -a 
-                          #- 0.0.0.0:1234 
-                          #- -r 
-                          #- "1000000"
+  demo-server:
+    image: dataflow:test
+    ports:
+      - "1234:1234"
+    volumes:
+      - /tmp/tiflow_engine_test:/data
+    command:
+      - /tiflow-demoserver
+      - -d 
+      - /data
+      - -a 
+      - 0.0.0.0:1234 
+      # use following flags if you want to test locally.
+      #- -r 
+      #- "100

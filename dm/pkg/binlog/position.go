@@ -189,9 +189,9 @@ func verifyRelaySubDirSuffix(suffix string) bool {
 	return true
 }
 
-// AdjustPosition adjusts the filename with uuid suffix in mysql position
+// RemoveRelaySubDirSuffix removes relay dir suffix from binlog filename of a position.
 // for example: mysql-bin|000001.000002 -> mysql-bin.000002.
-func AdjustPosition(pos gmysql.Position) gmysql.Position {
+func RemoveRelaySubDirSuffix(pos gmysql.Position) gmysql.Position {
 	realPos, err := RealMySQLPos(pos)
 	if err != nil {
 		// just return the origin pos
@@ -217,8 +217,8 @@ func VerifyBinlogPos(pos string) (*gmysql.Position, error) {
 //	0 if pos1 is equal to pos2
 //	-1 if pos1 is less than pos2
 func ComparePosition(pos1, pos2 gmysql.Position) int {
-	adjustedPos1 := AdjustPosition(pos1)
-	adjustedPos2 := AdjustPosition(pos2)
+	adjustedPos1 := RemoveRelaySubDirSuffix(pos1)
+	adjustedPos2 := RemoveRelaySubDirSuffix(pos2)
 
 	// means both pos1 and pos2 have uuid in name, so need also compare the uuid
 	if adjustedPos1.Name != pos1.Name && adjustedPos2.Name != pos2.Name {
@@ -299,12 +299,9 @@ func (l Location) CloneWithFlavor(flavor string) Location {
 	}
 
 	return Location{
-		Position: gmysql.Position{
-			Name: l.Position.Name,
-			Pos:  l.Position.Pos,
-		},
-		gtidSet: newGTIDSet,
-		Suffix:  l.Suffix,
+		Position: l.Position,
+		gtidSet:  newGTIDSet,
+		Suffix:   l.Suffix,
 	}
 }
 
@@ -414,6 +411,12 @@ func compareInjectSuffix(lhs, rhs int) int {
 // ResetSuffix set suffix to 0.
 func (l *Location) ResetSuffix() {
 	l.Suffix = 0
+}
+
+// CopyWithoutSuffixFrom copies a same Location without suffix. Note that gtidSet is shared.
+func (l *Location) CopyWithoutSuffixFrom(from Location) {
+	l.Position = from.Position
+	l.gtidSet = from.gtidSet
 }
 
 // SetGTID set new gtid for location.
