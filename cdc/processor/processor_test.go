@@ -174,6 +174,10 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
+func (m *mockTablePipeline) RemainEvents() int64 {
+	return 1
+}
+
 func (m *mockTablePipeline) State() pipeline.TableState {
 	if m.state == pipeline.TableStateStopped {
 		return m.state

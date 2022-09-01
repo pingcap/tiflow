@@ -230,7 +230,7 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 		u.cfg.Flavor,
 	)
 	if err != nil {
-		u.logger.Error("failed to get source status", zap.Error(err))
+		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
 	u.sourceStatusMu.Lock()
 	u.sourceStatus = sourceStatus

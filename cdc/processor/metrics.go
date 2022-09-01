@@ -114,6 +114,14 @@ var (
 			Name:      "memory_consumption",
 			Help:      "processor's memory consumption estimated in bytes",
 		}, []string{"namespace", "changefeed"})
+
+	remainKVEventsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "remain_kv_events",
+			Help:      "processor's kv events that remained in sorter",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics used in processor
@@ -131,4 +139,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorCloseDuration)
 	registry.MustRegister(tableMemoryHistogram)
 	registry.MustRegister(processorMemoryGauge)
+	registry.MustRegister(remainKVEventsGauge)
 }

@@ -33,7 +33,8 @@ func New() *sink {
 // WriteEvents log the events.
 func (s *sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
 	for _, row := range rows {
-		log.Debug("BlockHoleSink: WriteEvents", zap.Any("row", row))
+		// NOTE: don't change the log, some tests depend on it.
+		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
 	}
 
 	return nil

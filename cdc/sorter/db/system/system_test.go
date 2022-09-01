@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -127,7 +128,8 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	for i := uint64(0); i < 1000; i++ {
 		dbActorID := sys.DBActorID(i)
 		s, err := db.NewSorter(
-			ctx, int64(i), i, sys.DBRouter, dbActorID,
+			ctx, model.ChangeFeedID4Test("test", "test"),
+			int64(i), i, sys.DBRouter, dbActorID,
 			sys.WriterSystem, sys.WriterRouter,
 			sys.ReaderSystem, sys.ReaderRouter,
 			sys.CompactScheduler(), cfg)

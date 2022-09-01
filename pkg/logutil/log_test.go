@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -134,7 +133,10 @@ func TestShortError(t *testing.T) {
 	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
 	require.NoError(t, err)
 
-	err = cerrors.ErrMetaNotInRegion.GenWithStackByArgs("extra info")
+	err = errors.Normalize(
+		"meta not exists in region",
+		errors.RFCCodeText("CDC:ErrMetaNotInRegion"),
+	).GenWithStackByArgs("extra info")
 	log.L().Warn("short error", ShortError(err))
 	require.Regexp(t, regexp.QuoteMeta("[\"short error\"] "+
 		"[error=\"[CDC:ErrMetaNotInRegion]meta not exists in region"), buffer.Stripped())
