@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
@@ -62,7 +63,10 @@ type JobMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 }
 
-var _ framework.JobMasterImpl = (*JobMaster)(nil)
+var (
+	_               framework.JobMasterImpl = (*JobMaster)(nil)
+	internalVersion                         = semver.New("6.1.0")
+)
 
 type dmJobMasterFactory struct{}
 
@@ -99,11 +103,11 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
-	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
+	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
-	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.Logger())
+	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
 	return err
 }
 
@@ -115,6 +119,9 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
 		return jm.Exit(ctx, framework.ExitReasonFailed, err, "")
+	}
+	if err := jm.bootstrap(ctx); err != nil {
+		return err
 	}
 	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return err
@@ -139,7 +146,10 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 // When it is called, the jobCfg may not be in the metadata, and we should not report an error
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	jm.Logger().Info("recovering the dm jobmaster")
-	return jm.initComponents(ctx)
+	if err := jm.initComponents(ctx); err != nil {
+		return err
+	}
+	return jm.bootstrap(ctx)
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
@@ -311,6 +321,13 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	jm.Logger().Info("start pre-checking job config")
 
+	// TODO: refactor this, e.g. move this check to checkpoint agent
+	// lightning create checkpoint table with name `$jobID_lightning_checkpoint_list`
+	// max table of TiDB is 64, so length of jobID should be less or equal than 64-26=38
+	if len(jm.ID()) > 38 {
+		return errors.New("job id is too long, max length is 38")
+	}
+
 	if err := master.AdjustTargetDB(ctx, cfg.TargetDB); err != nil {
 		return err
 	}
@@ -318,7 +335,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
-		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())
+		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg(jm.ID()))
 	}
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
@@ -389,4 +406,37 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")
+}
+
+// bootstrap should be invoked after initComponents.
+func (jm *JobMaster) bootstrap(ctx context.Context) error {
+	jm.Logger().Info("start bootstraping")
+	// get old version
+	clusterInfoStore := jm.metadata.ClusterInfoStore()
+	state, err := clusterInfoStore.Get(ctx)
+	if err != nil {
+		// put cluster info for new job
+		// TODO: better error handling by error code.
+		if err.Error() == "state not found" {
+			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
+			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
+		}
+		jm.Logger().Info("get cluster info error", zap.Error(err))
+		return err
+	}
+	clusterInfo := state.(*metadata.ClusterInfo)
+	jm.Logger().Info("get cluster info for job", zap.Any("cluster_info", clusterInfo))
+
+	if err := jm.metadata.Upgrade(ctx, clusterInfo.Version); err != nil {
+		return err
+	}
+	if err := jm.checkpointAgent.Upgrade(ctx, clusterInfo.Version); err != nil {
+		return err
+	}
+
+	// only update for new version
+	if clusterInfo.Version.LessThan(*internalVersion) {
+		return clusterInfoStore.UpdateVersion(ctx, *internalVersion)
+	}
+	return nil
 }

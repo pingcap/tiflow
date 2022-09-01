@@ -14,13 +14,16 @@
 package model
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"reflect"
 
-	"gorm.io/gorm"
-
+	"github.com/pingcap/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/label"
+	"gorm.io/gorm"
 )
 
 type (
@@ -39,6 +42,59 @@ const (
 	MasterStatusFailed   = MasterStatusCode(5)
 	// extend the status code here
 )
+
+// MasterMetaExt stores some attributes of job masters that do not need
+// to be indexed.
+type MasterMetaExt struct {
+	Selectors []*label.Selector `json:"selectors"`
+}
+
+// Value implements driver.Valuer.
+func (e MasterMetaExt) Value() (driver.Value, error) {
+	b, err := json.Marshal(e)
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to marshal MasterMetaExt")
+	}
+	return string(b), nil
+}
+
+// Scan implements sql.Scanner.
+func (e *MasterMetaExt) Scan(rawInput interface{}) error {
+	// Zero the fields.
+	*e = MasterMetaExt{}
+
+	if rawInput == nil {
+		return nil
+	}
+
+	// As different SQL drivers might treat the JSON value differently,
+	// we need to handle two cases where the JSON value is passed as a string
+	// and a byte slice respectively.
+	var bytes []byte
+	switch input := rawInput.(type) {
+	case string:
+		// SQLite is this case.
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = []byte(input)
+	case []byte:
+		// MySQL is this case.
+		if len(input) == 0 {
+			return nil
+		}
+		bytes = input
+	default:
+		return errors.Errorf("failed to scan MasterMetaExt. "+
+			"Expected string or []byte, got %s", reflect.TypeOf(rawInput))
+	}
+
+	if err := json.Unmarshal(bytes, e); err != nil {
+		return errors.Annotate(err, "failed to unmarshal MasterMetaExt")
+	}
+
+	return nil
+}
 
 // MasterMetaKVData defines the metadata of job master
 type MasterMetaKVData struct {
@@ -59,6 +115,8 @@ type MasterMetaKVData struct {
 
 	// if job is finished or canceled, business logic can set self-defined job info to `ExtMsg`
 	ExtMsg string `json:"extend-message" gorm:"column:extend_message;type:text"`
+
+	Ext MasterMetaExt `json:"ext" gorm:"column:ext;type:JSON"`
 
 	// Deleted is a nullable timestamp. Then master is deleted
 	// if Deleted is not null.
@@ -88,6 +146,7 @@ func (m *MasterMetaKVData) Map() map[string]interface{} {
 		"config":         m.Config,
 		"error_message":  m.ErrorMsg,
 		"extend_message": m.ExtMsg,
+		"ext":            m.Ext,
 	}
 }
 
@@ -106,4 +165,5 @@ var MasterUpdateColumns = []string{
 	"config",
 	"error_message",
 	"extend_message",
+	"ext",
 }

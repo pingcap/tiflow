@@ -83,8 +83,8 @@ func (s *ScheduleTask) Name() string {
 	return "unknown"
 }
 
-// ReplicationManager manages replications and running scheduling tasks.
-type ReplicationManager struct { //nolint:revive
+// Manager manages replications and running scheduling tasks.
+type Manager struct { //nolint:revive
 	tables map[model.TableID]*ReplicationSet
 
 	runningTasks       map[model.TableID]*ScheduleTask
@@ -102,8 +102,8 @@ type ReplicationManager struct { //nolint:revive
 // NewReplicationManager returns a new replication manager.
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
-) *ReplicationManager {
-	return &ReplicationManager{
+) *Manager {
+	return &Manager{
 		tables:             make(map[int64]*ReplicationSet),
 		runningTasks:       make(map[int64]*ScheduleTask),
 		maxTaskConcurrency: maxTaskConcurrency,
@@ -112,7 +112,7 @@ func NewReplicationManager(
 }
 
 // HandleCaptureChanges handles capture changes.
-func (r *ReplicationManager) HandleCaptureChanges(
+func (r *Manager) HandleCaptureChanges(
 	init map[model.CaptureID][]schedulepb.TableStatus,
 	removed map[model.CaptureID][]schedulepb.TableStatus,
 	checkpointTs model.Ts,
@@ -163,7 +163,7 @@ func (r *ReplicationManager) HandleCaptureChanges(
 }
 
 // HandleMessage handles messages sent by other captures.
-func (r *ReplicationManager) HandleMessage(
+func (r *Manager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0, len(msgs))
@@ -192,7 +192,7 @@ func (r *ReplicationManager) HandleMessage(
 	return sentMsgs, nil
 }
 
-func (r *ReplicationManager) handleMessageHeartbeatResponse(
+func (r *Manager) handleMessageHeartbeatResponse(
 	from model.CaptureID, msg *schedulepb.HeartbeatResponse,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
@@ -221,7 +221,7 @@ func (r *ReplicationManager) handleMessageHeartbeatResponse(
 	return sentMsgs, nil
 }
 
-func (r *ReplicationManager) handleMessageDispatchTableResponse(
+func (r *Manager) handleMessageDispatchTableResponse(
 	from model.CaptureID, msg *schedulepb.DispatchTableResponse,
 ) ([]*schedulepb.Message, error) {
 	var status *schedulepb.TableStatus
@@ -261,7 +261,7 @@ func (r *ReplicationManager) handleMessageDispatchTableResponse(
 }
 
 // HandleTasks handles schedule tasks.
-func (r *ReplicationManager) HandleTasks(
+func (r *Manager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
@@ -350,7 +350,7 @@ func (r *ReplicationManager) HandleTasks(
 	return sentMsgs, nil
 }
 
-func (r *ReplicationManager) handleAddTableTask(
+func (r *Manager) handleAddTableTask(
 	task *AddTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
@@ -367,7 +367,7 @@ func (r *ReplicationManager) handleAddTableTask(
 	return table.handleAddTable(task.CaptureID)
 }
 
-func (r *ReplicationManager) handleRemoveTableTask(
+func (r *Manager) handleRemoveTableTask(
 	task *RemoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptRemoveTableTask++
@@ -383,7 +383,7 @@ func (r *ReplicationManager) handleRemoveTableTask(
 	return table.handleRemoveTable()
 }
 
-func (r *ReplicationManager) handleMoveTableTask(
+func (r *Manager) handleMoveTableTask(
 	task *MoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptMoveTableTask++
@@ -391,7 +391,7 @@ func (r *ReplicationManager) handleMoveTableTask(
 	return table.handleMoveTable(task.DestCapture)
 }
 
-func (r *ReplicationManager) handleBurstBalanceTasks(
+func (r *Manager) handleBurstBalanceTasks(
 	task *BurstBalance,
 ) ([]*schedulepb.Message, error) {
 	r.acceptBurstBalanceTask++
@@ -461,18 +461,18 @@ func (r *ReplicationManager) handleBurstBalanceTasks(
 
 // ReplicationSets return all tracking replication set
 // Caller must not modify the returned map.
-func (r *ReplicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
+func (r *Manager) ReplicationSets() map[model.TableID]*ReplicationSet {
 	return r.tables
 }
 
 // RunningTasks return running tasks.
 // Caller must not modify the returned map.
-func (r *ReplicationManager) RunningTasks() map[model.TableID]*ScheduleTask {
+func (r *Manager) RunningTasks() map[model.TableID]*ScheduleTask {
 	return r.runningTasks
 }
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
-func (r *ReplicationManager) AdvanceCheckpoint(
+func (r *Manager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
@@ -503,7 +503,7 @@ func (r *ReplicationManager) AdvanceCheckpoint(
 }
 
 // CollectMetrics collects metrics.
-func (r *ReplicationManager) CollectMetrics() {
+func (r *Manager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
@@ -557,7 +557,7 @@ func (r *ReplicationManager) CollectMetrics() {
 }
 
 // CleanMetrics cleans metrics.
-func (r *ReplicationManager) CleanMetrics() {
+func (r *Manager) CleanMetrics() {
 	cf := r.changefeedID
 	tableGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	slowestTableIDGauge.DeleteLabelValues(cf.Namespace, cf.ID)
@@ -596,11 +596,11 @@ func (r *ReplicationManager) CleanMetrics() {
 }
 
 // SetReplicationSetForTests is only used in tests.
-func (r *ReplicationManager) SetReplicationSetForTests(rs *ReplicationSet) {
+func (r *Manager) SetReplicationSetForTests(rs *ReplicationSet) {
 	r.tables[rs.TableID] = rs
 }
 
 // GetReplicationSetForTests is only used in tests.
-func (r *ReplicationManager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
+func (r *Manager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
 	return r.tables
 }

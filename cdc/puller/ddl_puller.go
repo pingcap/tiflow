@@ -76,31 +76,36 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 	})
 
 	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
-	for {
-		var ddlRawKV *model.RawKVEntry
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ddlRawKV = <-rawDDLCh:
-		}
-		if ddlRawKV == nil {
-			continue
-		}
 
-		job, err := p.unmarshalDDL(ddlRawKV)
-		jobEntry := &model.DDLJobEntry{
-			Job:    job,
-			OpType: ddlRawKV.OpType,
-			CRTs:   ddlRawKV.CRTs,
-			Err:    err,
-		}
+	g.Go(func() error {
+		for {
+			var ddlRawKV *model.RawKVEntry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ddlRawKV = <-rawDDLCh:
+			}
+			if ddlRawKV == nil {
+				continue
+			}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case p.outputCh <- jobEntry:
+			job, err := p.unmarshalDDL(ddlRawKV)
+			jobEntry := &model.DDLJobEntry{
+				Job:    job,
+				OpType: ddlRawKV.OpType,
+				CRTs:   ddlRawKV.CRTs,
+				Err:    err,
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case p.outputCh <- jobEntry:
+			}
 		}
-	}
+	})
+
+	return g.Wait()
 }
 
 // Output the DDL job entry, it contains the DDL job and the error.
@@ -245,14 +250,12 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 ) (DDLPuller, error) {
-	// It is no matter to use a empty as timezone here because DDLPuller
+	// It is no matter to use an empty as timezone here because DDLPuller
 	// doesn't use expression filter's method.
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// add "_ddl_puller" to make it different from table pullers.
-	changefeed.ID += "_ddl_puller"
 
 	var puller DDLJobPuller
 	storage := up.KVStorage
@@ -316,10 +319,6 @@ func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 			zap.Any("job", job))
 		return nil
 	}
-	log.Info("receive new ddl job",
-		zap.String("namespace", h.changefeedID.Namespace),
-		zap.String("changefeed", h.changefeedID.ID),
-		zap.Any("job", job))
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -330,14 +329,13 @@ func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 
 // Run the ddl puller to receive DDL events
 func (h *ddlPullerImpl) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, DDLPullerTableName)
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, h.changefeedID)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-
-	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		return h.ddlJobPuller.Run(ctx)
@@ -347,6 +345,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	g.Go(func() error {
+		h.lastResolvedTsAdvancedTime = h.clock.Now()
 		for {
 			select {
 			case <-ctx.Done():
