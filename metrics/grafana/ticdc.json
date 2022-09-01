@@ -4007,7 +4007,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{chanefeed}}",
+              "legendFormat": "{{instance}}-{{changefeed}}",
               "refId": "D"
             }
           ],
@@ -4106,7 +4106,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "(sum(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", type=~\"kv\"}) by (changefeed) - sum(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)) / sum(rate(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m]) > 0) by (changefeed)",
+              "expr": "sum(ticdc_processor_remain_kv_events{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed) / (sum(rate(ticdc_sorter_output_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\" ,type=~\"kv\"}[10m])) by (changefeed) > 0)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -4115,11 +4115,11 @@
             },
             {
               "exemplar": true,
-              "expr": "(sum(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\", type=~\"kv\"}) by (changefeed, instance) - sum(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed, instance)) / sum(rate(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m]) > 0) by (changefeed, instance)",
+              "expr": "sum(ticdc_processor_remain_kv_events{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed) / (sum(rate(ticdc_sorter_output_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\" ,type=~\"kv\"}[10m])) by (changefeed, instance) > 0)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{chanefeed}}",
+              "legendFormat": "{{instance}}-{{changefeed}}",
               "refId": "D"
             }
           ],
@@ -4184,12 +4184,12 @@
             "y": 35
           },
           "hiddenSeries": false,
-          "id": 605,
+          "id": 606,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": true,
+            "max": false,
             "min": false,
             "rightSide": true,
             "show": true,
@@ -4215,7 +4215,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "(sum(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", type=~\"kv\"}) by (changefeed) - sum(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed))",
+              "expr": "sum(ticdc_processor_remain_kv_events{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{changefeed}}",
@@ -4223,18 +4223,26 @@
             },
             {
               "exemplar": true,
-              "expr": "(sum(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\", type=~\"kv\"}) by (changefeed, instance) - sum(ticdc_sink_table_sink_total_rows_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed, instance))",
+              "expr": "sum(ticdc_processor_remain_kv_events{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}",
+              "legendFormat": "{{instance}}-{{changefeed}}",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "",
+              "refId": "C"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Events remain in cdc",
+          "title": "Events remain in cdc ",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4330,7 +4338,7 @@
             {
               "exemplar": true,
               "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_processor_tick_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (le,instance,changefeed))",
-              "hide": false,
+              "hide": true,
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}-p999",
               "refId": "B"
@@ -4356,6 +4364,7 @@
           },
           "yaxes": [
             {
+              "$$hashKey": "object:14704",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -4364,6 +4373,7 @@
               "show": true
             },
             {
+              "$$hashKey": "object:14705",
               "format": "none",
               "label": null,
               "logBase": 1,
