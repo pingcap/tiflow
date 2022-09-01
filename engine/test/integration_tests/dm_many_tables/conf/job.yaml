@@ -1,3 +1,4 @@
+name: test
 task-mode: full
 target-database:
   host: host.docker.internal
@@ -8,16 +9,11 @@ upstreams:
   - db-config:
       host: host.docker.internal
       port: 3306
-      user: dm_full
-      password: '123456'
+      user: root
+      password: ''
     source-id: mysql-01
     block-allow-list: balist-01
-    route-rules: [ "global" ]
 block-allow-list:
   balist-01:
     do-dbs:
-      - dm_full*
-routes:
-  global:
-    schema-pattern: "dm_full_route_schema"
-    target-schema: "dm_full_route_schema_succ"
+      - dm_many_tables
