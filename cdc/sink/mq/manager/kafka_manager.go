@@ -196,9 +196,9 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 			zap.Duration("duration", time.Since(start)))
 
 		return nil
-	}, retry.WithBackoffBaseDelay(500), // sleep 500ms for one run
+	}, retry.WithBackoffBaseDelay(500),
 		retry.WithBackoffMaxDelay(1000),
-		retry.WithMaxTries(6), // 3s in total
+		retry.WithMaxTries(6),
 	)
 
 	return err
