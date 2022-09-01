@@ -62,15 +62,20 @@ func CreateWorkerWithSelectors(selectors ...*label.Selector) CreateWorkerOpt {
 	}
 }
 
+// StartWorkerCallbackType is the type for a callback that's called before the
+// executor launches the worker. It is useful in the 2-phase task submission process.
+type StartWorkerCallbackType = func(
+	workerID frameModel.WorkerID,
+	executorID model.ExecutorID,
+	epoch frameModel.Epoch,
+)
+
 // WorkerCreationHooks contains hooks to be called at specifc points of the
 // worker creation process.
 type WorkerCreationHooks struct {
 	// BeforeStartingWorker will be called AFTER the executor has received the task
 	// but BEFORE the worker is actually started.
-	BeforeStartingWorker func(workerID frameModel.WorkerID, executorID model.ExecutorID, epoch frameModel.Epoch)
-
-	// AbortCreatingWorker is called at any point the worker creation process is canceled.
-	// AbortCreatingWorker func(workerID frameModel.WorkerID, err error)
+	BeforeStartingWorker StartWorkerCallbackType
 }
 
 // WorkerCreator implements the worker creation logic.
@@ -154,8 +159,8 @@ func (c *WorkerCreator) buildScheduleTaskRequest(
 	workerID frameModel.WorkerID,
 	opts *createWorkerOpts,
 ) (*pb.ScheduleTaskRequest, error) {
-	var finalSelectors []*label.Selector
-	copy(finalSelectors, c.inheritedSelectors)
+	finalSelectors := make([]*label.Selector, 0, len(c.inheritedSelectors)+len(opts.Selectors))
+	finalSelectors = append(finalSelectors, c.inheritedSelectors...)
 	finalSelectors = append(finalSelectors, opts.Selectors...)
 
 	selectors, err := toPBSelectors(finalSelectors...)
