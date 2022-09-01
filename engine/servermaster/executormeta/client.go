@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orm
+package executormeta
 
 import (
 	"context"
@@ -21,21 +21,21 @@ import (
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/servermaster/orm/model"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 )
 
-// ExecutorClient is a client for manage executor meta.
-type ExecutorClient interface {
+// Client is a client for manage executor meta.
+type Client interface {
 	CreateExecutor(ctx context.Context, executor *model.Executor) error
 	UpdateExecutor(ctx context.Context, executor *model.Executor) error
 	DeleteExecutor(ctx context.Context, executorID engineModel.ExecutorID) error
 	QueryExecutors(ctx context.Context) ([]*model.Executor, error)
 }
 
-// NewExecutorClient creates a new executor client.
-func NewExecutorClient(cc metaModel.ClientConn) (ExecutorClient, error) {
+// NewClient creates a new executor client.
+func NewClient(cc metaModel.ClientConn) (Client, error) {
 	if cc == nil {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
 	}
@@ -56,19 +56,18 @@ func NewExecutorClient(cc metaModel.ClientConn) (ExecutorClient, error) {
 		return nil, perrors.Trace(err)
 	}
 
-	return newExecutorClientImpl(db), nil
+	return newClientImpl(db), nil
 }
 
-type executorClientImpl struct {
-	ExecutorClient
+type clientImpl struct {
 	db *gorm.DB
 }
 
-func newExecutorClientImpl(db *gorm.DB) *executorClientImpl {
-	return &executorClientImpl{db: db}
+func newClientImpl(db *gorm.DB) *clientImpl {
+	return &clientImpl{db: db}
 }
 
-func (c *executorClientImpl) CreateExecutor(ctx context.Context, executor *model.Executor) error {
+func (c *clientImpl) CreateExecutor(ctx context.Context, executor *model.Executor) error {
 	if err := c.db.WithContext(ctx).
 		Create(executor).Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
@@ -76,7 +75,7 @@ func (c *executorClientImpl) CreateExecutor(ctx context.Context, executor *model
 	return nil
 }
 
-func (c *executorClientImpl) UpdateExecutor(ctx context.Context, executor *model.Executor) error {
+func (c *clientImpl) UpdateExecutor(ctx context.Context, executor *model.Executor) error {
 	if err := c.db.WithContext(ctx).
 		Model(&model.Executor{}).
 		Where("id = ?", executor.ID).
@@ -86,7 +85,7 @@ func (c *executorClientImpl) UpdateExecutor(ctx context.Context, executor *model
 	return nil
 }
 
-func (c *executorClientImpl) DeleteExecutor(ctx context.Context, executorID engineModel.ExecutorID) error {
+func (c *clientImpl) DeleteExecutor(ctx context.Context, executorID engineModel.ExecutorID) error {
 	if err := c.db.WithContext(ctx).
 		Where("id = ?", executorID).
 		Delete(&model.Executor{}).Error; err != nil {
@@ -95,7 +94,7 @@ func (c *executorClientImpl) DeleteExecutor(ctx context.Context, executorID engi
 	return nil
 }
 
-func (c *executorClientImpl) QueryExecutors(ctx context.Context) ([]*model.Executor, error) {
+func (c *clientImpl) QueryExecutors(ctx context.Context) ([]*model.Executor, error) {
 	var executors []*model.Executor
 	if err := c.db.WithContext(ctx).
 		Find(&executors).Error; err != nil {

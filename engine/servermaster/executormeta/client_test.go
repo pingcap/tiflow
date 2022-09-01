@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orm
+package executormeta
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	pkgModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/servermaster/orm/model"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,7 @@ func TestExecutorClient(t *testing.T) {
 
 	db, err := pkgOrm.NewGormDB(sqlDB, metaModel.StoreTypeMySQL)
 	require.NoError(t, err)
-	client := newExecutorClientImpl(db)
+	client := newClientImpl(db)
 
 	now := time.Now()
 	createdAt := now.Add(time.Second)

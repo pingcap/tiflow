@@ -25,8 +25,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/servermaster/orm"
-	ormModel "github.com/pingcap/tiflow/engine/servermaster/orm/model"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
+	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
@@ -43,11 +43,11 @@ func init() {
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
-	AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*ormModel.Executor, error)
+	AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*execModel.Executor, error)
 	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
-	ListExecutors() []*ormModel.Executor
+	ListExecutors() []*execModel.Executor
 	GetAddr(executorID model.ExecutorID) (string, bool)
 	Start(ctx context.Context) error
 	Stop()
@@ -68,7 +68,7 @@ type ExecutorManager interface {
 type ExecutorManagerImpl struct {
 	testContext *test.Context
 	wg          sync.WaitGroup
-	metaClient  orm.ExecutorClient
+	metaClient  executormeta.Client
 
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
@@ -83,7 +83,7 @@ type ExecutorManagerImpl struct {
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
-func NewExecutorManagerImpl(metaClient orm.ExecutorClient, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
+func NewExecutorManagerImpl(metaClient executormeta.Client, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
 	return &ExecutorManagerImpl{
 		testContext:       ctx,
 		metaClient:        metaClient,
@@ -175,27 +175,27 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 
 // registerExec registers executor to both executor manager and resource manager.
 // Note that this method must be called with the lock held.
-func (e *ExecutorManagerImpl) registerExecLocked(ormExecutor *ormModel.Executor) {
-	log.Info("register executor", zap.Any("executor", ormExecutor))
+func (e *ExecutorManagerImpl) registerExecLocked(executorMeta *execModel.Executor) {
+	log.Info("register executor", zap.Any("executor", executorMeta))
 	exec := &Executor{
-		Executor:       *ormExecutor,
+		Executor:       *executorMeta,
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		status:         model.Initing,
 		logRL:          rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
-	e.executors[ormExecutor.ID] = exec
+	e.executors[executorMeta.ID] = exec
 	e.notifier.Notify(model.ExecutorStatusChange{
-		ID:   ormExecutor.ID,
+		ID:   executorMeta.ID,
 		Tp:   model.EventExecutorOnline,
-		Addr: ormExecutor.Address,
+		Addr: executorMeta.Address,
 	})
 	e.rescMgr.Register(exec.ID, exec.Address, model.RescUnit(exec.Capability))
 }
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
-func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*ormModel.Executor, error) {
+func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*execModel.Executor, error) {
 	pbExecutor := req.Executor
 	log.Info("allocate new executor", zap.Stringer("executor", pbExecutor))
 
@@ -207,23 +207,23 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 			break
 		}
 	}
-	ormExecutor := &ormModel.Executor{
+	executorMeta := &execModel.Executor{
 		ID:         executorID,
 		Name:       pbExecutor.GetName(),
 		Address:    pbExecutor.GetAddress(),
 		Capability: int(pbExecutor.GetCapability()),
 	}
-	e.registerExecLocked(ormExecutor)
+	e.registerExecLocked(executorMeta)
 	e.mu.Unlock()
 
 	// Store the executor info to database.
 	// If any error occurs, client shouldn't use the executor.
 	// The executor in the map will be removed after the ttl expires.
-	if err := e.metaClient.CreateExecutor(ctx, ormExecutor); err != nil {
+	if err := e.metaClient.CreateExecutor(ctx, executorMeta); err != nil {
 		return nil, perrors.Trace(err)
 	}
 
-	return ormExecutor, nil
+	return executorMeta, nil
 }
 
 func generateExecutorID(name string) model.ExecutorID {
@@ -241,20 +241,20 @@ func (e *ExecutorManagerImpl) HasExecutor(executorID string) bool {
 }
 
 // ListExecutors implements ExecutorManager.ListExecutors
-func (e *ExecutorManagerImpl) ListExecutors() []*ormModel.Executor {
+func (e *ExecutorManagerImpl) ListExecutors() []*execModel.Executor {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	ret := make([]*ormModel.Executor, 0, len(e.executors))
+	ret := make([]*execModel.Executor, 0, len(e.executors))
 	for _, exec := range e.executors {
-		ormExec := exec.Executor
-		ret = append(ret, &ormExec)
+		execMeta := exec.Executor
+		ret = append(ret, &execMeta)
 	}
 	return ret
 }
 
 // Executor records the status of an executor instance.
 type Executor struct {
-	ormModel.Executor
+	execModel.Executor
 	status model.ExecutorStatus
 
 	mu sync.RWMutex

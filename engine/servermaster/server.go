@@ -49,7 +49,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/orm"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
@@ -301,15 +301,15 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 		return pbExecutor, err
 	}
 
-	ormExecutor, err := s.executorManager.AllocateNewExec(ctx, req)
+	executorMeta, err := s.executorManager.AllocateNewExec(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.Executor{
-		Id:         string(ormExecutor.ID),
-		Name:       ormExecutor.Name,
-		Address:    ormExecutor.Address,
-		Capability: int64(ormExecutor.Capability),
+		Id:         string(executorMeta.ID),
+		Name:       executorMeta.Name,
+		Address:    executorMeta.Address,
+		Capability: int64(executorMeta.Capability),
 	}, nil
 }
 
@@ -539,7 +539,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
-	executorMetaClient, err := orm.NewExecutorClient(s.frameworkClientConn)
+	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
 	if err != nil {
 		return errors.Trace(err)
 	}

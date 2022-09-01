@@ -22,15 +22,15 @@ import (
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/servermaster/orm"
-	ormModel "github.com/pingcap/tiflow/engine/servermaster/orm/model"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
+	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorManager(t *testing.T) {
 	t.Parallel()
 
-	metaClient := orm.NewMockExecutorClient(gomock.NewController(t))
+	metaClient := executormeta.NewMockClient(gomock.NewController(t))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	heartbeatTTL := time.Millisecond * 100
@@ -47,7 +47,7 @@ func TestExecutorManager(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -81,7 +81,7 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, resp.Err)
 
-	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*ormModel.Executor{}, nil)
+	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*execModel.Executor{}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
 
 	mgr.Start(ctx)
@@ -103,7 +103,7 @@ func TestExecutorManager(t *testing.T) {
 func TestExecutorManagerWatch(t *testing.T) {
 	t.Parallel()
 
-	metaClient := orm.NewMockExecutorClient(gomock.NewController(t))
+	metaClient := executormeta.NewMockClient(gomock.NewController(t))
 
 	heartbeatTTL := time.Millisecond * 400
 	checkInterval := time.Millisecond * 50
@@ -120,7 +120,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -146,7 +146,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -202,7 +202,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 
 	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).
-		Return([]*ormModel.Executor{
+		Return([]*execModel.Executor{
 			{ID: executorID1, Address: "127.0.0.1:10001"},
 			{ID: executorID2, Address: "127.0.0.1:10002"},
 		}, nil)

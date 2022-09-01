@@ -27,7 +27,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	masterModel "github.com/pingcap/tiflow/engine/servermaster/orm/model"
+	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -38,7 +38,7 @@ var globalModels = []interface{}{
 	&frameModel.WorkerStatus{},
 	&resModel.ResourceMeta{},
 	&model.LogicEpoch{},
-	&masterModel.Executor{},
+	&execModel.Executor{},
 }
 
 // TODO: retry and idempotent??
