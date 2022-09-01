@@ -139,4 +139,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorCloseDuration)
 	registry.MustRegister(tableMemoryHistogram)
 	registry.MustRegister(processorMemoryGauge)
+	registry.MustRegister(remainKVEventsGauge)
 }
