@@ -101,6 +101,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 		err := m.execDDL(ctx, ddl)
 		if err != nil {
 			if errorutil.IsIgnorableMySQLDDLError(err) {
+				// NOTE: don't change the log, some tests depend on it.
 				log.Info("Execute DDL failed, but error can be ignored",
 					zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 					zap.String("namespace", m.id.Namespace),

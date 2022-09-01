@@ -77,7 +77,7 @@ function check_ddl_executed() {
 	if [[ $success == "true" ]]; then
 		key_word="Exec DDL succeeded"
 	else
-		key_word="execute DDL failed, but error can be ignored"
+		key_word="Execute DDL failed, but error can be ignored"
 	fi
 	log=$(grep "${key_word}" ${log_file} | tail -n 1)
 	if [[ $log == *"${ddl}"* ]]; then

@@ -679,7 +679,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		)
 	} else {
 		log.Info("Try to create sinkV2")
-		p.sinkV2Factory, err = factory.New(ctx, p.changefeed.Info.SinkURI,
+		p.sinkV2Factory, err = factory.New(stdCtx, p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh)
 	}
