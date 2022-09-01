@@ -30,6 +30,7 @@ var (
 	sslRegexp       *regexp.Regexp = regexp.MustCompile(sslPatterns)
 	sslStringRegexp *regexp.Regexp = regexp.MustCompile(sslStringPatterns)
 
+	// HideSensitive is used to replace sensitive information with `******` in log.
 	HideSensitive = func(input string) string {
 		output := passwordRegexp.ReplaceAllString(input, "$1******$4")
 		output = sslRegexp.ReplaceAllString(output, "$1 \"******\"")
