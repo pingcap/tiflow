@@ -11,24 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pb
+package enginepb
 
 import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap/zapcore"
 )
 
-// HideSensitiveFunc should be overwrite by utils.HideSensitive, this variable is for avoiding cycle import.
 var HideSensitiveFunc = logutil.HideSensitiveFunc
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
-func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (m *Job) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", HideSensitiveFunc(m.String()))
 	return nil
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
-func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (m *CreateJobRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", HideSensitiveFunc(m.String()))
 	return nil
 }
