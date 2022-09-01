@@ -65,7 +65,7 @@ services:
     ports:
       - "3336:3306"
     healthcheck:
-      test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot"
+      test: mysql -h127.0.0.1 -P3306 -e "show databases"
       interval: 10s
       timeout: 600s
       retries: 60

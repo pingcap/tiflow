@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pb
+package enginepb
 
 import (
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -19,13 +19,13 @@ import (
 )
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
-func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (m *Job) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
-func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (m *CreateJobRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }
