@@ -107,6 +107,9 @@ type TablePipeline interface {
 	Wait()
 	// MemoryConsumption return the memory consumption in bytes
 	MemoryConsumption() uint64
+
+	// RemainEvents return the amount of kv events remain in sorter.
+	RemainEvents() int64
 }
 
 // TODO find a better name or avoid using an interface
