@@ -21,6 +21,8 @@ import (
 )
 
 // backend indicates a transaction backend like MySQL, TiDB, ...
+
+//go:generate mockery --name=Backend --inpackage
 type backend interface {
 	// OnTxnEvent handles one TxnCallbackableEvent.
 	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)

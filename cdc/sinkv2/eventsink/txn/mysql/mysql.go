@@ -19,7 +19,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"sort"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -35,7 +34,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"go.uber.org/zap"
 )
@@ -48,28 +46,28 @@ const (
 )
 
 type mysqlBackend struct {
-	changefeedID model.ChangeFeedID
-	db           *sql.DB
-
+	changefeed  string
+	db          *sql.DB
 	cfg         *pmysql.Config
 	dmlMaxRetry uint64
 
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
 
-	cancel func()
-
 	statistics *metrics.Statistics
 }
 
-// NewMySQLBackend creates a new MySQL sink using schema storage
-func NewMySQLBackend(
+// NewMySQLBackends creates a new MySQL sink using schema storage
+func NewMySQLBackends(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.Factory,
-) (*mysqlBackend, error) {
+	statistics *metrics.Statistics,
+) ([]*mysqlBackend, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)
+
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
@@ -88,21 +86,23 @@ func NewMySQLBackend(
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
-	ctx, cancel := context.WithCancel(ctx)
-	s := &mysqlBackend{
-		changefeedID: changefeedID,
-		db:           db,
-		cfg:          cfg,
-		dmlMaxRetry:  defaultDMLMaxRetry,
-		statistics:   metrics.NewStatistics(ctx, sink.TxnSink),
-		cancel:       cancel,
+	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
+	for i := 0; i < cfg.WorkerCount; i++ {
+		backends = append(backends, &mysqlBackend{
+			changefeed:  changefeed,
+			db:          db,
+			cfg:         cfg,
+			dmlMaxRetry: defaultDMLMaxRetry,
+			statistics:  statistics,
+		})
 	}
 
-	log.Info("mysql backend is created",
-		zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)),
-		zap.Bool("forceReplicate", s.cfg.ForceReplicate),
-		zap.Bool("enableOldValue", s.cfg.EnableOldValue))
-	return s, nil
+	log.Info("MySQL backends is created",
+		zap.String("changefeed", changefeed),
+		zap.Int("workerCount", cfg.WorkerCount),
+		zap.Bool("forceReplicate", cfg.ForceReplicate),
+		zap.Bool("enableOldValue", cfg.EnableOldValue))
+	return backends, nil
 }
 
 // OnTxnEvent implements interface backend.
@@ -114,10 +114,10 @@ func (s *mysqlBackend) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFl
 
 // Flush implements interface backend.
 func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
-	failpoint.Inject("SinkFlushDMLPanic", func() {
-		time.Sleep(time.Second)
-		log.Fatal("SinkFlushDMLPanic")
-	})
+	if s.rows == 0 {
+		return
+	}
+
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
 		// failpoint injected is executed first.
@@ -158,10 +158,6 @@ func (s *mysqlBackend) Close() (err error) {
 		err = s.db.Close()
 		s.db = nil
 	}
-	if s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
-	}
 	return
 }
 
@@ -181,7 +177,7 @@ type preparedDMLs struct {
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// TODO: use a sync.Pool to reduce allocations.
-	startTsSet := make(map[uint64]struct{}, s.rows)
+	startTs := make([]uint64, 0, s.rows)
 	sqls := make([]string, 0, s.rows)
 	values := make([][]interface{}, 0, s.rows)
 	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
@@ -218,11 +214,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		for _, row := range event.Event.Rows {
+			if len(startTs) == 0 || startTs[len(startTs)-1] != row.StartTs {
+				startTs = append(startTs, row.StartTs)
+			}
+
 			var query string
 			var args []interface{}
 			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-
-			startTsSet[row.StartTs] = struct{}{}
 
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
@@ -284,12 +282,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 	flushCacheDMLs()
 
-	startTs := make([]uint64, 0, len(startTsSet))
-	for k := range startTsSet {
-		startTs = append(startTs, k)
-	}
-	sort.Slice(startTs, func(i, j int) bool { return startTs[i] < startTs[j] })
-
 	if len(callbacks) == 0 {
 		callbacks = nil
 	}
@@ -313,10 +305,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 	start := time.Now()
 	return retry.Do(ctx, func() error {
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(
-				logDMLTxnErr(
-					errors.Trace(driver.ErrBadConn),
-					start, s.changefeedID, "failpoint", 0, nil))
+			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
+			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
@@ -327,7 +317,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeedID, "BEGIN", dmls.rowCount, dmls.startTs)
+					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
 			for i, query := range dmls.sqls {
@@ -336,7 +326,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
-						start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
+						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 					if rbErr := tx.Rollback(); rbErr != nil {
 						if errors.Cause(rbErr) != context.Canceled {
 							log.Warn("failed to rollback txn", zap.Error(rbErr))
@@ -349,7 +339,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 			if err = tx.Commit(); err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
+					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
 
 			for _, callback := range dmls.callbacks {
@@ -361,8 +351,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 			return errors.Trace(err)
 		}
 		log.Debug("Exec Rows succeeded",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
+			zap.String("changefeed", s.changefeed),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
@@ -371,13 +360,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
-// Only for testing.
-func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
-	s.dmlMaxRetry = maxRetry
-}
-
 func logDMLTxnErr(
-	err error, start time.Time, changefeed model.ChangeFeedID,
+	err error, start time.Time, changefeed string,
 	query string, count int, startTs []model.Ts,
 ) error {
 	if isRetryableDMLError(err) {
@@ -385,14 +369,12 @@ func logDMLTxnErr(
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
 			zap.String("query", query), zap.Int("count", count),
 			zap.Uint64s("startTs", startTs),
-			zap.String("namespace", changefeed.Namespace),
-			zap.String("changefeed", changefeed.ID))
+			zap.String("changefeed", changefeed))
 	} else {
 		log.Error("execute DMLs with error, can not retry",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
 			zap.String("query", query), zap.Int("count", count),
-			zap.String("namespace", changefeed.Namespace),
-			zap.String("changefeed", changefeed.ID))
+			zap.String("changefeed", changefeed))
 	}
 	return err
 }
@@ -421,4 +403,9 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	}
 
 	return errors.ErrCode(mysqlErr.Number), true
+}
+
+// Only for testing.
+func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
+	s.dmlMaxRetry = maxRetry
 }
