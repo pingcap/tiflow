@@ -345,6 +345,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 		return 0, false
 	}
 
+	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)
