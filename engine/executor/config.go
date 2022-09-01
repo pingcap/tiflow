@@ -36,7 +36,6 @@ var (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
-	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 
 	defaultCapability            int64 = 100 // TODO: make this configurable
