@@ -19,16 +19,16 @@ import (
 
 var (
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
-	sslPatterns      = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
+	passwordRegexp   = regexp.MustCompile(passwordPatterns)
+
+	sslPatterns = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
+	sslRegexp   = regexp.MustCompile(sslPatterns)
 
 	// to match PEM format, ref: https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail
 	beginPattern      = `(.*?)(-{5})BEGIN( [A-Z]+)+(-{5})`
 	endPattern        = `(.*?)(-{5})END( [A-Z]+)+(-{5})[\"\']?`
 	sslStringPatterns = `(ssl-(ca|key|cert)-bytes:)` + beginPattern + endPattern
-
-	passwordRegexp  *regexp.Regexp = regexp.MustCompile(passwordPatterns)
-	sslRegexp       *regexp.Regexp = regexp.MustCompile(sslPatterns)
-	sslStringRegexp *regexp.Regexp = regexp.MustCompile(sslStringPatterns)
+	sslStringRegexp   = regexp.MustCompile(sslStringPatterns)
 
 	// HideSensitive is used to replace sensitive information with `******` in log.
 	HideSensitive = func(input string) string {
