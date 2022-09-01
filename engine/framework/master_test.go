@@ -186,7 +186,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := metadata.NewWorkerStatusdataClient(masterName, master.GetFrameMetaClient())
+	workerMetaClient := metadata.NewWorkerStatusClient(masterName, master.GetFrameMetaClient())
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)

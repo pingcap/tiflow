@@ -89,26 +89,26 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*frameMode
 	return meta, nil
 }
 
-// WorkerStatusdataClient provides all ways to manage metadata of all workers
+// WorkerStatusClient provides all ways to manage metadata of all workers
 // belonging to a given master
-type WorkerStatusdataClient struct {
+type WorkerStatusClient struct {
 	masterID   frameModel.MasterID
 	metaClient pkgOrm.Client
 }
 
-// NewWorkerStatusdataClient creates a new WorkerStatusdataClient instance
-func NewWorkerStatusdataClient(
+// NewWorkerStatusClient creates a new WorkerStatusClient instance
+func NewWorkerStatusClient(
 	masterID frameModel.MasterID,
 	metaClient pkgOrm.Client,
-) *WorkerStatusdataClient {
-	return &WorkerStatusdataClient{
+) *WorkerStatusClient {
+	return &WorkerStatusClient{
 		masterID:   masterID,
 		metaClient: metaClient,
 	}
 }
 
 // LoadAllWorkers queries all workers of this master
-func (c *WorkerStatusdataClient) LoadAllWorkers(ctx context.Context) (map[frameModel.WorkerID]*frameModel.WorkerStatus, error) {
+func (c *WorkerStatusClient) LoadAllWorkers(ctx context.Context) (map[frameModel.WorkerID]*frameModel.WorkerStatus, error) {
 	resp, err := c.metaClient.QueryWorkersByMasterID(ctx, c.masterID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -122,7 +122,7 @@ func (c *WorkerStatusdataClient) LoadAllWorkers(ctx context.Context) (map[frameM
 }
 
 // Load queries a worker by its worker id
-func (c *WorkerStatusdataClient) Load(ctx context.Context, workerID frameModel.WorkerID) (*frameModel.WorkerStatus, error) {
+func (c *WorkerStatusClient) Load(ctx context.Context, workerID frameModel.WorkerID) (*frameModel.WorkerStatus, error) {
 	resp, err := c.metaClient.GetWorkerByID(ctx, c.masterID, workerID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -132,7 +132,7 @@ func (c *WorkerStatusdataClient) Load(ctx context.Context, workerID frameModel.W
 }
 
 // Remove deletes a given worker from metastore
-func (c *WorkerStatusdataClient) Remove(ctx context.Context, id frameModel.WorkerID) (bool, error) {
+func (c *WorkerStatusClient) Remove(ctx context.Context, id frameModel.WorkerID) (bool, error) {
 	_, err := c.metaClient.DeleteWorker(ctx, c.masterID, id)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -141,17 +141,17 @@ func (c *WorkerStatusdataClient) Remove(ctx context.Context, id frameModel.Worke
 }
 
 // Store stores a worker metadata into metastore
-func (c *WorkerStatusdataClient) Store(ctx context.Context, data *frameModel.WorkerStatus) error {
+func (c *WorkerStatusClient) Store(ctx context.Context, data *frameModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpsertWorker(ctx, data))
 }
 
 // Update updates a worker metadata
-func (c *WorkerStatusdataClient) Update(ctx context.Context, data *frameModel.WorkerStatus) error {
+func (c *WorkerStatusClient) Update(ctx context.Context, data *frameModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpdateWorker(ctx, data))
 }
 
 // MasterID returns the master id of this metadata client
-func (c *WorkerStatusdataClient) MasterID() frameModel.MasterID {
+func (c *WorkerStatusClient) MasterID() frameModel.MasterID {
 	return c.masterID
 }
 

@@ -123,7 +123,7 @@ type DefaultBaseWorker struct {
 	masterClient *worker.MasterClient
 	masterID     frameModel.MasterID
 
-	workerMetaClient *metadata.WorkerStatusdataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	statusSender     *statusutil.Writer
 	workerStatus     *frameModel.WorkerStatus
 	messageRouter    *MessageRouter
@@ -307,7 +307,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.workerStatus.Epoch,
 	)
 
-	w.workerMetaClient = metadata.NewWorkerStatusdataClient(w.masterID, w.frameMetaClient)
+	w.workerMetaClient = metadata.NewWorkerStatusClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)

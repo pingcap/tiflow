@@ -47,7 +47,7 @@ type WorkerManager struct {
 	workerEntries map[frameModel.WorkerID]*workerEntry
 	state         workerManagerState
 
-	workerMetaClient *metadata.WorkerStatusdataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	messageSender    p2p.MessageSender
 
 	masterID frameModel.MasterID
@@ -103,7 +103,7 @@ func NewWorkerManager(
 		workerEntries: make(map[frameModel.WorkerID]*workerEntry),
 		state:         state,
 
-		workerMetaClient: metadata.NewWorkerStatusdataClient(masterID, meta),
+		workerMetaClient: metadata.NewWorkerStatusClient(masterID, meta),
 		messageSender:    messageSender,
 
 		masterID: masterID,

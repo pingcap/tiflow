@@ -133,7 +133,7 @@ func TestLoadAllWorkers(t *testing.T) {
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
 	defer metaClient.Close()
-	workerMetaClient := NewWorkerStatusdataClient("master-1", metaClient)
+	workerMetaClient := NewWorkerStatusClient("master-1", metaClient)
 
 	// Using context.Background() since there is no risk that
 	// the mock KV might time out.

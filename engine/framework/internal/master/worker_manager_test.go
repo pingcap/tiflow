@@ -448,7 +448,7 @@ func TestCleanTombstone(t *testing.T) {
 	err := event.Handle.GetTombstone().CleanTombstone(ctx)
 	require.NoError(t, err)
 
-	workerMetaClient := metadata.NewWorkerStatusdataClient("master-1", suite.meta)
+	workerMetaClient := metadata.NewWorkerStatusClient("master-1", suite.meta)
 	_, err = workerMetaClient.Load(ctx, "worker-1")
 	// Asserts that the meta for the worker is indeed deleted.
 	require.Error(t, err)

@@ -208,7 +208,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *frameModel.WorkerStatus,
 ) {
-	workerMetaClient := metadata.NewWorkerStatusdataClient(masterID, master.frameMetaClient)
+	workerMetaClient := metadata.NewWorkerStatusClient(masterID, master.frameMetaClient)
 	err := workerMetaClient.Store(ctx, status)
 	require.NoError(t, err)
 
