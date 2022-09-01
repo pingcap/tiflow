@@ -88,50 +88,54 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 	})
 
 	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
-	for {
-		var ddlRawKV *model.RawKVEntry
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ddlRawKV = <-rawDDLCh:
-		}
-		if ddlRawKV == nil {
-			continue
-		}
+	eg.Go(
+		func() error {
+			for {
+				var ddlRawKV *model.RawKVEntry
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case ddlRawKV = <-rawDDLCh:
+				}
+				if ddlRawKV == nil {
+					continue
+				}
 
-		if ddlRawKV.OpType == model.OpTypeResolved {
-			if ddlRawKV.CRTs > p.getResolvedTs() {
-				p.setResolvedTs(ddlRawKV.CRTs)
+				if ddlRawKV.OpType == model.OpTypeResolved {
+					if ddlRawKV.CRTs > p.getResolvedTs() {
+						p.setResolvedTs(ddlRawKV.CRTs)
+					}
+				}
+
+				job, err := p.unmarshalDDL(ddlRawKV)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				if job != nil {
+					skip, err := p.handleJob(job)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					if skip {
+						continue
+					}
+				}
+
+				jobEntry := &model.DDLJobEntry{
+					Job:    job,
+					OpType: ddlRawKV.OpType,
+					CRTs:   ddlRawKV.CRTs,
+					Err:    err,
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case p.outputCh <- jobEntry:
+				}
 			}
-		}
-
-		job, err := p.unmarshalDDL(ddlRawKV)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if job != nil {
-			skip, err := p.handleJob(job)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if skip {
-				continue
-			}
-		}
-
-		jobEntry := &model.DDLJobEntry{
-			Job:    job,
-			OpType: ddlRawKV.OpType,
-			CRTs:   ddlRawKV.CRTs,
-			Err:    err,
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case p.outputCh <- jobEntry:
-		}
-	}
+		})
+	return eg.Wait()
 }
 
 // Output the DDL job entry, it contains the DDL job and the error.
