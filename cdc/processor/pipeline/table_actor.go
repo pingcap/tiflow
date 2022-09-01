@@ -492,6 +492,10 @@ func (t *tableActor) Start(ts model.Ts) {
 	}
 }
 
+func (t *tableActor) RemainEvents() int64 {
+	return t.sortNode.remainEvent()
+}
+
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)

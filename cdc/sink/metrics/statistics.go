@@ -136,16 +136,6 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 	}
 }
 
-// SubRowsCount records total number of rows needs to flush
-func (b *Statistics) SubRowsCount(count int) {
-	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
-}
-
-// TotalRowsCount returns total number of rows
-func (b *Statistics) TotalRowsCount() uint64 {
-	return atomic.LoadUint64(&b.totalRows)
-}
-
 // AddDDLCount records total number of ddl needs to flush
 func (b *Statistics) AddDDLCount() {
 	atomic.AddUint64(&b.totalDDLCount, 1)
