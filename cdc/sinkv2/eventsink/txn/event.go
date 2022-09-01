@@ -37,22 +37,21 @@ func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 }
 
 // ConflictKeys implements causality.txnEvent interface.
-func (e *txnEvent) ConflictKeys() (sums []int64) {
+func (e *txnEvent) ConflictKeys() []int64 {
 	if len(e.conflictKeys) > 0 {
 		return e.conflictKeys
 	}
 
 	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
-	sums = make([]int64, 0, len(keys))
+	e.conflictKeys = make([]int64, 0, len(keys))
 	for _, key := range keys {
 		hasher := crc64.New(crcTable)
 		if _, err := hasher.Write(key); err != nil {
 			log.Panic("crc64 hasher fail")
 		}
-		sums = append(sums, int64(hasher.Sum64()))
+		e.conflictKeys = append(e.conflictKeys, int64(hasher.Sum64()))
 	}
-	e.conflictKeys = sums
-	return
+	return e.conflictKeys
 }
 
 func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
