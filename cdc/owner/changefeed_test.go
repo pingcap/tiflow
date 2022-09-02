@@ -1024,7 +1024,7 @@ func TestBarrierAdvance(t *testing.T) {
 		// Then the first tick barrier won't be changed.
 		barrier, err := cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		require.Equal(t, cf.state.Info.StartTs-1, barrier)
+		require.Equal(t, cf.state.Info.StartTs, barrier)
 
 		// If sync-point is enabled, must tick more 1 time to advance barrier.
 		if i == 1 {
