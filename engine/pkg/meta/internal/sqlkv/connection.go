@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -85,6 +86,18 @@ func NewSQLDB(storeConf *model.StoreConfig) (*sql.DB, error) {
 	pairs := map[string]string{
 		"sql_mode": strconv.Quote(dbutil.GetSQLStrictMode()),
 	}
+	if storeConf.Security.IsTLSEnabled() {
+		tlsConf, err := storeConf.Security.ToTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		tlsName := "engine_tls" + storeConf.StoreID
+		if err := mysql.RegisterTLSConfig(tlsName, tlsConf); err != nil {
+			return nil, err
+		}
+		pairs["tls"] = tlsName
+	}
+
 	dsn := model.GenerateDSNByParams(storeConf, pairs)
 	return dbutil.NewSQLDB("mysql", dsn, storeConf.DBConf)
 }
