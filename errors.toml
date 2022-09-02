@@ -1091,6 +1091,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrSyncRenameTableFailed"]
+error = '''
+table's old name is not in filter rule, and its new name in filter rule table id '%d', ddl query: [%s], it's an unexpected behavior, if you want to replicate this table, please add its old name to filter rule.
+'''
+
 ["CDC:ErrTCPServerClosed"]
 error = '''
 The TCP server has been closed
