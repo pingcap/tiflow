@@ -35,8 +35,8 @@ var (
 
 	ResourceKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/resources/")
 
-	// TODO: discuss the key prefix
-	DMJobKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job/")
+	DMJobKeyAdapter  KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job")
+	DMInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/info")
 )
 
 // KeyAdapter is used to construct etcd like key

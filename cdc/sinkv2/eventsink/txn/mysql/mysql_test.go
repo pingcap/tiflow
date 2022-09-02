@@ -45,12 +45,27 @@ import (
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchReplaceEnabled = false
-	ctx, cancel := context.WithCancel(ctx)
 	return &mysqlBackend{
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 		cfg:        cfg,
-		cancel:     cancel,
 	}
+}
+
+func newMySQLBackend(
+	ctx context.Context,
+	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
+	dbConnFactory pmysql.Factory,
+) (*mysqlBackend, error) {
+	ctx1, cancel := context.WithCancel(ctx)
+	statistics := metrics.NewStatistics(ctx1, sink.TxnSink)
+	cancel() // Cancel background goroutines in returned metrics.Statistics.
+
+	backends, err := NewMySQLBackends(ctx, sinkURI, replicaConfig, dbConnFactory, statistics)
+	if err != nil {
+		return nil, err
+	}
+	return backends[0], nil
 }
 
 func TestPrepareDML(t *testing.T) {
@@ -158,10 +173,9 @@ func TestAdjustSQLMode(t *testing.T) {
 
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
-		config.GetDefaultReplicaConfig(), mockGetDBConn)
+	sink, err := newMySQLBackend(ctx, sinkURI, config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -224,7 +238,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
-	_, err = NewMySQLBackend(ctx, sinkURI,
+	_, err = newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), pmysql.CreateMySQLDBConn)
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
@@ -249,9 +263,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
-		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`,`b`) VALUES (?,?),(?,?)").
-			WithArgs(1, "test", 2, "test").
-			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
 		mock.ExpectClose()
 		return db, nil
@@ -261,9 +272,9 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	defer cancel()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
@@ -306,44 +317,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 				},
 			},
 		},
-		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 1,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
-		{
-			StartTs:  7,
-			CommitTs: 8,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 2,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
 	}
 
 	var flushedTs uint64 = 0
@@ -360,7 +333,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 
 	err = sink.Flush(context.Background())
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), flushedTs)
+	require.Equal(t, uint64(6), flushedTs)
 
 	require.Nil(t, sink.Close())
 }
@@ -424,7 +397,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 
@@ -496,7 +469,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 
@@ -570,7 +543,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(2)
@@ -633,7 +606,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockDBInsertDupEntry)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(1)
@@ -678,9 +651,9 @@ func TestNewMySQLBackend(t *testing.T) {
 
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 
 	require.Nil(t, err)
@@ -714,9 +687,9 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
-	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
@@ -751,9 +724,9 @@ func TestGBKSupported(t *testing.T) {
 	ctx := context.Background()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
@@ -811,7 +784,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
@@ -1188,7 +1161,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				startTs: []model.Ts{418658114257813506, 418658114257813516},
+				startTs: []model.Ts{418658114257813516, 418658114257813506},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",

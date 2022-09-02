@@ -168,6 +168,10 @@ func TestChangefeedNotRetryError(t *testing.T) {
 			err:      errors.New("CDC:ErrExpressionColumnNotFound"),
 			expected: true,
 		},
+		{
+			err:      ErrSyncRenameTableFailed.FastGenByArgs(),
+			expected: true,
+		},
 	}
 
 	for _, c := range cases {

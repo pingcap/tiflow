@@ -11,14 +11,14 @@ SINK_TYPE=$1
 MAX_RETRIES=10
 
 function check_old_value_enabled() {
-	row_logs=$(grep "EmitRowChangedEvents" "$1/cdc.log")
+	row_logs=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log")
 	echo $row_logs
 
 	# check update rows
 	# check if exist a row include `column` and `pre-column`
 	# When old value is turned on, we will have both column and pre-column in the update.
 	# So here we have 2 (pre val) and 3 (new val).
-	update_with_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep '\"columns\\\":\[' | grep 'value\\\":2' | grep -c 'value\\\":3')
+	update_with_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep '\"columns\\\":\[' | grep 'value\\\":2' | grep -c 'value\\\":3')
 	if [[ "$update_with_old_value_count" -ne 1 ]]; then
 		echo "can't found update row with old value"
 		exit 1
@@ -27,7 +27,7 @@ function check_old_value_enabled() {
 	# check if exist a update row without `pre-column`
 	# When old value is turned off, we only have the column in the update.
 	# So here we only have 3 (new val).
-	update_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":null' | grep -c 'value\\\":3')
+	update_without_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":null' | grep -c 'value\\\":3')
 	if [[ "$update_without_old_value_count" -ne 1 ]]; then
 		echo "can't found update row without old value"
 		exit 1
@@ -37,7 +37,7 @@ function check_old_value_enabled() {
 	# check if exist a delete row with a complete `pre-column`
 	# When old value is turned on, the pre-column in our delete will include all the columns.
 	# So here we have 1 (id) and 3 (val).
-	delete_with_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep 'value\\\":1' | grep -c 'value\\\":3')
+	delete_with_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep 'value\\\":1' | grep -c 'value\\\":3')
 	if [[ "$delete_with_old_value_count" -ne 1 ]]; then
 		echo "can't found delete row with old value"
 		exit 1
@@ -46,7 +46,7 @@ function check_old_value_enabled() {
 	# check if exist a delete row without a complete `pre-column`
 	# When old value is turned off, the pre-column in our delete will only include the handle columns.
 	# So here we only have 1 (id).
-	delete_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1,\\\"default\\\":null},null')
+	delete_without_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1,\\\"default\\\":null},null')
 	if [[ "$delete_without_old_value_count" -ne 1 ]]; then
 		echo "can't found delete row without old value"
 		exit 1

@@ -46,14 +46,14 @@ func NewCreatorVersionGate(version string) *CreatorVersionGate {
 
 // ChangefeedStateFromAdminJob determines if admin job is the state
 // of changefeed based on the version of the creator.
-func (f *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
+func (g *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
 	// Introduced in https://github.com/pingcap/tiflow/pull/1341.
 	// The changefeed before it was introduced was using the old owner.
-	if f.version == "" {
+	if g.version == "" {
 		return true
 	}
 
-	creatorVersion := semver.New(removeVAndHash(f.version))
+	creatorVersion := semver.New(removeVAndHash(g.version))
 	for _, version := range changefeedStateFromAdminJobVersions {
 		// NOTICE: To compare against the same major version.
 		if creatorVersion.Major == version.Major &&
@@ -67,13 +67,28 @@ func (f *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
 
 // ChangefeedAcceptUnknownProtocols determines whether to accept
 // unknown protocols based on the creator's version.
-func (f *CreatorVersionGate) ChangefeedAcceptUnknownProtocols() bool {
+func (g *CreatorVersionGate) ChangefeedAcceptUnknownProtocols() bool {
 	// Introduced in https://github.com/pingcap/ticdc/pull/1341.
 	// So it was supported at the time.
-	if f.version == "" {
+	if g.version == "" {
 		return true
 	}
 
-	creatorVersion := semver.New(removeVAndHash(f.version))
+	creatorVersion := semver.New(removeVAndHash(g.version))
 	return creatorVersion.LessThan(changefeedAcceptUnknownProtocolsVersion)
+}
+
+var changefeedAcceptProtocolInMysqlSinURI = *semver.New("6.1.1")
+
+// ChangefeedAcceptProtocolInMysqlSinURI determines whether to accept
+// protocol in mysql sink uri or configure based on the creator's version.
+func (g *CreatorVersionGate) ChangefeedAcceptProtocolInMysqlSinURI() bool {
+	// Introduced in https://github.com/pingcap/ticdc/pull/1341.
+	// So it was supported at the time.
+	if g.version == "" {
+		return true
+	}
+
+	creatorVersion := semver.New(removeVAndHash(g.version))
+	return creatorVersion.LessThan(changefeedAcceptProtocolInMysqlSinURI)
 }

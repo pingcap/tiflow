@@ -26,7 +26,6 @@ import (
 // of all executors
 type ExecutorInfoProvider interface {
 	HasExecutor(executorID string) bool
-	ListExecutors() []string
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors

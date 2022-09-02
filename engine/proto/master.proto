@@ -13,7 +13,29 @@ import "engine/proto/resources.proto";
 option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
 service Discovery {
-    rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
+    rpc RegisterExecutor(RegisterExecutorRequest) returns(Executor) {
+        option (google.api.http) = {
+            post: "/api/v1/executors/register"
+            body: "executor"
+        };
+    }
+
+    // ListExecutors lists all executors.
+    // Executors will use this API to discover other executors.
+    // Currently, we assume that there aren't too many executors.
+    // If the number of executors becomes very large in the future,
+    // we can consider a mechanism to watch the changes of the executors.
+    rpc ListExecutors(ListExecutorsRequest) returns(ListExecutorsResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/executors"
+        };
+    }
+
+    rpc ListMasters(ListMastersRequest) returns(ListMastersResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/masters"
+        };
+    }
 
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
 
@@ -95,18 +117,40 @@ message HeartbeatResponse {
     repeated string addrs = 3;
 }
 
-message RegisterExecutorRequest {
-    // dm need 'worker-name' to locate the worker.
-    // TODO: Do we really need a "worker name"? Can we use address to identify an executor?
-    string address = 1;
-    string version = 2;
-    int64  capability = 3;
+message Executor {
+    string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // name is the readable name of the executor.
+    string name = 2;
+    string address = 3;
+    int64  capability = 4;
 }
 
-message RegisterExecutorResponse {
-    Error err = 1;
-    string  executor_id = 2;
+message RegisterExecutorRequest {
+    Executor executor = 1;
 }
+
+message ListExecutorsRequest {
+}
+
+message ListExecutorsResponse {
+    repeated Executor executors = 1;
+}
+
+message Master {
+    string id = 1;
+    // name is the readable name of the master.
+    string name = 2;
+    string address = 3;
+    bool is_leader = 4;
+}
+
+message ListMastersRequest {
+}
+
+message ListMastersResponse {
+    repeated Master masters = 1;
+}
+
 
 message ScheduleTaskRequest {
     string task_id = 1;

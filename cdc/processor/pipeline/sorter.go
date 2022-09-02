@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -72,6 +71,8 @@ type sorterNode struct {
 
 	redoLogEnabled bool
 	changefeed     model.ChangeFeedID
+	// remainEvents record the amount of event remain in sorter engine
+	remainEvents int64
 }
 
 func newSorterNode(
@@ -100,11 +101,16 @@ func newSorterNode(
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
-	case model.SortInMemory:
-		return memory.NewEntrySorter(), nil
-	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+	// `file` and `memory` become aliases of `unified` for backward compatibility.
+	case model.SortInMemory, model.SortUnified, model.SortInFile:
+		if sortEngine == model.SortInMemory {
+			log.Warn("Memory sorter is deprecated so we use unified sorter by default.",
+				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("tableName", tableName))
+		}
 		if sortEngine == model.SortInFile {
-			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
+			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings.",
 				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 				zap.String("tableName", tableName))
@@ -116,7 +122,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			dbActorID := ssystem.DBActorID(uint64(tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
-				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
@@ -246,6 +252,7 @@ func (n *sorterNode) start(
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
+					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
@@ -293,7 +300,7 @@ func (n *sorterNode) start(
 					})
 					if err != nil {
 						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
+							log.Debug("flow control cancelled for table",
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
@@ -356,6 +363,8 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
+	} else {
+		atomic.AddInt64(&n.remainEvents, 1)
 	}
 	n.sorter.AddEntry(ctx, event)
 }
@@ -383,3 +392,7 @@ func (n *sorterNode) BarrierTs() model.Ts {
 }
 
 func (n *sorterNode) State() TableState { return n.state.Load() }
+
+func (n *sorterNode) remainEvent() int64 {
+	return atomic.LoadInt64(&n.remainEvents)
+}

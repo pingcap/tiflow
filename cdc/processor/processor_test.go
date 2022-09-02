@@ -145,8 +145,8 @@ type mockTablePipeline struct {
 	sinkStartTs model.Ts
 }
 
-func (m *mockTablePipeline) ID() (tableID int64, markTableID int64) {
-	return m.tableID, 0
+func (m *mockTablePipeline) ID() int64 {
+	return m.tableID
 }
 
 func (m *mockTablePipeline) Name() string {
@@ -172,6 +172,10 @@ func (m *mockTablePipeline) AsyncStop(targetTs model.Ts) bool {
 
 func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
+}
+
+func (m *mockTablePipeline) RemainEvents() int64 {
+	return 1
 }
 
 func (m *mockTablePipeline) State() pipeline.TableState {

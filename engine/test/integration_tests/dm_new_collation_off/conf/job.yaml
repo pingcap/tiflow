@@ -1,0 +1,17 @@
+task-mode: all
+target-database:
+  host: host.docker.internal
+  port: 4000
+  user: root
+  password: ''
+upstreams:
+  - db-config:
+      host: host.docker.internal
+      port: 3307
+      user: root
+      password: ''
+    source-id: mysql-02
+    block-allow-list: global
+block-allow-list:
+  global:
+    do-dbs: ["new_collation_off"]

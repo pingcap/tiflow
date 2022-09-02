@@ -98,3 +98,27 @@ func TestNotifierClose(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestReceiverClose(t *testing.T) {
+	n := NewNotifier[int]()
+	r := n.NewReceiver()
+
+	// Send enough events to make sure the receiver channel is full.
+	for i := 0; i < 64; i++ {
+		n.Notify(i)
+	}
+	time.Sleep(time.Second)
+
+	// Closing the receiver shouldn't be blocked, although we don't consume the events.
+	doneCh := make(chan struct{})
+	go func() {
+		r.Close()
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+	case <-time.After(time.Second):
+		t.Fatal("receiver.Close() is blocked")
+	}
+	n.Close()
+}

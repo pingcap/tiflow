@@ -18,16 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/pkg/label"
-)
-
-// NodeType is the type of a server instance, could be either server master or executor
-type NodeType int
-
-// All node types
-const (
-	NodeTypeServerMaster NodeType = iota + 1
-	NodeTypeExecutor
 )
 
 // RescUnit is the min unit of resource that we count.
@@ -39,23 +29,12 @@ type DeployNodeID string
 // ExecutorID is an alias for executor when NodeType is NodeTypeExecutor.
 type ExecutorID = DeployNodeID
 
-// NodeInfo describes the information of server instance, contains node type, node
-// uuid, advertise address and capability(executor node only)
+// NodeInfo describes the information of server instance.
+// Deprecated: only used for servermaster and will be removed soon.
 type NodeInfo struct {
-	Type NodeType     `json:"type"`
 	ID   DeployNodeID `json:"id"`
 	Addr string       `json:"addr"`
-
-	// The capability of executor, including
-	// 1. cpu (goroutines)
-	// 2. memory
-	// 3. disk cap
-	// TODO: So we should enrich the cap dimensions in the future.
-	Capability int `json:"cap"`
-
-	// Labels store the label set for each executor.
-	// It is invalid if Type != NodeTypeExecutor.
-	Labels label.Set `json:"labels"`
+	Name string       `json:"name"`
 }
 
 // EtcdKey return encoded key for a node used in service discovery etcd

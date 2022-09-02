@@ -28,17 +28,19 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.RowChangedEvent] = (*sink)(nil)
+var _ eventsink.EventSink[*model.RowChangedEvent] = (*dmlSink)(nil)
 
-// sink is the mq sink.
+// dmlSink is the mq sink.
 // It will send the events to the MQ system.
-type sink struct {
+type dmlSink struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
 	// protocol indicates the protocol used by this sink.
@@ -61,7 +63,7 @@ func newSink(ctx context.Context,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
 	errCh chan error,
-) (*sink, error) {
+) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
@@ -70,9 +72,10 @@ func newSink(ctx context.Context,
 	}
 	encoder := encoderBuilder.Build()
 
-	w := newWorker(changefeedID, encoder, producer)
+	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	w := newWorker(changefeedID, encoder, producer, statistics)
 
-	s := &sink{
+	s := &dmlSink{
 		id:             changefeedID,
 		protocol:       encoderConfig.Protocol,
 		worker:         w,
@@ -101,7 +104,7 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
-func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
+func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
 		partitionNum, err := s.topicManager.GetPartitionNum(topic)
@@ -122,7 +125,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error 
 }
 
 // Close closes the sink.
-func (s *sink) Close() error {
+func (s *dmlSink) Close() error {
 	s.worker.close()
 	return nil
 }

@@ -1,4 +1,3 @@
-name: test
 task-mode: all
 shard-mode: pessimistic
 ignore-checking-items: []

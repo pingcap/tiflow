@@ -140,8 +140,18 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	resp, err := handler(ctx, req)
 	if err != nil {
 		errOut := ToGRPCError(err)
-		if s, ok := status.FromError(errOut); ok && s.Code() == codes.Internal {
-			log.Warn("server encountered an internal error", zap.Error(errOut))
+		logger := log.With(zap.String("method", info.FullMethod), zap.Error(errOut), zap.Any("request", req))
+		s, ok := status.FromError(errOut)
+		if !ok {
+			s = status.FromContextError(err)
+		}
+		switch s.Code() {
+		case codes.Unknown:
+			logger.Warn("request handled with an unknown error")
+		case codes.Internal:
+			logger.Warn("request handled with an internal error")
+		default:
+			logger.Debug("request handled with an error")
 		}
 		return nil, errOut
 	}

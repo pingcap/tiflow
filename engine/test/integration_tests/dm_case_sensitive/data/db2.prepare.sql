@@ -1,5 +1,5 @@
 drop database if exists `lower_db`;
-create database `lower_db`;
+create database `lower_db` collate utf8mb4_general_ci;
 use `lower_db`;
 create table Upper_Table (
     id int NOT NULL AUTO_INCREMENT,

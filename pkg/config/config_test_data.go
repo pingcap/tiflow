@@ -129,9 +129,10 @@ const (
     "scheduler": {
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,
-      "check-balance-interval": 60000000000
+      "check-balance-interval": 60000000000,
+      "add-table-batch-size": 50
     },
-    "enable-new-sink": false
+    "enable-new-sink": true
   },
   "cluster-id": "default"
 }`

@@ -133,7 +133,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 
 	stage, _ := u.Stage()
 	if stage != metadata.StageRunning && stage != metadata.StageError {
-		return errors.Errorf("failed to pause unit with stage %d", stage)
+		return errors.Errorf("failed to pause unit with stage %s", stage)
 	}
 
 	// cancel process
@@ -153,7 +153,7 @@ func (u *unitHolderImpl) Resume(ctx context.Context) error {
 
 	stage, _ := u.Stage()
 	if stage != metadata.StagePaused && stage != metadata.StageError {
-		return errors.Errorf("failed to resume unit with stage %d", stage)
+		return errors.Errorf("failed to resume unit with stage %s", stage)
 	}
 
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -230,7 +230,7 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 		u.cfg.Flavor,
 	)
 	if err != nil {
-		u.logger.Error("failed to get source status", zap.Error(err))
+		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
 	u.sourceStatusMu.Lock()
 	u.sourceStatus = sourceStatus
@@ -279,7 +279,7 @@ func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSche
 
 	stage, _ := u.Stage()
 	if (stage != metadata.StagePaused && stage != metadata.StageError) && req.Op != pb.SchemaOp_ListMigrateTargets {
-		return "", errors.Errorf("current stage is %d but not paused, invalid", stage)
+		return "", errors.Errorf("current stage is %s but not paused, invalid", stage)
 	}
 
 	return syncUnit.OperateSchema(ctx, (*pb.OperateWorkerSchemaRequest)(req))

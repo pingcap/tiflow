@@ -62,7 +62,7 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 			if err != nil {
 				s.tctx.L().Warn("track ddl failed", zap.Stringer("ddl info", ddlInfo))
 			}
-			s.saveTablePoint(table, *qec.lastLocation)
+			s.saveTablePoint(table, qec.lastLocation)
 			s.tctx.L().Warn("track skipped ddl and return empty string", zap.String("origin sql", qec.originSQL), zap.Stringer("ddl info", ddlInfo))
 			ddlInfo.originDDL = ""
 			return true, nil
@@ -94,38 +94,46 @@ func (s *Syncer) skipRowsEvent(table *filter.Table, eventType replication.EventT
 }
 
 // skipSQLByPattern skip unsupported sql in tidb and global sql-patterns in binlog-filter config file.
-func (s *Syncer) skipSQLByPattern(sql string) (bool, error) {
+func skipSQLByPattern(binlogFilter *bf.BinlogEvent, sql string) (bool, error) {
 	if utils.IsBuildInSkipDDL(sql) {
 		return true, nil
 	}
-	action, err := s.binlogFilter.Filter("", "", bf.NullEvent, sql)
+	action, err := binlogFilter.Filter("", "", bf.NullEvent, sql)
 	if err != nil {
 		return false, terror.Annotatef(terror.ErrSyncerUnitBinlogEventFilter.New(err.Error()), "skip query %s", sql)
 	}
 	return action == bf.Ignore, nil
 }
 
+func (s *Syncer) skipByFilter(table *filter.Table, et bf.EventType, sql string) (bool, error) {
+	return skipByFilter(s.binlogFilter, table, et, sql)
+}
+
 // skipByFilter returns true when
 // * type of SQL doesn't pass binlog-filter.
 // * pattern of SQL doesn't pass binlog-filter.
-func (s *Syncer) skipByFilter(table *filter.Table, et bf.EventType, sql string) (bool, error) {
-	if s.binlogFilter == nil {
+func skipByFilter(binlogFilter *bf.BinlogEvent, table *filter.Table, et bf.EventType, sql string) (bool, error) {
+	if binlogFilter == nil {
 		return false, nil
 	}
-	action, err := s.binlogFilter.Filter(table.Schema, table.Name, et, sql)
+	action, err := binlogFilter.Filter(table.Schema, table.Name, et, sql)
 	if err != nil {
 		return false, terror.Annotatef(terror.ErrSyncerUnitBinlogEventFilter.New(err.Error()), "skip event %s on %v", et, table)
 	}
 	return action == bf.Ignore, nil
 }
 
+func (s *Syncer) skipByTable(table *filter.Table) bool {
+	return skipByTable(s.baList, table)
+}
+
 // skipByTable returns true when
 // * any schema of table names is system schema.
 // * any table name doesn't pass block-allow list.
-func (s *Syncer) skipByTable(table *filter.Table) bool {
+func skipByTable(baList *filter.Filter, table *filter.Table) bool {
 	if filter.IsSystemSchema(table.Schema) {
 		return true
 	}
-	tables := s.baList.Apply([]*filter.Table{table})
+	tables := baList.Apply([]*filter.Table{table})
 	return len(tables) == 0
 }

@@ -19,6 +19,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Routine to get a Factory:
@@ -106,4 +107,11 @@ func NewFactory4Framework() Factory {
 // IF 'worker' is a worker, use worker id as workerID
 func UnregisterWorkerMetrics(workerID frameModel.WorkerID) {
 	globalMetricRegistry.Unregister(workerID)
+}
+
+// GetGlobalMetricRegistry returns the global metric registry where auto-registering metrics are registered.
+// The register to it should be only be done by its derived factories from NewFactory4Master, ...
+// And the returned registry can be only used for unregister.
+func GetGlobalMetricRegistry() prometheus.Registerer {
+	return NewOnlyUnregRegister(globalMetricRegistry.registry)
 }

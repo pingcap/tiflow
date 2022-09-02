@@ -143,8 +143,8 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 }
 
 type registerExecutorReturnValue struct {
-	resp *pb.RegisterExecutorResponse
-	err  error
+	executor *pb.Executor
+	err      error
 }
 
 type mockRegisterMasterClient struct {
@@ -165,7 +165,7 @@ func (c *mockRegisterMasterClient) RegisterExecutor(
 	if value.err != nil {
 		return "", value.err
 	}
-	return model.ExecutorID(value.resp.ExecutorId), nil
+	return model.ExecutorID(value.executor.Id), nil
 }
 
 func TestSelfRegister(t *testing.T) {
@@ -190,8 +190,8 @@ func TestSelfRegister(t *testing.T) {
 	executorID := uuid.NewGenerator().NewString()
 	returnValues := []*registerExecutorReturnValue{
 		{
-			&pb.RegisterExecutorResponse{
-				ExecutorId: executorID,
+			&pb.Executor{
+				Id: executorID,
 			}, nil,
 		},
 	}
@@ -200,7 +200,7 @@ func TestSelfRegister(t *testing.T) {
 	}
 	err = s.selfRegister(ctx)
 	require.NoError(t, err)
-	require.Equal(t, executorID, string(s.info.ID))
+	require.Equal(t, executorID, string(s.selfID))
 }
 
 func TestRPCCallBeforeInitialized(t *testing.T) {

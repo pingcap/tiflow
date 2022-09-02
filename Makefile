@@ -96,28 +96,15 @@ GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 GOVERSION := $(shell go version)
 
-# CDC LDFLAGS.
+# Version LDFLAGS.
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
-# DM LDFLAGS.
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GoVersion=$(GOVERSION)"
-
-# Engine LDFLAGS.
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GoVersion=$(GOVERSION)"
-
 include tools/Makefile
+include Makefile.engine
 
 default: build buildsucc
 
@@ -304,7 +291,7 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec check-makefiles
+	swagger-spec check-makefiles check_engine_integration_test
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -335,6 +322,7 @@ generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
+	tools/bin/mockgen -source cdc/sinkv2/eventsink/txn/backend.go -destination cdc/sinkv2/eventsink/txn/mock/backend_mock.go
 
 clean:
 	go clean -i ./...
@@ -509,34 +497,23 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build
-
-engine_image_amd64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./ 
-
-engine_image_arm64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/arm64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./
-
-engine_image_from_local:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build-local
-
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: bin/sync_diff_inspector
+engine_integration_test: check_third_party_binary_for_engine
+	mkdir -p /tmp/tiflow_engine_test || true
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" | tee /tmp/tiflow_engine_test/engine_it.log
+	./engine/test/utils/check_log.sh
+
+check_third_party_binary_for_engine:
+	@which bash || (echo "bash not found in ${PATH}"; exit 1)
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+	@which go || (echo "go not found in ${PATH}"; exit 1)
+	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
+	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+
+check_engine_integration_test:
+	./engine/test/utils/check_case.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

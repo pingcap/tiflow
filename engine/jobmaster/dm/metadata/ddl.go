@@ -33,10 +33,9 @@ type DDLStore struct {
 }
 
 // NewDDLStore returns a new DDLStore instance
-func NewDDLStore(id frameModel.MasterID, kvClient metaModel.KVClient) *DDLStore {
+func NewDDLStore(kvClient metaModel.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
 		TomlStore: NewTomlStore(kvClient),
-		id:        id,
 	}
 	ddlStore.TomlStore.Store = ddlStore
 	return ddlStore
