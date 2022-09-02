@@ -117,12 +117,6 @@ func NewOptShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig
 	}
 }
 
-func (k *OptShardingGroupKeeper) reset() {
-	k.Lock()
-	defer k.Unlock()
-	k.groups = make(map[string]*OptShardingGroup)
-}
-
 func (k *OptShardingGroupKeeper) resolveGroup(targetTable *filter.Table) (map[string]binlog.Location, binlog.Location) {
 	targetTableID := utils.GenTableID(targetTable)
 	k.Lock()
@@ -229,7 +223,6 @@ func (k *OptShardingGroupKeeper) RemoveGroup(targetTable *filter.Table, sourceTa
 			delete(k.groups, targetTableID)
 		}
 	}
-	return
 }
 
 func (k *OptShardingGroupKeeper) RemoveSchema(schema string) {

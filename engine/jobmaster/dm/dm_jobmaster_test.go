@@ -188,7 +188,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
-	checkpoint.NewCheckpointAgent = func(*zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
+	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
