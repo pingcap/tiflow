@@ -220,10 +220,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 				errors.New("csv config quote and delimiter cannot be the same"))
 		}
 
-		// validate null string
-		if len(s.CSVConfig.NullString) == 0 {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config null representation value cannot be empty"))
+		// validate terminator
+		if len(s.CSVConfig.Terminator) == 0 {
+			s.CSVConfig.Terminator = "\r\n"
 		}
 	}
 
