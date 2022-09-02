@@ -81,7 +81,13 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
+<<<<<<< HEAD
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
+=======
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+
+	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
+>>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -235,6 +241,53 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
+<<<<<<< HEAD
+=======
+		prevResolvedTs := c.state.Status.ResolvedTs
+		if c.redoManager.Enabled() {
+			var flushedCheckpointTs, flushedResolvedTs model.Ts
+			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
+			// we can only upload it to etcd after it has been flushed into redo meta.
+			// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
+			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+			log.Debug("owner gets flushed meta",
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID))
+			if flushedResolvedTs != 0 {
+				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
+				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
+				newResolvedTs = flushedResolvedTs
+			} else {
+				newResolvedTs = prevResolvedTs
+			}
+		}
+		log.Debug("owner prepares to update status",
+			zap.Uint64("prevResolvedTs", prevResolvedTs),
+			zap.Uint64("newResolvedTs", newResolvedTs),
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
+		// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
+		// been decreased when the owner is initialized.
+		if newResolvedTs < prevResolvedTs {
+			newResolvedTs = prevResolvedTs
+		}
+		failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
+			if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
+				log.Info("owner won't update checkpoint because of failpoint",
+					zap.String("namespace", c.id.Namespace),
+					zap.String("changefeed", c.id.ID),
+					zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
+					zap.Uint64("skipCheckpoint", newCheckpointTs))
+				newCheckpointTs = c.state.Status.CheckpointTs
+			}
+		})
+>>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	} else if c.state.Status != nil {
@@ -288,9 +341,24 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+<<<<<<< HEAD
+=======
+
+	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// been executed or not. So the DDL puller must start at checkpointTs-1.
+	var ddlStartTs uint64
+	if resolvedTs > checkpointTs {
+		ddlStartTs = checkpointTs
+	} else {
+		ddlStartTs = checkpointTs - 1
+	}
+
+	c.barriers = newBarriers()
+>>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
+<<<<<<< HEAD
 	// Since we are starting DDL puller from (checkpointTs-1) to make
 	// the DDL committed at checkpointTs executable by CDC, we need to set
 	// the DDL barrier to the correct start point.
@@ -303,6 +371,12 @@ LOOP:
 	// the schema cache.
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage,
 		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
+=======
+	c.barriers.Update(ddlJobBarrier, ddlStartTs)
+	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+
+	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
+>>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -313,12 +387,21 @@ LOOP:
 	c.sink = c.newSink()
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
+<<<<<<< HEAD
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.wg.Add(1)
+=======
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.ddlWg.Add(1)
+>>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
 	go func() {
 		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
@@ -497,10 +580,10 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !done {
 			return barrierTs, nil
 		}
+		c.lastDDLTs = ddlResolvedTs
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
-
 	case syncPointBarrier:
 		if !blocked {
 			return barrierTs, nil
@@ -510,7 +593,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-
 	case finishBarrier:
 		if !blocked {
 			return barrierTs, nil
