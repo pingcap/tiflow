@@ -27,17 +27,17 @@ var (
 	ConflictDetectDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "txn_conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
 		})
 
-	// TxnBatchSize is the batch size for transactions.
-	TxnBatchSize = prometheus.NewHistogram(
+	// TxnBatchRows indicates row count of a transaction to downstream.
+	TxnBatchRows = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "txn_batch_size",
 			Help:      "Size of the DML transaction batch.",
 		})
@@ -46,7 +46,7 @@ var (
 	ExecBatchHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
@@ -56,7 +56,7 @@ var (
 	ExecTxnHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
@@ -68,7 +68,7 @@ var (
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "large_row_changed_event_size",
 			Help:      "The size of all received row changed events (in bytes).",
 			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
@@ -78,7 +78,7 @@ var (
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
@@ -88,7 +88,7 @@ var (
 	ExecutionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
 		}, []string{"namespace", "changefeed"})
@@ -97,7 +97,7 @@ var (
 	TotalRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "total_rows_count",
 			Help:      "The total count of rows that are processed by sink.",
 		}, []string{"namespace", "changefeed"})
@@ -106,7 +106,7 @@ var (
 	TotalFlushedRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "total_flushed_rows_count",
 			Help:      "The total count of rows that are flushed by sink.",
 		}, []string{"namespace", "changefeed"})
@@ -115,7 +115,7 @@ var (
 	TableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "table_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by table sink.",
 		}, []string{"namespace", "changefeed"})
@@ -124,7 +124,7 @@ var (
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ConflictDetectDuration)
-	registry.MustRegister(TxnBatchSize)
+	registry.MustRegister(TxnBatchRows)
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
 

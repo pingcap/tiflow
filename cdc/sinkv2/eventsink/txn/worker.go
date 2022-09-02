@@ -45,8 +45,10 @@ type worker struct {
 	errCh   chan<- error
 
 	// Fields only used in the background loop.
-	timer         *time.Timer
-	flushInterval time.Duration
+	flushInterval     time.Duration
+	timer             *time.Timer
+	txnBatchRows      int
+	wantMoreCallbacks []func()
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error) *worker {
@@ -104,8 +106,7 @@ func (w *worker) runBackgroundLoop() {
 			zap.Int("workerID", w.ID))
 
 		w.timer = time.NewTimer(w.flushInterval)
-		wantMoreCallbacks := make([]func(), 0, 1024)
-	LOOP:
+		w.wantMoreCallbacks = make([]func(), 0, 1024)
 		for {
 			select {
 			case <-w.ctx.Done():
@@ -119,27 +120,13 @@ func (w *worker) runBackgroundLoop() {
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
-				metrics.ConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
-				wantMoreCallbacks = append(wantMoreCallbacks, txn.wantMore)
-				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-					if w.doFlush(true) {
-						break LOOP
-					}
-				} else {
-					continue LOOP
+				if w.onEvent(txn) && w.doFlush() {
+					break
 				}
 			case <-w.timer.C:
-				if w.doFlush(false) {
-					break LOOP
+				if w.doFlush() {
+					break
 				}
-			}
-			// Flush successfully, call callbacks to notify conflict detector.
-			for _, wantMore := range wantMoreCallbacks {
-				wantMore()
-			}
-			wantMoreCallbacks = wantMoreCallbacks[:0]
-			if cap(wantMoreCallbacks) > 1024 {
-				wantMoreCallbacks = make([]func(), 0, 1024)
 			}
 		}
 		log.Warn("Transaction sink worker exits unexceptedly",
@@ -148,12 +135,28 @@ func (w *worker) runBackgroundLoop() {
 	}()
 }
 
+func (w *worker) onEvent(txn txnWithNotifier) bool {
+	metrics.ConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.txnBatchRows += len(txn.Event.Rows)
+	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
+	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
+		if !w.timer.Stop() {
+			<-w.timer.C
+		}
+		return true
+	}
+	return false
+}
+
 // doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush(needStopTimer bool) bool {
+func (w *worker) doFlush() bool {
+	metrics.TxnBatchRows.Observe(float64(w.txnBatchRows))
+
 	if err := w.backend.Flush(w.ctx); err != nil {
 		log.Warn("Transaction sink backend flush fail",
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID),
+			zap.Int("rows", w.txnBatchRows),
 			zap.Error(err))
 		select {
 		case <-w.ctx.Done():
@@ -161,9 +164,17 @@ func (w *worker) doFlush(needStopTimer bool) bool {
 		}
 		return true
 	}
-	if needStopTimer && !w.timer.Stop() {
-		<-w.timer.C
+
+	// Flush successfully, call callbacks to notify conflict detector.
+	for _, wantMore := range w.wantMoreCallbacks {
+		wantMore()
 	}
+	w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
+	if cap(w.wantMoreCallbacks) > 1024 {
+		w.wantMoreCallbacks = make([]func(), 0, 1024)
+	}
+
 	w.timer.Reset(w.flushInterval)
+	w.txnBatchRows = 0
 	return false
 }
