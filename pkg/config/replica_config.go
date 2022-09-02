@@ -40,7 +40,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Quote:      string(DoubleQuoteChar),
 			Delimiter:  string(Comma),
 			Terminator: string(LF),
-			NullString: string(DoubleQuoteChar) + NULL + string(DoubleQuoteChar),
+			NullString: NULL,
 		},
 	},
 	Consistent: &ConsistentConfig{

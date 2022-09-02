@@ -80,14 +80,6 @@ const (
 	BigintUnsignedHandlingModeLong = "long"
 )
 
-const (
-	Comma           = ","
-	CR              = '\r'
-	LF              = '\n'
-	CRLF            = "\r\n"
-	DoubleQuoteChar = '"'
-)
-
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 	params := sinkURI.Query()

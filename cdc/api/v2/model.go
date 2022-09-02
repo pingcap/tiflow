@@ -174,13 +174,11 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			})
 		}
 		res.Sink = &config.SinkConfig{
-			Protocol: c.Sink.Protocol,
-			MQConfig: config.MQConfig{
-				DispatchRules:  dispatchRules,
-				SchemaRegistry: c.Sink.SchemaRegistry,
-			},
+			DispatchRules:   dispatchRules,
+			Protocol:        c.Sink.Protocol,
 			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors: columnSelectors,
+			SchemaRegistry:  c.Sink.SchemaRegistry,
 		}
 	}
 	return res

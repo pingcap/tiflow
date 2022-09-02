@@ -77,17 +77,12 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	// the MQ-related configuration items probably would be extracted to an independent toml table
-	MQConfig
+	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
 	CSVConfig       *CSVConfig        `toml:"csv" json:"csv"`
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
 	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
-}
-
-type MQConfig struct {
-	DispatchRules  []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
-	SchemaRegistry string          `toml:"schema-registry" json:"schema-registry"`
 }
 
 type CSVConfig struct {
