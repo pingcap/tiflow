@@ -1096,11 +1096,6 @@ error = '''
 table's old name is not in filter rule, and its new name in filter rule table id '%d', ddl query: [%s], it's an unexpected behavior, if you want to replicate this table, please add its old name to filter rule.
 '''
 
-["CDC:ErrSyncRenameTablesFailed"]
-error = '''
-some table(s) old name are not in the filter rule, table id(s): '%v' and other table(s) old name are in filter rule, table id(s): '%v' ddl query: [%s], TiCDC replicates DDL atomically, if you want to replicate these table(s), please add their name to filter rule.
-'''
-
 ["CDC:ErrTCPServerClosed"]
 error = '''
 The TCP server has been closed
