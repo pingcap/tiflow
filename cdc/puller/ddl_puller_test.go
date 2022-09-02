@@ -173,17 +173,17 @@ func TestHandleRenameTable(t *testing.T) {
 		}
 	}()
 
-	// table t3, t5 not found in snapshot, report error
+	// table t3, t5 not found in snapshot, skip it.
+	// only table t1 remain.
 	{
-		missingTables := make([]int64, 2)
-		replicatedTables := make([]int64, 1)
+		remainTables := make([]int64, 1)
 		job := helper.DDL2Job("create database test1")
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t1(id int)")
-		replicatedTables[0] = job.TableID
+		remainTables[0] = job.TableID
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -194,13 +194,11 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t3(id int)")
-		missingTables[0] = job.TableID
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t5(id int)")
-		missingTables[1] = job.TableID
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
@@ -208,12 +206,10 @@ func TestHandleRenameTable(t *testing.T) {
 		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55")
 
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
-		require.Error(t, err)
-		require.True(t, skip)
-		require.Contains(t, err.Error(), fmt.Sprintf("some table(s) old name are not in the filter rule, table id(s): '%v' "+
-			"and other table(s) old name are in filter rule, table id(s): '%v' "+
-			"ddl query: [%s], TiCDC replicates DDL atomically, "+
-			"if you want to replicate these table(s), please add their name to filter rule.", missingTables, replicatedTables, job.Query))
+		require.NoError(t, err)
+		require.False(t, skip)
+		require.Len(t, job.BinlogInfo.MultipleTableInfos, 1)
+		require.Equal(t, remainTables[0], job.BinlogInfo.MultipleTableInfos[0].ID)
 	}
 
 	{

@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -211,11 +212,17 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 		newTableNames, oldSchemaNames           []*timodel.CIStr
 	)
+
 	err = job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
 		&newTableNames, &oldTableIDs, &oldSchemaNames)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
+
+	var (
+		remainOldSchemaIDs, remainNewSchemaIDs, remainOldTableIDs []int64
+		remainNewTableNames, remainOldSchemaNames                 []*timodel.CIStr
+	)
 
 	multiTableInfos := job.BinlogInfo.MultipleTableInfos
 	if len(multiTableInfos) != len(oldSchemaIDs) ||
@@ -225,8 +232,12 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		len(multiTableInfos) != len(oldSchemaNames) {
 		return true, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
-	var skipTablesCount int
-	matchTables := make([]int64, 0)
+
+	// we filter subordinate rename table ddl by these principles:
+	// 1. old table name matches the filter rule, remain it.
+	// 2. old table name does not match and new table name matches the filter rule, return error.
+	// 3. old table name and new table name do not match the filter rule, skip it.
+	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
 	for i, tableInfo := range multiTableInfos {
 		schema, ok := p.schemaSnapshot.SchemaByID(newSchemaIDs[i])
 		if !ok {
@@ -238,7 +249,6 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 			}
-			skipTablesCount++
 			continue
 		}
 		// we skip a rename table ddl only when its old table name and new table name are both filtered.
@@ -252,21 +262,54 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 				zap.Int64("tableID", tableInfo.ID),
 				zap.String("schema", oldSchemaNames[i].O),
 				zap.String("table", table.Name.O))
-			skipTablesCount++
 		} else {
-			matchTables = append(matchTables, tableInfo.ID)
+			remainTables = append(remainTables, tableInfo)
+			remainOldSchemaIDs = append(remainOldSchemaIDs, oldSchemaIDs[i])
+			remainNewSchemaIDs = append(remainNewSchemaIDs, newSchemaIDs[i])
+			remainOldTableIDs = append(remainOldTableIDs, oldTableIDs[i])
+			remainNewTableNames = append(remainNewTableNames, newTableNames[i])
+			remainOldSchemaNames = append(remainOldSchemaNames, oldSchemaNames[i])
 		}
 	}
 
-	if skipTablesCount == 0 {
-		return false, nil
-	}
-
-	if len(multiTableInfos) == skipTablesCount {
+	if len(remainTables) == 0 {
 		return true, nil
 	}
 
-	return true, cerror.ErrSyncRenameTablesFailed.GenWithStackByArgs(util.Difference(oldTableIDs, matchTables), matchTables, job.Query)
+	newArgs := make([]json.RawMessage, 5)
+	v, err := json.Marshal(remainOldSchemaIDs)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	newArgs[0] = v
+	v, err = json.Marshal(remainNewSchemaIDs)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	newArgs[1] = v
+	v, err = json.Marshal(remainNewTableNames)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	newArgs[2] = v
+	v, err = json.Marshal(remainOldTableIDs)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	newArgs[3] = v
+	v, err = json.Marshal(remainOldSchemaNames)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	newArgs[4] = v
+
+	newRawArgs, err := json.Marshal(newArgs)
+	if err != nil {
+		return true, errors.Trace(err)
+	}
+	job.RawArgs = newRawArgs
+	job.BinlogInfo.MultipleTableInfos = remainTables
+	return false, nil
 }
 
 // handleJob handles the DDL job.
