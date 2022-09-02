@@ -12,7 +12,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.0.2
-	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220512075501-53f2916ae240
+	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220902071706-590164e525e0
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/cockroachdb/pebble v0.0.0-20220415182917-06c9d3be25b3
 	github.com/coreos/go-semver v0.3.0
