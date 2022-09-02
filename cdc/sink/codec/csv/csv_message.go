@@ -200,6 +200,7 @@ func buildRowData(csvConfig *config.CSVConfig, e *model.RowChangedEvent) ([]byte
 		} else {
 			csvMsg.opType = updateOperation
 		}
+		// for insert and update operation, we only record the after columns.
 		for i, column := range e.Columns {
 			if column == nil {
 				continue

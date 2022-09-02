@@ -224,6 +224,14 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		if len(s.CSVConfig.Terminator) == 0 {
 			s.CSVConfig.Terminator = "\r\n"
 		}
+
+		// validate date separator
+		if len(s.CSVConfig.DateSeparator) > 0 {
+			var separator DateSeparator
+			if err := separator.FromString(s.CSVConfig.DateSeparator); err != nil {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+			}
+		}
 	}
 
 	return nil

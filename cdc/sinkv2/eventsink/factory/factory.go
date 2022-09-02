@@ -63,10 +63,6 @@ func New(ctx context.Context,
 		}
 		s.rowSink = mqs
 		s.sinkType = sink.RowSink
-	// case sink.S3Schema, sink.NFSSchema, sink.LocalSchema:
-	// 	cloudSink := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
-	// 	s.rowSink = cloudSink
-	// 	s.sinkType = sink.RowSink
 	case sink.BlackHoleSchema:
 		bs := blackhole.New()
 		s.rowSink = bs

@@ -84,7 +84,6 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.NotNil(t, encoder)
 
 	count := 0
-
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "test", Table: "table1"},
@@ -96,7 +95,6 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeTiny),
 		}},
 	}
-
 	tests := []struct {
 		row      *model.RowChangedEvent
 		callback func()

@@ -53,12 +53,6 @@ const (
 	TiDBSchema = "tidb"
 	// TiDBSSLSchema indicates the schema is TiDB+ssl.
 	TiDBSSLSchema = "tidb+ssl"
-	// S3Schema indicates the schema is s3.
-	S3Schema = "s3"
-	// NFSSchema indicates the schema is nfs
-	NFSSchema = "nfs"
-	// LocalSchema indicates the schema is local
-	LocalSchema = "local"
 )
 
 // IsMQScheme returns true if the scheme belong to mq schema.
