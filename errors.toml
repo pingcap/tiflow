@@ -1476,6 +1476,11 @@ error = '''
 master config contains unknown configuration options: %s
 '''
 
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
+'''
+
 ["DFLOW:ErrMasterDecodeConfigFile"]
 error = '''
 decode config file failed

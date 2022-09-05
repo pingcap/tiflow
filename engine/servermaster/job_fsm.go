@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -157,6 +158,9 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 	for oldJobID, job := range fsm.pendingJobs {
 		id, err := dispatchJobFn(job)
 		if err != nil {
+			if derrors.ErrMasterCreateWorkerBackoff.Equal(err) {
+				return nil
+			}
 			return err
 		}
 		delete(fsm.pendingJobs, oldJobID)
