@@ -14,6 +14,8 @@
 package entry
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	ticonfig "github.com/pingcap/tidb/config"
@@ -64,7 +66,43 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
-	return jobs[0]
+	res := jobs[0]
+	if res.Type != timodel.ActionRenameTables {
+		return res
+	}
+
+	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
+	// so we manually construct `job.RawArgs` to do the workaround.
+	// we assume the old schema name is same as the new schema name here.
+	// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
+	schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
+	tableNum := len(res.BinlogInfo.MultipleTableInfos)
+	oldSchemaIDs := make([]int64, tableNum)
+	for i := 0; i < tableNum; i++ {
+		oldSchemaIDs[i] = res.SchemaID
+	}
+	oldTableIDs := make([]int64, tableNum)
+	for i := 0; i < tableNum; i++ {
+		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
+	}
+	newTableNames := make([]timodel.CIStr, tableNum)
+	for i := 0; i < tableNum; i++ {
+		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
+	}
+	oldSchemaNames := make([]timodel.CIStr, tableNum)
+	for i := 0; i < tableNum; i++ {
+		oldSchemaNames[i] = timodel.NewCIStr(schema)
+	}
+	newSchemaIDs := oldSchemaIDs
+
+	args := []interface{}{
+		oldSchemaIDs, newSchemaIDs,
+		newTableNames, oldTableIDs, oldSchemaNames,
+	}
+	rawArgs, err := json.Marshal(args)
+	require.NoError(s.t, err)
+	res.RawArgs = rawArgs
+	return res
 }
 
 // DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
