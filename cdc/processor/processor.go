@@ -206,7 +206,7 @@ func (p *processor) AddTable(
 }
 
 // RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
+func (p *processor) RemoveTable(tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -225,7 +225,7 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool
 	if !table.AsyncStop(boundaryTs) {
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
-		log.Debug("AsyncStop has failed, possible due to a full pipeline",
+		log.Debug("async stop the table failed, due to a full pipeline",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -233,11 +233,18 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool
 			zap.Int64("tableID", tableID))
 		return false
 	}
+	log.Info("table stopped",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.String("tableName", table.Name()),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("targetTs", boundaryTs))
 	return true
 }
 
 // IsAddTableFinished implements TableExecutor interface.
-func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) bool {
+func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -319,7 +326,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 }
 
 // IsRemoveTableFinished implements TableExecutor interface.
-func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
+func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
 	if !p.checkReadyForMessages() {
 		return 0, false
 	}
