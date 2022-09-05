@@ -400,8 +400,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Before campaign check liveness
 		if c.liveness.Load() == model.LivenessCaptureStopping {
-			// If the capture is stopping, do not campaign.
-			log.Info("do not campaign owner, liveness is stopping")
+			log.Info("do not campaign owner, liveness is stopping",
+				zap.String("captureID", c.info.ID))
 			return nil
 		}
 		// Campaign to be the owner, it blocks until it been elected.
@@ -423,7 +423,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			// If the capture is stopping, resign actively.
 			log.Info("resign owner actively, liveness is stopping")
 			if resignErr := c.resign(ctx); resignErr != nil {
-				return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
+				log.Warn("resign owner actively failed",
+					zap.String("captureID", c.info.ID), zap.Error(resignErr))
+				return errors.Trace(err)
 			}
 			return nil
 		}
@@ -619,7 +621,10 @@ func (c *captureImpl) AsyncClose() {
 
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain() <-chan struct{} {
-	// Set liveness stopping, owners will move all tables out in the capture.
+	// Set liveness stopping, this is triggered by user manually stop
+	// the TiCDC instance by sent signals.
+	// It may cost a few seconds before cdc server fully stop, set it to `stopping` to prevent
+	// the capture become the leader or tables dispatched to it.
 	c.liveness.Store(model.LivenessCaptureStopping)
 
 	done := make(chan struct{})

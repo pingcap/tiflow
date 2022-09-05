@@ -249,9 +249,6 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		}
 	}
 
-	// todo: this may cause the cluster has no owner
-	// 2 captures alive, if the owner crashed, and this one is stopping, cannot become the owner.
-	// the whole cluster become unavailable.
 	if request.IsStopping {
 		a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	}
