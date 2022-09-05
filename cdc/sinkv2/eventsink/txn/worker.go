@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -44,6 +45,10 @@ type worker struct {
 	backend backend
 	errCh   chan<- error
 
+    // Metrics.
+    metricsConflictDetectDuration prometheus.Observer
+    metricsTxnBatchRows prometheus.Observer
+
 	// Fields only used in the background loop.
 	flushInterval     time.Duration
 	timer             *time.Timer
@@ -62,6 +67,9 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error)
 		stopped: make(chan struct{}),
 		backend: backend,
 		errCh:   errCh,
+
+        metricsConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+        metricsTxnBatchRows: metrics.TxnBatchRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 
 		flushInterval: backend.MaxFlushInterval(),
 	}
@@ -136,7 +144,7 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
-	metrics.ConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricsConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 	w.txnBatchRows += len(txn.Event.Rows)
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
@@ -150,7 +158,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 
 // doFlush flushes the backend. Returns true if the goroutine can exit.
 func (w *worker) doFlush() bool {
-	metrics.TxnBatchRows.Observe(float64(w.txnBatchRows))
+	w.metricsTxnBatchRows.Observe(float64(w.txnBatchRows))
 
 	if err := w.backend.Flush(w.ctx); err != nil {
 		log.Warn("Transaction sink backend flush fail",
