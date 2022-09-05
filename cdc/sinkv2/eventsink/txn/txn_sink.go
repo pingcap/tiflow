@@ -52,7 +52,7 @@ type sink struct {
 func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots int64) *sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, errCh)
+		w := newWorker(ctx, i, backend, errCh, len(backends))
 		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}

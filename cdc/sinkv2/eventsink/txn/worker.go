@@ -35,8 +35,9 @@ type txnWithNotifier struct {
 }
 
 type worker struct {
-	ctx        context.Context
-	changefeed string
+	ctx         context.Context
+	changefeed  string
+	workerCount int
 
 	ID      int
 	txnCh   *chann.Chann[txnWithNotifier]
@@ -56,11 +57,12 @@ type worker struct {
 	wantMoreCallbacks []func()
 }
 
-func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error) *worker {
+func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error, workerCount int) *worker {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
-		ctx:        ctx,
-		changefeed: fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
+		ctx:         ctx,
+		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
+		workerCount: workerCount,
 
 		ID:      ID,
 		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
@@ -144,7 +146,7 @@ func (w *worker) runBackgroundLoop() {
 			case now := <-overseerTimer.C:
 				totalTimeSlice = now.Sub(startToWork)
 				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
-				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio))
+				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
 				startToWork = now
 				flushTimeSlice = 0
 			}

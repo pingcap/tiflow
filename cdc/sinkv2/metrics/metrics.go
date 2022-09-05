@@ -96,6 +96,8 @@ var (
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ConflictDetectDuration)
+	registry.MustRegister(TxnWorkerFlushDuration)
+	registry.MustRegister(TxnWorkerBusyRatio)
 
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecDDLHistogram)
