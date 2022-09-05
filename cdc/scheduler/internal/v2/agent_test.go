@@ -109,7 +109,7 @@ func TestAgentRemoveTable(t *testing.T) {
 	agent.OnOwnerDispatchedTask("capture-2", 1, model.TableID(1), model.Ts(1000), true, epoch)
 	executor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
 	messenger.On("SendCheckpoint", mock.Anything, model.Ts(1000), model.Ts(1000)).Return(true, nil)
-	executor.On("RemoveTable", mock.Anything, model.TableID(1)).Return(true, nil)
+	executor.On("RemoveTable", model.TableID(1)).Return(true, nil)
 	messenger.On("Barrier", mock.Anything).Return(true)
 	err = agent.Tick(ctx)
 	require.NoError(t, err)
