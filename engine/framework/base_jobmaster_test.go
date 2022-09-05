@@ -248,7 +248,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.mu.Unlock()
 
 	status := jobMaster.Status()
-	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, string(status.ExtBytes))
+	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, status.ExtBytes)
 	require.NoError(t, err)
 
 	err = jobMaster.base.Close(ctx)
@@ -283,58 +283,58 @@ func TestJobMasterExit(t *testing.T) {
 	cases := []struct {
 		exitReason       ExitReason
 		err              error
-		extMsg           string
+		detail           string
 		expectedState    frameModel.MasterState
 		expectedErrorMsg string
-		expectedExtMsg   string
+		expectedDetail   string
 	}{
 		{
 			exitReason:       ExitReasonFinished,
 			err:              nil,
-			extMsg:           "test finished",
+			detail:           "test finished",
 			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test finished",
+			expectedDetail:   "test finished",
 		},
 		{
 			exitReason:       ExitReasonFinished,
 			err:              errors.New("test finished with error"),
-			extMsg:           "test finished",
+			detail:           "test finished",
 			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "test finished with error",
-			expectedExtMsg:   "test finished",
+			expectedDetail:   "test finished",
 		},
 		{
 			exitReason:       ExitReasonCanceled,
 			err:              nil,
-			extMsg:           "test canceled",
+			detail:           "test canceled",
 			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test canceled",
+			expectedDetail:   "test canceled",
 		},
 		{
 			exitReason:       ExitReasonCanceled,
 			err:              errors.New("test canceled with error"),
-			extMsg:           "test canceled",
+			detail:           "test canceled",
 			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "test canceled with error",
-			expectedExtMsg:   "test canceled",
+			expectedDetail:   "test canceled",
 		},
 		{
 			exitReason:       ExitReasonFailed,
 			err:              nil,
-			extMsg:           "test failed",
+			detail:           "test failed",
 			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test failed",
+			expectedDetail:   "test failed",
 		},
 		{
 			exitReason:       ExitReasonFailed,
 			err:              errors.New("test failed with error"),
-			extMsg:           "test failed",
+			detail:           "test failed",
 			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "test failed with error",
-			expectedExtMsg:   "test failed",
+			expectedDetail:   "test failed",
 		},
 	}
 
@@ -385,13 +385,12 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.mu.Unlock()
 
 		// test exit status
-		err = jobMaster.base.Exit(ctx, cs.exitReason, cs.err, cs.extMsg)
+		err = jobMaster.base.Exit(ctx, cs.exitReason, cs.err, []byte(cs.detail))
 		require.NoError(t, err)
 		meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
 		require.NoError(t, err)
 		require.Equal(t, cs.expectedState, meta.State)
-		require.Equal(t, cs.expectedExtMsg, meta.ExtMsg)
-
+		require.Equal(t, []byte(cs.expectedDetail), meta.Detail)
 		err = jobMaster.base.Close(ctx)
 		require.NoError(t, err)
 

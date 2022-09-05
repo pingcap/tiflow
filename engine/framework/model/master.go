@@ -113,8 +113,8 @@ type MasterMeta struct {
 	// error message for the job
 	ErrorMsg string `json:"error-message" gorm:"column:error_message;type:text"`
 
-	// if job is finished or canceled, business logic can set self-defined job info to `ExtMsg`
-	ExtMsg string `json:"extend-message" gorm:"column:extend_message;type:text"`
+	// if job is finished or canceled, business logic can set self-defined job info to `Detail`
+	Detail []byte `json:"detail" gorm:"column:detail;type:blob"`
 
 	Ext MasterMetaExt `json:"ext" gorm:"column:ext;type:JSON"`
 
@@ -136,17 +136,17 @@ func (m *MasterMeta) Unmarshal(data []byte) error {
 // Map is used for update the orm model
 func (m *MasterMeta) Map() map[string]interface{} {
 	return map[string]interface{}{
-		"project_id":     m.ProjectID,
-		"id":             m.ID,
-		"type":           m.Type,
-		"state":          m.State,
-		"node_id":        m.NodeID,
-		"address":        m.Addr,
-		"epoch":          m.Epoch,
-		"config":         m.Config,
-		"error_message":  m.ErrorMsg,
-		"extend_message": m.ExtMsg,
-		"ext":            m.Ext,
+		"project_id":    m.ProjectID,
+		"id":            m.ID,
+		"type":          m.Type,
+		"state":         m.State,
+		"node_id":       m.NodeID,
+		"address":       m.Addr,
+		"epoch":         m.Epoch,
+		"config":        m.Config,
+		"error_message": m.ErrorMsg,
+		"detail":        m.Detail,
+		"ext":           m.Ext,
 	}
 }
 
@@ -164,6 +164,6 @@ var MasterUpdateColumns = []string{
 	"epoch",
 	"config",
 	"error_message",
-	"extend_message",
+	"detail",
 	"ext",
 }

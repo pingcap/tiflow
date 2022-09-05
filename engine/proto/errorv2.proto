@@ -9,4 +9,3 @@ message ErrorV2 {
   bytes details = 2;
   string stack_trace = 3;
 }
-
