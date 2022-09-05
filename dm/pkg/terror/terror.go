@@ -16,6 +16,7 @@ package terror
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/pingcap/errors"
 )
@@ -26,7 +27,7 @@ const (
 
 // CodeToErrorMap maps from error code to base error, it is used for error
 // retrieval by error code.
-var CodeToErrorMap map[ErrCode]*Error = make(map[ErrCode]*Error)
+var codeToErrorMap = new(sync.Map)
 
 // ErrCode is used as the unique identifier of a specific error type.
 type ErrCode int
@@ -167,7 +168,7 @@ func New(code ErrCode, class ErrClass, scope ErrScope, level ErrLevel, message s
 		message:    message,
 		workaround: workaround,
 	}
-	CodeToErrorMap[code] = err
+	codeToErrorMap.Store(code, err)
 	return err
 }
 
@@ -397,4 +398,13 @@ func WithClass(err error, class ErrClass) error {
 	}
 	e.class = class
 	return e
+}
+
+// ErrorFromCode queries registered error from error code
+func ErrorFromCode(code ErrCode) (*Error, bool) {
+	value, ok := codeToErrorMap.Load(code)
+	if !ok {
+		return nil, false
+	}
+	return value.(*Error), true
 }

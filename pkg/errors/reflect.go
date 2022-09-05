@@ -40,7 +40,7 @@ func ToDMError(err error) error {
 	subMatch := dmErrRegexp.FindStringSubmatch(err.Error())
 	if len(subMatch) > 2 {
 		code, _ := strconv.Atoi(subMatch[1])
-		if baseError, ok := terror.CodeToErrorMap[terror.ErrCode(code)]; ok {
+		if baseError, ok := terror.ErrorFromCode(terror.ErrCode(code)); ok {
 			return baseError.Generatef(subMatch[2])
 		}
 	}

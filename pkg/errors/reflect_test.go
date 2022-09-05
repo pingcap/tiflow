@@ -25,21 +25,32 @@ import (
 func TestToDMError(t *testing.T) {
 	t.Parallel()
 
-	// DM standard error
-	for _, baseError := range terror.CodeToErrorMap {
-		err := baseError.Generate()
-		reflectErr := ToDMError(err)
-		require.Error(t, reflectErr)
-		require.True(t, err.(*terror.Error).Equal(reflectErr))
+	var (
+		minCode = 10000
+		maxCode = 50000
+	)
+
+	for code := minCode; code < maxCode; code++ {
+		// DM standard error
+		baseError, ok := terror.ErrorFromCode(terror.ErrCode(code))
+		if ok {
+			err := baseError.Generate()
+			reflectErr := ToDMError(err)
+			require.Error(t, reflectErr)
+			require.True(t, err.(*terror.Error).Equal(reflectErr))
+		}
 	}
 
-	// error from format DM standard error
-	for _, baseError := range terror.CodeToErrorMap {
-		raw := baseError.Generate()
-		err := errors.New(raw.Error())
-		reflectErr := ToDMError(err)
-		require.Error(t, reflectErr)
-		require.True(t, raw.(*terror.Error).Equal(reflectErr))
+	for code := minCode; code < maxCode; code++ {
+		// error from format DM standard error
+		baseError, ok := terror.ErrorFromCode(terror.ErrCode(code))
+		if ok {
+			raw := baseError.Generate()
+			err := errors.New(raw.Error())
+			reflectErr := ToDMError(err)
+			require.Error(t, reflectErr)
+			require.True(t, baseError.Equal(reflectErr))
+		}
 	}
 
 	// Non DM error
