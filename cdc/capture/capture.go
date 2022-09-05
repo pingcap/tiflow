@@ -120,6 +120,8 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
+	sorterSystem *ssystem.System,
+	tableActorSystem *system.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -129,6 +131,8 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
+		sorterSystem:        sorterSystem,
+		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 
@@ -173,32 +177,6 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 	return c.EtcdClient
 }
 
-func (c *captureImpl) initializeSystems(ctx context.Context) error {
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-	}
-	c.tableActorSystem = system.NewSystem()
-	c.tableActorSystem.Start(ctx)
-
-	if !c.config.Debug.EnableDBSorter {
-		return nil
-	}
-
-	if c.sorterSystem != nil {
-		c.sorterSystem.Stop()
-	}
-	// Sorter dir has been set and checked when server starts.
-	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
-	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	memPercentage := float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
-	c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
-	err := c.sorterSystem.Start(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
@@ -232,10 +210,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = newElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.GetClusterID()))
-
-	if err := c.initializeSystems(ctx); err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
 
 	c.grpcService.Reset(nil)
 
@@ -596,8 +570,6 @@ func (c *captureImpl) AsyncClose() {
 	}
 	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
-	c.stopSystems()
-
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
@@ -605,20 +577,6 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter = nil
 	}
 	log.Info("message router closed", zap.String("captureID", c.info.ID))
-}
-
-func (c *captureImpl) stopSystems() {
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-		c.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.String("captureID", c.info.ID))
-
-	if c.sorterSystem != nil {
-		c.sorterSystem.Stop()
-		c.sorterSystem = nil
-	}
-	log.Info("sorter actor system closed", zap.String("captureID", c.info.ID))
 }
 
 // Drain removes tables in the current TiCDC instance.
