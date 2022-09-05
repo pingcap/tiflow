@@ -393,7 +393,8 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
+	compression := strings.ToLower(strings.TrimSpace(c.Compression))
+	switch compression {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
 	case "gzip":
@@ -407,6 +408,9 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	default:
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
+	}
+	if config.Producer.Compression != sarama.CompressionNone {
+		log.Info("Kafka producer uses " + compression + " compression algorithm")
 	}
 
 	if c.EnableTLS {
