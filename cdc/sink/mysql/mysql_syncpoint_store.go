@@ -20,38 +20,45 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
 const (
-	// syncpointTableName is the name of table where all syncpoint maps sit
-	syncpointTableName string = "syncpoint_v1"
-	// schemaName is the name of database where syncpoint maps sit
+	// syncPointTableName is the name of table where all syncpoint maps sit
+	syncPointTableName string = "syncpoint_v1"
+	// schemaName is the name of database where syncPoint maps sit
 	schemaName = "tidb_cdc"
 )
 
-type mysqlSyncpointStore struct {
-	db *sql.DB
+type mysqlSyncPointStore struct {
+	db                 *sql.DB
+	syncPointRetention time.Duration
+	clusterID          string
 }
 
-// newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointStore(ctx context.Context,
-	id model.ChangeFeedID, sinkURI *url.URL,
-) (SyncpointStore, error) {
+// newSyncPointStore create a sink to record the syncPoint map in downstream DB for every changefeed
+func newMySQLSyncPointStore(
+	ctx context.Context,
+	id model.ChangeFeedID,
+	sinkURI *url.URL,
+	syncPointRetention time.Duration,
+) (SyncPointStore, error) {
 	var syncDB *sql.DB
 
 	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
-		return nil, errors.New("can create mysql sink with unsupported scheme")
+		return nil, errors.New("can not create mysql sink with unsupported scheme")
 	}
 	params := defaultParams.Clone()
 	s := sinkURI.Query().Get("tidb-txn-mode")
@@ -136,14 +143,15 @@ func newMySQLSyncpointStore(ctx context.Context,
 	}
 
 	log.Info("Start mysql syncpoint sink")
-	syncpointStore := &mysqlSyncpointStore{
-		db: syncDB,
-	}
 
-	return syncpointStore, nil
+	return &mysqlSyncPointStore{
+		db:                 syncDB,
+		syncPointRetention: syncPointRetention,
+		clusterID:          config.GetGlobalServerConfig().ClusterID,
+	}, nil
 }
 
-func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
+func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	database := schemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -166,7 +174,17 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
+	query := `
+	CREATE TABLE IF NOT EXISTS %s (
+		ticdc_cluster_id(varchar 255),
+		cf varchar(255),
+		primary_ts varchar(18),
+		secondary_ts varchar(18),
+		created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY ( "cf", 'primary_ts")
+	);`
+	query = fmt.Sprintf(query, syncPointTableName)
+	_, err = tx.Exec(query)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -178,7 +196,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
+func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	id model.ChangeFeedID,
 	checkpointTs uint64,
 ) error {
@@ -198,9 +216,9 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	query := "insert ignore into " + schemaName + "." + syncpointTableName +
-		"(cf, primary_ts, secondary_ts) VALUES (?,?,?)"
-	_, err = tx.Exec(query, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
+	query := "insert ignore into " + schemaName + "." + syncPointTableName +
+		"(ticdc_cluster_id, cf, primary_ts, secondary_ts) VALUES (?,?,?,?)"
+	_, err = tx.Exec(query, s.clusterID, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -208,11 +226,25 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
+
+	query = fmt.Sprintf(
+		"DELETE IGNORE FROM "+schemaName+"."+syncPointTableName+"WHERE cf like '%s' and creat_at < (NOW() - INTERVAL %.2f SECOND)",
+		id.Namespace+"_"+id.ID,
+		s.syncPointRetention.Seconds())
+	_, err = tx.Exec(query)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+
 	err = tx.Commit()
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointStore) Close() error {
+func (s *mysqlSyncPointStore) Close() error {
 	err := s.db.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

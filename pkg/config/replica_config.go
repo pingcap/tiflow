@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -26,9 +27,12 @@ import (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
-	CaseSensitive:    true,
-	EnableOldValue:   true,
-	CheckGCSafePoint: true,
+	CaseSensitive:      true,
+	EnableOldValue:     true,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    false,
+	SyncPointInterval:  time.Minute * 10,
+	SyncPointRetention: time.Hour * 24,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -49,18 +53,31 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
 }
 
+type Duration struct {
+	time.Duration
+}
+
+func (d *Duration) UnmarshalText(text []byte) error {
+	var err error
+	d.Duration, err = time.ParseDuration(string(text))
+	return err
+}
+
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter           *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink             *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
+	CaseSensitive      bool              `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue     bool              `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate     bool              `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint   bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	EnableSyncPoint    bool              `toml:"enable-sync-point" json:"enable-sync-point"`
+	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
+	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
+	Filter             *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink               *SinkConfig       `toml:"sink" json:"sink"`
+	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

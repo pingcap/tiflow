@@ -77,15 +77,13 @@ type PDConfig struct {
 
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
-	Namespace         string         `json:"namespace"`
-	ID                string         `json:"changefeed_id"`
-	StartTs           uint64         `json:"start_ts"`
-	TargetTs          uint64         `json:"target_ts"`
-	SinkURI           string         `json:"sink_uri"`
-	Engine            string         `json:"engine"`
-	ReplicaConfig     *ReplicaConfig `json:"replica_config"`
-	SyncPointEnabled  bool           `json:"sync_point_enabled"`
-	SyncPointInterval time.Duration  `json:"sync_point_interval"`
+	Namespace     string         `json:"namespace"`
+	ID            string         `json:"changefeed_id"`
+	StartTs       uint64         `json:"start_ts"`
+	TargetTs      uint64         `json:"target_ts"`
+	SinkURI       string         `json:"sink_uri"`
+	Engine        string         `json:"engine"`
+	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
 
@@ -96,6 +94,9 @@ type ReplicaConfig struct {
 	ForceReplicate        bool              `json:"force_replicate"`
 	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool              `json:"enable_sync_point"`
+	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
+	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
 	Sink                  *SinkConfig       `json:"sink"`
 	Consistent            *ConsistentConfig `json:"consistent"`
@@ -108,6 +109,9 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
+	res.EnableSyncPoint = c.EnableSyncPoint
+	res.SyncPointInterval = c.SyncPointInterval
+	res.SyncPointRetention = c.SyncPointRetention
 
 	if c.Filter != nil {
 		var mySQLReplicationRules *filter.MySQLReplicationRules
@@ -193,6 +197,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		ForceReplicate:        cloned.ForceReplicate,
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
+		EnableSyncPoint:       cloned.EnableSyncPoint,
+		SyncPointInterval:     cloned.SyncPointInterval,
+		SyncPointRetention:    cloned.SyncPointRetention,
 	}
 
 	if cloned.Filter != nil {
@@ -274,9 +281,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
-		CaseSensitive:    true,
-		EnableOldValue:   true,
-		CheckGCSafePoint: true,
+		CaseSensitive:      true,
+		EnableOldValue:     true,
+		CheckGCSafePoint:   true,
+		EnableSyncPoint:    false,
+		SyncPointInterval:  10 * time.Second,
+		SyncPointRetention: 24 * time.Hour,
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
@@ -436,14 +446,12 @@ type ChangeFeedInfo struct {
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
-	AdminJobType      model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine            string             `json:"engine,omitempty"`
-	Config            *ReplicaConfig     `json:"config,omitempty"`
-	State             model.FeedState    `json:"state,omitempty"`
-	Error             *RunningError      `json:"error,omitempty"`
-	SyncPointEnabled  bool               `json:"sync_point_enabled,omitempty"`
-	SyncPointInterval time.Duration      `json:"sync_point_interval,omitempty"`
-	CreatorVersion    string             `json:"creator_version,omitempty"`
+	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
+	Engine         string             `json:"engine,omitempty"`
+	Config         *ReplicaConfig     `json:"config,omitempty"`
+	State          model.FeedState    `json:"state,omitempty"`
+	Error          *RunningError      `json:"error,omitempty"`
+	CreatorVersion string             `json:"creator_version,omitempty"`
 }
 
 // RunningError represents some running error from cdc components, such as processor.

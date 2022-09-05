@@ -241,19 +241,17 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	return &model.ChangeFeedInfo{
-		UpstreamID:        pdClient.GetClusterID(ctx),
-		Namespace:         cfg.Namespace,
-		ID:                cfg.ID,
-		SinkURI:           cfg.SinkURI,
-		CreateTime:        time.Now(),
-		StartTs:           cfg.StartTs,
-		TargetTs:          cfg.TargetTs,
-		Engine:            cfg.Engine,
-		Config:            replicaCfg,
-		State:             model.StateNormal,
-		SyncPointEnabled:  cfg.SyncPointEnabled,
-		SyncPointInterval: cfg.SyncPointInterval,
-		CreatorVersion:    version.ReleaseVersion,
+		UpstreamID:     pdClient.GetClusterID(ctx),
+		Namespace:      cfg.Namespace,
+		ID:             cfg.ID,
+		SinkURI:        cfg.SinkURI,
+		CreateTime:     time.Now(),
+		StartTs:        cfg.StartTs,
+		TargetTs:       cfg.TargetTs,
+		Engine:         cfg.Engine,
+		Config:         replicaCfg,
+		State:          model.StateNormal,
+		CreatorVersion: version.ReleaseVersion,
 	}, nil
 }
 
@@ -308,12 +306,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 				cfg.TargetTs, newInfo.StartTs)
 		}
 		newInfo.TargetTs = cfg.TargetTs
-	}
-
-	// verify syncPoint
-	newInfo.SyncPointEnabled = cfg.SyncPointEnabled
-	if cfg.SyncPointInterval != 0 {
-		newInfo.SyncPointInterval = cfg.SyncPointInterval
 	}
 
 	if cfg.ReplicaConfig != nil {
