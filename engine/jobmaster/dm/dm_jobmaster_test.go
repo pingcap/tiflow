@@ -351,7 +351,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// placeholder
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
-	require.NoError(t.T(), jm.OnMasterMessage("", ""))
+	require.NoError(t.T(), jm.OnMasterMessage(context.Background(), "", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&framework.MockWorkerHandler{}, "", ""))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 

@@ -36,9 +36,12 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -59,6 +62,8 @@ type JobManager interface {
 
 const defaultJobMasterCost = 1
 
+const jobOperateInterval = time.Second * 15
+
 var jobNameRegex = regexp.MustCompile(`^\w([-.\w]{0,61}\w)?$`)
 
 // JobManagerImpl is a special job master that manages all the job masters, and notify the offline executor to them.
@@ -71,11 +76,13 @@ type JobManagerImpl struct {
 	framework.BaseMaster
 	*JobFsm
 
-	masterMetaClient *metadata.MasterMetadataClient
-	uuidGen          uuid.Generator
-	clocker          clock.Clock
-	frameMetaClient  pkgOrm.Client
-	tombstoneCleaned bool
+	masterMetaClient    *metadata.MasterMetadataClient
+	uuidGen             uuid.Generator
+	clocker             clock.Clock
+	frameMetaClient     pkgOrm.Client
+	tombstoneCleaned    bool
+	jobOperator         jobop.JobOperator
+	jobOperatorNotifier *notify.Notifier
 
 	// jobStatusChangeMu must be taken when we try to create, delete,
 	// pause or resume a job.
@@ -84,19 +91,45 @@ type JobManagerImpl struct {
 	// TODO We might add a pending operation queue in the future.
 	jobStatusChangeMu *ctxmu.CtxMutex
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
+	wg                *errgroup.Group
 }
 
 // CancelJob implements JobManagerServer.CancelJob.
 func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.Job, error) {
-	// FIXME: The JobFsm's status may not be consistent with the database.
-	job := jm.JobFsm.QueryOnlineJob(req.Id)
-	if job == nil {
-		// Check if the job is not found.
-		if _, err := jm.frameMetaClient.GetJobByID(ctx, req.Id); pkgOrm.IsNotFoundError(err) {
+	meta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
+	if err != nil {
+		if pkgOrm.IsNotFoundError(err) {
 			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
 		}
-		return nil, ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: req.Id})
+		return nil, err
 	}
+
+	pbJob, err := buildPBJob(meta)
+	if err != nil {
+		return nil, err
+	}
+	if pbJob.Status == pb.Job_Finished || pbJob.Status == pb.Job_Canceled {
+		return pbJob, nil
+	}
+
+	if err := jm.jobOperator.MarkJobCanceling(ctx, req.Id); err != nil {
+		return nil, err
+	}
+	jm.jobOperatorNotifier.Notify()
+	pbJob.Status = pb.Job_Canceling
+	return pbJob, nil
+}
+
+// SendCancelJobMessage implements operateRouter.SendCancelJobMessage
+func (jm *JobManagerImpl) SendCancelJobMessage(ctx context.Context, jobID string) error {
+	job := jm.JobFsm.QueryOnlineJob(jobID)
+	if job == nil {
+		if _, err := jm.frameMetaClient.GetJobByID(ctx, jobID); pkgOrm.IsNotFoundError(err) {
+			return ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: jobID})
+		}
+		return ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+	}
+
 	topic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle().ID())
 	msg := &frameModel.StatusChangeRequest{
 		SendTime:     jm.clocker.Mono(),
@@ -104,21 +137,11 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
 		ExpectState:  frameModel.WorkerStateStopped,
 	}
-	if handle := job.WorkerHandle().Unwrap(); handle != nil {
-		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
-		if err != nil {
-			return nil, err
-		}
-		pbJob, err := buildPBJob(job.MasterMeta())
-		if err != nil {
-			return nil, err
-		}
-		// TODO: we should persist the job status to the database.
-		pbJob.Status = pb.Job_Canceling
-		return pbJob, nil
+	handle := job.WorkerHandle().Unwrap()
+	if handle == nil {
+		return ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
 	}
-	// The job is a tombstone, which means that the job has already exited.
-	return nil, ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: req.Id})
+	return handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
 }
 
 // DeleteJob implements JobManagerServer.DeleteJob.
@@ -399,13 +422,14 @@ func NewJobManagerImpl(
 	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImpl{
-		JobFsm:            NewJobFsm(),
-		uuidGen:           uuid.NewGenerator(),
-		masterMetaClient:  cli,
-		clocker:           clock.New(),
-		frameMetaClient:   metaClient,
-		jobStatusChangeMu: ctxmu.New(),
-		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
+		JobFsm:              NewJobFsm(),
+		uuidGen:             uuid.NewGenerator(),
+		masterMetaClient:    cli,
+		clocker:             clock.New(),
+		frameMetaClient:     metaClient,
+		jobStatusChangeMu:   ctxmu.New(),
+		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
+		jobOperatorNotifier: new(notify.Notifier),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
@@ -413,21 +437,25 @@ func NewJobManagerImpl(
 		id,
 		framework.JobManager,
 	)
+	impl.jobOperator = jobop.NewJobOperatorImpl(metaClient, impl)
+	wg, ctx := errgroup.WithContext(dctx)
+	impl.wg = wg
 
 	// Note the meta data of job manager is not used, it is safe to overwrite it
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.State = frameModel.MasterStateInit
-	err = metadata.StoreMasterMeta(dctx, impl.frameMetaClient, meta)
+	err = metadata.StoreMasterMeta(ctx, impl.frameMetaClient, meta)
 	if err != nil {
 		return nil, err
 	}
-	err = impl.BaseMaster.Init(dctx)
+	err = impl.BaseMaster.Init(ctx)
 	if err != nil {
-		_ = impl.BaseMaster.Close(dctx)
+		_ = impl.BaseMaster.Close(ctx)
 		return nil, err
 	}
+	impl.bgJobOperatorLoop(ctx)
 
 	return impl, err
 }
@@ -549,8 +577,12 @@ func (jm *JobManagerImpl) OnWorkerOffline(worker framework.WorkerHandle, reason 
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.Info("job master finished", zap.String("id", worker.ID()))
 		needFailover = false
-	} else if derrors.ErrWorkerStop.Equal(reason) {
-		log.Info("job master stopped", zap.String("id", worker.ID()))
+	} else if derrors.ErrWorkerCancel.Equal(reason) {
+		log.Info("job master canceled", zap.String("id", worker.ID()))
+		needFailover = false
+		jm.jobOperatorNotifier.Notify()
+	} else if derrors.ErrWorkerFailed.Equal(reason) {
+		log.Info("job master failed permanently", zap.String("id", worker.ID()))
 		needFailover = false
 	} else {
 		log.Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
@@ -579,7 +611,12 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 // CloseImpl implements frame.MasterImpl.CloseImpl
 func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
-	return nil
+	return jm.wg.Wait()
+}
+
+// StopImpl implements frame.MasterImpl.StopImpl
+func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
+	return jm.CloseImpl(ctx)
 }
 
 // WatchJobStatuses returns a snapshot of job statuses followed by a stream
@@ -612,4 +649,26 @@ func (jm *JobManagerImpl) WatchJobStatuses(
 
 	receiver := jm.notifier.NewReceiver()
 	return snapshot, receiver, nil
+}
+
+func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
+	jm.wg.Go(func() error {
+		receiver, err := jm.jobOperatorNotifier.NewReceiver(jobOperateInterval)
+		if err != nil {
+			return err
+		}
+		defer receiver.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case <-receiver.C:
+			}
+			if err := jm.jobOperator.Tick(ctx); err != nil {
+				// error returns from Tick is only caused by metastore error, so
+				// only log it and retry later.
+				log.Warn("job operator tick with error", zap.Error(err))
+			}
+		}
+	})
 }

@@ -251,7 +251,7 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
 	return nil
 }
 
