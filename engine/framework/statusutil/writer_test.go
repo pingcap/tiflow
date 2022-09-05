@@ -65,7 +65,7 @@ func TestWriterUpdate(t *testing.T) {
 	st := &frameModel.WorkerStatus{
 		JobID:    "master-1",
 		ID:       "worker-1",
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ErrorMsg: "test",
 	}
 
@@ -80,7 +80,7 @@ func TestWriterUpdate(t *testing.T) {
 
 	status, err := suite.cli.GetWorkerByID(ctx, st.JobID, st.ID)
 	require.NoError(t, err)
-	require.Equal(t, status.Code, frameModel.WorkerStatusNormal)
+	require.Equal(t, status.State, frameModel.WorkerStateNormal)
 	require.Equal(t, status.ErrorMsg, "test")
 
 	rawMsg, ok := suite.messageSender.TryPop("executor-1", WorkerStatusTopic("master-1"))
@@ -120,7 +120,7 @@ func TestWriterSendRetry(t *testing.T) {
 	st := &frameModel.WorkerStatus{
 		JobID:    "master-1",
 		ID:       "worker-1",
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ErrorMsg: "test",
 	}
 	err := suite.cli.UpsertWorker(ctx, st)
@@ -148,7 +148,7 @@ func TestWriterSendRetry(t *testing.T) {
 func checkWorkerStatusMsg(t *testing.T, expect, msg *WorkerStatusMessage) {
 	require.Equal(t, expect.Worker, msg.Worker)
 	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
-	require.Equal(t, expect.Status.Code, expect.Status.Code)
+	require.Equal(t, expect.Status.State, expect.Status.State)
 	require.Equal(t, expect.Status.ErrorMsg, expect.Status.ErrorMsg)
 	require.Equal(t, expect.Status.ExtBytes, expect.Status.ExtBytes)
 }

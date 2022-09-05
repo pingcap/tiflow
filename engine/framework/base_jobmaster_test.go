@@ -78,6 +78,14 @@ func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,14 +142,6 @@ func (m *testJobMasterImpl) Workload() model.RescUnit {
 	return args.Get(0).(model.RescUnit)
 }
 
-func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(topic, message)
-	return args.Error(0)
-}
-
 func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
 	apiGroup.GET("/status", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
@@ -154,15 +154,23 @@ func (m *testJobMasterImpl) IsJobMasterImpl() {
 
 func (m *testJobMasterImpl) Status() frameModel.WorkerStatus {
 	return frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}
+}
+
+func (m *testJobMasterImpl) OnCancel(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 // simulate the job manager to insert a job record first since job master will only update the job
 func prepareInsertJob(ctx context.Context, cli pkgOrm.Client, jobID string) error {
-	return cli.UpsertJob(ctx, &frameModel.MasterMetaKVData{
-		ID:         jobID,
-		StatusCode: frameModel.MasterStatusUninit,
+	return cli.UpsertJob(ctx, &frameModel.MasterMeta{
+		ID:    jobID,
+		State: frameModel.MasterStateUninit,
 	})
 }
 
@@ -276,7 +284,7 @@ func TestJobMasterExit(t *testing.T) {
 		exitReason       ExitReason
 		err              error
 		extMsg           string
-		expectedStatus   frameModel.MasterStatusCode
+		expectedState    frameModel.MasterState
 		expectedErrorMsg string
 		expectedExtMsg   string
 	}{
@@ -284,7 +292,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              nil,
 			extMsg:           "test finished",
-			expectedStatus:   frameModel.MasterStatusFinished,
+			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "",
 			expectedExtMsg:   "test finished",
 		},
@@ -292,7 +300,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonFinished,
 			err:              errors.New("test finished with error"),
 			extMsg:           "test finished",
-			expectedStatus:   frameModel.MasterStatusFinished,
+			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "test finished with error",
 			expectedExtMsg:   "test finished",
 		},
@@ -300,7 +308,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              nil,
 			extMsg:           "test canceled",
-			expectedStatus:   frameModel.MasterStatusStopped,
+			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "",
 			expectedExtMsg:   "test canceled",
 		},
@@ -308,7 +316,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonCanceled,
 			err:              errors.New("test canceled with error"),
 			extMsg:           "test canceled",
-			expectedStatus:   frameModel.MasterStatusStopped,
+			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "test canceled with error",
 			expectedExtMsg:   "test canceled",
 		},
@@ -316,7 +324,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              nil,
 			extMsg:           "test failed",
-			expectedStatus:   frameModel.MasterStatusFailed,
+			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "",
 			expectedExtMsg:   "test failed",
 		},
@@ -324,7 +332,7 @@ func TestJobMasterExit(t *testing.T) {
 			exitReason:       ExitReasonFailed,
 			err:              errors.New("test failed with error"),
 			extMsg:           "test failed",
-			expectedStatus:   frameModel.MasterStatusFailed,
+			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "test failed with error",
 			expectedExtMsg:   "test failed",
 		},
@@ -381,7 +389,7 @@ func TestJobMasterExit(t *testing.T) {
 		require.NoError(t, err)
 		meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
 		require.NoError(t, err)
-		require.Equal(t, cs.expectedStatus, meta.StatusCode)
+		require.Equal(t, cs.expectedState, meta.State)
 		require.Equal(t, cs.expectedExtMsg, meta.ExtMsg)
 
 		err = jobMaster.base.Close(ctx)

@@ -221,7 +221,7 @@ func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID s
 	panic("not implemented")
 }
 
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error) {
 	panic("not implemented")
 }
 

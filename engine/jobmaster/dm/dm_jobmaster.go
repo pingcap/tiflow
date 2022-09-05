@@ -137,7 +137,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		return err
 	}
 	if jm.isFinished(ctx) {
-		return jm.cancel(ctx, frameModel.WorkerStatusFinished)
+		return jm.cancel(ctx, frameModel.WorkerStateFinished)
 	}
 	return nil
 }
@@ -222,7 +222,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	// we alreay update finished status in OnWorkerOffline
-	if newStatus.Code == frameModel.WorkerStatusFinished || len(newStatus.ExtBytes) == 0 {
+	if newStatus.State == frameModel.WorkerStateFinished || len(newStatus.ExtBytes) == 0 {
 		return nil
 	}
 	jm.Logger().Info("on worker status updated", zap.String(logutil.ConstFieldWorkerKey, worker.ID()), zap.String("extra bytes", string(newStatus.ExtBytes)))
@@ -251,7 +251,7 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
 	return nil
 }
 
@@ -263,7 +263,7 @@ func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 // OnCancel implements JobMasterImpl.OnCancel
 func (jm *JobMaster) OnCancel(ctx context.Context) error {
 	jm.Logger().Info("on cancel job master")
-	return jm.cancel(ctx, frameModel.WorkerStatusStopped)
+	return jm.cancel(ctx, frameModel.WorkerStateStopped)
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
@@ -352,9 +352,9 @@ func (jm *JobMaster) isFinished(ctx context.Context) bool {
 	return jm.taskManager.allFinished(ctx) && jm.workerManager.allTombStone()
 }
 
-func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCode) (frameModel.WorkerStatus, error) {
+func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerState) (frameModel.WorkerStatus, error) {
 	status := frameModel.WorkerStatus{
-		Code: code,
+		State: code,
 	}
 	if jobStatus, err := jm.QueryJobStatus(ctx, nil); err != nil {
 		return status, err
@@ -367,7 +367,7 @@ func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCod
 }
 
 // cancel remove jobCfg in metadata, and wait all workers offline.
-func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCode) error {
+func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) error {
 	var extMsg string
 	status, err := jm.status(ctx, code)
 	if err != nil {
@@ -388,7 +388,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCod
 			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), extMsg)
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
-				return jm.Exit(ctx, framework.WorkerStatusCodeToExitReason(status.Code), err, extMsg)
+				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, extMsg)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
 		}

@@ -21,6 +21,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -33,7 +34,9 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -59,6 +62,8 @@ func TestJobManagerCreateJob(t *testing.T) {
 		jobStatusChangeMu: ctxmu.New(),
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
+	wg, ctx := errgroup.WithContext(ctx)
+	mgr.wg = wg
 	// set master impl to JobManagerImpl
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
@@ -144,23 +149,27 @@ func TestJobManagerCancelJob(t *testing.T) {
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImpl{
-		BaseMaster:        mockMaster.DefaultBaseMaster,
-		JobFsm:            NewJobFsm(),
-		clocker:           clock.New(),
-		frameMetaClient:   mockMaster.GetFrameMetaClient(),
-		jobStatusChangeMu: ctxmu.New(),
+		BaseMaster:          mockMaster.DefaultBaseMaster,
+		JobFsm:              NewJobFsm(),
+		clocker:             clock.New(),
+		frameMetaClient:     mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu:   ctxmu.New(),
+		jobOperatorNotifier: new(notify.Notifier),
 	}
+	mgr.jobOperator = jobop.NewJobOperatorImpl(mgr.frameMetaClient, mgr)
 
 	cancelWorkerID := "cancel-worker-id"
-	meta := &frameModel.MasterMetaKVData{
-		ID:         cancelWorkerID,
-		Tp:         framework.CvsJobMaster,
-		StatusCode: frameModel.MasterStatusInit,
+	meta := &frameModel.MasterMeta{
+		ID:    cancelWorkerID,
+		Type:  framework.CvsJobMaster,
+		State: frameModel.MasterStateInit,
 	}
 	mgr.JobFsm.JobDispatched(meta, false)
 
+	err := mgr.frameMetaClient.UpsertJob(ctx, meta)
+	require.NoError(t, err)
 	mockWorkerHandle := &framework.MockHandle{WorkerID: cancelWorkerID, ExecutorID: "executor-1"}
-	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
+	err = mgr.JobFsm.JobOnline(mockWorkerHandle)
 	require.NoError(t, err)
 
 	req := &pb.CancelJobRequest{
@@ -170,7 +179,11 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pb.Job_Canceling, job.Status)
 
-	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
+	for i := 0; i < 5; i++ {
+		err = mgr.jobOperator.Tick(ctx)
+		require.NoError(t, err)
+		require.Equal(t, i+1, mockWorkerHandle.SendMessageCount())
+	}
 
 	req.Id = cancelWorkerID + "-unknown"
 	_, err = mgr.CancelJob(ctx, req)
@@ -197,10 +210,10 @@ func TestJobManagerDeleteJob(t *testing.T) {
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
-	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMetaKVData{
-		ID:         "job-to-be-deleted",
-		Tp:         framework.FakeJobMaster,
-		StatusCode: frameModel.MasterStatusStopped,
+	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
+		ID:    "job-to-be-deleted",
+		Type:  framework.FakeJobMaster,
+		State: frameModel.MasterStateStopped,
 	})
 	require.NoError(t, err)
 
@@ -222,38 +235,38 @@ func TestJobManagerGetJob(t *testing.T) {
 	defer cancel()
 
 	testCases := []struct {
-		meta             *frameModel.MasterMetaKVData
+		meta             *frameModel.MasterMeta
 		expectedPBStatus pb.Job_Status
 	}{
 		{
-			&frameModel.MasterMetaKVData{
-				ID:         "master-1",
-				Tp:         framework.FakeJobMaster,
-				StatusCode: frameModel.MasterStatusUninit,
+			&frameModel.MasterMeta{
+				ID:    "master-1",
+				Type:  framework.FakeJobMaster,
+				State: frameModel.MasterStateUninit,
 			},
 			pb.Job_Created,
 		},
 		{
-			&frameModel.MasterMetaKVData{
-				ID:         "master-2",
-				Tp:         framework.FakeJobMaster,
-				StatusCode: frameModel.MasterStatusInit,
+			&frameModel.MasterMeta{
+				ID:    "master-2",
+				Type:  framework.FakeJobMaster,
+				State: frameModel.MasterStateInit,
 			},
 			pb.Job_Running,
 		},
 		{
-			&frameModel.MasterMetaKVData{
-				ID:         "master-3",
-				Tp:         framework.FakeJobMaster,
-				StatusCode: frameModel.MasterStatusFinished,
+			&frameModel.MasterMeta{
+				ID:    "master-3",
+				Type:  framework.FakeJobMaster,
+				State: frameModel.MasterStateFinished,
 			},
 			pb.Job_Finished,
 		},
 		{
-			&frameModel.MasterMetaKVData{
-				ID:         "master-4",
-				Tp:         framework.FakeJobMaster,
-				StatusCode: frameModel.MasterStatusStopped,
+			&frameModel.MasterMeta{
+				ID:    "master-4",
+				Type:  framework.FakeJobMaster,
+				State: frameModel.MasterStateStopped,
 			},
 			pb.Job_Canceled,
 		},
@@ -288,7 +301,7 @@ func TestJobManagerGetJob(t *testing.T) {
 		require.Equal(t, tc.expectedPBStatus, job.GetStatus())
 
 		require.Contains(t, statuses, tc.meta.ID)
-		require.Equal(t, tc.meta.StatusCode, statuses[tc.meta.ID])
+		require.Equal(t, tc.meta.State, statuses[tc.meta.ID])
 	}
 }
 
@@ -341,14 +354,14 @@ func TestJobManagerRecover(t *testing.T) {
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	// prepare mockvk with two job masters
-	meta := []*frameModel.MasterMetaKVData{
+	meta := []*frameModel.MasterMeta{
 		{
-			ID: "master-1",
-			Tp: framework.FakeJobMaster,
+			ID:   "master-1",
+			Type: framework.FakeJobMaster,
 		},
 		{
-			ID: "master-2",
-			Tp: framework.FakeJobMaster,
+			ID:   "master-2",
+			Type: framework.FakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -390,7 +403,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.NoError(t, err)
 
-	mgr.JobFsm.JobDispatched(&frameModel.MasterMetaKVData{ID: "failover-job-master"}, true)
+	mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: "failover-job-master"}, true)
 	// try to recreate failover job master, will meet quota error
 	err = mgr.Tick(ctx)
 	require.NoError(t, err)
@@ -421,10 +434,10 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
-	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMetaKVData{
-		ID:         "job-to-be-deleted",
-		Tp:         framework.FakeJobMaster,
-		StatusCode: frameModel.MasterStatusStopped,
+	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
+		ID:    "job-to-be-deleted",
+		Type:  framework.FakeJobMaster,
+		State: frameModel.MasterStateStopped,
 	})
 	require.NoError(t, err)
 
@@ -433,9 +446,9 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 
 	snap, stream, err := mgr.WatchJobStatuses(ctx)
 	require.NoError(t, err)
-	require.Equal(t, map[frameModel.MasterID]frameModel.MasterStatusCode{
-		"delete-job-test":   frameModel.MasterStatusUninit,
-		"job-to-be-deleted": frameModel.MasterStatusStopped,
+	require.Equal(t, map[frameModel.MasterID]frameModel.MasterState{
+		"delete-job-test":   frameModel.MasterStateUninit,
+		"job-to-be-deleted": frameModel.MasterStateStopped,
 	}, snap)
 
 	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{
