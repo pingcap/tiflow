@@ -99,7 +99,7 @@ func TestDMJob(t *testing.T) {
 		"http://127.0.0.1:11242/metrics",
 		"http://127.0.0.1:11243/metrics",
 	}
-	re := regexp.MustCompile(`job_id="(.{36})"`)
+	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
 	for _, metricsURL := range metricsURLs {
 		resp, err := http.Get(metricsURL)
 		require.NoError(t, err)

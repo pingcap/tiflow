@@ -56,6 +56,7 @@ type Worker interface {
 	ID() runtime.RunnableID
 	Workload() model.RescUnit
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -73,7 +74,7 @@ type WorkerImpl interface {
 	Workload() model.RescUnit
 
 	// OnMasterMessage is called when worker receives master message
-	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
+	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
@@ -313,7 +314,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(topic, msg)
+			return w.Impl.OnMasterMessage(ctx, topic, msg)
 		},
 	)
 
@@ -425,6 +426,11 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 			zap.String("worker-id", w.id),
 			logutil.ShortError(err))
 	}
+}
+
+// Stop implements Worker.Stop, works the same as Worker.Close
+func (w *DefaultBaseWorker) Stop(ctx context.Context) error {
+	return w.Close(ctx)
 }
 
 // ID implements BaseWorker.ID
