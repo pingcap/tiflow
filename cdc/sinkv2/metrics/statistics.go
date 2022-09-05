@@ -36,8 +36,8 @@ func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 	s := sinkType.String()
 	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricRowSizeHis = RowSizeHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespcae, changefeedID)
+	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespcae, changefeedID, s)
+	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespcae, changefeedID, s)
 	return statistics
 }
 
@@ -63,7 +63,7 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 	for _, row := range rows {
 		// only track row with data size larger than `rowSizeLowBound` to reduce
 		// the overhead of calling `Observe` method.
-		if row.ApproximateDataSize >= rowSizeLowBound {
+		if row.ApproximateDataSize >= largeRowSizeLowBound {
 			b.metricRowSizeHis.Observe(float64(row.ApproximateDataSize))
 		}
 	}
@@ -95,6 +95,6 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 func (b *Statistics) Close() {
 	ExecDDLHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecBatchHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
-	RowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
+	LargeRowSizeHistogram.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 	ExecutionErrorCounter.DeleteLabelValues(b.changefeedID.Namespace, b.changefeedID.ID)
 }

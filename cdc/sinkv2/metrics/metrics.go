@@ -14,12 +14,12 @@
 package metrics
 
 import (
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	// "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
-const rowSizeLowBound = 128 * 1024
+const largeRowSizeLowBound = 128 * 1024
 
 // ---------- Metrics for txn sink and backends. ---------- //
 var (
@@ -41,20 +41,20 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
-			Name:      "txn_batch_size",
-			Help:      "Bucketed histogram of batch size of a txn.",
+			Name:      "batch_row_count",
+			Help:      "Row count number for a given batch",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// RowSizeHistogram records the row size of events.
-	RowSizeHistogram = prometheus.NewHistogramVec(
+	// LargeRowSizeHistogram records size of large rows.
+	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
-			Name:      "large_row_changed_event_size",
+			Name:      "large_row_size",
 			Help:      "The size of all received row changed events (in bytes).",
-			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
-		}, []string{"namespace", "changefeed"})
+			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 10), // 128K~128M
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
@@ -64,7 +64,7 @@ var (
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
-		}, []string{"namespace", "changefeed"})
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecutionErrorCounter is the counter of execution errors.
 	ExecutionErrorCounter = prometheus.NewCounterVec(
@@ -73,7 +73,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
-		}, []string{"namespace", "changefeed"})
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 )
 
 // InitMetrics registers all metrics in this file
@@ -82,9 +82,9 @@ func InitMetrics(registry *prometheus.Registry) {
 
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecDDLHistogram)
-	registry.MustRegister(RowSizeHistogram)
+	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 
 	// Register Kafka producer and broker metrics.
-	kafka.InitMetrics(registry)
+	// kafka.InitMetrics(registry)
 }

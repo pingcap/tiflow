@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"

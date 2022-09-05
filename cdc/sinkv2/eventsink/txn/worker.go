@@ -113,6 +113,7 @@ func (w *worker) runBackgroundLoop() {
 
 		w.timer = time.NewTimer(w.flushInterval)
 		w.wantMoreCallbacks = make([]func(), 0, 1024)
+	LOOP:
 		for {
 			select {
 			case <-w.ctx.Done():
@@ -127,11 +128,11 @@ func (w *worker) runBackgroundLoop() {
 				return
 			case txn := <-w.txnCh.Out():
 				if w.onEvent(txn) && w.doFlush() {
-					break
+					break LOOP
 				}
 			case <-w.timer.C:
 				if w.doFlush() {
-					break
+					break LOOP
 				}
 			}
 		}
