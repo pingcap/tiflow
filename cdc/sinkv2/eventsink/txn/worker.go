@@ -46,8 +46,9 @@ type worker struct {
 	errCh   chan<- error
 
 	// Metrics.
-	metricsConflictDetectDuration prometheus.Observer
-	metricsTxnBatchRows           prometheus.Observer
+	metricConflictDetectDuration prometheus.Observer
+	metricTxnWorkerFlushDuration prometheus.Observer
+	metricTxnWorkerBusyRatio     prometheus.Counter
 
 	// Fields only used in the background loop.
 	flushInterval     time.Duration
@@ -67,7 +68,9 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error)
 		backend: backend,
 		errCh:   errCh,
 
-		metricsConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 
 		flushInterval: backend.MaxFlushInterval(),
 	}
@@ -113,6 +116,10 @@ func (w *worker) runBackgroundLoop() {
 
 		w.timer = time.NewTimer(w.flushInterval)
 		w.wantMoreCallbacks = make([]func(), 0, 1024)
+
+		var flushTimeSlice, totalTimeSlice time.Duration
+		overseerTimer := time.NewTicker(2 * time.Second)
+		startToWork := time.Now()
 	LOOP:
 		for {
 			select {
@@ -127,13 +134,19 @@ func (w *worker) runBackgroundLoop() {
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
-				if w.onEvent(txn) && w.doFlush() {
+				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
 					break LOOP
 				}
 			case <-w.timer.C:
-				if w.doFlush() {
+				if w.doFlush(&flushTimeSlice) {
 					break LOOP
 				}
+			case now := <-overseerTimer.C:
+				totalTimeSlice = now.Sub(startToWork)
+				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
+				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				flushTimeSlice = 0
 			}
 		}
 		log.Warn("Transaction sink worker exits unexceptedly",
@@ -143,7 +156,7 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
-	w.metricsConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
 		if !w.timer.Stop() {
@@ -155,7 +168,14 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 }
 
 // doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush() bool {
+func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		*flushTimeSlice += elapsed
+		w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+	}()
+
 	if err := w.backend.Flush(w.ctx); err != nil {
 		log.Warn("Transaction sink backend flush fail",
 			zap.String("changefeedID", w.changefeed),

@@ -32,6 +32,23 @@ var (
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
 		}, []string{"namespace", "changefeed"})
+
+	TxnWorkerFlushDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "txn_worker_flush_duration",
+			Help:      "Flush duration (s) for txn worker",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+		}, []string{"namespace", "changefeed"})
+
+	TxnWorkerBusyRatio = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "txn_worker_busy_ratio",
+			Help:      "Busy ratio (X ms in 1s) for all workers",
+		}, []string{"namespace", "changefeed"})
 )
 
 // ---------- Metrics used in Statistics. ---------- //
