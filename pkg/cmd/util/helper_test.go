@@ -208,7 +208,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		CSVConfig: &config.CSVConfig{
 			Delimiter:       ",",
 			Quote:           "\"",
-			Terminator:      "",
+			Terminator:      "\r\n",
 			NullString:      "\\N",
 			DateSeparator:   "day",
 			IncludeCommitTs: false,
