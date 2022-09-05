@@ -282,10 +282,6 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return unified.RunWorkerPool(cctx)
-	})
-
-	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
 	})
 
@@ -294,6 +290,13 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	conf := config.GetGlobalServerConfig()
+
+	if !conf.Debug.EnableDBSorter {
+		wg.Go(func() error {
+			return unified.RunWorkerPool(cctx)
+		})
+	}
+
 	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
