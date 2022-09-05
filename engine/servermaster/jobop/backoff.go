@@ -118,6 +118,11 @@ func NewJobBackoff(jobID string, options ...BackoffOption) *JobBackoff {
 
 // JobBackoff is a job backoff manager, it recoreds job online and offline events
 // and determines whether a job can be re-created based on backoff mechanism.
+// The backoff stragegy is as following
+// - Each time a fail event arrives, the backoff time will be move forward by
+//   nextBackoff.
+// - If a job is success for more than `resetInterval`, the backoff history will
+//   be cleared, and backoff time will be re-calculated.
 type JobBackoff struct {
 	jobID           string
 	events          []backoffEvent
@@ -160,18 +165,16 @@ func (b *JobBackoff) Fail() {
 
 // addEvent appends new backoff event into backoffer
 func (b *JobBackoff) addEvent(event backoffEvent) {
-	idx := 0
-	for ; idx < len(b.events); idx++ {
-		if b.opts.clocker.Since(b.events[idx].ts) < b.opts.resetInterval {
-			break
+	// The last event is online and it is earlier than `resetInterval`,
+	// reset the backoff
+	if len(b.events) > 0 {
+		lastEvent := b.events[len(b.events)-1]
+		if lastEvent.tp == backoffOnline &&
+			b.opts.clocker.Since(lastEvent.ts) >= b.opts.resetInterval {
+			b.events = make([]backoffEvent, 0)
+			b.resetErrBackoff()
 		}
 	}
-	// all events are earlier than `resetInterval`, and last event is online
-	// means the job is online for more than `resetInterval`, reset the backoff
-	if len(b.events) > 0 && idx == len(b.events) && b.events[idx-1].tp == backoffOnline {
-		b.resetErrBackoff()
-	}
-	b.events = b.events[idx:]
 	b.events = append(b.events, event)
 }
 
