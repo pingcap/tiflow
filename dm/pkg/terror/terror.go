@@ -400,7 +400,7 @@ func WithClass(err error, class ErrClass) error {
 	return e
 }
 
-// ErrorFromCode queries registered error from error code
+// ErrorFromCode queries registered error from error code.
 func ErrorFromCode(code ErrCode) (*Error, bool) {
 	value, ok := codeToErrorMap.Load(code)
 	if !ok {
