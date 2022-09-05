@@ -19,13 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 type mockExecutorWatcher struct {
@@ -147,6 +147,28 @@ func TestWatchExecutors(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestWatchExecutorFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	watcher := newMockExecutorWatcher()
+	user := newMockExecutorInfoUser()
+
+	evNotifier := notifier.NewNotifier[model.ExecutorStatusChange]()
+	defer evNotifier.Close()
+
+	watcher.On("WatchExecutors", mock.Anything).
+		Return(map[model.ExecutorID]string(nil),
+			(*notifier.Receiver[model.ExecutorStatusChange])(nil),
+			perrors.New("test error"),
+		).Times(1)
+
+	err := WatchExecutors(ctx, watcher, user)
+	require.ErrorContains(t, err, "test error")
 }
 
 func TestCloseWatchExecutors(t *testing.T) {
