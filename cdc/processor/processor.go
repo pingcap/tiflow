@@ -100,6 +100,7 @@ type processor struct {
 
 	metricsTableMemoryHistogram prometheus.Observer
 	metricsProcessorMemoryGauge prometheus.Gauge
+	metricRemainKVEventGauge    prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -344,6 +345,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 		return 0, false
 	}
 
+	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)
@@ -434,6 +436,8 @@ func newProcessor(
 		metricsTableMemoryHistogram: tableMemoryHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricRemainKVEventGauge: remainKVEventsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
@@ -675,7 +679,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		)
 	} else {
 		log.Info("Try to create sinkV2")
-		p.sinkV2Factory, err = factory.New(ctx, p.changefeed.Info.SinkURI,
+		p.sinkV2Factory, err = factory.New(stdCtx, p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh)
 	}
@@ -773,6 +777,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		checkpointTs,
 		kvCfg,
+		p.changefeed.Info.Config,
 		p.changefeedID,
 	)
 	if err != nil {
@@ -782,7 +787,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs,
 		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -1020,14 +1025,20 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
-	var total uint64
+	var totalConsumed uint64
+	var totalEvents int64
 	for _, table := range p.tables {
 		consumed := table.MemoryConsumption()
 		p.metricsTableMemoryHistogram.Observe(float64(consumed))
-		total += consumed
+		totalConsumed += consumed
+		events := table.RemainEvents()
+		if events > 0 {
+			totalEvents += events
+		}
 	}
-	p.metricsProcessorMemoryGauge.Set(float64(total))
+	p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
 func (p *processor) Close() error {

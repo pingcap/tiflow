@@ -134,8 +134,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		eventChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 		memBufferSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
 		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	}()
