@@ -25,7 +25,7 @@ const (
 	errBaseFormat = "[code=%d:class=%s:scope=%s:level=%s]"
 )
 
-// CodeToErrorMap maps from error code to base error, it is used for error
+// codeToErrorMap maps from error code to base error, it is used for error
 // retrieval by error code.
 var codeToErrorMap = new(sync.Map)
 
