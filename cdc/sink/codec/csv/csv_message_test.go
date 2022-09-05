@@ -613,7 +613,7 @@ func TestCSVMessageEncode(t *testing.T) {
 			want: []byte("\"I\",\"table1\",\"test\",435661838416609281,123,\"hello,world\"\n"),
 		},
 		{
-			name: "csv encode values containig single-character delimter string, without quote mark",
+			name: "csv encode values containing single-character delimter string, without quote mark",
 			fields: fields{
 				csvConfig: &config.CSVConfig{
 					Delimiter:       "!",
@@ -631,7 +631,7 @@ func TestCSVMessageEncode(t *testing.T) {
 			want: []byte(`U!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
 		},
 		{
-			name: "csv encode values containig single-character delimter string, with quote mark",
+			name: "csv encode values containing single-character delimter string, with quote mark",
 			fields: fields{
 				csvConfig: &config.CSVConfig{
 					Delimiter:       ",",

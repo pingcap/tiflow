@@ -79,7 +79,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 	for i := 0; i < len(value); i++ {
 		ch := value[i]
 		isDelimiterStart := strings.HasPrefix(value[i:], delimiter)
-		if ch == config.CR || ch == config.LF || ch == config.BackSlash || isDelimiterStart {
+		if ch == config.CR || ch == config.LF || ch == config.Backslash || isDelimiterStart {
 			// write out characters up until this position
 			strBuilder.WriteString(value[lastPos:i])
 			switch ch {
@@ -88,12 +88,12 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 			case config.CR:
 				ch = 'r'
 			}
-			strBuilder.WriteRune(config.BackSlash)
+			strBuilder.WriteRune(config.Backslash)
 			strBuilder.WriteRune(rune(ch))
 
 			if isDelimiterStart {
 				for k := 1; k < len(c.csvConfig.Delimiter); k++ {
-					strBuilder.WriteRune(config.BackSlash)
+					strBuilder.WriteRune(config.Backslash)
 					strBuilder.WriteRune(rune(delimiter[k]))
 				}
 				lastPos = i + len(delimiter)

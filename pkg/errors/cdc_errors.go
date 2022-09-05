@@ -415,9 +415,9 @@ var (
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
-	ErrS3SinkInvalidDateSeparator = errors.Normalize(
-		"date separator in s3 sink is invalid",
-		errors.RFCCodeText("CDC:ErrS3SinkInvalidDateSeparator"),
+	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
+		"date separator in cloud storage sink is invalid",
+		errors.RFCCodeText("CDC:ErrStorageSinkInvalidDateSeparator"),
 	)
 
 	// utilities related errors

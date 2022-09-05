@@ -1081,6 +1081,11 @@ error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
+["CDC:ErrStorageSinkInvalidDateSeparator"]
+error = '''
+date separator in cloud storage sink is invalid
+'''
+
 ["CDC:ErrSupportGetOnly"]
 error = '''
 this api supports GET method only

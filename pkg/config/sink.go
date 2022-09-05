@@ -52,15 +52,20 @@ const (
 )
 
 const (
+	// Comma is a constant for ','
 	Comma = ","
-	// carriage return
+	// CR is an abbreviation for carriage return
 	CR = '\r'
-	// line feed
-	LF              = '\n'
-	CRLF            = "\r\n"
+	// LF is an abbreviation for line feed
+	LF = '\n'
+	// CRLF is an abbreviation for '\r\n'
+	CRLF = "\r\n"
+	// DoubleQuoteChar is a constant for '"'
 	DoubleQuoteChar = '"'
-	BackSlash       = '\\'
-	NULL            = "\\N"
+	// Backslash is a constant for '\'
+	Backslash = '\\'
+	// NULL is a constant for '\N'
+	NULL = "\\N"
 )
 
 // ShouldSplitTxn returns whether the sink should split txn.
@@ -85,6 +90,7 @@ type SinkConfig struct {
 	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
 }
 
+// CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
 	Delimiter       string `toml:"delimiter" json:"delimiter"`
 	Quote           string `toml:"quote" json:"quote"`
@@ -94,7 +100,7 @@ type CSVConfig struct {
 	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
 }
 
-// DateSeperator sepecifies the date seperator in s3 path
+// DateSeparator sepecifies the date separator in storage destination path
 type DateSeparator int
 
 // Enum types of DateSeperator
@@ -105,9 +111,9 @@ const (
 	DateSeparatorDay
 )
 
-// FromString converts the seperator from string to DateSeperator enum type.
-func (d *DateSeparator) FromString(seperator string) error {
-	switch strings.ToLower(seperator) {
+// FromString converts the separator from string to DateSeperator enum type.
+func (d *DateSeparator) FromString(separator string) error {
+	switch strings.ToLower(separator) {
 	case "none":
 		*d = DateSeparatorNone
 	case "year":
@@ -117,7 +123,7 @@ func (d *DateSeparator) FromString(seperator string) error {
 	case "day":
 		*d = DateSeparatorDay
 	default:
-		return cerror.ErrS3SinkInvalidDateSeparator.GenWithStackByArgs(seperator)
+		return cerror.ErrStorageSinkInvalidDateSeparator.GenWithStackByArgs(separator)
 	}
 
 	return nil
@@ -187,45 +193,51 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 	}
 
 	if s.CSVConfig != nil {
-		// validate quote
-		if len(s.CSVConfig.Quote) > 1 {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config quote contains more than one character"))
-		}
-		if len(s.CSVConfig.Quote) == 1 {
-			quote := s.CSVConfig.Quote[0]
-			if quote == CR || quote == LF {
-				return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-					errors.New("csv config quote cannot be line break character"))
-			}
-		}
+		return s.validateAndAdjustCSVConfig()
+	}
 
-		// validate delimiter
-		if len(s.CSVConfig.Delimiter) == 0 {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config delimiter cannot be empty"))
-		}
-		if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
-			strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config delimiter contains line break characters"))
-		}
-		if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config quote and delimiter cannot be the same"))
-		}
+	return nil
+}
 
-		// validate terminator
-		if len(s.CSVConfig.Terminator) == 0 {
-			s.CSVConfig.Terminator = "\r\n"
+func (s *SinkConfig) validateAndAdjustCSVConfig() error {
+	// validate quote
+	if len(s.CSVConfig.Quote) > 1 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote contains more than one character"))
+	}
+	if len(s.CSVConfig.Quote) == 1 {
+		quote := s.CSVConfig.Quote[0]
+		if quote == CR || quote == LF {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote cannot be line break character"))
 		}
+	}
 
-		// validate date separator
-		if len(s.CSVConfig.DateSeparator) > 0 {
-			var separator DateSeparator
-			if err := separator.FromString(s.CSVConfig.DateSeparator); err != nil {
-				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
-			}
+	// validate delimiter
+	if len(s.CSVConfig.Delimiter) == 0 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter cannot be empty"))
+	}
+	if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
+		strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter contains line break characters"))
+	}
+	if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	// validate terminator
+	if len(s.CSVConfig.Terminator) == 0 {
+		s.CSVConfig.Terminator = CRLF
+	}
+
+	// validate date separator
+	if len(s.CSVConfig.DateSeparator) > 0 {
+		var separator DateSeparator
+		if err := separator.FromString(s.CSVConfig.DateSeparator); err != nil {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 		}
 	}
 
