@@ -54,7 +54,6 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 
 	watchStart := time.Now()
 	snap, updates, err := watcher.WatchExecutors(ctx)
-	defer updates.Close()
 
 	if duration := time.Since(watchStart); duration >= 100*time.Millisecond {
 		log.Warn("WatchExecutors took too long",
@@ -64,6 +63,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 	if err != nil {
 		return errors.Annotate(err, "watch executors")
 	}
+	defer updates.Close()
 
 	log.Info("update executor list", zap.Any("list", snap))
 	if err := user.UpdateExecutorList(snap); err != nil {

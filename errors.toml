@@ -1406,6 +1406,11 @@ error = '''
 invalid worker type: %s
 '''
 
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job is already canceled: %s
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
@@ -1716,6 +1721,16 @@ error = '''
 cannot find executor ID: %s
 '''
 
+["DFLOW:ErrWorkerCancel"]
+error = '''
+worker is canceled
+'''
+
+["DFLOW:ErrWorkerFailed"]
+error = '''
+worker is failed permanently
+'''
+
 ["DFLOW:ErrWorkerFinish"]
 error = '''
 worker finished and exited
@@ -1739,11 +1754,6 @@ worker is not found: worker ID %s
 ["DFLOW:ErrWorkerOffline"]
 error = '''
 worker is offline: workerID: %s, error message: %s
-'''
-
-["DFLOW:ErrWorkerStop"]
-error = '''
-worker is stopped
 '''
 
 ["DFLOW:ErrWorkerSuicide"]

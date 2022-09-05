@@ -21,6 +21,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -33,7 +34,9 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -59,6 +62,8 @@ func TestJobManagerCreateJob(t *testing.T) {
 		jobStatusChangeMu: ctxmu.New(),
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
+	wg, ctx := errgroup.WithContext(ctx)
+	mgr.wg = wg
 	// set master impl to JobManagerImpl
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
@@ -144,12 +149,14 @@ func TestJobManagerCancelJob(t *testing.T) {
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImpl{
-		BaseMaster:        mockMaster.DefaultBaseMaster,
-		JobFsm:            NewJobFsm(),
-		clocker:           clock.New(),
-		frameMetaClient:   mockMaster.GetFrameMetaClient(),
-		jobStatusChangeMu: ctxmu.New(),
+		BaseMaster:          mockMaster.DefaultBaseMaster,
+		JobFsm:              NewJobFsm(),
+		clocker:             clock.New(),
+		frameMetaClient:     mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu:   ctxmu.New(),
+		jobOperatorNotifier: new(notify.Notifier),
 	}
+	mgr.jobOperator = jobop.NewJobOperatorImpl(mgr.frameMetaClient, mgr)
 
 	cancelWorkerID := "cancel-worker-id"
 	meta := &frameModel.MasterMeta{
@@ -159,8 +166,10 @@ func TestJobManagerCancelJob(t *testing.T) {
 	}
 	mgr.JobFsm.JobDispatched(meta, false)
 
+	err := mgr.frameMetaClient.UpsertJob(ctx, meta)
+	require.NoError(t, err)
 	mockWorkerHandle := &framework.MockHandle{WorkerID: cancelWorkerID, ExecutorID: "executor-1"}
-	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
+	err = mgr.JobFsm.JobOnline(mockWorkerHandle)
 	require.NoError(t, err)
 
 	req := &pb.CancelJobRequest{
@@ -170,7 +179,11 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pb.Job_Canceling, job.Status)
 
-	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
+	for i := 0; i < 5; i++ {
+		err = mgr.jobOperator.Tick(ctx)
+		require.NoError(t, err)
+		require.Equal(t, i+1, mockWorkerHandle.SendMessageCount())
+	}
 
 	req.Id = cancelWorkerID + "-unknown"
 	_, err = mgr.CancelJob(ctx, req)

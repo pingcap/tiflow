@@ -225,13 +225,18 @@ var (
 		"invalid job type: %s",
 		errors.RFCCodeText("DFLOW:ErrInvalidJobType"),
 	)
+	// TODO: unify the following three errors into one ErrWorkerTerminated
 	ErrWorkerFinish = errors.Normalize(
 		"worker finished and exited",
 		errors.RFCCodeText("DFLOW:ErrWorkerFinish"),
 	)
-	ErrWorkerStop = errors.Normalize(
-		"worker is stopped",
-		errors.RFCCodeText("DFLOW:ErrWorkerStop"),
+	ErrWorkerCancel = errors.Normalize(
+		"worker is canceled",
+		errors.RFCCodeText("DFLOW:ErrWorkerCancel"),
+	)
+	ErrWorkerFailed = errors.Normalize(
+		"worker is failed permanently",
+		errors.RFCCodeText("DFLOW:ErrWorkerFailed"),
 	)
 	ErrTooManyStatusUpdates = errors.Normalize(
 		"there are too many pending worker status updates: %d",
@@ -470,6 +475,12 @@ var (
 	ErrLocalFileDirNotWritable = errors.Normalize(
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
+	)
+
+	// JobOps related error
+	ErrJobAlreadyCanceled = errors.Normalize(
+		"job is already canceled: %s",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyCanceled"),
 	)
 
 	// cli related errors
