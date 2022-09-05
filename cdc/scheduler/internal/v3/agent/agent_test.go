@@ -886,7 +886,7 @@ func (e *MockTableExecutor) IsAddTableFinished(tableID model.TableID, isPrepare 
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	args := e.Called(ctx, tableID, isPrepare)
+	args := e.Called(tableID, isPrepare)
 	if args.Bool(0) {
 		e.tables[tableID] = pipeline.TableStatePrepared
 		if !isPrepare {
@@ -919,7 +919,7 @@ func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	// the current `processor implementation, does not consider table's state
 	log.Info("RemoveTable", zap.Int64("tableID", tableID), zap.Any("state", state))
 
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(0) {
 		e.tables[tableID] = pipeline.TableStateStopped
 	}
@@ -935,7 +935,7 @@ func (e *MockTableExecutor) IsRemoveTableFinished(tableID model.TableID) (model.
 			zap.Int64("tableID", tableID))
 		return 0, true
 	}
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
 			zap.Int64("tableID", tableID), zap.Any("state", state))

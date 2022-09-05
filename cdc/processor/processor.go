@@ -233,13 +233,6 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 			zap.Int64("tableID", tableID))
 		return false
 	}
-	log.Info("table stopped",
-		zap.String("capture", p.captureInfo.ID),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.String("tableName", table.Name()),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("targetTs", boundaryTs))
 	return true
 }
 
@@ -358,7 +351,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	delete(p.tables, tableID)
 
 	checkpointTs := table.CheckpointTs()
-	log.Info("Remove Table finished",
+	log.Info("table removed",
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),

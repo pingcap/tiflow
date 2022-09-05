@@ -138,7 +138,7 @@ func (e *MockTableExecutor) AddTable(
 // RemoveTable removes a table from the executor.
 func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	log.Info("RemoveTable", zap.Int64("tableID", tableID))
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	require.Contains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)
 	delete(e.Running, tableID)
