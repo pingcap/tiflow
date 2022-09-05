@@ -280,7 +280,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
 	// Ignore the already exists error because it's not harmful.
-	if err != nil && strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),
