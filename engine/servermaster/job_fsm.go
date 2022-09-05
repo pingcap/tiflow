@@ -99,7 +99,7 @@ type JobFsm struct {
 
 // JobStats defines a statistics interface for JobFsm
 type JobStats interface {
-	JobCount(status pb.Job_Status) int
+	JobCount(status pb.Job_State) int
 }
 
 // NewJobFsm creates a new job fsm
@@ -247,7 +247,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 }
 
 // JobCount queries job count based on job status
-func (fsm *JobFsm) JobCount(status pb.Job_Status) int {
+func (fsm *JobFsm) JobCount(status pb.Job_State) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	switch status {

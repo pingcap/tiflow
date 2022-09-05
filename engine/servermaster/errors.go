@@ -16,7 +16,7 @@ package servermaster
 import "github.com/pingcap/tiflow/engine/pkg/rpcerror"
 
 // ErrJobNotFound indicates that a given job cannot be found.
-var ErrJobNotFound = rpcerror.Normalize[JobNotFoundError]()
+var ErrJobNotFound = rpcerror.Normalize[JobNotFoundError](rpcerror.WithMessage("job not found"))
 
 // JobNotFoundError provides details of an ErrJobNotFound.
 type JobNotFoundError struct {
@@ -26,7 +26,7 @@ type JobNotFoundError struct {
 }
 
 // ErrJobAlreadyExists indicates that a given job already exists.
-var ErrJobAlreadyExists = rpcerror.Normalize[JobAlreadyExistsError]()
+var ErrJobAlreadyExists = rpcerror.Normalize[JobAlreadyExistsError](rpcerror.WithMessage("job already exists"))
 
 // JobAlreadyExistsError provides details of an ErrJobAlreadyExists.
 type JobAlreadyExistsError struct {
