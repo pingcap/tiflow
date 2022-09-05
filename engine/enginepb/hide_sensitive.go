@@ -11,17 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package enginepb
 
 import (
-	"time"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"go.uber.org/zap/zapcore"
 )
 
-// Define some constants
-const (
-	ServerMasterEtcdDialTimeout = 5 * time.Second
-	// Disable endpoints auto sync in etcd client. Make sure to pass a load
-	// balancer address(such as service endpoint in K8s), or all advertise-addrs
-	// of the etcd cluster.
-	ServerMasterEtcdSyncInterval = time.Duration(0)
-)
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *Job) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *CreateJobRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	return nil
+}

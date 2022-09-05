@@ -303,7 +303,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 	return retry.Do(ctx, func() error {
 		err := s.execDDL(ctx, ddl)
 		if errorutil.IsIgnorableMySQLDDLError(err) {
-			log.Info("execute DDL failed, but error can be ignored",
+			log.Info("Execute DDL failed, but error can be ignored",
 				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 				zap.Error(err))
 			return nil
@@ -817,10 +817,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, bucket int) error {
-	failpoint.Inject("SinkFlushDMLPanic", func() {
-		time.Sleep(time.Second)
-		log.Fatal("SinkFlushDMLPanic")
-	})
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
 		// failpoint injected is executed first.

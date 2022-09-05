@@ -123,7 +123,7 @@ type DefaultBaseWorker struct {
 	masterClient *worker.MasterClient
 	masterID     frameModel.MasterID
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	statusSender     *statusutil.Writer
 	workerStatus     *frameModel.WorkerStatus
 	messageRouter    *MessageRouter
@@ -307,7 +307,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.workerStatus.Epoch,
 	)
 
-	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
+	w.workerMetaClient = metadata.NewWorkerStatusClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
@@ -336,7 +336,7 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	w.workerStatus.Code = frameModel.WorkerStatusInit
+	w.workerStatus.State = frameModel.WorkerStateInit
 	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
 		return errors.Trace(err)
 	}
@@ -448,7 +448,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
-// The status is persisted if Code or ErrorMsg has changed. Refer to (*WorkerStatus).HasSignificantChange.
+// The status is persisted if State or ErrorMsg has changed. Refer to (*WorkerState).HasSignificantChange.
 //
 // If UpdateStatus returns without an error, then the status must have been persisted,
 // but there is no guarantee that the master has received a notification.
@@ -458,7 +458,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	w.workerStatus.Code = status.Code
+	w.workerStatus.State = status.State
 	w.workerStatus.ErrorMsg = status.ErrorMsg
 	w.workerStatus.ExtBytes = status.ExtBytes
 	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
@@ -506,15 +506,15 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 
 	switch exitReason {
 	case ExitReasonFinished:
-		w.workerStatus.Code = frameModel.WorkerStatusFinished
+		w.workerStatus.State = frameModel.WorkerStateFinished
 	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
-		w.workerStatus.Code = frameModel.WorkerStatusStopped
+		w.workerStatus.State = frameModel.WorkerStateStopped
 	case ExitReasonFailed:
 		// TODO: replace error with failed
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	default:
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	}
 
 	if err != nil {

@@ -117,7 +117,7 @@ type Master struct {
 	statusRateLimiter *rate.Limiter
 	statusCode        struct {
 		sync.RWMutex
-		code frameModel.WorkerStatusCode
+		code frameModel.WorkerState
 	}
 
 	ctx         context.Context
@@ -136,8 +136,8 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			m.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			m.setState(frameModel.WorkerStateStopped)
 			m.workerListMu.Lock()
 			for _, worker := range m.workerList {
 				if worker == nil {
@@ -148,7 +148,7 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 					SendTime:     m.clocker.Mono(),
 					FromMasterID: m.BaseJobMaster.ID(),
 					Epoch:        m.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  frameModel.WorkerStatusStopped,
+					ExpectState:  frameModel.WorkerStateStopped,
 				}
 				ctx, cancel := context.WithTimeout(m.ctx, time.Second*2)
 				runningHandle := worker.Unwrap()
@@ -368,15 +368,15 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	}
 
 	// check for special worker status
-	if m.getStatusCode() == frameModel.WorkerStatusStopped {
+	if m.getState() == frameModel.WorkerStateStopped {
 		log.Info("FakeMaster: received pause command, stop now")
-		m.setStatusCode(frameModel.WorkerStatusStopped)
+		m.setState(frameModel.WorkerStateStopped)
 		return m.Exit(ctx, framework.ExitReasonCanceled, nil, "FakeMaster: received pause command")
 	}
 
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
-		m.setStatusCode(frameModel.WorkerStatusFinished)
+		m.setState(frameModel.WorkerStateFinished)
 		return m.Exit(ctx, framework.ExitReasonFinished, nil, "all workers have been finished")
 	}
 
@@ -525,18 +525,18 @@ func (m *Master) marshalBusinessStatus() []byte {
 func (m *Master) Status() frameModel.WorkerStatus {
 	extBytes := m.marshalBusinessStatus()
 	return frameModel.WorkerStatus{
-		Code:     m.getStatusCode(),
+		State:    m.getState(),
 		ExtBytes: extBytes,
 	}
 }
 
-func (m *Master) setStatusCode(code frameModel.WorkerStatusCode) {
+func (m *Master) setState(code frameModel.WorkerState) {
 	m.statusCode.Lock()
 	defer m.statusCode.Unlock()
 	m.statusCode.code = code
 }
 
-func (m *Master) getStatusCode() frameModel.WorkerStatusCode {
+func (m *Master) getState() frameModel.WorkerState {
 	m.statusCode.RLock()
 	defer m.statusCode.RUnlock()
 	return m.statusCode.code
@@ -621,6 +621,6 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		initialized:         atomic.NewBool(false),
 		cachedCheckpoint:    ckpt,
 	}
-	ret.setStatusCode(frameModel.WorkerStatusNormal)
+	ret.setState(frameModel.WorkerStateNormal)
 	return ret
 }

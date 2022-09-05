@@ -42,7 +42,7 @@ type exampleMaster struct {
 		id          frameModel.WorkerID
 		handle      framework.WorkerHandle
 		online      bool
-		statusCode  frameModel.WorkerStatusCode
+		statusCode  frameModel.WorkerState
 		receivedErr error
 	}
 
@@ -67,7 +67,7 @@ func (e *exampleMaster) Tick(ctx context.Context) error {
 	if handle == nil {
 		return nil
 	}
-	e.worker.statusCode = handle.Status().Code
+	e.worker.statusCode = handle.Status().State
 	log.Info("status", zap.Any("status", handle.Status()))
 	return nil
 }

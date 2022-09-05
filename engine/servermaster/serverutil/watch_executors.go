@@ -38,7 +38,7 @@ type executorWatcher interface {
 }
 
 // executorInfoUser represents an object that uses the information provides
-// by executorWater.
+// by executorWatcher.
 type executorInfoUser interface {
 	UpdateExecutorList(executors map[model.ExecutorID]string) error
 	AddExecutor(executorID model.ExecutorID, addr string) error
