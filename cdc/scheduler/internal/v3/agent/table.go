@@ -58,7 +58,7 @@ func (t *table) getAndUpdateTableState() (schedulepb.TableState, bool) {
 	t.state = state
 
 	if oldState != state {
-		log.Info("schedulerv3: table state changed",
+		log.Debug("schedulerv3: table state changed",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.Int64("tableID", t.id),

@@ -261,7 +261,4 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
-	log.Info("db sorter: send start ts to reader",
-		zap.Uint64("tableID", ls.common.tableID),
-		zap.Uint64("ts", ts))
 }
