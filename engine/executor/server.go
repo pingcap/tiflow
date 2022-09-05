@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/label"
-
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/common"
@@ -43,7 +41,6 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -82,7 +79,7 @@ type Server struct {
 	taskRunner    *worker.TaskRunner
 	taskCommitter *worker.TaskCommitter
 	msgServer     *p2p.MessageRPCService
-	info          *model.NodeInfo
+	selfID        model.ExecutorID
 
 	lastHearbeatTime time.Time
 
@@ -182,8 +179,8 @@ func (s *Server) makeTask(
 		return nil, err
 	}
 	dctx = dctx.WithDeps(dp)
-	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
-	dctx.Environ.Addr = s.info.Addr
+	dctx.Environ.NodeID = p2p.NodeID(s.selfID)
+	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
 
 	logger := frameLog.WithProjectInfo(logutil.FromContext(ctx), dctx.ProjectInfo)
@@ -284,20 +281,14 @@ func (s *Server) Stop() {
 	}
 
 	if s.metastores.IsInitialized() {
-		etcdCli := s.metastores.ServiceDiscoveryStore()
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_, err := etcdCli.Delete(ctx, s.info.EtcdKey())
-		if err != nil {
-			log.L().Warn("failed to delete executor info", zap.Error(err))
-		}
-
 		s.metastores.Close()
 	}
 
 	if s.mockSrv != nil {
 		s.mockSrv.Stop()
 	}
+
+	// TODO: unregister self from master.
 }
 
 func (s *Server) startForTest(ctx context.Context) (err error) {
@@ -322,7 +313,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
-	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.info.ID), nil, s.grpcSrv)
+	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.selfID), nil, s.grpcSrv)
 	if err != nil {
 		return err
 	}
@@ -376,10 +367,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.resourceBroker = broker.NewBroker(
 		&s.cfg.Storage,
-		s.info.ID,
+		s.selfID,
 		s.masterClient)
 
-	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
+	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 
 	s.grpcSrv = grpc.NewServer()
 	err = s.startMsgService(ctx, wg)
@@ -396,17 +387,6 @@ func (s *Server) Run(ctx context.Context) error {
 		log.L().Error("Failed to init metastores", zap.Error(err))
 		return err
 	}
-
-	// Register self information to etcd in case of master failover.
-	// TODO: remove this after executor information is stored in metastore.
-	discoveryKeeper := serverutil.NewDiscoveryKeepaliver(
-		s.info, s.metastores.ServiceDiscoveryStore(), s.cfg.SessionTTL, defaultDiscoverTicker,
-		nil, /* s.p2pMsgRouter */
-	)
-	// connects to metastore and maintains a etcd session
-	wg.Go(func() error {
-		return discoveryKeeper.Keepalive(ctx)
-	})
 
 	discoveryAgent := discovery.NewAgent(s.masterClient, defaultDiscoveryAutoSyncInterval)
 	wg.Go(func() error {
@@ -580,19 +560,8 @@ func (s *Server) selfRegister(ctx context.Context) error {
 		return err
 	}
 
-	labelSet, err := label.NewSetFromMap(s.cfg.Labels)
-	if err != nil {
-		return err
-	}
-
-	s.info = &model.NodeInfo{
-		Type:       model.NodeTypeExecutor,
-		ID:         executorID,
-		Addr:       s.cfg.AdvertiseAddr,
-		Capability: int(defaultCapability),
-		Labels:     labelSet,
-	}
-	log.L().Info("register successful", zap.Any("info", s.info))
+	s.selfID = executorID
+	log.L().Info("register successful", zap.String("executor-id", string(executorID)))
 	return nil
 }
 
@@ -619,7 +588,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
-				ExecutorId: string(s.info.ID),
+				ExecutorId: string(s.selfID),
 				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that

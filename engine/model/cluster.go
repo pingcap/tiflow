@@ -17,18 +17,7 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/pkg/label"
-)
-
-// NodeType is a type of server instance, could be either server master or executor
-type NodeType int
-
-// All node types
-const (
-	NodeTypeServerMaster NodeType = iota + 1
-	NodeTypeExecutor
 )
 
 // RescUnit is the min unit of resource that we count.
@@ -40,50 +29,12 @@ type DeployNodeID string
 // ExecutorID is an alias for executor when NodeType is NodeTypeExecutor.
 type ExecutorID = DeployNodeID
 
-// NodeInfo describes the information of server instance, contains node type, node
-// uuid, advertise address and capability(executor node only)
+// NodeInfo describes the information of server instance.
+// Deprecated: only used for servermaster and will be removed soon.
 type NodeInfo struct {
-	Type NodeType     `json:"type"`
 	ID   DeployNodeID `json:"id"`
 	Addr string       `json:"addr"`
 	Name string       `json:"name"`
-
-	// The capability of executor, including
-	// 1. cpu (goroutines)
-	// 2. memory
-	// 3. disk cap
-	// TODO: So we should enrich the cap dimensions in the future.
-	Capability int `json:"cap"`
-
-	// Labels store the label set for each executor.
-	// It is invalid if Type != NodeTypeExecutor.
-	Labels label.Set `json:"labels"`
-}
-
-// NewNodeInfoForExecutor constructs a NodeInfo struct for an executor.
-func NewNodeInfoForExecutor(id ExecutorID) *NodeInfo {
-	return &NodeInfo{
-		Type: NodeTypeExecutor,
-		ID:   id,
-	}
-}
-
-// FromRegisterExecutorRequest fills the NodeInfo with information provided by
-// a RegisterExecutorRequest.
-func (e *NodeInfo) FromRegisterExecutorRequest(req *pb.RegisterExecutorRequest) error {
-	if e.Type != NodeTypeExecutor {
-		panic("FromRegisterExecutorRequest must be called with Type == NodeTypeExecutor")
-	}
-	e.Name = req.GetExecutor().Name
-	e.Addr = req.GetExecutor().Address
-	e.Capability = int(req.GetExecutor().Capability)
-
-	var err error
-	e.Labels, err = label.NewSetFromMap(req.GetExecutor().GetLabels())
-	if err != nil {
-		return errors.Annotate(err, "FromRegisterExecutorRequest")
-	}
-	return nil
 }
 
 // EtcdKey return encoded key for a node used in service discovery etcd

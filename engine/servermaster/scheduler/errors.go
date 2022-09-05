@@ -23,7 +23,7 @@ import (
 // ErrResourceNotFound indicates that a given resource requirement
 // (usually a local file requirement) cannot be satisfied because
 // the given resource could not be found.
-var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError]()
+var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError](rpcerror.WithName("RequiredResourceNotFoundError"))
 
 // ResourceNotFoundError provides the details of an ErrResourceNotFound.
 type ResourceNotFoundError struct {
