@@ -54,7 +54,7 @@ type JobManager interface {
 	pb.JobManagerServer
 
 	GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error)
-	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error)
+	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error)
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
@@ -105,7 +105,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 		SendTime:     jm.clocker.Mono(),
 		FromMasterID: jm.BaseMaster.MasterID(),
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
-		ExpectState:  frameModel.WorkerStatusStopped,
+		ExpectState:  frameModel.WorkerStateStopped,
 	}
 	if handle := job.WorkerHandle().Unwrap(); handle != nil {
 		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
@@ -135,7 +135,7 @@ func (jm *JobManagerImpl) DeleteJob(ctx context.Context, req *pb.DeleteJobReques
 	}
 
 	// Only stopped (canceled) jobs can be deleted.
-	if masterMeta.StatusCode != frameModel.MasterStatusStopped && masterMeta.StatusCode != frameModel.MasterStatusFinished {
+	if masterMeta.State != frameModel.MasterStateStopped && masterMeta.State != frameModel.MasterStateFinished {
 		return nil, ErrJobNotStopped.GenWithStack(&JobNotStoppedError{JobID: req.Id})
 	}
 	if err := jm.deleteJobMeta(ctx, req.Id); err != nil {
@@ -203,14 +203,14 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		job.Id = jm.uuidGen.NewString()
 	}
 
-	meta := &frameModel.MasterMetaKVData{
+	meta := &frameModel.MasterMeta{
 		ProjectID: tenant.NewProjectInfo(
 			req.TenantId,
 			req.ProjectId,
 		).UniqueID(),
-		ID:         job.Id,
-		Config:     job.Config,
-		StatusCode: frameModel.MasterStatusUninit,
+		ID:     job.Id,
+		Config: job.Config,
+		State:  frameModel.MasterStateUninit,
 		Ext: frameModel.MasterMetaExt{
 			Selectors: selectors,
 		},
@@ -222,11 +222,11 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		if err := json.Unmarshal(job.Config, extConfig); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "failed to decode config: %v", err)
 		}
-		meta.Tp = framework.CvsJobMaster
+		meta.Type = framework.CvsJobMaster
 	case pb.Job_DM:
-		meta.Tp = framework.DMJobMaster
+		meta.Type = framework.DMJobMaster
 	case pb.Job_FakeJob:
-		meta.Tp = framework.FakeJobMaster
+		meta.Type = framework.FakeJobMaster
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "job type %v is not supported", job.Type)
 	}
@@ -256,7 +256,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
 	workerID, err := jm.BaseMaster.CreateWorkerV2(
-		meta.Tp, meta,
+		meta.Type, meta,
 		framework.CreateWorkerWithCost(defaultJobMasterCost),
 		framework.CreateWorkerWithSelectors(selectors...))
 	if err != nil {
@@ -328,7 +328,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 		return masterMetas[i].ID > req.PageToken
 	})
 	for i := firstIdx; i < len(masterMetas); i++ {
-		if masterMetas[i].Tp == framework.JobManager {
+		if masterMetas[i].Type == framework.JobManager {
 			continue
 		}
 		job, err := buildPBJob(masterMetas[i])
@@ -345,9 +345,9 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 	return resp, nil
 }
 
-func buildPBJob(masterMeta *frameModel.MasterMetaKVData) (*pb.Job, error) {
+func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 	var jobType pb.Job_Type
-	switch tp := framework.MustConvertWorkerType2JobType(masterMeta.Tp); tp {
+	switch tp := framework.MustConvertWorkerType2JobType(masterMeta.Type); tp {
 	case engineModel.JobTypeCVSDemo:
 		jobType = pb.Job_CVSDemo
 	case engineModel.JobTypeDM:
@@ -357,21 +357,21 @@ func buildPBJob(masterMeta *frameModel.MasterMetaKVData) (*pb.Job, error) {
 	case engineModel.JobTypeFakeJob:
 		jobType = pb.Job_FakeJob
 	default:
-		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.Tp)
+		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.Type)
 	}
 
 	var jobStatus pb.Job_Status
-	switch masterMeta.StatusCode {
-	case frameModel.MasterStatusUninit:
+	switch masterMeta.State {
+	case frameModel.MasterStateUninit:
 		jobStatus = pb.Job_Created
-	case frameModel.MasterStatusInit:
+	case frameModel.MasterStateInit:
 		jobStatus = pb.Job_Running
-	case frameModel.MasterStatusFinished:
+	case frameModel.MasterStateFinished:
 		jobStatus = pb.Job_Finished
-	case frameModel.MasterStatusStopped:
+	case frameModel.MasterStateStopped:
 		jobStatus = pb.Job_Canceled
 	default:
-		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.StatusCode)
+		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
 	}
 
 	return &pb.Job{
@@ -393,7 +393,7 @@ func (jm *JobManagerImpl) GetJobMasterForwardAddress(ctx context.Context, jobID 
 		}
 		return "", err
 	}
-	if masterMeta.StatusCode != frameModel.MasterStatusInit || jm.JobFsm.QueryOnlineJob(jobID) == nil {
+	if masterMeta.State != frameModel.MasterStateInit || jm.JobFsm.QueryOnlineJob(jobID) == nil {
 		return "", ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
 	}
 	return masterMeta.Addr, nil
@@ -402,16 +402,16 @@ func (jm *JobManagerImpl) GetJobMasterForwardAddress(ctx context.Context, jobID 
 // GetJobStatuses returns the status code of all jobs that are not deleted.
 func (jm *JobManagerImpl) GetJobStatuses(
 	ctx context.Context,
-) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+) (map[frameModel.MasterID]frameModel.MasterState, error) {
 	// BUG? NO filter in the implement
 	jobs, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := make(map[frameModel.MasterID]frameModel.MasterStatusCode, len(jobs))
+	ret := make(map[frameModel.MasterID]frameModel.MasterState, len(jobs))
 	for _, jobMeta := range jobs {
-		ret[jobMeta.ID] = jobMeta.StatusCode
+		ret[jobMeta.ID] = jobMeta.State
 	}
 	return ret, nil
 }
@@ -450,7 +450,7 @@ func NewJobManagerImpl(
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
-	meta.StatusCode = frameModel.MasterStatusInit
+	meta.State = frameModel.MasterStateInit
 	err = metadata.StoreMasterMeta(dctx, impl.frameMetaClient, meta)
 	if err != nil {
 		return nil, err
@@ -483,9 +483,9 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 	}
 
 	err := jm.JobFsm.IterPendingJobs(
-		func(job *frameModel.MasterMetaKVData) (string, error) {
+		func(job *frameModel.MasterMeta) (string, error) {
 			return jm.BaseMaster.CreateWorker(
-				job.Tp, job, defaultJobMasterCost)
+				job.Type, job, defaultJobMasterCost)
 		})
 	if _, err = filterQuotaError(err); err != nil {
 		return err
@@ -510,9 +510,9 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 			}
 		}
 		err = jm.JobFsm.IterWaitAckJobs(
-			func(job *frameModel.MasterMetaKVData) (string, error) {
+			func(job *frameModel.MasterMeta) (string, error) {
 				return jm.BaseMaster.CreateWorker(
-					job.Tp, job, defaultJobMasterCost)
+					job.Type, job, defaultJobMasterCost)
 			})
 		exceedQuota, err := filterQuotaError(err)
 		if err != nil {
@@ -537,7 +537,7 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 
 	// TODO: refine me, split the BaseMaster interface
 	impl, ok := jm.BaseMaster.(interface {
-		InitProjectInfosAfterRecover([]*frameModel.MasterMetaKVData)
+		InitProjectInfosAfterRecover([]*frameModel.MasterMeta)
 	})
 	if !ok {
 		log.Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
@@ -546,11 +546,11 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 	impl.InitProjectInfosAfterRecover(jobs)
 
 	for _, job := range jobs {
-		if job.Tp == framework.JobManager {
+		if job.Type == framework.JobManager {
 			continue
 		}
 		// TODO: filter the job in backend
-		if job.StatusCode == frameModel.MasterStatusFinished || job.StatusCode == frameModel.MasterStatusStopped {
+		if job.State == frameModel.MasterStateFinished || job.State == frameModel.MasterStateStopped {
 			log.Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}

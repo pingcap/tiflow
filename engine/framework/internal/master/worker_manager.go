@@ -47,7 +47,7 @@ type WorkerManager struct {
 	workerEntries map[frameModel.WorkerID]*workerEntry
 	state         workerManagerState
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	messageSender    p2p.MessageSender
 
 	masterID frameModel.MasterID
@@ -103,7 +103,7 @@ func NewWorkerManager(
 		workerEntries: make(map[frameModel.WorkerID]*workerEntry),
 		state:         state,
 
-		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+		workerMetaClient: metadata.NewWorkerStatusClient(masterID, meta),
 		messageSender:    messageSender,
 
 		masterID: masterID,
@@ -171,7 +171,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	for workerID, status := range allPersistedWorkers {
 		entry := newWaitingWorkerEntry(workerID, status)
 		// TODO: refine mapping from worker status to worker entry state
-		if status.Code == frameModel.WorkerStatusFinished {
+		if status.State == frameModel.WorkerStateFinished {
 			continue
 		}
 		m.workerEntries[workerID] = entry
@@ -362,7 +362,7 @@ func (m *WorkerManager) BeforeStartingWorker(
 		m.nextExpireTime(),
 		workerEntryCreated,
 		&frameModel.WorkerStatus{
-			Code:  frameModel.WorkerStatusCreated,
+			State: frameModel.WorkerStateCreated,
 			Epoch: epoch,
 		},
 	)
@@ -504,10 +504,10 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 
 		var offlineError error
 		if status := entry.Status(); status != nil {
-			switch status.Code {
-			case frameModel.WorkerStatusFinished:
+			switch status.State {
+			case frameModel.WorkerStateFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case frameModel.WorkerStatusStopped:
+			case frameModel.WorkerStateStopped:
 				offlineError = derror.ErrWorkerStop.FastGenByArgs()
 			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)

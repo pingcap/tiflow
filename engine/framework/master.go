@@ -135,7 +135,7 @@ type BaseMaster interface {
 	Logger() *zap.Logger
 
 	// MasterMeta return the meta data of master
-	MasterMeta() *frameModel.MasterMetaKVData
+	MasterMeta() *frameModel.MasterMeta
 
 	// GetWorkers return the handle of all workers, from which we can get the worker status、worker id and
 	// the method for sending message to specific worker
@@ -200,7 +200,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
-	masterMeta    *frameModel.MasterMetaKVData
+	masterMeta    *frameModel.MasterMeta
 
 	workerCreator *master.WorkerCreator
 
@@ -258,7 +258,7 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &frameModel.MasterMetaKVData{}
+		masterMeta    = &frameModel.MasterMeta{}
 		params        masterParams
 	)
 	if ctx != nil {
@@ -351,7 +351,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		}
 	}
 
-	if err := m.markStatusCodeInMetadata(ctx, frameModel.MasterStatusInit); err != nil {
+	if err := m.markStateInMetadata(ctx, frameModel.MasterStateInit); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -500,7 +500,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 }
 
 // MasterMeta implements BaseMaster.MasterMeta
-func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMetaKVData {
+func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMeta {
 	return m.masterMeta
 }
 
@@ -568,13 +568,13 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 
 	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterMeta.StatusCode == frameModel.MasterStatusUninit
+	isInit = masterMeta.State == frameModel.MasterStateUninit
 
 	return
 }
 
-func (m *DefaultBaseMaster) markStatusCodeInMetadata(
-	ctx context.Context, code frameModel.MasterStatusCode,
+func (m *DefaultBaseMaster) markStateInMetadata(
+	ctx context.Context, code frameModel.MasterState,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
@@ -582,12 +582,12 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 		return errors.Trace(err)
 	}
 
-	masterMeta.StatusCode = code
+	masterMeta.State = code
 	return metaClient.Update(ctx, masterMeta)
 }
 
 // PrepareWorkerConfig extracts information from WorkerConfig into detail fields.
-//   - If workerType is master type, the config is a `*MasterMetaKVData` struct and
+//   - If workerType is master type, the config is a `*MasterMeta` struct and
 //     contains pre allocated maseter ID, and json marshalled config.
 //   - If workerType is worker type, the config is a user defined config struct, we
 //     marshal it to byte slice as returned config, and generate a random WorkerID.
@@ -596,7 +596,7 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*frameModel.MasterMetaKVData)
+		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
@@ -708,14 +708,14 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
 	switch exitReason {
 	case ExitReasonFinished:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
+		m.masterMeta.State = frameModel.MasterStateFinished
 	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
-		m.masterMeta.StatusCode = frameModel.MasterStatusStopped
+		m.masterMeta.State = frameModel.MasterStateStopped
 	case ExitReasonFailed:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+		m.masterMeta.State = frameModel.MasterStateFailed
 	default:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+		m.masterMeta.State = frameModel.MasterStateFailed
 	}
 
 	if err != nil {
@@ -755,7 +755,7 @@ func (m *DefaultBaseMaster) GetProjectInfo(masterID frameModel.MasterID) tenant.
 
 // InitProjectInfosAfterRecover set project infos for all worker after master recover
 // NOTICE: Only used by JobMananger when failover
-func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*frameModel.MasterMetaKVData) {
+func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*frameModel.MasterMeta) {
 	for _, meta := range jobs {
 		// TODO: fix the TenantID
 		m.workerProjectMap.Store(meta.ID, tenant.NewProjectInfo("", meta.ProjectID))

@@ -27,14 +27,14 @@ import (
 // JobHolder holds job meta and worker handle for a job.
 type JobHolder struct {
 	workerHandle framework.WorkerHandle
-	masterMeta   *frameModel.MasterMetaKVData
+	masterMeta   *frameModel.MasterMeta
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
 }
 
 // MasterMeta returns master meta of the job.
-func (jh *JobHolder) MasterMeta() *frameModel.MasterMetaKVData {
+func (jh *JobHolder) MasterMeta() *frameModel.MasterMeta {
 	return jh.masterMeta
 }
 
@@ -91,7 +91,7 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[frameModel.MasterID]*frameModel.MasterMetaKVData
+	pendingJobs map[frameModel.MasterID]*frameModel.MasterMeta
 	waitAckJobs map[frameModel.MasterID]*JobHolder
 	onlineJobs  map[frameModel.MasterID]*JobHolder
 }
@@ -104,7 +104,7 @@ type JobStats interface {
 // NewJobFsm creates a new job fsm
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMetaKVData),
+		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMeta),
 		waitAckJobs: make(map[frameModel.MasterID]*JobHolder),
 		onlineJobs:  make(map[frameModel.MasterID]*JobHolder),
 	}
@@ -140,7 +140,7 @@ func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *JobHolder {
 }
 
 // JobDispatched is called when a job is firstly created or server master is failovered
-func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailover bool) {
+func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMeta, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &JobHolder{
@@ -150,7 +150,7 @@ func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailov
 }
 
 // IterPendingJobs iterates all pending jobs and dispatch(via create worker) them again.
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -171,7 +171,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 }
 
 // IterWaitAckJobs iterates wait ack jobs, failover them if they are added from failover
-func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 

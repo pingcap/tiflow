@@ -106,9 +106,9 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	h.ExecInfo.AddExecutor("executor-2", "addr-2:8080")
 	h.ExecInfo.AddExecutor("executor-3", "addr-3:8080")
 
-	h.JobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-2", frameModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-3", frameModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
+	h.JobInfo.SetJobStatus("job-2", frameModel.MasterStateInit)
+	h.JobInfo.SetJobStatus("job-3", frameModel.MasterStateInit)
 
 	err := h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 		ID:       "resource-1",
