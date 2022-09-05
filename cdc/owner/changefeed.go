@@ -409,8 +409,6 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
-<<<<<<< HEAD
-=======
 
 	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
@@ -422,23 +420,14 @@ LOOP:
 	}
 
 	c.barriers = newBarriers()
->>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
+
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(ddlJobBarrier, ddlStartTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-<<<<<<< HEAD
-	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
-	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
-	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
-	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage,
-		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
-=======
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
->>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
+	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -449,12 +438,7 @@ LOOP:
 	c.sink = c.newSink()
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
-<<<<<<< HEAD
-	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upStream, checkpointTs-1)
-=======
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
->>>>>>> e5c887449 (cdc: fix a bug that DDLs can be executed multiple times incorrectly (#6928))
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upStream, ddlStartTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
