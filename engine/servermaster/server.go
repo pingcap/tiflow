@@ -690,7 +690,8 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
 		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux,
-			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error) {
+			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error,
+		) {
 			errOut := rpcerror.ToGRPCError(err)
 			st, ok := status.FromError(errOut)
 			if !ok {
