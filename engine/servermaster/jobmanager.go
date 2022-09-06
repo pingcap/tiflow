@@ -195,7 +195,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	}
 
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
-	log.Info("create job", zap.String("config", string(req.Job.Config)),
+	log.Info("create job", zap.Any("job", req.Job),
 		zap.String("tenant_id", req.TenantId), zap.String("project_id", req.ProjectId))
 
 	job := req.Job
@@ -374,12 +374,21 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
 	}
 
+	var selectors []*pb.Selector
+	for _, sel := range masterMeta.Ext.Selectors {
+		pbSel, err := schedModel.SelectorToPB(sel)
+		if err != nil {
+			return nil, errors.Annotate(err, "buildPBJob")
+		}
+		selectors = append(selectors, pbSel)
+	}
 	return &pb.Job{
-		Id:     masterMeta.ID,
-		Type:   jobType,
-		Status: jobStatus,
-		Config: masterMeta.Config,
-		Error:  nil, // TODO: Fill error field.
+		Id:        masterMeta.ID,
+		Type:      jobType,
+		Status:    jobStatus,
+		Config:    masterMeta.Config,
+		Error:     nil, // TODO: Fill error field.
+		Selectors: selectors,
 	}, nil
 }
 
