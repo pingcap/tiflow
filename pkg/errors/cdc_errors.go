@@ -1107,8 +1107,14 @@ var (
 		"failed to convert ddl '%s' to filter event type",
 		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
+	ErrSyncRenameTableFailed = errors.Normalize(
+		"table's old name is not in filter rule, and its new name in filter rule "+
+			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
+			"if you want to replicate this table, please add its old name to filter rule.",
+		errors.RFCCodeText("CDC:ErrSyncRenameTableFailed"),
+	)
 
-	//changefeed config error
+	// changefeed config error
 	ErrInvalidReplicaConfig = errors.Normalize(
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
