@@ -692,11 +692,11 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux,
 			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error) {
 			errOut := rpcerror.ToGRPCError(err)
-			s, ok := status.FromError(errOut)
+			st, ok := status.FromError(errOut)
 			if !ok {
-				s = status.FromContextError(err)
+				st = status.FromContextError(err)
 			}
-			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, writer, request, s.Err())
+			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, writer, request, st.Err())
 		}),
 	)
 	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
