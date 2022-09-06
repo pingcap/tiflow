@@ -1388,29 +1388,31 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
+			var ddlCreateTime int64
+			ddlCreateTime = -1 // default when scan failed
 			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
 			if err2 != nil {
 				s.tctx.L().Warn("selecting unix timestamp failed", zap.String("error", err2.Error()))
-			}
-			var ddlCreateTime int64
-			for row.Next() {
-				err2 = row.Scan(&ddlCreateTime)
-				if err2 != nil {
-					s.tctx.L().Warn("getting ddlCreateTime failed", zap.String("error", err2.Error()))
+			} else {
+				for row.Next() {
+					err2 = row.Scan(&ddlCreateTime)
+					if err2 != nil {
+						s.tctx.L().Warn("getting ddlCreateTime failed", zap.String("error", err2.Error()))
+					}
 				}
+				row.Close()
 			}
-			row.Close()
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
-				affected = 1
+				// simulate the value of affected along with the injected error
+				// -2 instead of -1 is due to the adding of SET SQL of timezone and timestamp
+				if affected > 2 {
+					affected -= 2
+				}
 			})
 			if err != nil {
-				if err2 != nil {
-					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
-				} else {
-					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
-				}
+				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}

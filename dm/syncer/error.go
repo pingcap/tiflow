@@ -249,7 +249,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 			}
 			select {
 			case <-tctx.Ctx.Done():
-				return nil
+				return err
 			case <-ticker.C:
 			}
 		}

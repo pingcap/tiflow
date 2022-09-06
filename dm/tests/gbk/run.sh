@@ -105,55 +105,11 @@ function run() {
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 30
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
-
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count"
 	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT '0'" 1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	echo "check test invalid connection with status running successfully"
-
-	kill_dm_worker
-
-	# test invalid connection with status cancelled
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"cancelled\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test invalid connection with status cancelled"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN k SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 60
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
-
-	echo "check cancelled error"
-	# unresumable error
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status gbk" \
-		"origin SQL: \[ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN j SMALLINT(4) NOT NULL DEFAULT _UTF8MB4\'0\'\]: DDL ALTER TABLE \`gbk\`.\`invalid_conn_test2\` MODIFY COLUMN \`j\` SMALLINT(4) NOT NULL DEFAULT \'0\' executed in background and met error" 1
-	# manually resume
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
-	# modify upstream back to the state before cancelled error to let upstream and downstream be synced
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN k TINYINT"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN k TINYINT"
-	echo "check test invalid connection with status cancelled successfully"
 
 	kill_dm_worker
 
@@ -168,14 +124,6 @@ function run() {
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN m SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 60
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
 
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count"
@@ -196,14 +144,6 @@ function run() {
 
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN n SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 30
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
 
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count"
@@ -226,14 +166,6 @@ function run() {
 	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (1,1,1,1,1,1)"
 	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (2,2,2,2,2,2)"
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 30
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
-
 	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` SMALLINT(4) NOT NULL DEFAULT '0'"
 	echo "check count"
 	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` SMALLINT(4) NOT NULL DEFAULT '0'" 1
@@ -255,23 +187,10 @@ function run() {
 	run_sql_tidb "INSERT INTO gbk.invalid_conn_test1 VALUES (3,4,4,4,4,4)"
 	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(i)"
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task gbk" \
-		"\"result\": true" 3
-	sleep 60
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
-
 	echo "check cancelled error"
-	# unresumable error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status gbk" \
 		"origin SQL: \[ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(i)\]: DDL ALTER TABLE \`gbk\`.\`invalid_conn_test1\` ADD UNIQUE(\`i\`) executed in background and met error" 1
-	# manually resume
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task gbk" \
-		"\"result\": true" 3
 	echo "check test adding UNIQUE on column with duplicate data successfully"
 
 	dmctl_stop_task $cur/conf/dm-task.yaml
