@@ -1,0 +1,2 @@
+enalbe-sync-point = true
+sync-point-interval = "30s"
