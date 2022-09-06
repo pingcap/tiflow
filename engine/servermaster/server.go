@@ -689,6 +689,15 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true},
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
+		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux,
+			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error) {
+			errOut := rpcerror.ToGRPCError(err)
+			s, ok := status.FromError(errOut)
+			if !ok {
+				s = status.FromContextError(err)
+			}
+			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, writer, request, s.Err())
+		}),
 	)
 	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
 		return nil, errors.Trace(err)
