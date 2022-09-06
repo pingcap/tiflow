@@ -20,13 +20,11 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/util"
 )
-
-// jobAPIPrefix is the prefix of the job API.
-const jobAPIPrefix = "/api/v1/jobs/"
 
 // registerRoutes registers the routes for the HTTP server.
 func registerRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJobAPI http.HandlerFunc) {
@@ -71,10 +69,10 @@ func registerRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJob
 
 // shouldForwardJobAPI indicates whether the request should be forwarded to the job master.
 func shouldForwardJobAPI(r *http.Request) bool {
-	if !strings.HasPrefix(r.URL.Path, jobAPIPrefix) {
+	if !strings.HasPrefix(r.URL.Path, openapi.JobAPIPrefix) {
 		return false
 	}
-	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
+	apiPath := strings.TrimPrefix(r.URL.Path, openapi.JobAPIPrefix)
 	fields := strings.SplitN(apiPath, "/", 2)
 	if len(fields) != 2 {
 		return false
