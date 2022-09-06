@@ -69,6 +69,7 @@ service TaskScheduler {
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 }
 
+// Refer to: https://cloud.google.com/apis/design/standard_methods 
 service JobManager {
     rpc CreateJob(CreateJobRequest) returns (Job){
         option (google.api.http) = {
@@ -89,6 +90,9 @@ service JobManager {
         };
     };
 
+    // NOTE: for the compability of existing openapi(ticdc) format, 
+    // we use `/cancel` but not `:cancel`(google api suggested) 
+    // refer to: https://cloud.google.com/apis/design/custom_methods
     rpc CancelJob(CancelJobRequest) returns (Job){
         option (google.api.http) = {
             post: "/api/v1/jobs/{id=*}/cancel"
@@ -212,8 +216,8 @@ message Job {
         FakeJob = 4;
     }
 
-    enum Status{
-        StatusUnknown = 0;
+    enum State{
+        StateUnknown = 0;
         Created = 1;
         Running = 2;
         Failed = 3;
@@ -224,10 +228,11 @@ message Job {
 
     string id = 1;
     Type type = 2;
-    Status status = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    State state = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
     bytes config = 4;
-    Error error = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
-    repeated Selector selectors = 6;
+    bytes detail = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+    Error error = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+    repeated Selector selectors = 7;
 }
 
 message CreateJobRequest {

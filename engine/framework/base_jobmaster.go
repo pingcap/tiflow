@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -80,7 +81,7 @@ type BaseJobMaster interface {
 
 	// Exit should be called when jobmaster (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
-	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
 	// IsMasterReady returns whether the master has received heartbeats for all
 	// workers after a fail-over. If this is the first time the JobMaster started up,
@@ -126,10 +127,9 @@ type JobMasterImpl interface {
 
 	// Workload return the resource unit of the job master itself
 	Workload() model.RescUnit
-
-	// OnJobManagerMessage is called when receives a message from jobmanager
-	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
-
+	// OnCancel is triggered when a cancel message is received. It can be
+	// triggered multiple times.
+	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
 	// This is used to for JobMaster to register its OpenAPI handler.
 	// The implementation must not retain the apiGroup. It must register
@@ -158,7 +158,7 @@ func NewBaseJobMaster(
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp, workerEpoch)
+		ctx, &jobMasterImplAsWorkerImpl{inner: jobMasterImpl}, workerID, masterID, tp, workerEpoch)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter
@@ -258,8 +258,28 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	return nil
 }
 
+// Stop implements BaseJobMaster.Stop
+func (d *DefaultBaseJobMaster) Stop(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+
+	if err := d.impl.StopImpl(ctx); err != nil {
+		d.Logger().Error("Failed to stop JobMasterImpl", zap.Error(err))
+	}
+	d.master.doClose()
+	d.worker.doClose()
+	return nil
+}
+
 // NotifyExit implements BaseJobMaster interface
 func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (retErr error) {
+	if eventloop.IsTerminatedError(errIn) {
+		// In terminate scenario job master should call StopImpl, and we don't
+		// call NotifyExit to advance the calling of StopImpl. The drawback of
+		// this choice is job manager has to hearbeat timeout of this job master.
+		return nil
+	}
+
 	d.closeOnce.Do(func() {
 		err := d.impl.CloseImpl(ctx)
 		if err != nil {
@@ -351,16 +371,16 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseJobMaster.Exit
-func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error {
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
 	// Don't set error center for master to make worker.Exit work well
-	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg); errTmp != nil {
+	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, detail); errTmp != nil {
 		return errTmp
 	}
 
-	return d.worker.Exit(ctx, exitReason, err, []byte(extMsg))
+	return d.worker.Exit(ctx, exitReason, err, detail)
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.
@@ -372,7 +392,8 @@ func (d *DefaultBaseJobMaster) TriggerOpenAPIInitialize(apiGroup *gin.RouterGrou
 func (d *DefaultBaseJobMaster) IsBaseJobMasterExt() {}
 
 type jobMasterImplAsWorkerImpl struct {
-	inner JobMasterImpl
+	inner          JobMasterImpl
+	onCancelCalled bool
 }
 
 func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
@@ -389,8 +410,24 @@ func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 	return j.inner.Workload()
 }
 
-func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {
-	return j.inner.OnJobManagerMessage(topic, message)
+func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
+	ctx context.Context, topic p2p.Topic, message interface{},
+) error {
+	switch msg := message.(type) {
+	case *frameModel.StatusChangeRequest:
+		switch msg.ExpectState {
+		case frameModel.WorkerStateStopped:
+			if !j.onCancelCalled {
+				j.onCancelCalled = true
+				return j.inner.OnCancel(ctx)
+			}
+		default:
+			log.Info("Ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+		}
+	default:
+		log.Info("unsupported message", zap.Any("message", message))
+	}
+	return nil
 }
 
 func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
@@ -438,5 +475,10 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 
 func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
 	log.Panic("unexpected Close call")
+	return nil
+}
+
+func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) error {
+	log.Panic("unexpected StopImpl call")
 	return nil
 }

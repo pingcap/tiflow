@@ -60,6 +60,7 @@ type Master interface {
 	Poll(ctx context.Context) error
 	MasterID() frameModel.MasterID
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -94,6 +95,9 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
+
+	// StopImpl is called when the master is being canceled
+	StopImpl(ctx context.Context) error
 }
 
 const (
@@ -149,7 +153,7 @@ type BaseMaster interface {
 	// Exit should be called when master (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -333,8 +337,10 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	// Don't cancel this context until it meets first error. In this way this
+	// context can be used in business logic and leaves a robust way to cancel
+	// business logic from runtime.(If business uses context correctly)
+	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -541,6 +547,15 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+// Stop implements Master.Stop
+func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
+	err := m.Impl.StopImpl(ctx)
+	if err != nil {
+		m.Logger().Error("stop master impl failed", zap.Error(err))
+	}
+	return err
+}
+
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
@@ -692,7 +707,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 
 // Exit implements BaseMaster.Exit
 // NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	// keep the original error in errCenter if possible
 	defer func() {
@@ -702,10 +717,10 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 		m.errCenter.OnError(err)
 	}()
 
-	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)
+	return m.exitWithoutSetErrCenter(ctx, exitReason, err, detail)
 }
 
-func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
+func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, detail []byte) (errRet error) {
 	switch exitReason {
 	case ExitReasonFinished:
 		m.masterMeta.State = frameModel.MasterStateFinished
@@ -721,7 +736,7 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 	if err != nil {
 		m.masterMeta.ErrorMsg = err.Error()
 	}
-	m.masterMeta.ExtMsg = extMsg
+	m.masterMeta.Detail = detail
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	return metaClient.Update(ctx, m.masterMeta)
