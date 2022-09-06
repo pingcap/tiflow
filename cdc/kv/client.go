@@ -485,8 +485,7 @@ func newEventFeedSession(
 	id := strconv.FormatUint(allocID(), 10)
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs,
-		changefeed.Namespace+"."+changefeed.ID,
-		tableID, tableName)
+		changefeed.Namespace+"."+changefeed.ID)
 	return &eventFeedSession{
 		client:            client,
 		totalSpan:         totalSpan,

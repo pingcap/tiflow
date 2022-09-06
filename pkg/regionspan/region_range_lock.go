@@ -24,7 +24,6 @@ import (
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
@@ -155,15 +154,11 @@ type RegionRangeLock struct {
 	regionIDLock      map[uint64]*rangeLockEntry
 	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
 	id uint64
-
-	tableID   model.TableID
-	tableName string
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock(
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
-	tableID model.TableID, tableName string,
 ) *RegionRangeLock {
 	return &RegionRangeLock{
 		changefeedLogInfo: changefeedLogInfo,
@@ -171,8 +166,6 @@ func NewRegionRangeLock(
 		rangeLock:         btree.NewG[*rangeLockEntry](16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 		id:                allocID(),
-		tableID:           tableID,
-		tableName:         tableName,
 	}
 }
 
@@ -230,7 +223,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 		log.Info("range locked",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.Uint64("version", version),
 			zap.Uint64("checkpointTs", checkpointTs),
@@ -263,7 +255,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 		log.Info("try lock range staled",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
@@ -303,7 +294,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	log.Info("lock range blocked",
 		zap.String("changefeed", l.changefeedLogInfo),
-		zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)),
@@ -353,7 +343,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	if !ok {
 		log.Panic("unlocking a not locked range",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
@@ -364,7 +353,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	if entry.regionID != regionID {
 		log.Panic("unlocked a range but regionID mismatch",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("expectedRegionID", regionID),
 			zap.Uint64("foundRegionID", entry.regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
@@ -373,7 +361,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	if entry != l.regionIDLock[regionID] {
 		log.Panic("range lock and region id lock mismatch when trying to unlock",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("unlockingRegionID", regionID),
 			zap.String("rangeLockEntry", entry.String()),
 			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
@@ -383,7 +370,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
 		log.Panic("unlocking region doesn't match the locked region",
 			zap.String("changefeed", l.changefeedLogInfo),
-			zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
@@ -403,7 +389,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 	log.Info("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
-		zap.Int64("tableID", l.tableID), zap.String("tableName", l.tableName),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
