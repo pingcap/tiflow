@@ -243,13 +243,13 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		_, err = tx.Exec(query)
 		if err != nil {
 			err2 := tx.Rollback()
+			// It is ok to ignore the error, since clear sync point is not necessary.
 			if err2 != nil {
 				log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 			}
-			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
 		s.lastCleanSyncPointTime = time.Now()
-		log.Info("clean outdate ts map successfully", zap.String("query", query))
+		log.Info("clean outdate syncpoint successfully", zap.String("query", query))
 	}
 
 	err = tx.Commit()
