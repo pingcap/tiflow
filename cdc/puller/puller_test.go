@@ -76,7 +76,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	span regionspan.ComparableSpan,
 	ts uint64,
 	lockResolver txnutil.LockResolver,
-	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	for {

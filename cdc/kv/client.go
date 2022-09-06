@@ -294,7 +294,6 @@ type CDCKVClient interface {
 		span regionspan.ComparableSpan,
 		ts uint64,
 		lockResolver txnutil.LockResolver,
-		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
 	) error
 }
@@ -393,11 +392,6 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 	return
 }
 
-// PullerInitialization is a workaround to solved cyclic import.
-type PullerInitialization interface {
-	IsInitialized() bool
-}
-
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
@@ -405,11 +399,10 @@ type PullerInitialization interface {
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 	lockResolver txnutil.LockResolver,
-	isPullerInit PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(
-		ctx, c, span, lockResolver, isPullerInit, ts, eventCh, c.changefeed, c.tableID, c.tableName)
+		ctx, c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -428,7 +421,6 @@ type eventFeedSession struct {
 	client *CDCClient
 
 	lockResolver txnutil.LockResolver
-	isPullerInit PullerInitialization
 
 	// The whole range that is being subscribed.
 	totalSpan regionspan.ComparableSpan
@@ -475,7 +467,6 @@ func newEventFeedSession(
 	client *CDCClient,
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
-	isPullerInit PullerInitialization,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 	changefeed model.ChangeFeedID,
@@ -497,7 +488,6 @@ func newEventFeedSession(
 		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
-		isPullerInit:      isPullerInit,
 		id:                id,
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
@@ -801,11 +791,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.insert(requestID, state)
 
-		logReq := log.Debug
-		if s.isPullerInit.IsInitialized() {
-			logReq = log.Info
-		}
-		logReq("start new request",
+		log.Debug("start new request",
 			zap.String("namespace", s.client.changefeed.Namespace),
 			zap.String("changefeed", s.client.changefeed.ID),
 			zap.Int64("tableID", s.tableID), zap.String("tableName", s.tableName),
