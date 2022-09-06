@@ -73,9 +73,9 @@ func createClientConn(ctx context.Context, credential *security.Credential, targ
 	if err != nil {
 		return nil, err
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-
 	conn, err := grpc.DialContext(
 		ctx,
 		target,
