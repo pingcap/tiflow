@@ -1107,4 +1107,10 @@ var (
 		"failed to convert ddl '%s' to filter event type",
 		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
+
+	//changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
+	)
 )

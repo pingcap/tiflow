@@ -41,9 +41,10 @@ const (
 )
 
 type mysqlSyncPointStore struct {
-	db                 *sql.DB
-	syncPointRetention time.Duration
-	clusterID          string
+	db                     *sql.DB
+	clusterID              string
+	syncPointRetention     time.Duration
+	lastCleanSyncPointTime time.Time
 }
 
 // newSyncPointStore create a sink to record the syncPoint map in downstream DB for every changefeed
@@ -145,9 +146,10 @@ func newMySQLSyncPointStore(
 	log.Info("Start mysql syncpoint sink")
 
 	return &mysqlSyncPointStore{
-		db:                 syncDB,
-		syncPointRetention: syncPointRetention,
-		clusterID:          config.GetGlobalServerConfig().ClusterID,
+		db:                     syncDB,
+		clusterID:              config.GetGlobalServerConfig().ClusterID,
+		syncPointRetention:     syncPointRetention,
+		lastCleanSyncPointTime: time.Now(),
 	}, nil
 }
 
@@ -174,14 +176,15 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	query := `
-	CREATE TABLE IF NOT EXISTS %s (
-		ticdc_cluster_id(varchar 255),
+	query := `CREATE TABLE IF NOT EXISTS %s 
+	(
+		ticdc_cluster_id varchar (255),
 		cf varchar(255),
 		primary_ts varchar(18),
 		secondary_ts varchar(18),
 		created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY ( "cf", 'primary_ts")
+		INDEX (created_at),
+		PRIMARY KEY (cf, primary_ts)
 	);`
 	query = fmt.Sprintf(query, syncPointTableName)
 	_, err = tx.Exec(query)
@@ -216,6 +219,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
+	// insert ts map
 	query := "insert ignore into " + schemaName + "." + syncPointTableName +
 		"(ticdc_cluster_id, cf, primary_ts, secondary_ts) VALUES (?,?,?,?)"
 	_, err = tx.Exec(query, s.clusterID, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
@@ -227,17 +231,25 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
-	query = fmt.Sprintf(
-		"DELETE IGNORE FROM "+schemaName+"."+syncPointTableName+"WHERE cf like '%s' and creat_at < (NOW() - INTERVAL %.2f SECOND)",
-		id.Namespace+"_"+id.ID,
-		s.syncPointRetention.Seconds())
-	_, err = tx.Exec(query)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+	// clean stale ts map in downstream
+	if time.Since(s.lastCleanSyncPointTime) >= s.syncPointRetention {
+		query = fmt.Sprintf(
+			"DELETE IGNORE FROM "+
+				schemaName+"."+
+				syncPointTableName+
+				" WHERE cf like '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
+			id.Namespace+"_"+id.ID,
+			s.syncPointRetention.Seconds())
+		_, err = tx.Exec(query)
+		if err != nil {
+			err2 := tx.Rollback()
+			if err2 != nil {
+				log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			}
+			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		s.lastCleanSyncPointTime = time.Now()
+		log.Info("clean outdate ts map successfully", zap.String("query", query))
 	}
 
 	err = tx.Commit()

@@ -179,6 +179,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {
@@ -308,8 +309,13 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newInfo.TargetTs = cfg.TargetTs
 	}
 
+	// verify replica config
 	if cfg.ReplicaConfig != nil {
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+		err = newInfo.Config.ValidateAndAdjust(nil)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	f, err := filter.NewFilter(newInfo.Config, "")

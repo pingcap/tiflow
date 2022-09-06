@@ -26,6 +26,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
+	minSyncPointInterval = time.Second * 30
+	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
+	minSyncPointRetention = time.Hour * 1
+)
+
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:      true,
 	EnableOldValue:     true,
@@ -53,10 +60,12 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 	return defaultReplicaConfig.Clone()
 }
 
+// Duration wrap time.Duration to override UnmarshalText func
 type Duration struct {
 	time.Duration
 }
 
+// UnmarshalText unmarshal byte to duration
 func (d *Duration) UnmarshalText(text []byte) error {
 	var err error
 	d.Duration, err = time.ParseDuration(string(text))
@@ -137,12 +146,31 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 
 // ValidateAndAdjust verifies and adjusts the replica configuration.
 func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
+	// check sink uri
 	if c.Sink != nil {
 		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
 		if err != nil {
 			return err
 		}
 	}
+	// check sync point config
+	if c.EnableSyncPoint {
+		if c.SyncPointInterval < minSyncPointInterval {
+			return cerror.ErrInvalidReplicaConfig.
+				FastGenByArgs(
+					fmt.Sprintf("The SyncPointInterval:%s must large than %s",
+						c.SyncPointInterval.String(),
+						minSyncPointInterval.String()))
+		}
+		if c.SyncPointRetention < minSyncPointRetention {
+			return cerror.ErrInvalidReplicaConfig.
+				FastGenByArgs(
+					fmt.Sprintf("The SyncPointRetention:%s must large than %s",
+						c.SyncPointRetention.String(),
+						minSyncPointRetention.String()))
+		}
+	}
+
 	return nil
 }
 
