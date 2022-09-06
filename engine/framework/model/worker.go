@@ -22,23 +22,23 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
-// WorkerStatusCode represents worker running status in master worker framework
-// TODO: add fsm of WorkerStatusCode
-type WorkerStatusCode int8
+// WorkerState represents worker running status in master worker framework
+// TODO: add fsm of WorkerState
+type WorkerState int8
 
-// Among these statuses, only WorkerStatusCreated is used by the framework
+// Among these statuses, only WorkerStateCreated is used by the framework
 // for now. The rest are for the business logic to use.
 // TODO think about whether to manage the transition of the statuses.
 // TODO: need a FSM graph
 // NOTICE: DO NOT CHANGE the previous status code
-// Modify the WorkerStatus.Code comment IF you add some new status code
+// Modify the WorkerStatus.State comment IF you add some new status code
 const (
-	WorkerStatusNormal   = WorkerStatusCode(1)
-	WorkerStatusCreated  = WorkerStatusCode(2)
-	WorkerStatusInit     = WorkerStatusCode(3)
-	WorkerStatusError    = WorkerStatusCode(4)
-	WorkerStatusFinished = WorkerStatusCode(5)
-	WorkerStatusStopped  = WorkerStatusCode(6)
+	WorkerStateNormal   = WorkerState(1)
+	WorkerStateCreated  = WorkerState(2)
+	WorkerStateInit     = WorkerState(3)
+	WorkerStateError    = WorkerState(4)
+	WorkerStateFinished = WorkerState(5)
+	WorkerStateStopped  = WorkerState(6)
 	// extend the status code here
 )
 
@@ -51,7 +51,7 @@ var WorkerUpdateColumns = []string{
 	"job_id",
 	"id",
 	"type",
-	"status",
+	"state",
 	"epoch",
 	"error_message",
 	"extend_bytes",
@@ -66,7 +66,7 @@ type WorkerStatus struct {
 	JobID     MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
 	ID        WorkerID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:2"`
 	Type      WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
-	Code      WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
+	State     WorkerState      `json:"state" gorm:"column:state;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
 	Epoch     Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
 	ErrorMsg  string           `json:"error-message" gorm:"column:error_message;type:text"`
 
@@ -78,14 +78,14 @@ type WorkerStatus struct {
 
 // HasSignificantChange indicates whether `s` has significant changes worth persisting.
 func (s WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
-	return s.Code != other.Code || s.ErrorMsg != other.ErrorMsg
+	return s.State != other.State || s.ErrorMsg != other.ErrorMsg
 }
 
 // InTerminateState returns whether worker is in a terminate state, including
 // finished, stopped, error.
 func (s *WorkerStatus) InTerminateState() bool {
-	switch s.Code {
-	case WorkerStatusFinished, WorkerStatusStopped, WorkerStatusError:
+	switch s.State {
+	case WorkerStateFinished, WorkerStateStopped, WorkerStateError:
 		return true
 	default:
 		return false
@@ -112,7 +112,7 @@ func (s *WorkerStatus) Map() map[string]interface{} {
 		"job_id":        s.JobID,
 		"id":            s.ID,
 		"type":          s.Type,
-		"status":        s.Code,
+		"state":         s.State,
 		"epoch":         s.Epoch,
 		"error_message": s.ErrorMsg,
 		"extend_bytes":  s.ExtBytes,

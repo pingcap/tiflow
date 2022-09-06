@@ -41,7 +41,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -85,7 +85,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -118,7 +118,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	_ = cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 	err := cluster.meta.CreateResource(ctx, &resModel.ResourceMeta{
 		ID:        "/local/resource-2",
 		Job:       "job-1",

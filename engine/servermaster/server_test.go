@@ -208,10 +208,10 @@ type mockJobManager struct {
 	framework.BaseMaster
 	pb.UnimplementedJobManagerServer
 	jobMu sync.RWMutex
-	jobs  map[pb.Job_Status]int
+	jobs  map[pb.Job_State]int
 }
 
-func (m *mockJobManager) JobCount(status pb.Job_Status) int {
+func (m *mockJobManager) JobCount(status pb.Job_State) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
 	return m.jobs[status]
@@ -221,7 +221,7 @@ func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID s
 	panic("not implemented")
 }
 
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error) {
 	panic("not implemented")
 }
 
@@ -265,7 +265,7 @@ func TestCollectMetric(t *testing.T) {
 	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.Job_Status]int{
+		jobs: map[pb.Job_State]int{
 			pb.Job_Running: 3,
 		},
 	}

@@ -14,7 +14,7 @@ enum ErrorCode {
     NotEnoughResource = 3;
     // submit subjob failed
     SubJobSubmitFailed = 4;
-    // TombstoneExecuto
+    // TombstoneExecutor
     TombstoneExecutor = 5;
     //
     SubJobBuildFailed = 6;
