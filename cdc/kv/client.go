@@ -543,32 +543,31 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
 				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
-				if !allowed {
-					if errInfo.logRateLimitedHint() {
-						zapFieldAddr := zap.Skip()
-						if errInfo.singleRegionInfo.rpcCtx != nil {
-							// rpcCtx may be nil if we failed to get region info
-							// from pd. It could cause by pd down or the region
-							// has been merged.
-							zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
-						}
-						log.Info("EventFeed retry rate limited",
-							zap.String("namespace", s.client.changefeed.Namespace),
-							zap.String("changefeed", s.client.changefeed.ID),
-							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
-							zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
-							zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-							zap.Any("errInfo", errInfo),
-							zapFieldAddr)
-					}
-					// rate limit triggers, add the error info to the rate limit queue.
-					s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
-				} else {
-					err := s.handleError(ctx, errInfo)
-					if err != nil {
+				if allowed {
+					if err := s.handleError(ctx, errInfo); err != nil {
 						return err
 					}
+					continue
 				}
+				if errInfo.logRateLimitedHint() {
+					zapFieldAddr := zap.Skip()
+					if errInfo.singleRegionInfo.rpcCtx != nil {
+						// rpcCtx may be nil if we failed to get region info
+						// from pd. It could cause by pd down or the region
+						// has been merged.
+						zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
+					}
+					log.Info("EventFeed retry rate limited",
+						zap.String("namespace", s.client.changefeed.Namespace),
+						zap.String("changefeed", s.client.changefeed.ID),
+						zap.Int64("tableID", tableID), zap.String("tableName", tableName),
+						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
+						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
+						zap.Any("errInfo", errInfo),
+						zapFieldAddr)
+				}
+				// rate limit triggers, add the error info to the rate limit queue.
+				s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
 			}
 		}
 	})
@@ -849,23 +848,16 @@ func (s *eventFeedSession) requestRegionToStore(
 // Regions from `regionCh` will be connected. If any error happens to a
 // region, the error will be sent to `errCh` and the receiver of `errCh` is
 // responsible for handling the error.
-func (s *eventFeedSession) dispatchRequest(
-	ctx context.Context,
-) error {
+func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 	for {
 		// Note that when a region is received from the channel, it's range has been already locked.
 		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case sri = <-s.regionCh:
 			s.regionChSizeGauge.Dec()
 		}
-
-		log.Debug("dispatching region",
-			zap.String("namespace", s.client.changefeed.Namespace),
-			zap.String("changefeed", s.client.changefeed.ID),
-			zap.Uint64("regionID", sri.verID.GetID()))
 
 		// Send a resolved ts to event channel first, for two reasons:
 		// 1. Since we have locked the region range, and have maintained correct
