@@ -563,8 +563,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 						zap.Int64("tableID", tableID), zap.String("tableName", tableName),
 						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-						zap.Any("errInfo", errInfo),
-						zapFieldAddr)
+						zap.Error(errInfo.err), zapFieldAddr)
 				}
 				// rate limit triggers, add the error info to the rate limit queue.
 				s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
