@@ -73,7 +73,7 @@ func (m *mockPuller) Run(ctx context.Context) error {
 	}
 }
 
-func (m *mockPuller) GetResolvedTs() uint64 {
+func (m *mockPuller) ResolvedTs() uint64 {
 	return atomic.LoadUint64(&m.resolvedTs)
 }
 
@@ -81,7 +81,7 @@ func (m *mockPuller) Output() <-chan *model.RawKVEntry {
 	return m.outCh
 }
 
-func (m *mockPuller) IsInitialized() bool {
+func (m *mockPuller) Initialized() bool {
 	return true
 }
 

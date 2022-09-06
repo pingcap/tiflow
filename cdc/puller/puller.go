@@ -45,12 +45,12 @@ const (
 type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer.
 	Run(ctx context.Context) error
-	GetResolvedTs() uint64
+	ResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
-	IsInitialized() bool
+	Initialized() bool
 }
 
-type pullerImpl struct {
+type puller struct {
 	kvCli        kv.CDCKVClient
 	kvStorage    tikv.Storage
 	checkpointTs uint64
@@ -59,6 +59,7 @@ type pullerImpl struct {
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	initialized  int64
+	changefeed   model.ChangeFeedID
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -87,7 +88,7 @@ func New(ctx context.Context,
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, changefeed, cfg)
-	p := &pullerImpl{
+	p := &puller{
 		kvCli:        kvCli,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
@@ -96,19 +97,20 @@ func New(ctx context.Context,
 		tsTracker:    tsTracker,
 		resolvedTs:   checkpointTs,
 		initialized:  0,
+		changefeed:   changefeed,
 	}
 	return p
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
-func (p *pullerImpl) Run(ctx context.Context) error {
+func (p *puller) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
+		p.changefeed, contextutil.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
@@ -117,25 +119,24 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	tableID, _ := contextutil.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricTxnCollectCounterKv := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		eventChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		memBufferSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	}()
 
 	lastResolvedTs := p.checkpointTs
@@ -150,8 +151,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
+					zap.String("namespace", p.changefeed.Namespace),
+					zap.String("changefeed", p.changefeed.ID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -193,8 +194,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
 						zap.Reflect("resolved", e.Resolved),
 						zap.Int64("tableID", tableID),
 						zap.Reflect("spans", p.spans),
@@ -214,8 +215,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
 						zap.Int64("tableID", tableID),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Duration("duration", time.Since(start)),
@@ -236,14 +237,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *pullerImpl) GetResolvedTs() uint64 {
+func (p *puller) ResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
 }
 
-func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
+func (p *puller) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
 }
 
-func (p *pullerImpl) IsInitialized() bool {
+func (p *puller) Initialized() bool {
 	return atomic.LoadInt64(&p.initialized) > 0
 }

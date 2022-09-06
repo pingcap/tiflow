@@ -140,7 +140,7 @@ func newPullerForTest(
 	require.Nil(t, err)
 	mockPlr := &mockInjectedPuller{
 		Puller: plr,
-		cli:    plr.(*pullerImpl).kvCli.(*mockCDCKVClient),
+		cli:    plr.(*puller).kvCli.(*mockCDCKVClient),
 	}
 	return mockPlr, cancel, &wg, store
 }
@@ -173,9 +173,9 @@ func TestPullerResolvedForward(t *testing.T) {
 	ev := <-plr.Output()
 	require.Equal(t, model.OpTypeResolved, ev.OpType)
 	require.Equal(t, uint64(1000), ev.CRTs)
-	require.True(t, plr.IsInitialized())
+	require.True(t, plr.Initialized())
 	err := retry.Do(context.Background(), func() error {
-		ts := plr.GetResolvedTs()
+		ts := plr.ResolvedTs()
 		if ts != uint64(1000) {
 			return errors.Errorf("resolved ts %d of puller does not forward to 1000", ts)
 		}
