@@ -38,7 +38,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
 			Name:      "txn_worker_flush_duration",
-			Help:      "Flush duration (s) for txn worker",
+			Help:      "Flush duration (s) for txn worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
 		}, []string{"namespace", "changefeed"})
 
@@ -47,7 +47,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
 			Name:      "txn_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for all workers",
+			Help:      "Busy ratio (X ms in 1s) for all workers.",
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -59,7 +59,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
 			Name:      "batch_row_count",
-			Help:      "Row count number for a given batch",
+			Help:      "Row count number for a given batch.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 

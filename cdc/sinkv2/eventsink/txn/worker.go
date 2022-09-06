@@ -122,6 +122,7 @@ func (w *worker) runBackgroundLoop() {
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(2 * time.Second)
 		startToWork := time.Now()
+		defer overseerTimer.Stop()
 	LOOP:
 		for {
 			select {
@@ -196,6 +197,7 @@ func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
 	}
 	w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
 	if cap(w.wantMoreCallbacks) > 1024 {
+		// Resize the buffer if it's too big.
 		w.wantMoreCallbacks = make([]func(), 0, 1024)
 	}
 
