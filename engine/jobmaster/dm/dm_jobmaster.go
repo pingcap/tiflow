@@ -118,7 +118,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
-		return jm.Exit(ctx, framework.ExitReasonFailed, err, "")
+		return jm.Exit(ctx, framework.ExitReasonFailed, err, nil)
 	}
 	if err := jm.bootstrap(ctx); err != nil {
 		return err
@@ -368,27 +368,27 @@ func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerState) (f
 
 // cancel remove jobCfg in metadata, and wait all workers offline.
 func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) error {
-	var extMsg string
+	var detail []byte
 	status, err := jm.status(ctx, code)
 	if err != nil {
 		jm.Logger().Error("failed to get status", zap.Error(err))
 	} else {
-		extMsg = string(status.ExtBytes)
+		detail = status.ExtBytes
 	}
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
-		return jm.Exit(ctx, framework.ExitReasonCanceled, err, extMsg)
+		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
 	jm.workerManager.SetNextCheckTime(time.Now())
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), extMsg)
+			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
-				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, extMsg)
+				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
 		}

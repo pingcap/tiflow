@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -98,7 +99,7 @@ type JobFsm struct {
 
 // JobStats defines a statistics interface for JobFsm
 type JobStats interface {
-	JobCount(status pb.Job_Status) int
+	JobCount(status pb.Job_State) int
 }
 
 // NewJobFsm creates a new job fsm
@@ -157,6 +158,9 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 	for oldJobID, job := range fsm.pendingJobs {
 		id, err := dispatchJobFn(job)
 		if err != nil {
+			if derrors.ErrMasterCreateWorkerBackoff.Equal(err) {
+				return nil
+			}
 			return err
 		}
 		delete(fsm.pendingJobs, oldJobID)
@@ -243,7 +247,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 }
 
 // JobCount queries job count based on job status
-func (fsm *JobFsm) JobCount(status pb.Job_Status) int {
+func (fsm *JobFsm) JobCount(status pb.Job_State) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	switch status {

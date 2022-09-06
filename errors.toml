@@ -1411,6 +1411,26 @@ error = '''
 job is already canceled: %s
 '''
 
+["DFLOW:ErrJobManagerGetJobDetailFail"]
+error = '''
+failed to get job detail from job master
+'''
+
+["DFLOW:ErrJobManagerReadRespBodyFail"]
+error = '''
+failed to read response body
+'''
+
+["DFLOW:ErrJobManagerRespStatusCode404"]
+error = '''
+get job detail response status code is 404
+'''
+
+["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
+error = '''
+get job detail response status code is not 2XX
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
@@ -1454,6 +1474,11 @@ parse config flag set failed
 ["DFLOW:ErrMasterConfigUnknownItem"]
 error = '''
 master config contains unknown configuration options: %s
+'''
+
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]

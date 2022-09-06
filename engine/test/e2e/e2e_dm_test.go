@@ -177,7 +177,7 @@ func testSimpleAllModeTask(
 	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
 		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
-		return err == nil && job.Status == pb.Job_Finished
+		return err == nil && job.State == pb.Job_Finished
 	}, time.Second*30, time.Millisecond*100)
 
 	source1 := "mysql-replica-01"
