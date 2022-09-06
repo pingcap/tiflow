@@ -48,7 +48,7 @@ type worker struct {
 	ticker *time.Ticker
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
-	// producer is used to send the messages to the Kafka/Pulsar broker.
+	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
