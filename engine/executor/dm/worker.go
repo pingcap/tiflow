@@ -74,7 +74,7 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
 	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Uint64("config_modify_revision", cfg.ModRevision))
-	dmSubtaskCfg := cfg.ToDMSubTaskCfg()
+	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
 	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
 }
 
@@ -166,7 +166,7 @@ func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
-func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.Logger().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
 	return nil
 }
@@ -245,12 +245,12 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
 	var (
 		stage       = w.getStage()
-		code        frameModel.WorkerStatusCode
+		code        frameModel.WorkerState
 		taskStatus  = &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
 		finalStatus any
 	)
 	if stage == metadata.StageFinished {
-		code = frameModel.WorkerStatusFinished
+		code = frameModel.WorkerStateFinished
 		_, result := w.unitHolder.Stage()
 		status := w.unitHolder.Status(ctx)
 		// nolint:errcheck
@@ -261,13 +261,13 @@ func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
 			Status:     statusBytes,
 		}
 	} else {
-		code = frameModel.WorkerStatusNormal
+		code = frameModel.WorkerStateNormal
 		finalStatus = taskStatus
 	}
 	// nolint:errcheck
 	statusBytes, _ := json.Marshal(finalStatus)
 	return frameModel.WorkerStatus{
-		Code:     code,
+		State:    code,
 		ExtBytes: statusBytes,
 	}
 }

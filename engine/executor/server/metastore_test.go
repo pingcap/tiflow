@@ -19,14 +19,12 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server/mocks"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/stretchr/testify/require"
 )
 
 func newMetastoreManagerForTesting(ctrl *gomock.Controller) (*metastoreManagerImpl, *mocks.MockMetastoreCreator) {
@@ -44,17 +42,6 @@ func TestMetastoreManagerBasics(t *testing.T) {
 	mockServerMasterClient := client.NewMockServerMasterClient(ctrl)
 	manager, mockCreator := newMetastoreManagerForTesting(ctrl)
 	ctx := context.Background()
-
-	var discoveryStoreParams metaModel.StoreConfig
-	discoveryStoreParams.SetEndpoints("embedded-etcd:1234")
-
-	mockServerMasterClient.EXPECT().
-		QueryMetaStore(
-			gomock.Any(),
-			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery})).
-		Return(&pb.QueryMetaStoreResponse{
-			Address: "embedded-etcd:1234", // fake address
-		}, nil).Times(1)
 
 	var frameStoreParams metaModel.StoreConfig
 	frameStoreParams.SetEndpoints("127.0.0.1:3306")
@@ -82,15 +69,10 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			Address: string(businessParamBytes),
 		}, nil).Times(1)
 
-	fakeEtcdCli := clientv3.NewCtxClient(ctx)
 	fakeFrameworkClientConn := metaMock.NewMockClientConn()
 	require.NoError(t, err)
 	fakeBusinessClientConn := metaMock.NewMockClientConn()
 
-	mockCreator.
-		EXPECT().
-		CreateEtcdCliForServiceDiscovery(gomock.Any(), gomock.Eq(discoveryStoreParams)).
-		Return(fakeEtcdCli, nil)
 	mockCreator.
 		EXPECT().
 		CreateClientConnForFramework(gomock.Any(), gomock.Eq(frameStoreParams)).
@@ -104,13 +86,11 @@ func TestMetastoreManagerBasics(t *testing.T) {
 
 	require.True(t, manager.IsInitialized())
 
-	require.Equal(t, fakeEtcdCli, manager.ServiceDiscoveryStore())
 	require.Equal(t, fakeFrameworkClientConn, manager.FrameworkClientConn())
 	require.Equal(t, fakeBusinessClientConn, manager.BusinessClientConn())
 
 	manager.Close()
 
-	require.Nil(t, manager.ServiceDiscoveryStore())
 	require.Nil(t, manager.FrameworkClientConn())
 	require.Nil(t, manager.BusinessClientConn())
 }
@@ -123,9 +103,6 @@ func TestMetastoreManagerUseBeforeInit(t *testing.T) {
 	manager, _ := newMetastoreManagerForTesting(ctrl)
 	require.False(t, manager.IsInitialized())
 
-	require.Panics(t, func() {
-		manager.ServiceDiscoveryStore()
-	})
 	require.Panics(t, func() {
 		manager.FrameworkClientConn()
 	})

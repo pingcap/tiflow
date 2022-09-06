@@ -152,11 +152,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	}
 
 	startTime := time.Now()
-	log.Info("table actor starting",
-		zap.String("namespace", table.changefeedID.Namespace),
-		zap.String("changefeed", table.changefeedID.ID),
-		zap.String("tableName", tableName),
-		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
 		table.stop(err)
 		return nil, errors.Trace(err)
@@ -168,8 +163,12 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	log.Info("table actor started",
 		zap.String("namespace", table.changefeedID.Namespace),
 		zap.String("changefeed", table.changefeedID.ID),
-		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
+		zap.String("tableName", tableName),
+		zap.Uint64("checkpointTs", replicaInfo.StartTs),
+		zap.Uint64("quota", table.memoryQuota),
+		zap.Bool("redoLogEnabled", table.redoManager.Enabled()),
+		zap.Bool("splitTxn", table.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
 }
@@ -277,12 +276,6 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 			zap.Int64("tableID", t.tableID),
 			zap.String("tableName", t.tableName))
 	}
-	log.Debug("creating table flow controller",
-		zap.String("namespace", t.changefeedID.Namespace),
-		zap.String("changefeed", t.changefeedID.ID),
-		zap.Int64("tableID", t.tableID),
-		zap.String("tableName", t.tableName),
-		zap.Uint64("quota", t.memoryQuota))
 
 	splitTxn := t.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()
 
@@ -340,23 +333,20 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
 	t.started = true
-	log.Info("table actor is started",
-		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID))
 	return nil
 }
 
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
 func (t *tableActor) stop(err error) {
-	log.Info("table actor begin to stop....",
+	log.Debug("table actor begin to stop....",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName))
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadUint32(&t.stopped) == stopped {
-		log.Info("table actor is already stopped",
+		log.Warn("table actor is already stopped",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName))
@@ -370,11 +360,13 @@ func (t *tableActor) stop(err error) {
 	t.cancel()
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
-			log.Warn("close sink failed",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.String("tableName", t.tableName),
-				zap.Error(err))
+			if errors.Cause(err) != context.Canceled {
+				log.Warn("close sink failed",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.String("tableName", t.tableName),
+					zap.Error(err))
+			}
 		}
 	}
 	log.Info("table actor stopped",
@@ -426,15 +418,11 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
-func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
+func (t *tableActor) AsyncStop(_ model.Ts) bool {
 	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
 	// and then stop the whole table pipeline by call Cancel
 	msg := message.StopMessage[pmessage.Message]()
 	err := t.router.Send(t.actorID, msg)
-	log.Info("send async stop signal to table",
-		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Uint64("targetTs", targetTs))
 	if err != nil {
 		if cerror.ErrMailboxFull.Equal(err) {
 			return false
@@ -498,6 +486,10 @@ func (t *tableActor) Start(ts model.Ts) {
 		t.sortNode.startTsCh <- ts
 		close(t.sortNode.startTsCh)
 	}
+}
+
+func (t *tableActor) RemainEvents() int64 {
+	return t.sortNode.remainEvent()
 }
 
 // for ut

@@ -103,11 +103,11 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
-	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient(), jm.Logger())
+	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
-	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.Logger())
+	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
 	return err
 }
 
@@ -118,7 +118,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
-		return jm.Exit(ctx, framework.ExitReasonFailed, err, "")
+		return jm.Exit(ctx, framework.ExitReasonFailed, err, nil)
 	}
 	if err := jm.bootstrap(ctx); err != nil {
 		return err
@@ -137,7 +137,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		return err
 	}
 	if jm.isFinished(ctx) {
-		return jm.cancel(ctx, frameModel.WorkerStatusFinished)
+		return jm.cancel(ctx, frameModel.WorkerStateFinished)
 	}
 	return nil
 }
@@ -222,7 +222,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	// we alreay update finished status in OnWorkerOffline
-	if newStatus.Code == frameModel.WorkerStatusFinished || len(newStatus.ExtBytes) == 0 {
+	if newStatus.State == frameModel.WorkerStateFinished || len(newStatus.ExtBytes) == 0 {
 		return nil
 	}
 	jm.Logger().Info("on worker status updated", zap.String(logutil.ConstFieldWorkerKey, worker.ID()), zap.String("extra bytes", string(newStatus.ExtBytes)))
@@ -251,7 +251,7 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
 	return nil
 }
 
@@ -263,7 +263,7 @@ func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 // OnCancel implements JobMasterImpl.OnCancel
 func (jm *JobMaster) OnCancel(ctx context.Context) error {
 	jm.Logger().Info("on cancel job master")
-	return jm.cancel(ctx, frameModel.WorkerStatusStopped)
+	return jm.cancel(ctx, frameModel.WorkerStateStopped)
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
@@ -321,6 +321,13 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	jm.Logger().Info("start pre-checking job config")
 
+	// TODO: refactor this, e.g. move this check to checkpoint agent
+	// lightning create checkpoint table with name `$jobID_lightning_checkpoint_list`
+	// max table of TiDB is 64, so length of jobID should be less or equal than 64-26=38
+	if len(jm.ID()) > 38 {
+		return errors.New("job id is too long, max length is 38")
+	}
+
 	if err := master.AdjustTargetDB(ctx, cfg.TargetDB); err != nil {
 		return err
 	}
@@ -328,7 +335,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
-		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())
+		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg(jm.ID()))
 	}
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
@@ -345,9 +352,9 @@ func (jm *JobMaster) isFinished(ctx context.Context) bool {
 	return jm.taskManager.allFinished(ctx) && jm.workerManager.allTombStone()
 }
 
-func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCode) (frameModel.WorkerStatus, error) {
+func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerState) (frameModel.WorkerStatus, error) {
 	status := frameModel.WorkerStatus{
-		Code: code,
+		State: code,
 	}
 	if jobStatus, err := jm.QueryJobStatus(ctx, nil); err != nil {
 		return status, err
@@ -360,28 +367,28 @@ func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCod
 }
 
 // cancel remove jobCfg in metadata, and wait all workers offline.
-func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCode) error {
-	var extMsg string
+func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) error {
+	var detail []byte
 	status, err := jm.status(ctx, code)
 	if err != nil {
 		jm.Logger().Error("failed to get status", zap.Error(err))
 	} else {
-		extMsg = string(status.ExtBytes)
+		detail = status.ExtBytes
 	}
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
-		return jm.Exit(ctx, framework.ExitReasonCanceled, err, extMsg)
+		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
 	jm.workerManager.SetNextCheckTime(time.Now())
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), extMsg)
+			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
-				return jm.Exit(ctx, framework.WorkerStatusCodeToExitReason(status.Code), err, extMsg)
+				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
 		}

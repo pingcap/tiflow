@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 )
@@ -209,10 +208,10 @@ type mockJobManager struct {
 	framework.BaseMaster
 	pb.UnimplementedJobManagerServer
 	jobMu sync.RWMutex
-	jobs  map[pb.Job_Status]int
+	jobs  map[pb.Job_State]int
 }
 
-func (m *mockJobManager) JobCount(status pb.Job_Status) int {
+func (m *mockJobManager) JobCount(status pb.Job_State) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
 	return m.jobs[status]
@@ -222,7 +221,7 @@ func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID s
 	panic("not implemented")
 }
 
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error) {
 	panic("not implemented")
 }
 
@@ -234,55 +233,18 @@ func (m *mockJobManager) WatchJobStatuses(
 }
 
 type mockExecutorManager struct {
+	ExecutorManager
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
 }
 
-func (m *mockExecutorManager) WatchExecutors(
-	ctx context.Context,
-) (map[model.ExecutorID]string, *notifier.Receiver[model.ExecutorStatusChange], error) {
-	panic("implement me")
-}
-
-func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
-	panic("implement me")
-}
-
-func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) RegisterExec(info *model.NodeInfo) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) Start(ctx context.Context) {
-	panic("not implemented")
-}
-
 func (m *mockExecutorManager) Stop() {
-}
-
-func (m *mockExecutorManager) HasExecutor(executorID string) bool {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) ListExecutors() []*model.NodeInfo {
-	panic("not implemented")
 }
 
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
 	return m.count[status]
-}
-
-func (m *mockExecutorManager) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
-	panic("not implemented")
 }
 
 func TestCollectMetric(t *testing.T) {
@@ -303,7 +265,7 @@ func TestCollectMetric(t *testing.T) {
 	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.Job_Status]int{
+		jobs: map[pb.Job_State]int{
 			pb.Job_Running: 3,
 		},
 	}

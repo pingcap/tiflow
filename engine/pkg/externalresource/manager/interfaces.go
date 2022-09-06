@@ -36,7 +36,7 @@ type ExecutorInfoProvider interface {
 }
 
 // JobStatus describes the a Job's status.
-type JobStatus = frameModel.MasterStatusCode
+type JobStatus = frameModel.MasterState
 
 // JobStatusesSnapshot describes the statuses of all jobs
 // at some time point.

@@ -200,7 +200,7 @@ func TestSelfRegister(t *testing.T) {
 	}
 	err = s.selfRegister(ctx)
 	require.NoError(t, err)
-	require.Equal(t, executorID, string(s.info.ID))
+	require.Equal(t, executorID, string(s.selfID))
 }
 
 func TestRPCCallBeforeInitialized(t *testing.T) {
