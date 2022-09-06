@@ -274,7 +274,7 @@ func (a *Agent) processOperations(ctx context.Context) error {
 				}
 			} else {
 				// delete table
-				done := a.executor.RemoveTable(ctx, op.TableID)
+				done := a.executor.RemoveTable(op.TableID)
 				if !done {
 					break
 				}
@@ -284,9 +284,9 @@ func (a *Agent) processOperations(ctx context.Context) error {
 		case operationProcessed:
 			var done bool
 			if !op.IsDelete {
-				done = a.executor.IsAddTableFinished(ctx, op.TableID, false)
+				done = a.executor.IsAddTableFinished(op.TableID, false)
 			} else {
-				_, done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
+				_, done = a.executor.IsRemoveTableFinished(op.TableID)
 			}
 			if !done {
 				break
