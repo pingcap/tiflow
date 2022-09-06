@@ -388,7 +388,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 
 // PullerInitialization is a workaround to solved cyclic import.
 type PullerInitialization interface {
-	IsInitialized() bool
+	Initialized() bool
 }
 
 // EventFeed divides a EventFeed request on range boundaries and establishes
