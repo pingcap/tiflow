@@ -29,6 +29,18 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -43,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
@@ -59,17 +72,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -133,16 +135,16 @@ type Server struct {
 }
 
 type serverMasterMetric struct {
-	metricJobNum      map[pb.Job_Status]prometheus.Gauge
+	metricJobNum      map[pb.Job_State]prometheus.Gauge
 	metricExecutorNum map[model.ExecutorStatus]prometheus.Gauge
 }
 
 func newServerMasterMetric() *serverMasterMetric {
 	// Following are leader only metrics
-	metricJobNum := make(map[pb.Job_Status]prometheus.Gauge)
-	for status, statusName := range pb.Job_Status_name {
+	metricJobNum := make(map[pb.Job_State]prometheus.Gauge)
+	for status, statusName := range pb.Job_State_name {
 		metric := serverJobNumGauge.WithLabelValues(statusName)
-		metricJobNum[pb.Job_Status(status)] = metric
+		metricJobNum[pb.Job_State(status)] = metric
 	}
 
 	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
@@ -705,6 +707,8 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 
 func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 	if err := s.handleForwardJobAPI(w, r); err != nil {
+		// using normalized error to construct grpc.status if possible
+		// NOTE: normalized error should have 'message' to keep the same as normal error
 		st, ok := status.FromError(rpcerror.ToGRPCError(err))
 		if !ok {
 			st = status.FromContextError(err)
@@ -722,7 +726,7 @@ func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) error {
-	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
+	apiPath := strings.TrimPrefix(r.URL.Path, openapi.JobAPIPrefix)
 	fields := strings.SplitN(apiPath, "/", 2)
 	if len(fields) != 2 {
 		return errors.New("invalid job api path")
@@ -816,10 +820,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
 
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Tp:        framework.JobManager,
+		Type:      framework.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -969,8 +973,8 @@ func (e executorInfoUpdater) RemoveExecutor(executorID model.ExecutorID) error {
 }
 
 func (s *Server) collectLeaderMetric() {
-	for statusName := range pb.Job_Status_name {
-		pbStatus := pb.Job_Status(statusName)
+	for statusName := range pb.Job_State_name {
+		pbStatus := pb.Job_State(statusName)
 		s.metrics.metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
 	}
 	for statusName := range model.ExecutorStatusNameMapping {

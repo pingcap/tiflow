@@ -777,6 +777,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		checkpointTs,
 		kvCfg,
+		p.changefeed.Info.Config,
 		p.changefeedID,
 	)
 	if err != nil {
@@ -786,7 +787,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs,
 		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)

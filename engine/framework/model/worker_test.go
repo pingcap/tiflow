@@ -22,19 +22,19 @@ import (
 func TestTerminateState(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		code     WorkerStatusCode
+		code     WorkerState
 		expected bool
 	}{
-		{WorkerStatusNormal, false},
-		{WorkerStatusCreated, false},
-		{WorkerStatusInit, false},
-		{WorkerStatusError, true},
-		{WorkerStatusFinished, true},
-		{WorkerStatusStopped, true},
+		{WorkerStateNormal, false},
+		{WorkerStateCreated, false},
+		{WorkerStateInit, false},
+		{WorkerStateError, true},
+		{WorkerStateFinished, true},
+		{WorkerStateStopped, true},
 	}
 	s := &WorkerStatus{}
 	for _, tc := range testCases {
-		s.Code = tc.code
+		s.State = tc.code
 		require.Equal(t, tc.expected, s.InTerminateState())
 	}
 }
@@ -47,28 +47,28 @@ func TestHasSignificantChange(t *testing.T) {
 		changed    bool
 	}{
 		{
-			prev:    &WorkerStatus{Code: WorkerStatusInit, ErrorMsg: "1"},
-			next:    &WorkerStatus{Code: WorkerStatusInit, ErrorMsg: "2"},
+			prev:    &WorkerStatus{State: WorkerStateInit, ErrorMsg: "1"},
+			next:    &WorkerStatus{State: WorkerStateInit, ErrorMsg: "2"},
 			changed: true,
 		},
 		{
-			prev:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "1"},
-			next:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "1"},
+			prev:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "1"},
+			next:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "1"},
 			changed: false,
 		},
 		{
-			prev:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "1", ExtBytes: []byte("1")},
-			next:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "1", ExtBytes: []byte("2")},
+			prev:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "1", ExtBytes: []byte("1")},
+			next:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "1", ExtBytes: []byte("2")},
 			changed: false,
 		},
 		{
-			prev:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "1", ExtBytes: []byte("1")},
-			next:    &WorkerStatus{Code: WorkerStatusFinished, ErrorMsg: "2", ExtBytes: []byte("2")},
+			prev:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "1", ExtBytes: []byte("1")},
+			next:    &WorkerStatus{State: WorkerStateFinished, ErrorMsg: "2", ExtBytes: []byte("2")},
 			changed: true,
 		},
 		{
-			prev:    &WorkerStatus{Code: WorkerStatusInit, ErrorMsg: "1"},
-			next:    &WorkerStatus{Code: WorkerStatusNormal, ErrorMsg: "1"},
+			prev:    &WorkerStatus{State: WorkerStateInit, ErrorMsg: "1"},
+			next:    &WorkerStatus{State: WorkerStateNormal, ErrorMsg: "1"},
 			changed: true,
 		},
 	}

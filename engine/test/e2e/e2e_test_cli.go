@@ -126,13 +126,13 @@ func (cli *ChaosCli) CancelJob(ctx context.Context, jobID string) error {
 
 // CheckJobStatus checks job status is as expected.
 func (cli *ChaosCli) CheckJobStatus(
-	ctx context.Context, jobID string, expectedStatus pb.Job_Status,
+	ctx context.Context, jobID string, expectedStatus pb.Job_State,
 ) (bool, error) {
 	job, err := QueryJobViaHTTP(ctx, cli.masterAddrs[0], cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	return job.Status == expectedStatus, nil
+	return job.State == expectedStatus, nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
