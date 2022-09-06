@@ -19,11 +19,14 @@
 
 {{- define "tiflow.configmap.data" -}}
 server-master: |-
+    etcd-endpoints = ["{{ include "tiflow.name" . }}-metastore-etcd:12479"]
+    framework-metastore-conf.endpoints = ["{{ include "tiflow.name" . }}-metastore-mysql:3306"]
+    business-metastore-conf.endpoints = ["{{ include "tiflow.name" . }}-metastore-mysql:3306"]
     {{- if .Values.master.config }}
-{{ .Values.master.config | indent 2 }}
+{{ .Values.master.config | indent 4 }}
     {{- end }}
 executor: |-
     {{- if .Values.executor.config }}
-{{ .Values.executor.config | indent 2 }}
+{{ .Values.executor.config | indent 4 }}
     {{- end }}
 {{- end -}}
