@@ -208,10 +208,10 @@ type mockJobManager struct {
 	framework.BaseMaster
 	pb.UnimplementedJobManagerServer
 	jobMu sync.RWMutex
-	jobs  map[pb.Job_Status]int
+	jobs  map[pb.Job_State]int
 }
 
-func (m *mockJobManager) JobCount(status pb.Job_Status) int {
+func (m *mockJobManager) JobCount(status pb.Job_State) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
 	return m.jobs[status]
@@ -265,7 +265,7 @@ func TestCollectMetric(t *testing.T) {
 	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.Job_Status]int{
+		jobs: map[pb.Job_State]int{
 			pb.Job_Running: 3,
 		},
 	}
