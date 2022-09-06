@@ -191,7 +191,7 @@ func (d *dummyWorker) Workload() model.RescUnit {
 	return model.RescUnit(10)
 }
 
-func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:

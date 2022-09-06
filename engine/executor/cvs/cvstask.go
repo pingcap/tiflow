@@ -208,7 +208,7 @@ func (task *cvsTask) Workload() model.RescUnit {
 	return 1
 }
 
-func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
