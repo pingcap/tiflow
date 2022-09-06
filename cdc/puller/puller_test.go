@@ -61,8 +61,10 @@ func newMockCDCKVClient(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),

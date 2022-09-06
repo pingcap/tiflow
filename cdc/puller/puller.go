@@ -92,7 +92,7 @@ func New(ctx context.Context,
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
-		ctx, pdCli, grpcPool, regionCache, pdClock, changefeed, cfg)
+		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName)
 	p := &pullerImpl{
 		kvCli:        kvCli,
 		kvStorage:    tikvStorage,

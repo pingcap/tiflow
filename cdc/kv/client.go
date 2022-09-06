@@ -314,7 +314,10 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	pdClock     pdutil.Clock
-	changefeed  model.ChangeFeedID
+
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
+	tableName  string
 
 	regionLimiters *regionEventFeedLimiters
 }
@@ -326,8 +329,10 @@ func NewCDCClient(
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
@@ -338,8 +343,11 @@ func NewCDCClient(
 		grpcPool:       grpcPool,
 		regionCache:    regionCache,
 		pdClock:        pdClock,
-		changefeed:     changefeed,
 		regionLimiters: defaultRegionEventFeedLimiters,
+
+		changefeed: changefeed,
+		tableID:    tableID,
+		tableName:  tableName,
 	}
 	return
 }
@@ -402,7 +410,7 @@ func (c *CDCClient) EventFeed(
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(
-		ctx, c, span, lockResolver, isPullerInit, ts, eventCh)
+		ctx, c, span, lockResolver, isPullerInit, ts, eventCh, c.changefeed, c.tableID, c.tableName)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -452,6 +460,10 @@ type eventFeedSession struct {
 	streams          map[string]*eventFeedStream
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
+
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
+	tableName  string
 }
 
 type rangeRequestTask struct {
@@ -467,11 +479,14 @@ func newEventFeedSession(
 	isPullerInit PullerInitialization,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs,
-		client.changefeed.Namespace+"-"+client.changefeed.ID)
+		changefeed.Namespace+"-"+changefeed.ID)
 	return &eventFeedSession{
 		client:            client,
 		totalSpan:         totalSpan,
@@ -490,6 +505,10 @@ func newEventFeedSession(
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
 		streams:           make(map[string]*eventFeedStream),
 		streamsCanceller:  make(map[string]context.CancelFunc),
+
+		changefeed: changefeed,
+		tableID:    tableID,
+		tableName:  tableName,
 	}
 }
 
@@ -529,7 +548,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
-	tableID, tableName := contextutil.TableIDFromCtx(ctx)
 	g.Go(func() error {
 		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
 		defer timer.Stop()
@@ -560,10 +578,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 					log.Info("EventFeed retry rate limited",
 						zap.String("namespace", s.client.changefeed.Namespace),
 						zap.String("changefeed", s.client.changefeed.ID),
-						zap.Int64("tableID", tableID), zap.String("tableName", tableName),
+						zap.Int64("tableID", s.tableID),
+						zap.String("tableName", s.tableName),
 						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-						zap.Error(errInfo.err), zapFieldAddr)
+						zap.Error(errInfo.err),
+						zapFieldAddr)
 				}
 				// rate limit triggers, add the error info to the rate limit queue.
 				s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
@@ -581,6 +601,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	log.Info("event feed started",
 		zap.String("namespace", s.client.changefeed.Namespace),
 		zap.String("changefeed", s.client.changefeed.ID),
+		zap.Int64("tableID", s.tableID),
+		zap.String("tableName", s.tableName),
 		zap.Uint64("startTs", ts),
 		zap.Stringer("span", s.totalSpan))
 
