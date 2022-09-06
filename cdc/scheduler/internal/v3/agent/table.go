@@ -170,7 +170,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 		case schedulepb.TableStateAbsent:
 			done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, t.task.IsPrepare)
 			if err != nil || !done {
-				log.Info("schedulerv3: agent add table failed",
+				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.id), zap.Any("task", t.task),
@@ -190,7 +190,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 		case schedulepb.TableStatePrepared:
 			if t.task.IsPrepare {
 				// `prepared` is a stable state, if the task was to prepare the table.
-				log.Debug("schedulerv3: table is prepared",
+				log.Info("schedulerv3: table is prepared",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.id), zap.Stringer("state", state))
@@ -201,7 +201,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 			if t.task.status == dispatchTableTaskReceived {
 				done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, false)
 				if err != nil || !done {
-					log.Info("schedulerv3: agent add table failed",
+					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
 						zap.String("changefeed", t.changefeedID.ID),
 						zap.Int64("tableID", t.id), zap.Stringer("state", state),
