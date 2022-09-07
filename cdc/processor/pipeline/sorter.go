@@ -183,7 +183,7 @@ func (n *sorterNode) start(
 		case <-stdCtx.Done():
 			return nil
 		case <-n.preparedCh:
-			log.Info("table is prepared",
+			log.Debug("table is prepared",
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.String("namespace", n.changefeed.Namespace),
@@ -359,7 +359,11 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
 		if n.state.Load() == TableStatePreparing {
-			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
+			log.Debug("sorterNode, first resolved event received",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs))
 			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
