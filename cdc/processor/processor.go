@@ -977,13 +977,6 @@ func (p *processor) createTablePipelineImpl(
 		}
 	}
 
-	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.String("name", table.Name()),
-		zap.Any("replicaInfo", replicaInfo),
-		zap.Uint64("globalResolvedTs", p.changefeed.Status.ResolvedTs))
-
 	return table, nil
 }
 

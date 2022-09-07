@@ -475,7 +475,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
-			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
+			log.Warn("changefeed not found when handle a job", zap.Any("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
 			continue
