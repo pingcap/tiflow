@@ -17,25 +17,31 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// SyncpointStore is an abstraction for anything that a changefeed may emit into.
-type SyncpointStore interface {
-	// CreateSynctable create a table to record the syncpoints
-	CreateSynctable(ctx context.Context) error
+// SyncPointStore is an abstraction for anything that a changefeed may emit into.
+type SyncPointStore interface {
+	// CreateSyncTable create a table to record the syncpoints
+	CreateSyncTable(ctx context.Context) error
 
-	// SinkSyncpoint record the syncpoint(a map with ts) in downstream db
-	SinkSyncpoint(ctx context.Context, id model.ChangeFeedID, checkpointTs uint64) error
+	// SinkSyncPoint record the syncpoint(a map with ts) in downstream db
+	SinkSyncPoint(ctx context.Context, id model.ChangeFeedID, checkpointTs uint64) error
 
-	// Close closes the SyncpointSink
+	// Close closes the SyncPointSink
 	Close() error
 }
 
-// NewSyncpointStore creates a new Syncpoint sink with the sink-uri
-func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string) (SyncpointStore, error) {
+// NewSyncPointStore creates a new SyncPoint sink with the sink-uri
+func NewSyncPointStore(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURIStr string,
+	syncPointRetention time.Duration,
+) (SyncPointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -43,8 +49,9 @@ func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sin
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSyncpointStore(ctx, changefeedID, sinkURI)
+		return newMySQLSyncPointStore(ctx, changefeedID, sinkURI, syncPointRetention)
 	default:
-		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
+		return nil, cerror.ErrSinkURIInvalid.
+			GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
 }
