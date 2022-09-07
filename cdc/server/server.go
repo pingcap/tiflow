@@ -387,17 +387,19 @@ func (s *server) Close() {
 }
 
 func (s *server) stopActorSystems() {
+	start := time.Now()
 	if s.tableActorSystem != nil {
 		s.tableActorSystem.Stop()
 		s.tableActorSystem = nil
 	}
-	log.Info("table actor system closed")
+	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
 
+	start = time.Now()
 	if s.sorterSystem != nil {
 		s.sorterSystem.Stop()
 		s.sorterSystem = nil
 	}
-	log.Info("sorter actor system closed")
+	log.Info("sorter actor system closed", zap.Duration("duration", time.Since(start)))
 }
 
 func (s *server) initDir(ctx context.Context) error {
