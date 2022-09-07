@@ -890,7 +890,7 @@ func (st *SubTask) getValidatorStage() pb.Stage {
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {
 	if stage == pb.Stage_Stopped || stage == pb.Stage_Finished {
-		taskState.DeleteAllAboutLabels(prometheus.Labels{"task": task, "source_id": sourceID})
+		taskState.DeletePartialMatch(prometheus.Labels{"task": task, "source_id": sourceID})
 	} else {
 		taskState.WithLabelValues(task, sourceID, workerName).Set(float64(stage))
 	}
