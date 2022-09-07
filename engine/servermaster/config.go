@@ -47,12 +47,14 @@ const (
 	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
 	defaultBusinessMetaUser      = "root"
 	defaultBusinessMetaPassword  = ""
+	defaultBusinessMetaSchema    = "test"
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = ""
+	defaultFrameMetaSchema    = "test"
 
 	defaultFrameworkStoreType = metaModel.StoreTypeMySQL
 	defaultBusinessStoreType  = metaModel.StoreTypeMySQL
@@ -108,6 +110,15 @@ func (c *Config) AdjustAndValidate() (err error) {
 	// adjust the metastore type
 	c.FrameMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
 	c.BusinessMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+
+	if c.FrameMetaConf.Schema == defaultFrameMetaSchema {
+		log.Warn("use default test schema for framework metastore, " +
+			"better to use predefined schema in production environment")
+	}
+	if c.BusinessMetaConf.Schema == defaultBusinessMetaSchema {
+		log.Warn("use default test schema for business metastore, " +
+			"better to use predefined schema in production environment")
+	}
 
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
@@ -189,6 +200,7 @@ func checkUndecodedItems(metaData toml.MetaData) error {
 // newFrameMetaConfig return the default framework metastore config
 func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
+	conf.Schema = defaultFrameMetaSchema
 	conf.StoreID = FrameMetaID
 	conf.StoreType = defaultFrameworkStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
@@ -201,6 +213,7 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 // NewDefaultBusinessMetaConfig return the default business metastore config
 func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
+	conf.Schema = defaultBusinessMetaSchema
 	conf.StoreID = DefaultBusinessMetaID
 	conf.StoreType = defaultBusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)

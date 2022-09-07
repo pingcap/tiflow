@@ -32,6 +32,7 @@ import (
 )
 
 var (
+	defaultJoinAddr          = "127.0.0.1:10240"
 	defaultSessionTTL        = 20
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
@@ -119,10 +120,6 @@ func getDefaultLocalStorageDir(executorName string) string {
 
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
-	if c.Join == "" {
-		return errors.ErrInvalidCliParameter.GenWithStack("join must be provided")
-	}
-
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
 	}
@@ -165,7 +162,7 @@ func GetDefaultExecutorConfig() *Config {
 			File:  "",
 		},
 		Name:                 "",
-		Join:                 "",
+		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,
