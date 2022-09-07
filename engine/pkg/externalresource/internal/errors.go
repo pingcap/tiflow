@@ -69,8 +69,7 @@ var ErrInvalidArgument = rpcerror.Normalize[InvalidArgumentError]()
 type ResourceFilesNotFoundError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
 
-	ResourceID resModel.ResourceID
-	Details    string
+	Ident ResourceIdent
 }
 
 // ErrResourceFilesNotFound indicates that the required resource is not found

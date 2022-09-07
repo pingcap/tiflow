@@ -68,10 +68,14 @@ func (m *FileManager) GetPersistedResource(
 	if err != nil {
 		return nil, errors.Annotate(err, "check placeholder file")
 	}
-
 	if !ok {
-		
+		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
+			&internal.ResourceFilesNotFoundError{
+				Ident: ident,
+			})
 	}
+
+	return desc, nil
 }
 
 func (m *FileManager) RemoveTemporaryFiles(
