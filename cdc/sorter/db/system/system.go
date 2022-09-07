@@ -184,16 +184,16 @@ func (s *System) Start(ctx context.Context) error {
 }
 
 // Stop stops a system.
-func (s *System) Stop() error {
+func (s *System) Stop() {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	switch s.state {
 	case sysStateStopped:
 		// Already stopped.
-		return nil
+		return
 	case sysStateInit:
 		// Not started.
-		return nil
+		return
 	}
 	s.state = sysStateStopped
 
@@ -215,7 +215,6 @@ func (s *System) Stop() error {
 	}
 	// Wait actors and metrics goroutine.
 	s.closedWg.Wait()
-	return nil
 }
 
 func collectMetrics(dbs []db.DB) {
