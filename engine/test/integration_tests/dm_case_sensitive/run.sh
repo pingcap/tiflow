@@ -31,7 +31,7 @@ function run() {
 	echo "job_id: $job_id"
 
 	# wait for job finished
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.status == \"Finished\"'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
 

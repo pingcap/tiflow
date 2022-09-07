@@ -552,6 +552,7 @@ func (s *Server) selfRegister(ctx context.Context) error {
 			Name:       s.cfg.Name,
 			Address:    s.cfg.AdvertiseAddr,
 			Capability: defaultCapability,
+			Labels:     s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
