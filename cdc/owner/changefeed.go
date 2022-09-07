@@ -763,7 +763,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 ) (bool, error) {
 	if job.BinlogInfo == nil {
 		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id.ID),
-			zap.Reflect("job", job))
+			zap.Any("job", job))
 		return true, nil
 	}
 
@@ -772,7 +772,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
-				zap.Reflect("job", job), zap.Error(err))
+				zap.Any("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 		c.ddlEventCache = ddlEvents
@@ -830,7 +830,7 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
-			zap.String("changefeed", c.id.ID), zap.Reflect("event", ddlEvent))
+			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
 	}
 	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)

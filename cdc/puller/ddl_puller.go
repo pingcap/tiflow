@@ -476,7 +476,8 @@ func NewDDLJobPuller(
 			checkpointTs,
 			regionspan.GetAllDDLSpan(),
 			cfg,
-			changefeed),
+			changefeed,
+			-1, DDLPullerTableName),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 		metricDiscardedDDLCounter: discardedDDLCounter.
@@ -597,10 +598,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 
-	ctx = contextutil.PutTableInfoInCtx(ctx, -1, DDLPullerTableName)
-	ctx = contextutil.PutChangefeedIDInCtx(ctx, h.changefeedID)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-
 	g.Go(func() error {
 		return h.ddlJobPuller.Run(ctx)
 	})
@@ -664,7 +662,7 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 
 // Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
-	log.Info("Close the ddl puller",
+	log.Info("close the ddl puller",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
 	h.cancel()
