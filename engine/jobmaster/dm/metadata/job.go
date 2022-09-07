@@ -46,15 +46,15 @@ const (
 	StageUnscheduled
 )
 
-var typesStringify = []string{
-	"",
-	"Initing",
-	"Running",
-	"Paused",
-	"Finished",
-	"Error",
-	"Pausing",
-	"Unscheduled",
+var typesStringify = [...]string{
+	0:                "",
+	StageInit:        "Initing",
+	StageRunning:     "Running",
+	StagePaused:      "Paused",
+	StageFinished:    "Finished",
+	StageError:       "Error",
+	StagePausing:     "Pausing",
+	StageUnscheduled: "Unscheduled",
 }
 
 var toTaskStage map[string]TaskStage

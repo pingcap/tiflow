@@ -68,11 +68,11 @@ const (
 )
 
 var typesStringify = []string{
-	"",
-	"Creating",
-	"Online",
-	"Finished",
-	"Offline",
+	0:              "",
+	WorkerCreating: "Creating",
+	WorkerOnline:   "Online",
+	WorkerFinished: "Finished",
+	WorkerOffline:  "Offline",
 }
 
 var toWorkerStage map[string]WorkerStage

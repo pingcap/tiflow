@@ -57,20 +57,20 @@ const (
 	// extend the worker type here
 )
 
-var typesStringify = []string{
-	"",
-	"JobManager",
-	"CVSJobMaster",
-	"FakeJobMaster",
-	"DMJobMaster",
-	"CDCJobMaster",
-	"CVSTask",
-	"FakeTask",
-	"DMTask",
-	"CDCTask",
-	"DMDumpTask",
-	"DMLoadTask",
-	"DMSyncTask",
+var typesStringify = [...]string{
+	0:             "",
+	JobManager:    "JobManager",
+	CvsJobMaster:  "CVSJobMaster",
+	FakeJobMaster: "FakeJobMaster",
+	DMJobMaster:   "DMJobMaster",
+	CdcJobMaster:  "CDCJobMaster",
+	CvsTask:       "CVSTask",
+	FakeTask:      "FakeTask",
+	DmTask:        "DMTask",
+	CdcTask:       "CDCTask",
+	WorkerDMDump:  "DMDumpTask",
+	WorkerDMLoad:  "DMLoadTask",
+	WorkerDMSync:  "DMSyncTask",
 }
 
 var toWorkerType map[string]WorkerType

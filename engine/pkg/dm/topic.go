@@ -54,7 +54,7 @@ const (
 	Deleting
 )
 
-var typesStringify = []string{
+var typesStringify = [...]string{
 	0:        "",
 	Create:   "Create",
 	Pause:    "Pause",
