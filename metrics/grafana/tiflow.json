@@ -1,4 +1,35 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS_TIFLOW",
+      "label": "Prometheus_tiflow",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.1.2"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -25,12 +56,12 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 6,
+  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -38,194 +69,196 @@
         "y": 0
       },
       "id": 12,
-      "panels": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "zx0TiSM4k"
-          },
-          "description": "job num of  different state",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 1
-          },
-          "id": 14,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "zx0TiSM4k"
-              },
-              "editorMode": "code",
-              "expr": "max(dataflow_dataflow_server_master_job_num{}) by (status)",
-              "legendFormat": "{{status}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Job Num",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "zx0TiSM4k"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 1
-          },
-          "id": 16,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "zx0TiSM4k"
-              },
-              "editorMode": "code",
-              "expr": "max(dataflow_dataflow_server_master_executor_num{}) by (status)",
-              "interval": "1",
-              "legendFormat": "{{status}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Executor Num",
-          "type": "timeseries"
-        }
-      ],
+      "panels": [],
       "title": "General",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
+      },
+      "description": "num of different job state",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
+          },
+          "editorMode": "code",
+          "expr": "max(dataflow_dataflow_server_master_job_num{}) by (status)",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Num of Job State",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
+      },
+      "description": "num of different executor state",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
+          },
+          "editorMode": "code",
+          "expr": "max(dataflow_dataflow_server_master_executor_num{}) by (status)",
+          "interval": "1",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Num of Executor State",
+      "type": "timeseries"
     },
     {
       "collapsed": true,
@@ -233,14 +266,14 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 9
       },
       "id": 4,
       "panels": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "zx0TiSM4k"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "description": "Tiflow process rss memory usage. Tiflow heap memory size in use.",
           "fieldConfig": {
@@ -317,7 +350,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "process_resident_memory_bytes{}",
@@ -328,7 +361,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_memstats_heap_idle_bytes{} - go_memstats_heap_released_bytes{} + go_memstats_heap_inuse_bytes{} - go_memstats_heap_alloc_bytes{}",
@@ -340,7 +373,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_memstats_stack_sys_bytes{} + go_memstats_mspan_sys_bytes{} + go_memstats_mcache_sys_bytes{} + go_memstats_buck_hash_sys_bytes{} + go_memstats_gc_sys_bytes{} + go_memstats_other_sys_bytes{}",
@@ -352,7 +385,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_memstats_next_gc_bytes{}",
@@ -364,7 +397,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "(clamp_max(idelta(go_memstats_last_gc_time_seconds{}[1m]), 1) * go_memstats_next_gc_bytes{}) > 0",
@@ -380,7 +413,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "zx0TiSM4k"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "description": "Count of live objects.",
           "fieldConfig": {
@@ -457,7 +490,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_memstats_heap_objects{}",
@@ -472,7 +505,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "zx0TiSM4k"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "description": "The throughput of Go's memory allocator.",
           "fieldConfig": {
@@ -549,7 +582,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "irate(go_memstats_alloc_bytes_total{}[30s])",
@@ -560,7 +593,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "irate((go_memstats_alloc_bytes_total{} - go_memstats_heap_alloc_bytes{})[30s:])",
@@ -572,7 +605,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "irate(go_memstats_mallocs_total{}[30s])",
@@ -584,7 +617,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "irate(go_memstats_frees_total{}[30s])",
@@ -600,7 +633,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "zx0TiSM4k"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "description": "TiCDC process Go garbage collection STW pause duration",
           "fieldConfig": {
@@ -677,7 +710,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_gc_duration_seconds{quantile=\"0\"}",
@@ -688,7 +721,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_gc_duration_seconds{quantile!~\"0|1\"}",
@@ -700,7 +733,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "zx0TiSM4k"
+                "uid": "${DS_PROMETHEUS_TIFLOW}"
               },
               "editorMode": "code",
               "expr": "go_gc_duration_seconds{quantile=\"1\"}",
@@ -724,15 +757,10 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "isNone": true,
-          "selected": false,
-          "text": "None",
-          "value": ""
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "zx0TiSM4k"
+          "uid": "${DS_PROMETHEUS_TIFLOW}"
         },
         "definition": "label_values(go_goroutines, k8s_cluster)",
         "hide": 0,
@@ -761,6 +789,6 @@
   "timezone": "",
   "title": "Cluster-Tiflow",
   "uid": "tFhyuFG4z",
-  "version": 11,
+  "version": 12,
   "weekStart": ""
 }
