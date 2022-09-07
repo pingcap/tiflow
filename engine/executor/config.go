@@ -58,8 +58,6 @@ type Config struct {
 
 	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
 
-	ConfigFile string `toml:"config-file" json:"config-file"`
-
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`

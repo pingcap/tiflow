@@ -167,6 +167,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 
 	id := "server-master-" + uuid.New().String()
 	info := &model.NodeInfo{
+		Name: cfg.Name,
 		ID:   model.DeployNodeID(id),
 		Addr: cfg.AdvertiseAddr,
 	}

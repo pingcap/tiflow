@@ -16,6 +16,7 @@ package servermaster
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ const (
 	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
+	defaultEtcdEndpoint      = "127.0.0.1:2379"
 
 	// DefaultBusinessMetaID is the ID for default business metastore
 	DefaultBusinessMetaID        = "_default"
@@ -60,13 +62,14 @@ const (
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
+	Name          string `toml:"name" json:"name"`
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
 
-	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-metastore-conf" json:"framework-metastore-conf"`
-	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
+	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-meta" json:"framework-meta"`
+	BusinessMetaConf *metaModel.StoreConfig `toml:"business-meta" json:"business-meta"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -103,11 +106,15 @@ func (c *Config) Toml() (string, error) {
 // AdjustAndValidate validates and adjusts the master configuration
 func (c *Config) AdjustAndValidate() (err error) {
 	// adjust the metastore type
-	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
-	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+	c.FrameMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
+	c.BusinessMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
 
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
+	}
+
+	if c.Name == "" {
+		c.Name = fmt.Sprintf("master-%s", c.AdvertiseAddr)
 	}
 
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
@@ -155,8 +162,10 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
+		Name:                 "",
 		Addr:                 defaultMasterAddr,
 		AdvertiseAddr:        "",
+		ETCDEndpoints:        []string{defaultEtcdEndpoint},
 		FrameMetaConf:        newFrameMetaConfig(),
 		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
@@ -183,8 +192,8 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf.StoreID = FrameMetaID
 	conf.StoreType = defaultFrameworkStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
-	conf.Auth.User = defaultFrameMetaUser
-	conf.Auth.Passwd = defaultFrameMetaPassword
+	conf.User = defaultFrameMetaUser
+	conf.Password = defaultFrameMetaPassword
 
 	return conf
 }
@@ -195,8 +204,8 @@ func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf.StoreID = DefaultBusinessMetaID
 	conf.StoreType = defaultBusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
-	conf.Auth.User = defaultBusinessMetaUser
-	conf.Auth.Passwd = defaultBusinessMetaPassword
+	conf.User = defaultBusinessMetaUser
+	conf.Password = defaultBusinessMetaPassword
 
 	return conf
 }

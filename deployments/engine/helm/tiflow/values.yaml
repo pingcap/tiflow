@@ -15,14 +15,14 @@ master:
   dataStorage: 2Gi
   logStorage: 1Gi
   config: |
-    [framework-metastore-conf]
-    auth.user = "root"
-    auth.passwd = ""
+    [framework-meta]
+    user = "root"
+    password = ""
     schema = "test_framework"
 
-    [business-metastore-conf]
-    auth.user = "root"
-    auth.passwd = ""
+    [business-meta]
+    user = "root"
+    password = ""
     schema = "test_business"
   resources: 
     requests:
