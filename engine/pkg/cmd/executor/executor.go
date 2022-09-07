@@ -70,6 +70,8 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+
+	cmd.Flags().StringToStringVar(&o.executorConfig.Labels, "labels", map[string]string{}, "labels to the executor in key-value pairs")
 }
 
 // run runs the server cmd.
@@ -136,6 +138,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.Security.KeyPath = o.executorConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			cfg.Security.CertAllowedCN = o.executorConfig.Security.CertAllowedCN
+		case "labels":
+			cfg.Labels = o.executorConfig.Labels
 		case "config":
 			// do nothing
 		default:
