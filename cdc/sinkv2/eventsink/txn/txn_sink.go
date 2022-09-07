@@ -40,6 +40,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 // sink is the sink for SingleTableTxn.
 type sink struct {
 	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
+	statistics       *metrics.Statistics
 	workers          []*worker
 	cancel           func()
 
@@ -51,7 +52,7 @@ type sink struct {
 func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots int64) *sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, errCh)
+		w := newWorker(ctx, i, backend, errCh, len(backends))
 		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}
@@ -82,6 +83,7 @@ func NewMySQLSink(
 		backends = append(backends, impl)
 	}
 	sink := newSink(ctx, backends, errCh, conflictDetectorSlots)
+	sink.statistics = statistics
 	sink.cancel = cancel
 
 	return sink, nil
@@ -111,6 +113,9 @@ func (s *sink) Close() error {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
+	}
+	if s.statistics != nil {
+		s.statistics.Close()
 	}
 	return nil
 }
