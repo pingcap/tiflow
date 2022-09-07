@@ -14,7 +14,7 @@ function run() {
 	# add a delay in case that the cluster is not ready
 	sleep 3
 
-	create_job_json=$(base64 -i $CUR_DIR/conf/fake_job.json | tr -d \\n | jq -Rs '{ type: "FakeJob", selectors: [{ label: "name", target: "exec-1", op: "SelectorEq" }], config: . }')
+	create_job_json=$(base64 -i $CUR_DIR/conf/fake_job.json | tr -d \\n | jq -Rs '{ type: "FakeJob", selectors: [{ label: "name", target: "exec-1", op: "Eq" }], config: . }')
 	echo "create_job_json: $create_job_json"
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=e2e_selectors&project_id=e2e_selectors" | tee /dev/stderr | jq -r .id)
 	echo "job_id: $job_id"
