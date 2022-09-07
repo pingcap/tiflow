@@ -91,11 +91,11 @@ func newCoordinator(
 		version:   version.ReleaseSemver(),
 		revision:  revision,
 		captureID: captureID,
-		replicationM: replication.NewReplicationManager(
+		replicationM: replication.NewManager(
 			cfg.MaxTaskConcurrency, changefeedID),
 		captureM: member.NewCaptureManager(
 			captureID, changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
+		schedulerM:   scheduler.NewManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
 }

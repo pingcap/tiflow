@@ -99,8 +99,8 @@ type Manager struct { //nolint:revive
 	acceptBurstBalanceTask int
 }
 
-// NewReplicationManager returns a new replication manager.
-func NewReplicationManager(
+// NewManager returns a new replication manager.
+func NewManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
 	return &Manager{

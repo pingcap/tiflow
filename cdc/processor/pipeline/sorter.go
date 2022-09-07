@@ -184,10 +184,10 @@ func (n *sorterNode) start(
 			return nil
 		case <-n.preparedCh:
 			log.Info("table is prepared",
-				zap.Int64("tableID", n.tableID),
-				zap.String("tableName", n.tableName),
 				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID))
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName))
 		}
 
 		// The latest ts from PD when the table becomes replicating.
@@ -215,12 +215,13 @@ func (n *sorterNode) start(
 				return errors.Trace(err)
 			}
 			log.Info("table is replicating",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.Uint64("replicateTs", replicateTs),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID))
+				zap.Uint64("startTs", startTs),
+				zap.Duration("duration", time.Since(start)))
 		}
 
 		n.state.Store(TableStateReplicating)
@@ -255,7 +256,12 @@ func (n *sorterNode) start(
 					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
-						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
+						log.Error("Got an error from mounter, sorter stop",
+							zap.String("namespace", n.changefeed.Namespace),
+							zap.String("changefeed", n.changefeed.ID),
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName),
+							zap.Error(err))
 						ctx.Throw(err)
 						return errors.Trace(err)
 					}

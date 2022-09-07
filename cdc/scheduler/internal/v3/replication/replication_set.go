@@ -601,7 +601,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("original", original),
-				zap.String("captureID", captureID))
+				zap.String("current", secondary))
 			return &schedulepb.Message{
 				To:      r.Primary,
 				MsgType: schedulepb.MsgDispatchTableRequest,

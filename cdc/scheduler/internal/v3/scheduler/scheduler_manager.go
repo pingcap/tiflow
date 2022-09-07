@@ -34,8 +34,8 @@ type Manager struct { //nolint:revive
 	maxTaskConcurrency int
 }
 
-// NewSchedulerManager returns a new scheduler manager.
-func NewSchedulerManager(
+// NewManager returns a new scheduler manager.
+func NewManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
 ) *Manager {
 	sm := &Manager{
