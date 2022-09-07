@@ -19,7 +19,7 @@ function run() {
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=e2e_selectors&project_id=e2e_selectors" | tee /dev/stderr | jq -r .id)
 	echo "job_id: $job_id"
 
-	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.status == \"Finished\"'"
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
