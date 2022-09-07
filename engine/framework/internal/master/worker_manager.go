@@ -508,7 +508,9 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			case frameModel.WorkerStateFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
 			case frameModel.WorkerStateStopped:
-				offlineError = derror.ErrWorkerStop.FastGenByArgs()
+				offlineError = derror.ErrWorkerCancel.FastGenByArgs()
+			case frameModel.WorkerStateError:
+				offlineError = derror.ErrWorkerFailed.FastGenByArgs()
 			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
 			}

@@ -99,7 +99,7 @@ func TestDMJob(t *testing.T) {
 		"http://127.0.0.1:11242/metrics",
 		"http://127.0.0.1:11243/metrics",
 	}
-	re := regexp.MustCompile(`job_id="(.{36})"`)
+	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
 	for _, metricsURL := range metricsURLs {
 		resp, err := http.Get(metricsURL)
 		require.NoError(t, err)
@@ -177,7 +177,7 @@ func testSimpleAllModeTask(
 	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
 		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
-		return err == nil && job.Status == pb.Job_Finished
+		return err == nil && job.State == pb.Job_Finished
 	}, time.Second*30, time.Millisecond*100)
 
 	source1 := "mysql-replica-01"

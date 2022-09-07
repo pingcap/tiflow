@@ -37,12 +37,11 @@ func NewSystem() *System {
 }
 
 // Start starts a system.
-func (s *System) Start(ctx context.Context) error {
+func (s *System) Start(ctx context.Context) {
 	// todo: make the table actor system configurable
 	sys, router := actor.NewSystemBuilder[pmessage.Message]("table").Build()
 	s.tableActorSystem, s.tableActorRouter = sys, router
 	s.tableActorSystem.Start(ctx)
-	return nil
 }
 
 // Stop stops a system.

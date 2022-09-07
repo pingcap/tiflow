@@ -155,14 +155,19 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return nil
 	}
 
+	extMsg, err := d.status.Marshal()
+	if err != nil {
+		return err
+	}
+
 	if d.getState() == frameModel.WorkerStateStopped {
 		d.setState(frameModel.WorkerStateStopped)
-		return d.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("worker has been canceled"))
+		return d.Exit(ctx, framework.ExitReasonCanceled, nil, extMsg)
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
 		d.setState(frameModel.WorkerStateFinished)
-		return d.Exit(ctx, framework.ExitReasonFinished, nil, []byte("worker has reached target tick"))
+		return d.Exit(ctx, framework.ExitReasonFinished, nil, extMsg)
 	}
 
 	if d.config.InjectErrorInterval != 0 {
@@ -191,7 +196,7 @@ func (d *dummyWorker) Workload() model.RescUnit {
 	return model.RescUnit(10)
 }
 
-func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
