@@ -20,6 +20,9 @@ import (
 	"sort"
 	"time"
 
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -228,8 +231,13 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		return nil, err
 	}
 
+	selectors, err := convertSelectors(req)
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
-	log.Info("create job", zap.String("config", string(req.Job.Config)),
+	log.Info("create job", zap.Any("job", req.Job),
 		zap.String("tenant_id", req.TenantId), zap.String("project_id", req.ProjectId))
 
 	job := req.Job
@@ -245,6 +253,9 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		ID:     job.Id,
 		Config: job.Config,
 		State:  frameModel.MasterStateUninit,
+		Ext: frameModel.MasterMetaExt{
+			Selectors: selectors,
+		},
 	}
 	switch job.Type {
 	case pb.Job_CVSDemo:
@@ -285,8 +296,10 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
-	workerID, err := jm.BaseMaster.CreateWorker(
-		meta.Type, meta, defaultJobMasterCost)
+	workerID, err := jm.BaseMaster.CreateWorkerV2(
+		meta.Type, meta,
+		framework.CreateWorkerWithCost(defaultJobMasterCost),
+		framework.CreateWorkerWithSelectors(selectors...))
 	if err != nil {
 		err2 := metadata.DeleteMasterMeta(ctx, jm.frameMetaClient, meta.ID)
 		if err2 != nil {
@@ -317,6 +330,25 @@ func validateCreateJobRequest(req *pb.CreateJobRequest) error {
 		return status.Error(codes.InvalidArgument, "job type must be specified")
 	}
 	return nil
+}
+
+func convertSelectors(req *pb.CreateJobRequest) ([]*label.Selector, error) {
+	if len(req.GetJob().Selectors) == 0 {
+		return nil, nil
+	}
+
+	ret := make([]*label.Selector, 0, len(req.GetJob().Selectors))
+	for _, pbSel := range req.Job.Selectors {
+		sel, err := schedModel.SelectorFromPB(pbSel)
+		if err != nil {
+			return nil, err
+		}
+		if err := sel.Validate(); err != nil {
+			return nil, err
+		}
+		ret = append(ret, sel)
+	}
+	return ret, nil
 }
 
 // ListJobs implements JobManagerServer.ListJobs.
@@ -413,6 +445,14 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
 	}
 
+	var selectors []*pb.Selector
+	for _, sel := range masterMeta.Ext.Selectors {
+		pbSel, err := schedModel.SelectorToPB(sel)
+		if err != nil {
+			return nil, errors.Annotate(err, "buildPBJob")
+		}
+		selectors = append(selectors, pbSel)
+	}
 	return &pb.Job{
 		Id:     masterMeta.ID,
 		Type:   jobType,
@@ -422,6 +462,7 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		Error: &pb.Error{
 			Message: masterMeta.ErrorMsg,
 		},
+		Selectors: selectors,
 	}, nil
 }
 

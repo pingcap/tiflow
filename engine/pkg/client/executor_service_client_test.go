@@ -65,8 +65,6 @@ func TestDispatchTaskNormal(t *testing.T) {
 	err := serviceCli.DispatchTask(context.Background(), args, func() {
 		require.True(t, preDispatchComplete.Load())
 		require.False(t, cbCalled.Swap(true))
-	}, func(error) {
-		require.Fail(t, "not expected")
 	})
 	require.NoError(t, err)
 }
@@ -85,20 +83,15 @@ func TestPreDispatchAborted(t *testing.T) {
 		WorkerConfig: []byte("testtest"),
 	}
 
-	var abortCalled atomic.Bool
-
 	unknownRPCError := status.Error(codes.Unknown, "fake error")
 	client.EXPECT().PreDispatchTask(gomock.Any(), matchPreDispatchArgs(args)).
 		Return((*enginepb.PreDispatchTaskResponse)(nil), unknownRPCError).Times(1)
 
 	err := serviceCli.DispatchTask(context.Background(), args, func() {
 		t.Fatalf("unexpected callback")
-	}, func(err error) {
-		abortCalled.Swap(true)
 	})
 	require.Error(t, err)
 	require.Regexp(t, "fake error", err)
-	require.True(t, abortCalled.Load())
 }
 
 func TestConfirmDispatchErrorFailFast(t *testing.T) {
@@ -146,7 +139,6 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 			requestID           string
 			preDispatchComplete atomic.Bool
 			timerStarted        atomic.Bool
-			aborted             atomic.Bool
 		)
 
 		args := &DispatchTaskArgs{
@@ -172,16 +164,12 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 		err := serviceCli.DispatchTask(context.Background(), args, func() {
 			require.True(t, preDispatchComplete.Load())
 			require.False(t, timerStarted.Swap(true))
-		}, func(error) {
-			require.False(t, aborted.Swap(true))
 		})
 
 		if tc.isFailFast {
 			require.Error(t, err)
-			require.True(t, aborted.Load())
 		} else {
 			require.NoError(t, err)
-			require.False(t, aborted.Load())
 		}
 	}
 }
