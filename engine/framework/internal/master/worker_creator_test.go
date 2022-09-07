@@ -161,7 +161,7 @@ func TestCreateWorkerNormal(t *testing.T) {
 			WorkerType:   int64(1),
 			WorkerConfig: []byte("sample-config"),
 			WorkerEpoch:  int64(1),
-		}, gomock.Any(), gomock.Any()).
+		}, gomock.Any()).
 		Return(nil).
 		Times(1)
 
