@@ -12,9 +12,9 @@ TABLE_NUM=500
 
 function run() {
 	start_engine_cluster $CONFIG
-	wait_mysql_online.sh --port 3306 --try-nums 100
-	wait_mysql_online.sh --port 3307 --try-nums 100
-	wait_mysql_online.sh --port 4000 --try-nums 100
+	wait_mysql_online.sh --port 3306
+	wait_mysql_online.sh --port 3307
+	wait_mysql_online.sh --port 4000
 
 	# change default charset and collation for MySQL 8.0
 	run_sql --port 3307 "set global character_set_server='utf8mb4';set global collation_server='utf8mb4_bin';"
