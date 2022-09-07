@@ -160,7 +160,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": true,
 			"status": {
 				"error_message": "worker for task task1 not found",
-				"unit": 0,
+				"unit": "",
 				"stage": "",
 				"result": null,
 				"status": null
@@ -172,7 +172,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": true,
 			"status": {
 				"error_message": "task task2 is finished and status has been deleted",
-				"unit": 11,
+				"unit": "DMLoadTask",
 				"stage": "Finished",
 				"result": null,
 				"status": null
@@ -184,7 +184,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": false,
 			"status": {
 				"error_message": "context deadline exceeded",
-				"unit": 0,
+				"unit": "",
 				"stage": "",
 				"result": null,
 				"status": null
@@ -196,7 +196,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
-				"unit": 11,
+				"unit": "DMLoadTask",
 				"stage": "Paused",
 				"result": {
 					"is_canceled": true
@@ -216,7 +216,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
-				"unit": 12,
+				"unit": "DMSyncTask",
 				"stage": "Error",
 				"result": {
 					"errors": [
@@ -253,7 +253,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
-				"unit": 10,
+				"unit": "DMDumpTask",
 				"stage": "Running",
 				"result": null,
 				"status": {
@@ -271,7 +271,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
-				"unit": 11,
+				"unit": "DMLoadTask",
 				"stage": "Finished",
 				"result": {},
 				"status": {
@@ -286,7 +286,6 @@ func TestQueryStatusAPI(t *testing.T) {
 	}
 }`
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
-	fmt.Println(string(status))
 	require.NoError(t, err)
 	require.Equal(t, sortString(expectedStatus), sortString(string(status)))
 }
