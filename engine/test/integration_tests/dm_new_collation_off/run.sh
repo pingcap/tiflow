@@ -11,8 +11,8 @@ echo "using adjusted configs to deploy cluster: $CONFIG"
 
 function run() {
 	start_engine_cluster $CONFIG
-	wait_mysql_online.sh --port 3307
-	wait_mysql_online.sh --port 4000
+	wait_mysql_online.sh --port 3307 --try-nums 100
+	wait_mysql_online.sh --port 4000 --try-nums 100
 
 	# prepare data
 

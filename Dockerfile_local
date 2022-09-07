@@ -1,0 +1,13 @@
+FROM golang:1.18-alpine as builder
+
+RUN apk add --no-cache gcompat bind-tools 
+
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64 && \
+    chmod +x /usr/local/bin/dumb-init
+
+COPY ./bin/tiflow /tiflow
+COPY ./bin/tiflow-demoserver /tiflow-demoserver
+COPY ./engine/deployments/docker-compose/config/master.toml  /master.toml
+COPY ./engine/deployments/docker-compose/config/executor.toml  /executor.toml
+
+ENTRYPOINT ["/usr/local/bin/dumb-init"]
