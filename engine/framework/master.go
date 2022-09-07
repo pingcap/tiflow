@@ -570,7 +570,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType frameModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
-	case CvsJobMaster, FakeJobMaster, DMJobMaster:
+	case frameModel.CvsJobMaster, frameModel.FakeJobMaster, frameModel.DMJobMaster:
 		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
@@ -578,7 +578,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 		}
 		rawConfig = masterMeta.Config
 		workerID = masterMeta.ID
-	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+	case frameModel.WorkerDMDump, frameModel.WorkerDMLoad, frameModel.WorkerDMSync:
 		var b bytes.Buffer
 		err = toml.NewEncoder(&b).Encode(config)
 		if err != nil {

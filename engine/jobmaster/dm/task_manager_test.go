@@ -25,7 +25,7 @@ import (
 	"go.uber.org/atomic"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
@@ -50,12 +50,12 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	dumpStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  frameModel.WorkerDMDump,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
 	dumpStatus2 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  frameModel.WorkerDMDump,
 		Task:  jobCfg.Upstreams[1].SourceID,
 		Stage: metadata.StageRunning,
 	}
@@ -70,12 +70,12 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	loadStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMLoad,
+		Unit:  frameModel.WorkerDMLoad,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
 	loadStatus2 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMLoad,
+		Unit:  frameModel.WorkerDMLoad,
 		Task:  jobCfg.Upstreams[1].SourceID,
 		Stage: metadata.StageFinished,
 	}
@@ -190,12 +190,12 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager := NewTaskManager(nil, nil, nil, log.L())
 	syncStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMSync,
+		Unit:  frameModel.WorkerDMSync,
 		Task:  "source1",
 		Stage: metadata.StageRunning,
 	}
 	syncStatus2 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMSync,
+		Unit:  frameModel.WorkerDMSync,
 		Task:  "source2",
 		Stage: metadata.StageRunning,
 	}
@@ -247,12 +247,12 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
 	dumpStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  frameModel.WorkerDMDump,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
 	dumpStatus2 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  frameModel.WorkerDMDump,
 		Task:  jobCfg.Upstreams[1].SourceID,
 		Stage: metadata.StageRunning,
 	}
@@ -300,12 +300,12 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	}()
 
 	syncStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMSync,
+		Unit:  frameModel.WorkerDMSync,
 		Task:  source1,
 		Stage: metadata.StageRunning,
 	}
 	syncStatus2 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMSync,
+		Unit:  frameModel.WorkerDMSync,
 		Task:  source2,
 		Stage: metadata.StageRunning,
 	}

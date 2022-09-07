@@ -72,7 +72,7 @@ type dmJobMasterFactory struct{}
 
 // RegisterWorker is used to register dm job master to global registry
 func RegisterWorker() {
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.DMJobMaster, dmJobMasterFactory{})
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.DMJobMaster, dmJobMasterFactory{})
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig

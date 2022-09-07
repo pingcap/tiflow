@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
@@ -101,9 +102,9 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 
 	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
 	switch u.tp {
-	case framework.WorkerDMDump:
+	case frameModel.WorkerDMDump:
 		u.unit = dumpling.NewDumpling(u.cfg)
-	case framework.WorkerDMLoad:
+	case frameModel.WorkerDMLoad:
 		sqlMode, err2 := utils.GetGlobalVariable(ctx, u.upstreamDB.DB, "sql_mode")
 		if err2 != nil {
 			u.logger.Error("get global sql_mode from upstream failed",
@@ -115,7 +116,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 		}
 		u.cfg.LoaderConfig.SQLMode = sqlMode
 		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
-	case framework.WorkerDMSync:
+	case frameModel.WorkerDMSync:
 		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
 	}
 

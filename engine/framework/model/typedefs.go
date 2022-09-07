@@ -27,3 +27,26 @@ type (
 	// Epoch is an increasing only value.
 	Epoch = int64
 )
+
+// Defines all task type
+// TODO: Refine me.Currently, when adding a new worker type or job type, we need to modify many code places,
+// NOTICE: DO NOT CHANGE the previous worker type
+// Modify the comment in model IF you add some new worker type
+const (
+	JobManager = WorkerType(iota + 1)
+	// job master
+	CvsJobMaster
+	FakeJobMaster
+	DMJobMaster
+	CdcJobMaster
+	// task
+	CvsTask
+	FakeTask
+	DmTask
+	CdcTask
+	// worker
+	WorkerDMDump
+	WorkerDMLoad
+	WorkerDMSync
+	// extend the worker type here
+)

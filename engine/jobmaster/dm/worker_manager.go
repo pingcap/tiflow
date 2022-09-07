@@ -253,7 +253,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
 			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
@@ -268,16 +268,16 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 
 var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeAll: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
-		framework.WorkerDMSync,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
+		frameModel.WorkerDMSync,
 	},
 	dmconfig.ModeFull: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
 	},
 	dmconfig.ModeIncrement: {
-		framework.WorkerDMSync,
+		frameModel.WorkerDMSync,
 	},
 }
 

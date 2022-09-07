@@ -202,7 +202,7 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 		impl,
 		jobManagerID,
 		jobMasterID,
-		FakeTask,
+		frameModel.FakeTask,
 		epoch,
 	).(*DefaultBaseJobMaster)
 }

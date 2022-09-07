@@ -20,10 +20,10 @@ import (
 
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
@@ -248,7 +248,7 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 			return false
 		}
 		// update if we add new task mode
-		if runningTask.Unit != framework.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
+		if runningTask.Unit != frameModel.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
 			return false
 		}
 	}

@@ -165,7 +165,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	cancelWorkerID := "cancel-worker-id"
 	meta := &frameModel.MasterMeta{
 		ID:    cancelWorkerID,
-		Type:  framework.CvsJobMaster,
+		Type:  frameModel.CvsJobMaster,
 		State: frameModel.MasterStateInit,
 	}
 	mgr.JobFsm.JobDispatched(meta, false)
@@ -216,7 +216,7 @@ func TestJobManagerDeleteJob(t *testing.T) {
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:    "job-to-be-deleted",
-		Type:  framework.FakeJobMaster,
+		Type:  frameModel.FakeJobMaster,
 		State: frameModel.MasterStateStopped,
 	})
 	require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestJobManagerGetJob(t *testing.T) {
 		{
 			&frameModel.MasterMeta{
 				ID:    "master-1",
-				Type:  framework.FakeJobMaster,
+				Type:  frameModel.FakeJobMaster,
 				State: frameModel.MasterStateUninit,
 			},
 			pb.Job_Created,
@@ -253,7 +253,7 @@ func TestJobManagerGetJob(t *testing.T) {
 		{
 			&frameModel.MasterMeta{
 				ID:    "master-2",
-				Type:  framework.FakeJobMaster,
+				Type:  frameModel.FakeJobMaster,
 				State: frameModel.MasterStateInit,
 			},
 			pb.Job_Running,
@@ -261,7 +261,7 @@ func TestJobManagerGetJob(t *testing.T) {
 		{
 			&frameModel.MasterMeta{
 				ID:    "master-3",
-				Type:  framework.FakeJobMaster,
+				Type:  frameModel.FakeJobMaster,
 				State: frameModel.MasterStateFinished,
 			},
 			pb.Job_Finished,
@@ -269,7 +269,7 @@ func TestJobManagerGetJob(t *testing.T) {
 		{
 			&frameModel.MasterMeta{
 				ID:    "master-4",
-				Type:  framework.FakeJobMaster,
+				Type:  frameModel.FakeJobMaster,
 				State: frameModel.MasterStateStopped,
 			},
 			pb.Job_Canceled,
@@ -362,11 +362,11 @@ func TestJobManagerRecover(t *testing.T) {
 	meta := []*frameModel.MasterMeta{
 		{
 			ID:   "master-1",
-			Type: framework.FakeJobMaster,
+			Type: frameModel.FakeJobMaster,
 		},
 		{
 			ID:   "master-2",
-			Type: framework.FakeJobMaster,
+			Type: frameModel.FakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -444,7 +444,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:    "job-to-be-deleted",
-		Type:  framework.FakeJobMaster,
+		Type:  frameModel.FakeJobMaster,
 		State: frameModel.MasterStateStopped,
 	})
 	require.NoError(t, err)
@@ -496,7 +496,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	// normal case, return job detail
 	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:   "new-job",
-		Type: framework.FakeJobMaster,
+		Type: frameModel.FakeJobMaster,
 		// set state to running
 		State:    frameModel.MasterStateInit,
 		Addr:     "1.1.1.1:1",
@@ -520,7 +520,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	// test return 404
 	err = mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:   "new-job",
-		Type: framework.FakeJobMaster,
+		Type: frameModel.FakeJobMaster,
 		// set status code to running state
 		State:    frameModel.MasterStateInit,
 		Addr:     "1.1.1.1:1",
@@ -543,7 +543,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	// test wrong url
 	err = mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:   "new-job",
-		Type: framework.FakeJobMaster,
+		Type: frameModel.FakeJobMaster,
 		// set status code to running state
 		State:    frameModel.MasterStateInit,
 		Addr:     "123.123.12.1:234",

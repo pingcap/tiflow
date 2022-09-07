@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	"github.com/pingcap/tiflow/engine/framework/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
@@ -40,29 +41,6 @@ type (
 	MasterFailoverReasonCode int32
 )
 
-// Defines all task type
-// TODO: Refine me.Currently, when adding a new worker type or job type, we need to modify many code places,
-// NOTICE: DO NOT CHANGE the previous worker type
-// Modify the comment in model IF you add some new worker type
-const (
-	JobManager = WorkerType(iota + 1)
-	// job master
-	CvsJobMaster
-	FakeJobMaster
-	DMJobMaster
-	CdcJobMaster
-	// task
-	CvsTask
-	FakeTask
-	DmTask
-	CdcTask
-	// worker
-	WorkerDMDump
-	WorkerDMLoad
-	WorkerDMSync
-	// extend the worker type here
-)
-
 // Defines all reason codes
 const (
 	MasterTimedOut = MasterFailoverReasonCode(iota + 1)
@@ -79,16 +57,16 @@ type MasterFailoverReason struct {
 // TODO: let user register a unique identifier for the metric prefix
 func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 	switch tp {
-	case JobManager:
+	case frameModel.JobManager:
 		// jobmanager is the framework level job
 		return engineModel.JobTypeJobManager
-	case CvsJobMaster, CvsTask:
+	case frameModel.CvsJobMaster, frameModel.CvsTask:
 		return engineModel.JobTypeCVSDemo
-	case FakeJobMaster, FakeTask:
+	case frameModel.FakeJobMaster, frameModel.FakeTask:
 		return engineModel.JobTypeFakeJob
-	case DMJobMaster, DmTask, WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+	case frameModel.DMJobMaster, frameModel.DmTask, frameModel.WorkerDMDump, frameModel.WorkerDMLoad, frameModel.WorkerDMSync:
 		return engineModel.JobTypeDM
-	case CdcJobMaster, CdcTask:
+	case frameModel.CdcJobMaster, frameModel.CdcTask:
 		return engineModel.JobTypeCDC
 	}
 

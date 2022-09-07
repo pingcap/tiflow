@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/framework"
-	frame "github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -28,7 +28,7 @@ import (
 var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
 
 const (
-	fakeWorkerType = frame.FakeJobMaster
+	fakeWorkerType = frameModel.FakeJobMaster
 )
 
 func TestGlobalRegistry(t *testing.T) {
