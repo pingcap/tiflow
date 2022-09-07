@@ -160,7 +160,7 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: *cdcEtcdCli,
+		cdcEtcdCli: cdcEtcdCli,
 	}
 
 	log.Info("new cluster initialized")
