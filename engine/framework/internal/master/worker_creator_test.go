@@ -120,22 +120,22 @@ func TestCreateWorkerNormal(t *testing.T) {
 		{
 			Label:  "label1",
 			Target: "value1",
-			Op:     pb.Selector_SelectorEq,
+			Op:     pb.Selector_Eq,
 		},
 		{
 			Label:  "label2",
 			Target: "value2",
-			Op:     pb.Selector_SelectorNeq,
+			Op:     pb.Selector_Neq,
 		},
 		{
 			Label:  "label3",
 			Target: "value3",
-			Op:     pb.Selector_SelectorEq,
+			Op:     pb.Selector_Eq,
 		},
 		{
 			Label:  "label4",
 			Target: "value4",
-			Op:     pb.Selector_SelectorNeq,
+			Op:     pb.Selector_Neq,
 		},
 	}
 	helper.ServerMasterClient.EXPECT().ScheduleTask(gomock.Any(),

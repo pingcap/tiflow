@@ -403,9 +403,9 @@
     "SelectorOp": {
       "type": "string",
       "enum": [
-        "SelectorEq",
-        "SelectorNeq",
-        "SelectorRegex"
+        "Eq",
+        "Neq",
+        "Regex"
       ]
     },
     "enginepbCheckDirResponse": {

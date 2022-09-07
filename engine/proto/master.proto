@@ -108,10 +108,10 @@ service JobManager {
 
 message Selector {
     enum Op {
-        SelectorTypeUnknown = 0;
-        SelectorEq = 1;
-        SelectorNeq = 2;
-        SelectorRegex = 3;
+        TypeUnknown = 0;
+        Eq = 1;
+        Neq = 2;
+        Regex = 3;
     }
 
     string label = 1;

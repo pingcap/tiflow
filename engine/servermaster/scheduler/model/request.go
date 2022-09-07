@@ -71,11 +71,11 @@ var ErrIncompatibleSchedulerRequest = rpcerror.Normalize[IncompatibleSchedulerRe
 func SelectorFromPB(req *enginepb.Selector) (*label.Selector, error) {
 	var op label.Op
 	switch req.Op {
-	case enginepb.Selector_SelectorEq:
+	case enginepb.Selector_Eq:
 		op = label.OpEq
-	case enginepb.Selector_SelectorNeq:
+	case enginepb.Selector_Neq:
 		op = label.OpNeq
-	case enginepb.Selector_SelectorRegex:
+	case enginepb.Selector_Regex:
 		op = label.OpRegex
 	default:
 		// Future-proof the code in case a new Op is added.
@@ -111,11 +111,11 @@ func SelectorToPB(sel *label.Selector) (*enginepb.Selector, error) {
 	var pbOp enginepb.Selector_Op
 	switch sel.Op {
 	case label.OpEq:
-		pbOp = enginepb.Selector_SelectorEq
+		pbOp = enginepb.Selector_Eq
 	case label.OpNeq:
-		pbOp = enginepb.Selector_SelectorNeq
+		pbOp = enginepb.Selector_Neq
 	case label.OpRegex:
-		pbOp = enginepb.Selector_SelectorRegex
+		pbOp = enginepb.Selector_Regex
 	default:
 		return nil, errors.Errorf("unknown selector op %s", sel.Op)
 	}
