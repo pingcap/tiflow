@@ -136,9 +136,9 @@ func (e *MockTableExecutor) AddTable(
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
+func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	log.Info("RemoveTable", zap.Int64("tableID", tableID))
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	require.Contains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)
 	delete(e.Running, tableID)
@@ -147,13 +147,13 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) bool {
+func (e *MockTableExecutor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
 	_, ok := e.Running[tableID]
 	return ok
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
+func (e *MockTableExecutor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
 	_, ok := e.Removing[tableID]
 	return 0, !ok
 }
