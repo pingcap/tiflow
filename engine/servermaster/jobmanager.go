@@ -33,8 +33,8 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/framework/registry"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -635,7 +635,7 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		log.Warn("dispatch worker met error", zap.Error(result))
-		if registry.ErrCreateWorkerTerminate.Is(result) {
+		if pkgClient.ErrCreateWorkerTerminate.Is(result) {
 			log.Info("job master terminated", zap.String("job-id", worker.ID()))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()

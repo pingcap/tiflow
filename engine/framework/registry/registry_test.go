@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
 var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
@@ -132,7 +131,7 @@ func TestSetImplMember(t *testing.T) {
 	require.Equal(t, 2, iface.(*myImpl).MyBase.(int))
 }
 
-func TestAnalyzeError(t *testing.T) {
+func TestIsRetryableError(t *testing.T) {
 	t.Parallel()
 
 	registry := NewRegistry()
@@ -143,17 +142,13 @@ func TestAnalyzeError(t *testing.T) {
 		err         error
 		isRetryable bool
 	}{
-		{&deserializeConfigError{inErr: errors.New("err")}, false},
+		{NewDeserializeConfigError(errors.New("inner err")), false},
 		{errors.New("normal error"), true},
 	}
 
 	for _, tc := range testCases {
-		err := registry.AnalyzeError(tc.err, framework.FakeJobMaster)
-		inErr := rpcerror.FromGRPCError(err)
-		if tc.isRetryable {
-			require.Truef(t, ErrCreateWorkerRetryable.Is(inErr), "error: %s", err)
-		} else {
-			require.Truef(t, ErrCreateWorkerTerminate.Is(inErr), "error: %s", err)
-		}
+		retryable, err := registry.IsRetryableError(tc.err, framework.FakeJobMaster)
+		require.NoError(t, err)
+		require.Equal(t, tc.isRetryable, retryable)
 	}
 }

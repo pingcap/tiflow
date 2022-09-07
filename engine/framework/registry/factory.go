@@ -81,13 +81,21 @@ func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config.(C)), nil
 }
 
-// used in fake job and unit test only
-type deserializeConfigError struct {
-	inErr error
+// DeserializeConfigError is used in fake job and unit test only
+type DeserializeConfigError struct {
+	errIn error
 }
 
-func (e *deserializeConfigError) Error() string {
-	return fmt.Sprintf("deserialize config failed: %s", e.inErr)
+// NewDeserializeConfigError creates a new DeserializeConfigError
+func NewDeserializeConfigError(errIn error) *DeserializeConfigError {
+	return &DeserializeConfigError{
+		errIn: errIn,
+	}
+}
+
+// Error implements error interface
+func (e *DeserializeConfigError) Error() string {
+	return fmt.Sprintf("deserialize config failed: %s", e.errIn)
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
@@ -95,14 +103,14 @@ func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (Worke
 	var config C
 	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(&deserializeConfigError{inErr: err})
+		return nil, errors.Trace(NewDeserializeConfigError(err))
 	}
 	return config, nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
 func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
-	var errOut *deserializeConfigError
+	var errOut *DeserializeConfigError
 	if libErrors.As(err, &errOut) {
 		return false
 	}

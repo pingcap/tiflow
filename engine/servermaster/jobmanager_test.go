@@ -30,8 +30,8 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -643,8 +643,8 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 	// simulate a job is created.
 	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
 	mockHandle := &framework.MockHandle{WorkerID: masterID}
-	nerr := registry.ErrCreateWorkerTerminate.Gen(
-		&registry.CreateWorkerTerminateError{
+	nerr := pkgClient.ErrCreateWorkerTerminate.Gen(
+		&pkgClient.CreateWorkerTerminateError{
 			Details: "unit test fast fail error",
 		})
 	// OnWorkerDispatched callback on job manager, a terminated error will make

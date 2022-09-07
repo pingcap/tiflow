@@ -24,8 +24,10 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -35,6 +37,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
@@ -215,4 +219,32 @@ func TestRPCCallBeforeInitialized(t *testing.T) {
 	_, err = svr.ConfirmDispatchTask(context.Background(), &pb.ConfirmDispatchTaskRequest{})
 	require.Error(t, err)
 	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
+}
+
+func TestConvertMakeTaskError(t *testing.T) {
+	t.Parallel()
+
+	register := registry.NewRegistry()
+	ok := register.RegisterWorkerType(framework.FakeJobMaster,
+		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	testCases := []struct {
+		err         error
+		isRetryable bool
+	}{
+		{registry.NewDeserializeConfigError(errors.New("inner err")), false},
+		{errors.New("normal error"), true},
+	}
+
+	for _, tc := range testCases {
+		err := convertMakeTaskErrorToRPCError(register, tc.err, framework.FakeJobMaster)
+		require.Error(t, err)
+		errIn := rpcerror.FromGRPCError(err)
+		if tc.isRetryable {
+			require.True(t, client.ErrCreateWorkerNonTerminate.Is(errIn))
+		} else {
+			require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
+		}
+	}
 }

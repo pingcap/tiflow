@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -44,9 +43,9 @@ type Registry interface {
 		config []byte,
 		epoch frameModel.Epoch,
 	) (framework.Worker, error)
-	// AnalyzeError parses error, checks whether this error is retryable and
-	// returns rpc error based on it.
-	AnalyzeError(err error, tp framework.WorkerType) error
+	// IsRetryableError returns whether error is treated as retryable from the
+	// perspective of business logic.
+	IsRetryableError(err error, tp framework.WorkerType) (bool, error)
 }
 
 type registryImpl struct {
@@ -136,27 +135,13 @@ func (r *registryImpl) CreateWorker(
 	return nil, nil
 }
 
-// AnalyzeError implements Registry.AnalyzeError
-func (r *registryImpl) AnalyzeError(err error, tp frameModel.WorkerType) error {
-	switch tp {
-	case framework.DMJobMaster:
-		err = derror.ToDMError(err)
-	default:
-	}
+// IsRetryableError checks whether an error is retryable in business logic
+func (r *registryImpl) IsRetryableError(err error, tp frameModel.WorkerType) (bool, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
-		return derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+		return false, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
-	if factory.IsRetryableError(err) {
-		return rpcerror.ToGRPCError(
-			ErrCreateWorkerRetryable.GenWithStack(&CreateWorkerRetryableError{
-				Details: err.Error(),
-			}))
-	}
-	return rpcerror.ToGRPCError(
-		ErrCreateWorkerTerminate.GenWithStack(&CreateWorkerTerminateError{
-			Details: err.Error(),
-		}))
+	return factory.IsRetryableError(err), nil
 }
 
 func (r *registryImpl) getWorkerFactory(tp frameModel.WorkerType) (factory WorkerFactory, ok bool) {
