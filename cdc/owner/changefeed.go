@@ -470,7 +470,7 @@ LOOP:
 	}
 
 	c.barriers = newBarriers()
-	if c.state.Info.SyncPointEnabled {
+	if c.state.Info.Config.EnableSyncPoint {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(ddlJobBarrier, ddlStartTs)
@@ -737,7 +737,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
 		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
