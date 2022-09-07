@@ -83,8 +83,6 @@ func newDDLSink(ctx context.Context,
 }
 
 func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	k.statistics.AddDDLCount()
-
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
@@ -111,7 +109,9 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		err = k.statistics.RecordDDLExecution(func() error {
+			return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		})
 		return errors.Trace(err)
 	}
 	// Notice: We must call GetPartitionNum here,
@@ -122,7 +122,9 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = k.producer.SyncSendMessage(ctx, topic, dispatcher.PartitionZero, msg)
+	err = k.statistics.RecordDDLExecution(func() error {
+		return k.producer.SyncSendMessage(ctx, topic, dispatcher.PartitionZero, msg)
+	})
 	return errors.Trace(err)
 }
 
