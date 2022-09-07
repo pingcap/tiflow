@@ -14,47 +14,95 @@
 package s3
 
 import (
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"context"
+
+	"github.com/pingcap/errors"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+)
+
+const (
+	placeholderFileName = ".keep"
 )
 
 type FileManager struct {
+	bucketSelector BucketSelector
+	options        *brStorage.S3BackendOptions
 }
 
-func (f *FileManager) CreateResource(
-	creator frameModel.WorkerID,
-	resName resModel.ResourceName,
+func (m *FileManager) CreateResource(
+	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
-	//TODO implement me
-	panic("implement me")
+	bucket, err := m.bucketSelector.GetBucket(ctx, ident.Scope())
+	if err != nil {
+		return nil, errors.Annotate(err, "FileManager: CreateResource")
+	}
+
+	desc := newResourceDescriptor(bucket, ident, m.options)
+	storage, err := desc.ExternalStorage(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := createPlaceholderFile(ctx, storage); err != nil {
+		return nil, err
+	}
+	return desc, nil
 }
 
-func (f *FileManager) GetPersistedResource(
-	creator frameModel.WorkerID,
-	resName resModel.ResourceName,
+func (m *FileManager) GetPersistedResource(
+	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
-	//TODO implement me
-	panic("implement me")
+	bucket, err := m.bucketSelector.GetBucket(ctx, ident.Scope())
+	if err != nil {
+		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
+	}
+
+	desc := newResourceDescriptor(bucket, ident, m.options)
+	storage, err := desc.ExternalStorage(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ok, err := storage.FileExists(ctx, placeholderFileName)
+	if err != nil {
+		return nil, errors.Annotate(err, "check placeholder file")
+	}
+
+	if !ok {
+		
+	}
 }
 
-func (f *FileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (f *FileManager) RemoveResource(
-	creator frameModel.WorkerID,
-	resName resModel.ResourceName,
+func (m *FileManager) RemoveTemporaryFiles(
+	ctx context.Context, scope internal.ResourceScope,
 ) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (f *FileManager) SetPersisted(
-	creator frameModel.WorkerID,
-	resName resModel.ResourceName,
-) {
+func (m *FileManager) RemoveResource(
+	ctx context.Context, ident internal.ResourceIdent,
+) error {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (m *FileManager) SetPersisted(
+	ctx context.Context, ident internal.ResourceIdent,
+) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
+	writer, err := storage.Create(ctx, placeholderFileName)
+	if err != nil {
+		return errors.Annotate(err, "creating placeholder file")
+	}
+
+	if err := writer.Close(ctx); err != nil {
+		return errors.Annotate(err, "creating placeholder file")
+	}
+	return nil
 }

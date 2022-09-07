@@ -20,18 +20,50 @@ import (
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 )
 
-type ResourceDescriptor struct {
-	Options      *brStorage.S3BackendOptions
-	Bucket       string
-	ExecutorID   resModel.ExecutorID
-	WorkerID     resModel.WorkerID
-	ResourceName resModel.ResourceName
+// resourceDescriptor is a handle for a s3-backed resource used
+// internally in engine/pkg/externalresource.
+//
+// Note that this implementation caches a brStorage.ExternalStorage object,
+// so it is not thread-safe to use. But thread-safety does not seem
+// to be a necessary requirement.
+type resourceDescriptor struct {
+	Bucket  BucketName
+	Ident   internal.ResourceIdent
+	Options *brStorage.S3BackendOptions
+
+	storage brStorage.ExternalStorage
 }
 
-func (r *ResourceDescriptor) MakeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+func newResourceDescriptor(
+	bucket BucketName,
+	ident internal.ResourceIdent,
+	options *brStorage.S3BackendOptions,
+) *resourceDescriptor {
+	return &resourceDescriptor{
+		Bucket:  bucket,
+		Ident:   ident,
+		Options: options,
+	}
+}
+
+// ExternalStorage creates the storage object if one has not been created yet, and returns the
+// created storage object.
+func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+	if r.storage == nil {
+		storage, err := r.makeExternalStorage(ctx)
+		if err != nil {
+			return nil, errors.Annotate(err, "creating ExternalStorage for s3")
+		}
+		r.storage = storage
+	}
+	return r.storage, nil
+}
+
+// makeExternalStorage actually creates the storage object.
+func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
 	uri := r.generateURI()
 	opts := &brStorage.BackendOptions{
 		S3: *r.Options,
@@ -41,6 +73,7 @@ func (r *ResourceDescriptor) MakeExternalStorage(ctx context.Context) (brStorage
 		return nil, errors.Trace(err)
 	}
 
+	// Note that we may have network I/O here.
 	ret, err := brStorage.New(ctx, backEnd, &brStorage.ExternalStorageOptions{})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -48,14 +81,14 @@ func (r *ResourceDescriptor) MakeExternalStorage(ctx context.Context) (brStorage
 	return ret, nil
 }
 
-func (r *ResourceDescriptor) URI() string {
+func (r *resourceDescriptor) URI() string {
 	return r.generateURI()
 }
 
-func (r *ResourceDescriptor) generateURI() string {
+func (r *resourceDescriptor) generateURI() string {
 	return fmt.Sprintf("s3:///%s/%s/%s/%s",
 		url.QueryEscape(r.Bucket),
-		url.QueryEscape(string(r.ExecutorID)),
-		url.QueryEscape(r.WorkerID),
-		url.QueryEscape(r.ResourceName))
+		url.QueryEscape(string(r.Ident.Executor)),
+		url.QueryEscape(r.Ident.WorkerID),
+		url.QueryEscape(r.Ident.Name))
 }

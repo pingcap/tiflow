@@ -11,17 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package s3
 
 import (
 	"context"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 )
 
-// ResourceDescriptor is an object used internally by the broker
-// to manage resources.
-type ResourceDescriptor interface {
-	URI() string
-	ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error)
+type BucketName = string
+
+type BucketSelector interface {
+	GetBucket(ctx context.Context, scope internal.ResourceScope) (BucketName, error)
+}
+
+type constantBucketSelector struct {
+	bucket BucketName
+}
+
+func NewConstantBucketSelector(bucketName BucketName) BucketSelector {
+	return &constantBucketSelector{bucket: bucketName}
+}
+
+func (s *constantBucketSelector) GetBucket(
+	_ context.Context,
+	_ internal.ResourceScope,
+) (BucketName, error) {
+	return s.bucket, nil
 }
