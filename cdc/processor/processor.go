@@ -351,7 +351,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	delete(p.tables, tableID)
 
 	checkpointTs := table.CheckpointTs()
-	log.Info("remove table finished",
+	log.Info("table removed",
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
