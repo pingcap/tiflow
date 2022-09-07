@@ -20,6 +20,6 @@ alter table t1 drop partition p1;
 insert into t1 values (7),(8),(9);
 update t1 set a=a+10 where a=9;
 
-create table t2 (a int primary key)
+create table t2 (a int primary key);
 ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2;
 
