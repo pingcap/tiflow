@@ -400,6 +400,14 @@
         "DDL"
       ]
     },
+    "SelectorOp": {
+      "type": "string",
+      "enum": [
+        "Eq",
+        "Neq",
+        "Regex"
+      ]
+    },
     "enginepbCheckDirResponse": {
       "type": "object",
       "properties": {
@@ -490,6 +498,12 @@
         "capability": {
           "type": "string",
           "format": "int64"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -557,6 +571,12 @@
         },
         "error": {
           "$ref": "#/definitions/enginepbError"
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbSelector"
+          }
         }
       }
     },
@@ -773,6 +793,20 @@
         },
         "executor_addr": {
           "type": "string"
+        }
+      }
+    },
+    "enginepbSelector": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/definitions/SelectorOp"
         }
       }
     },
