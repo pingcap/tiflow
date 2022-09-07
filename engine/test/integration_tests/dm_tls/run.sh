@@ -25,7 +25,7 @@ function run() {
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem
 
   echo "verify can't connect to upstream without certificates"
-  mysql --ssl-mode=DISABLED -P3306 -h127.0.0.1 -uroot -p123456 -e "show databases" && echo "failed" && exit 1 || true
+  mysql -P3306 -h127.0.0.1 -uroot -p123456 -e "show databases" && echo "failed" && exit 1 || true
 
 	# prepare data
 
@@ -36,6 +36,7 @@ function run() {
 
 	run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "CREATE USER 'dm_user'@'%' REQUIRE X509;"
 
+read -p 123
 	# create job
 
   cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml

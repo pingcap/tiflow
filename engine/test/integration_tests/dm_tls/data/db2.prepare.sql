@@ -1,5 +1,6 @@
 drop user if exists 'dm_user'@'%';
 create user 'dm_user'@'%' require X509;
+grant all privileges on *.* to 'dm_user'@'%';
 
 drop database if exists `tls`;
 create database `tls`;

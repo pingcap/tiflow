@@ -99,8 +99,6 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 		lightningCfg.Security.CAPath = cfg.To.Security.SSLCA
 		lightningCfg.Security.CertPath = cfg.To.Security.SSLCert
 		lightningCfg.Security.KeyPath = cfg.To.Security.SSLKey
-		// use task name as tls config name to prevent multiple subtasks from conflicting with each other
-		lightningCfg.Security.TLSConfigName = cfg.Name
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
