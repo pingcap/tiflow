@@ -158,14 +158,14 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 		if c.SyncPointInterval < minSyncPointInterval {
 			return cerror.ErrInvalidReplicaConfig.
 				FastGenByArgs(
-					fmt.Sprintf("The SyncPointInterval:%s must large than %s",
+					fmt.Sprintf("The SyncPointInterval:%s must be larger than %s",
 						c.SyncPointInterval.String(),
 						minSyncPointInterval.String()))
 		}
 		if c.SyncPointRetention < minSyncPointRetention {
 			return cerror.ErrInvalidReplicaConfig.
 				FastGenByArgs(
-					fmt.Sprintf("The SyncPointRetention:%s must large than %s",
+					fmt.Sprintf("The SyncPointRetention:%s must be larger than %s",
 						c.SyncPointRetention.String(),
 						minSyncPointRetention.String()))
 		}
