@@ -410,7 +410,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
 		log.Warn("send fails",
-			zap.Reflect("msg", msg),
+			zap.Any("msg", msg),
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
