@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -45,31 +46,32 @@ const (
 	StageUnscheduled
 )
 
-var toString = map[TaskStage]string{
-	0:                "",
-	StageInit:        "Initing",
-	StageRunning:     "Running",
-	StagePaused:      "Paused",
-	StageFinished:    "Finished",
-	StageError:       "Error",
-	StagePausing:     "Pausing",
-	StageUnscheduled: "Unscheduled",
+var typesStringify = []string{
+	"",
+	"Initing",
+	"Running",
+	"Paused",
+	"Finished",
+	"Error",
+	"Pausing",
+	"Unscheduled",
 }
 
-var toID = map[string]TaskStage{
-	"":            0,
-	"Initing":     StageInit,
-	"Running":     StageRunning,
-	"Paused":      StagePaused,
-	"Finished":    StageFinished,
-	"Error":       StageError,
-	"Pausing":     StagePausing,
-	"Unscheduled": StageUnscheduled,
+var toTaskStage map[string]TaskStage
+
+func init() {
+	toTaskStage = make(map[string]TaskStage, len(typesStringify))
+	for i, s := range typesStringify {
+		toTaskStage[s] = TaskStage(i)
+	}
 }
 
 // String implements fmt.Stringer interface
 func (ts TaskStage) String() string {
-	return toString[ts]
+	if int(ts) >= len(typesStringify) {
+		return fmt.Sprintf("Unknown TaskStage %d", ts)
+	}
+	return typesStringify[ts]
 }
 
 // MarshalJSON marshals the enum as a quoted json string
@@ -87,7 +89,7 @@ func (ts *TaskStage) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*ts = toID[j]
+	*ts = toTaskStage[j]
 	return nil
 }
 

@@ -16,6 +16,7 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/tiflow/engine/framework"
@@ -66,25 +67,29 @@ const (
 	// WorkerDestroying
 )
 
-var toString = map[WorkerStage]string{
-	0:              "",
-	WorkerCreating: "Creating",
-	WorkerOnline:   "Online",
-	WorkerFinished: "Finished",
-	WorkerOffline:  "Offline",
+var typesStringify = []string{
+	"",
+	"Creating",
+	"Online",
+	"Finished",
+	"Offline",
 }
 
-var toID = map[string]WorkerStage{
-	"":         0,
-	"Creating": WorkerCreating,
-	"Online":   WorkerOnline,
-	"Finished": WorkerFinished,
-	"Offline":  WorkerOffline,
+var toWorkerStage map[string]WorkerStage
+
+func init() {
+	toWorkerStage = make(map[string]WorkerStage, len(typesStringify))
+	for i, s := range typesStringify {
+		toWorkerStage[s] = WorkerStage(i)
+	}
 }
 
 // String implements fmt.Stringer interface
 func (ws WorkerStage) String() string {
-	return toString[ws]
+	if int(ws) >= len(typesStringify) {
+		return fmt.Sprintf("Unknown WorkerStage %d", ws)
+	}
+	return typesStringify[ws]
 }
 
 // MarshalJSON marshals the enum as a quoted json string
@@ -102,7 +107,7 @@ func (ws *WorkerStage) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*ws = toID[j]
+	*ws = toWorkerStage[j]
 	return nil
 }
 

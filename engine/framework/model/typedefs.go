@@ -16,6 +16,7 @@ package model
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
 type (
@@ -56,41 +57,37 @@ const (
 	// extend the worker type here
 )
 
-var toString = map[WorkerType]string{
-	0:             "",
-	JobManager:    "JobManager",
-	CvsJobMaster:  "CVSJobMaster",
-	FakeJobMaster: "FakeJobMaster",
-	DMJobMaster:   "DMJobMaster",
-	CdcJobMaster:  "CDCJobMaster",
-	CvsTask:       "CVSTask",
-	FakeTask:      "FakeTask",
-	DmTask:        "DMTask",
-	CdcTask:       "CDCTask",
-	WorkerDMDump:  "DMDumpTask",
-	WorkerDMLoad:  "DMLoadTask",
-	WorkerDMSync:  "DMSyncTask",
+var typesStringify = []string{
+	"",
+	"JobManager",
+	"CVSJobMaster",
+	"FakeJobMaster",
+	"DMJobMaster",
+	"CDCJobMaster",
+	"CVSTask",
+	"FakeTask",
+	"DMTask",
+	"CDCTask",
+	"DMDumpTask",
+	"DMLoadTask",
+	"DMSyncTask",
 }
 
-var toID = map[string]WorkerType{
-	"":              0,
-	"JobManager":    JobManager,
-	"CVSJobMaster":  CvsJobMaster,
-	"FakeJobMaster": FakeJobMaster,
-	"DMJobMaster":   DMJobMaster,
-	"CDCJobMaster":  CdcJobMaster,
-	"CVSTask":       CvsTask,
-	"FakeTask":      FakeTask,
-	"DMTask":        DmTask,
-	"CDCTask":       CdcTask,
-	"DMDumpTask":    WorkerDMDump,
-	"DMLoadTask":    WorkerDMLoad,
-	"DMSyncTask":    WorkerDMSync,
+var toWorkerType map[string]WorkerType
+
+func init() {
+	toWorkerType = make(map[string]WorkerType, len(typesStringify))
+	for i, s := range typesStringify {
+		toWorkerType[s] = WorkerType(i)
+	}
 }
 
 // String implements fmt.Stringer interface
 func (wt WorkerType) String() string {
-	return toString[wt]
+	if int(wt) >= len(typesStringify) {
+		return fmt.Sprintf("Unknown WorkerType %d", wt)
+	}
+	return typesStringify[wt]
 }
 
 // MarshalJSON marshals the enum as a quoted json string
@@ -108,6 +105,6 @@ func (wt *WorkerType) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*wt = toID[j]
+	*wt = toWorkerType[j]
 	return nil
 }

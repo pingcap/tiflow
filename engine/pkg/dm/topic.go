@@ -16,6 +16,7 @@ package dm
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -53,7 +54,7 @@ const (
 	Deleting
 )
 
-var toString = map[OperateType]string{
+var typesStringify = []string{
 	0:        "",
 	Create:   "Create",
 	Pause:    "Pause",
@@ -63,19 +64,21 @@ var toString = map[OperateType]string{
 	Deleting: "Deleting",
 }
 
-var toID = map[string]OperateType{
-	"":         0,
-	"Create":   Create,
-	"Pause":    Pause,
-	"Resume":   Resume,
-	"Update":   Update,
-	"Delete":   Delete,
-	"Deleting": Deleting,
+var toOperateType map[string]OperateType
+
+func init() {
+	toOperateType = make(map[string]OperateType, len(typesStringify))
+	for i, s := range typesStringify {
+		toOperateType[s] = OperateType(i)
+	}
 }
 
 // String implements fmt.Stringer interface
 func (op OperateType) String() string {
-	return toString[op]
+	if int(op) >= len(typesStringify) {
+		return fmt.Sprintf("Unknown OperateType %d", op)
+	}
+	return typesStringify[op]
 }
 
 // MarshalJSON marshals the enum as a quoted json string
@@ -93,7 +96,7 @@ func (op *OperateType) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*op = toID[j]
+	*op = toOperateType[j]
 	return nil
 }
 

@@ -14,6 +14,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -64,4 +65,15 @@ func TestWorkerStatus(t *testing.T) {
 	workerStatus.createdTime = time.Now().Add(-2*HeartbeatInterval - 1)
 	require.True(t, workerStatus.CreateFailed())
 	require.True(t, workerStatus.IsTombStone())
+
+	for _, s := range typesStringify {
+		ws, ok := toWorkerStage[s]
+		require.True(t, ok)
+		bs, err := json.Marshal(ws)
+		require.NoError(t, err)
+		var ws2 WorkerStage
+		require.NoError(t, json.Unmarshal(bs, &ws2))
+		require.Equal(t, ws, ws2)
+	}
+	require.Equal(t, "Unknown WorkerStage 1000", WorkerStage(1000).String())
 }
