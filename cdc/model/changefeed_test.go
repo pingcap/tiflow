@@ -145,9 +145,11 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			CaseSensitive:    true,
-			EnableOldValue:   true,
-			CheckGCSafePoint: true,
+			CaseSensitive:      true,
+			EnableOldValue:     true,
+			CheckGCSafePoint:   true,
+			SyncPointInterval:  time.Minute * 10,
+			SyncPointRetention: time.Hour * 24,
 		},
 	}
 
