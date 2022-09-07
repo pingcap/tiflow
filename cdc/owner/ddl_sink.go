@@ -61,7 +61,7 @@ type DDLSink interface {
 
 type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
-	syncPointStore mysql.SyncpointStore
+	syncPointStore mysql.SyncPointStore
 
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
@@ -124,10 +124,10 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 		a.sinkV2 = s
 	}
 
-	if !info.SyncPointEnabled {
+	if !info.Config.EnableSyncPoint {
 		return nil
 	}
-	syncPointStore, err := mysql.NewSyncpointStore(stdCtx, id, info.SinkURI)
+	syncPointStore, err := mysql.NewSyncPointStore(stdCtx, id, info.SinkURI, info.Config.SyncPointRetention)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -136,7 +136,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	})
 	a.syncPointStore = syncPointStore
 
-	if err := a.syncPointStore.CreateSynctable(stdCtx); err != nil {
+	if err := a.syncPointStore.CreateSyncTable(stdCtx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -333,7 +333,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 	}
 	s.lastSyncPoint = checkpointTs
 	// TODO implement async sink syncPoint
-	return s.syncPointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
+	return s.syncPointStore.SinkSyncPoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
