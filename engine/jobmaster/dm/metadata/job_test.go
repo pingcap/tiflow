@@ -139,5 +139,12 @@ func TestTaskStage(t *testing.T) {
 		require.NoError(t, json.Unmarshal(bs, &ts2))
 		require.Equal(t, ts, ts2)
 	}
-	require.Equal(t, "Unknown TaskStage 1000", TaskStage(1000).String())
+
+	ts := TaskStage(1000)
+	require.Equal(t, "Unknown TaskStage 1000", ts.String())
+	bs, err := json.Marshal(ts)
+	require.NoError(t, err)
+	var ts2 TaskStage
+	require.NoError(t, json.Unmarshal(bs, &ts2))
+	require.Equal(t, TaskStage(0), ts2)
 }

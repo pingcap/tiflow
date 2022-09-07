@@ -75,5 +75,12 @@ func TestWorkerStatus(t *testing.T) {
 		require.NoError(t, json.Unmarshal(bs, &ws2))
 		require.Equal(t, ws, ws2)
 	}
-	require.Equal(t, "Unknown WorkerStage 1000", WorkerStage(1000).String())
+
+	ws := WorkerStage(1000)
+	require.Equal(t, "Unknown WorkerStage 1000", ws.String())
+	bs, err := json.Marshal(ws)
+	require.NoError(t, err)
+	var ws2 WorkerStage
+	require.NoError(t, json.Unmarshal(bs, &ws2))
+	require.Equal(t, WorkerStage(0), ws2)
 }
