@@ -171,7 +171,7 @@ func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
-func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.Logger().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
 	return nil
 }

@@ -878,9 +878,7 @@ func (e *MockTableExecutor) AddTable(
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
-	tableID model.TableID, isPrepare bool,
-) bool {
+func (e *MockTableExecutor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
 	_, ok := e.tables[tableID]
 	if !ok {
 		log.Panic("table which was added is not found",
@@ -888,7 +886,7 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	args := e.Called(ctx, tableID, isPrepare)
+	args := e.Called(tableID, isPrepare)
 	if args.Bool(0) {
 		e.tables[tableID] = pipeline.TableStatePrepared
 		if !isPrepare {
@@ -906,7 +904,7 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
+func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	state, ok := e.tables[tableID]
 	if !ok {
 		log.Warn("table to be remove is not found", zap.Int64("tableID", tableID))
@@ -921,7 +919,7 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 	// the current `processor implementation, does not consider table's state
 	log.Info("RemoveTable", zap.Int64("tableID", tableID), zap.Any("state", state))
 
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(0) {
 		e.tables[tableID] = pipeline.TableStateStopped
 	}
@@ -929,9 +927,7 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
-	tableID model.TableID,
-) (model.Ts, bool) {
+func (e *MockTableExecutor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
 	state, ok := e.tables[tableID]
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
@@ -939,7 +935,7 @@ func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
 			zap.Int64("tableID", tableID))
 		return 0, true
 	}
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
 			zap.Int64("tableID", tableID), zap.Any("state", state))

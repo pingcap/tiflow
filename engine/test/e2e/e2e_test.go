@@ -165,8 +165,8 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 		cancel()
 		require.Equal(t, pb.Job_CVSDemo, job.Type)
 		fmt.Printf("query id %s, status %d, time %s\n",
-			jobID, int(job.Status), time.Now().Format("2006-01-02 15:04:05"))
-		if job.Status == pb.Job_Finished {
+			jobID, int(job.State), time.Now().Format("2006-01-02 15:04:05"))
+		if job.State == pb.Job_Finished {
 			break
 		}
 		time.Sleep(time.Second)

@@ -110,6 +110,11 @@ func (e *exampleMaster) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
+func (e *exampleMaster) StopImpl(ctx context.Context) error {
+	log.Info("StopImpl")
+	return nil
+}
+
 func (e *exampleMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	log.Info("OnWorkerStatusUpdated")
 	return nil
