@@ -159,7 +159,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		jm.setState(frameModel.WorkerStateFinished)
 		log.Info("cvs job master finished")
 		status := jm.Status()
-		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonFinished, nil, string(status.ExtBytes))
+		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonFinished, nil, status.ExtBytes)
 	}
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
@@ -214,7 +214,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	if jm.getState() == frameModel.WorkerStateStopped {
 		log.Info("cvs job master stopped")
 		status := jm.Status()
-		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, string(status.ExtBytes))
+		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, status.ExtBytes)
 	}
 	return nil
 }
@@ -341,6 +341,11 @@ func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
+// StopImpl is called when the master is being canceled
+func (jm *JobMaster) StopImpl(ctx context.Context) error {
+	return nil
+}
+
 // ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {
 	return jm.workerID
@@ -352,53 +357,44 @@ func (jm *JobMaster) Workload() model.RescUnit {
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	return nil
 }
 
-// OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
-func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.Info("cvs jobmaster: OnJobManagerMessage", zap.Any("message", message))
-	jm.Lock()
-	defer jm.Unlock()
-	switch msg := message.(type) {
-	case *frameModel.StatusChangeRequest:
-		switch msg.ExpectState {
-		case frameModel.WorkerStateStopped:
-			jm.setState(frameModel.WorkerStateStopped)
-			for _, worker := range jm.syncFilesInfo {
-				if worker.handle.Load() == nil {
-					continue
-				}
-				handle := *(*framework.WorkerHandle)(worker.handle.Load())
-				workerID := handle.ID()
-				wTopic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
-				wMessage := &frameModel.StatusChangeRequest{
-					SendTime:     jm.clocker.Mono(),
-					FromMasterID: jm.BaseJobMaster.ID(),
-					Epoch:        jm.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  frameModel.WorkerStateStopped,
-				}
+// OnCancel implements JobMasterImpl.OnCancel
+func (jm *JobMaster) OnCancel(ctx context.Context) error {
+	log.Info("cvs jobmaster: OnCancel")
+	return jm.cancelWorkers(ctx)
+}
 
-				if handle := handle.Unwrap(); handle != nil {
-					ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
-					if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
-						cancel()
-						return err
-					}
-					log.Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
-					cancel()
-				} else {
-					log.Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
-				}
-			}
-		default:
-			log.Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+func (jm *JobMaster) cancelWorkers(ctx context.Context) error {
+	jm.setState(frameModel.WorkerStateStopped)
+	for _, worker := range jm.syncFilesInfo {
+		if worker.handle.Load() == nil {
+			continue
 		}
-	default:
-		log.Info("unsupported message", zap.Any("message", message))
-	}
+		handle := *(*framework.WorkerHandle)(worker.handle.Load())
+		workerID := handle.ID()
+		wTopic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
+		wMessage := &frameModel.StatusChangeRequest{
+			SendTime:     jm.clocker.Mono(),
+			FromMasterID: jm.BaseJobMaster.ID(),
+			Epoch:        jm.BaseJobMaster.CurrentEpoch(),
+			ExpectState:  frameModel.WorkerStateStopped,
+		}
 
+		if handle := handle.Unwrap(); handle != nil {
+			ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
+			if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+				cancel()
+				return err
+			}
+			log.Info("sent message to worker", zap.String("topic", wTopic), zap.Any("message", wMessage))
+			cancel()
+		} else {
+			log.Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
+		}
+	}
 	return nil
 }
 

@@ -26,16 +26,17 @@ import (
 
 	"github.com/phayes/freeport"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func init() {
@@ -205,31 +206,26 @@ func testRunLeaderService(t *testing.T) {
 }
 
 type mockJobManager struct {
-	framework.BaseMaster
-	pb.UnimplementedJobManagerServer
+	JobManager
 	jobMu sync.RWMutex
-	jobs  map[pb.Job_Status]int
+	jobs  map[pb.Job_State][]*pb.Job
 }
 
-func (m *mockJobManager) JobCount(status pb.Job_Status) int {
+func (m *mockJobManager) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
+	for _, jobs := range m.jobs {
+		for _, job := range jobs {
+			if job.GetId() == req.GetId() {
+				return job, nil
+			}
+		}
+	}
+	return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+}
+
+func (m *mockJobManager) JobCount(status pb.Job_State) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
-	return m.jobs[status]
-}
-
-func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error) {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error) {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) WatchJobStatuses(
-	ctx context.Context,
-) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
-	// TODO implement me
-	panic("implement me")
+	return len(m.jobs[status])
 }
 
 type mockExecutorManager struct {
@@ -265,8 +261,18 @@ func TestCollectMetric(t *testing.T) {
 	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.Job_Status]int{
-			pb.Job_Running: 3,
+		jobs: map[pb.Job_State][]*pb.Job{
+			pb.Job_Running: {
+				&pb.Job{
+					Id: "job-1",
+				},
+				&pb.Job{
+					Id: "job-2",
+				},
+				&pb.Job{
+					Id: "job-3",
+				},
+			},
 		},
 	}
 	executorManager := &mockExecutorManager{
@@ -299,4 +305,72 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		return strings.Contains(metric, "dataflow_server_master_job_num") &&
 			strings.Contains(metric, "dataflow_server_master_executor_num")
 	}, time.Second, time.Millisecond*20)
+}
+
+type mockPreRPCHook struct {
+	rpcutil.PreRPCHook
+}
+
+func (mockPreRPCHook) PreRPC(_ context.Context, _ interface{}, _ interface{}) (shouldRet bool, err error) {
+	return false, nil
+}
+
+func TestHTTPErrorHandler(t *testing.T) {
+	cfg := prepareServerEnv(t)
+
+	s := &Server{
+		cfg:           cfg,
+		msgService:    p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		masterRPCHook: mockPreRPCHook{},
+		jobManager: &mockJobManager{
+			jobs: map[pb.Job_State][]*pb.Job{
+				pb.Job_Running: {
+					&pb.Job{
+						Id: "job-1",
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.serve(ctx)
+	}()
+
+	require.Eventually(t, func() bool {
+		conn, err := net.Dial("tcp", cfg.Addr)
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, time.Millisecond*100, "wait for server start")
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var pbStatus spb.Status
+	err = protojson.Unmarshal(body, &pbStatus)
+	require.NoError(t, err)
+
+	rpcErr := rpcerror.FromGRPCError(status.FromProto(&pbStatus).Err())
+	require.True(t, ErrJobNotFound.Is(rpcErr))
+
+	cancel()
+	wg.Wait()
+	s.Stop()
 }

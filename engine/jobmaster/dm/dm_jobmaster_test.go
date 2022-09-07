@@ -351,7 +351,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// placeholder
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
-	require.NoError(t.T(), jm.OnMasterMessage("", ""))
+	require.NoError(t.T(), jm.OnMasterMessage(context.Background(), "", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&framework.MockWorkerHandler{}, "", ""))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
@@ -434,7 +434,7 @@ func (m *MockBaseJobmaster) Logger() *zap.Logger {
 	return log.L()
 }
 
-func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitReason, err error, extMsg string) error {
+func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitReason, err error, detail []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
