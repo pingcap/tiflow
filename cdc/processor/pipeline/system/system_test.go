@@ -25,7 +25,7 @@ func TestStartAndStopSystem(t *testing.T) {
 	t.Parallel()
 
 	s := NewSystem()
-	require.Nil(t, s.Start(context.TODO()))
+	s.Start(context.TODO())
 	s.Stop()
 }
 
