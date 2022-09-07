@@ -225,6 +225,11 @@ func (s *Server) makeTask(
 func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
+	switch tp {
+	case framework.DMJobMaster:
+		err = errors.ToDMError(err)
+	default:
+	}
 	// retryable means whether job is retryable from the perspective of business
 	// logic. This rpc error is non-retryable from the perspective of rpc client.
 	retryable, inErr := register.IsRetryableError(err, tp)
