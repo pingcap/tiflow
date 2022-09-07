@@ -54,7 +54,7 @@ func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri: framework.UpstreamPD,
 		SinkURI: "kafka://kafka:9092/testdb_test?protocol=avro" +
-			"&avro-bigint-unsigned-handling-mode=string",
+			"&avro-bigint-unsigned-handling-mode=string&compression=gzip",
 		SchemaRegistry: "http://schema-registry:8081",
 	}
 }

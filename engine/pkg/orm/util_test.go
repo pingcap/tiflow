@@ -71,17 +71,17 @@ func testInitialize(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `master_meta_kv_data` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `master_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
 		"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null,`id` varchar(128) not null,`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)'," +
-		"`status` tinyint not null COMMENT 'Uninit(1),Init(2),Finished(3),Stopped(4)',`node_id` varchar(128) not null,`address` varchar(256) not null,`epoch` bigint not null," +
-		"`config` blob,`extend_message` text,`deleted` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX `idx_mst` (`project_id`,`status`),UNIQUE INDEX `uidx_mid` (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+		"`state` tinyint not null COMMENT 'Uninit(1),Init(2),Finished(3),Stopped(4)',`node_id` varchar(128) not null,`address` varchar(256) not null,`epoch` bigint not null," +
+		"`config` blob,`detail` blob,`deleted` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX `idx_mst` (`project_id`,`state`),UNIQUE INDEX `uidx_mid` (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `worker_statuses` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
 		"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null,`job_id` varchar(128) not null,`id` varchar(128) not null,`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4)," +
-		"CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)',`status` tinyint not null COMMENT 'Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)'," +
-		"`epoch` bigint not null,`errmsg` text,`extend_bytes` blob,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_wid` (`job_id`,`id`),INDEX `idx_wst` (`job_id`,`status`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+		"CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)',`state` tinyint not null COMMENT 'Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)'," +
+		"`epoch` bigint not null,`errmsg` text,`extend_bytes` blob,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_wid` (`job_id`,`id`),INDEX `idx_wst` (`job_id`,`state`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 		sqlmock.NewRows([]string{"SCHEMA_NAME"}))

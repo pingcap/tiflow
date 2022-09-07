@@ -35,6 +35,8 @@ echo "generate dataflow engine mock code..."
 	>engine/enginepb/mock/broker_mock.go
 "$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/enginepb ResourceManagerClient \
 	>engine/enginepb/mock/resource_mock.go
+"$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/pkg/httputil JobHTTPClient \
+	>engine/pkg/httputil/mock/jobhttpclient_mock.go
 
 rm engine/pkg/client/client_mock.go || true
 "$MOCKGEN" -package client -self_package github.com/pingcap/tiflow/engine/pkg/client \
