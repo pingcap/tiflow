@@ -160,6 +160,10 @@ var (
 		"master has reached concurrency quota",
 		errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"),
 	)
+	ErrMasterCreateWorkerBackoff = errors.Normalize(
+		"create worker is being backoff, retry later",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerBackoff"),
+	)
 	ErrMasterInvalidMeta = errors.Normalize(
 		"invalid master meta data: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"),
@@ -245,6 +249,27 @@ var (
 	ErrInvalidWorkerType = errors.Normalize(
 		"invalid worker type: %s",
 		errors.RFCCodeText("DFLOW:ErrInvalidWorkerType"),
+	)
+
+	// job manager related errors
+	ErrJobManagerGetJobDetailFail = errors.Normalize(
+		"failed to get job detail from job master",
+		errors.RFCCodeText("DFLOW:ErrJobManagerGetJobDetailFail"),
+	)
+
+	ErrJobManagerReadRespBodyFail = errors.Normalize(
+		"failed to read response body",
+		errors.RFCCodeText("DFLOW:ErrJobManagerReadRespBodyFail"),
+	)
+
+	ErrJobManagerRespStatusCode404 = errors.Normalize(
+		"get job detail response status code is 404",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCode404"),
+	)
+
+	ErrJobManagerRespStatusCodeNot2XX = errors.Normalize(
+		"get job detail response status code is not 2XX",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCodeNot2XX"),
 	)
 
 	// master etcd related errors
