@@ -42,6 +42,15 @@ func (e *NodeInfo) EtcdKey() string {
 	return adapter.NodeInfoKeyAdapter.Encode(string(e.ID))
 }
 
+// ToJSON returns json marshal of a node info
+func (e *NodeInfo) ToJSON() (string, error) {
+	data, err := json.Marshal(e)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return string(data), nil
+}
+
 // ExecutorStatus describes the node aliveness status of an executor
 type ExecutorStatus int32
 
@@ -68,15 +77,6 @@ func (s ExecutorStatus) String() string {
 		return "unknown"
 	}
 	return val
-}
-
-// ToJSON returns json marshal of a node info
-func (e *NodeInfo) ToJSON() (string, error) {
-	data, err := json.Marshal(e)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	return string(data), nil
 }
 
 // ExecutorStatusChangeType describes the types of ExecutorStatusChange.

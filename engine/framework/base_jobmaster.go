@@ -61,6 +61,14 @@ type BaseJobMaster interface {
 	// their ID's must be passed by `resources`.
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
 
+	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// a more flexible way of passing options.
+	CreateWorkerV2(
+		workerType frameModel.WorkerType,
+		config WorkerConfig,
+		opts ...CreateWorkerOpt,
+	) (frameModel.WorkerID, error)
+
 	// UpdateJobStatus updates jobmaster(worker of jobmanager) status and
 	// sends a 'status updated' message to jobmanager
 	UpdateJobStatus(ctx context.Context, status frameModel.WorkerStatus) error
@@ -293,8 +301,22 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 }
 
 // CreateWorker implements BaseJobMaster.CreateWorker
-func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(
+	workerType WorkerType,
+	config WorkerConfig,
+	cost model.RescUnit,
+	resources ...resourcemeta.ResourceID,
+) (frameModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
+}
+
+// CreateWorkerV2 implements BaseJobMaster.CreateWorkerV2
+func (d *DefaultBaseJobMaster) CreateWorkerV2(
+	workerType frameModel.WorkerType,
+	config WorkerConfig,
+	opts ...CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	return d.master.CreateWorkerV2(workerType, config, opts...)
 }
 
 // UpdateStatus delegates the UpdateStatus of inner worker
