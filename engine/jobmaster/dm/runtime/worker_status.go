@@ -14,6 +14,8 @@
 package runtime
 
 import (
+	"bytes"
+	"encoding/json"
 	"time"
 
 	"github.com/pingcap/tiflow/engine/framework"
@@ -57,12 +59,52 @@ type WorkerStage int
 
 // All available WorkerStage
 const (
-	WorkerCreating WorkerStage = iota
+	WorkerCreating WorkerStage = iota + 1
 	WorkerOnline
 	WorkerFinished
 	WorkerOffline
 	// WorkerDestroying
 )
+
+var toString = map[WorkerStage]string{
+	0:              "",
+	WorkerCreating: "Creating",
+	WorkerOnline:   "Online",
+	WorkerFinished: "Finished",
+	WorkerOffline:  "Offline",
+}
+
+var toID = map[string]WorkerStage{
+	"":         0,
+	"Creating": WorkerCreating,
+	"Online":   WorkerOnline,
+	"Finished": WorkerFinished,
+	"Offline":  WorkerOffline,
+}
+
+// String implements fmt.Stringer interface
+func (ws WorkerStage) String() string {
+	return toString[ws]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (ws WorkerStage) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(ws.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (ws *WorkerStage) UnmarshalJSON(b []byte) error {
+	var j string
+	err := json.Unmarshal(b, &j)
+	if err != nil {
+		return err
+	}
+	*ws = toID[j]
+	return nil
+}
 
 // WorkerStatus manages worker state machine
 type WorkerStatus struct {

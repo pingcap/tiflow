@@ -217,7 +217,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	if currentStage == previousStage {
 		return nil
 	}
-	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.String("from", string(previousStage)), zap.String("to", string(currentStage)))
+	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.Stringer("from", previousStage), zap.Stringer("to", currentStage))
 	w.setStage(currentStage)
 
 	status := w.workerStatus(ctx)

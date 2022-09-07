@@ -239,12 +239,12 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
-			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
+			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Int64("unit", int64(runningWorker.Unit)))
 			continue
 		} else if !ok {
 			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
 		} else if !runningWorker.RunAsExpected() {
-			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
 		} else {
 			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
 		}

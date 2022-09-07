@@ -14,6 +14,7 @@
 package dm
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"github.com/pingcap/tiflow/dm/pb"
@@ -52,6 +53,50 @@ const (
 	Deleting
 )
 
+var toString = map[OperateType]string{
+	0:        "",
+	Create:   "Create",
+	Pause:    "Pause",
+	Resume:   "Resume",
+	Update:   "Update",
+	Delete:   "Delete",
+	Deleting: "Deleting",
+}
+
+var toID = map[string]OperateType{
+	"":         0,
+	"Create":   Create,
+	"Pause":    Pause,
+	"Resume":   Resume,
+	"Update":   Update,
+	"Delete":   Delete,
+	"Deleting": Deleting,
+}
+
+// String implements fmt.Stringer interface
+func (op OperateType) String() string {
+	return toString[op]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (op OperateType) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(op.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (op *OperateType) UnmarshalJSON(b []byte) error {
+	var j string
+	err := json.Unmarshal(b, &j)
+	if err != nil {
+		return err
+	}
+	*op = toID[j]
+	return nil
+}
+
 // OperateTaskMessage is operate task message
 type OperateTaskMessage struct {
 	Task string
@@ -86,6 +131,7 @@ type ProcessResult struct {
 	Detail     []byte          `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 }
 
+// NewProcessResultFromPB converts ProcessResult from pb.ProcessResult.
 func NewProcessResultFromPB(result *pb.ProcessResult) *ProcessResult {
 	if result == nil {
 		return nil

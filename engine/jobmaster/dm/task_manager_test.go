@@ -184,7 +184,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.EqualError(t.T(), err, "state not found")
 	require.Nil(t.T(), state)
 
-	require.EqualError(t.T(), taskManager.OperateTask(context.Background(), -1, nil, nil), "unknown operate type")
+	require.EqualError(t.T(), taskManager.OperateTask(context.Background(), 0, nil, nil), "unknown operate type")
 }
 
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {

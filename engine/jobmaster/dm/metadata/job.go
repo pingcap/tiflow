@@ -14,7 +14,9 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -28,20 +30,66 @@ import (
 
 // TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
-type TaskStage string
+type TaskStage int
 
 // These stages may be updated in later pr.
 const (
-	StageInit     TaskStage = "init"
-	StageRunning  TaskStage = "running"
-	StagePaused   TaskStage = "paused"
-	StageFinished TaskStage = "finished"
-	StageError    TaskStage = "error"
-	StagePausing  TaskStage = "pausing"
+	StageInit TaskStage = iota + 1
+	StageRunning
+	StagePaused
+	StageFinished
+	StageError
+	StagePausing
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled TaskStage = "unscheduled"
+	StageUnscheduled
 )
+
+var toString = map[TaskStage]string{
+	0:                "",
+	StageInit:        "Initing",
+	StageRunning:     "Running",
+	StagePaused:      "Paused",
+	StageFinished:    "Finished",
+	StageError:       "Error",
+	StagePausing:     "Pausing",
+	StageUnscheduled: "Unscheduled",
+}
+
+var toID = map[string]TaskStage{
+	"":            0,
+	"Initing":     StageInit,
+	"Running":     StageRunning,
+	"Paused":      StagePaused,
+	"Finished":    StageFinished,
+	"Error":       StageError,
+	"Pausing":     StagePausing,
+	"Unscheduled": StageUnscheduled,
+}
+
+// String implements fmt.Stringer interface
+func (ts TaskStage) String() string {
+	return toString[ts]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (ts TaskStage) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(ts.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (ts *TaskStage) UnmarshalJSON(b []byte) error {
+	var j string
+	err := json.Unmarshal(b, &j)
+	if err != nil {
+		return err
+	}
+	*ts = toID[j]
+	return nil
+}
 
 // Job represents the state of a job.
 type Job struct {

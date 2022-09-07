@@ -66,7 +66,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 // OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
 // called by user request.
 func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
-	tm.logger.Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
+	tm.logger.Info("operate task", zap.Stringer("op", op), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
 			tm.SetNextCheckTime(time.Now())
@@ -101,7 +101,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 	tm.logger.Debug(
 		"update task status",
 		zap.String("task_id", taskStatus.Task),
-		zap.String("stage", string(taskStatus.Stage)),
+		zap.Stringer("stage", taskStatus.Stage),
 		zap.Int("unit", int(taskStatus.Unit)),
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
@@ -159,7 +159,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 			tm.logger.Debug(
 				"task status will not be changed",
 				zap.String("task_id", taskID),
-				zap.String("stage", string(runningTask.Stage)),
+				zap.Stringer("stage", runningTask.Stage),
 			)
 			continue
 		}
@@ -167,9 +167,9 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		tm.logger.Info(
 			"unexpected task status",
 			zap.String("task_id", taskID),
-			zap.Int("op", int(op)),
-			zap.String("expected_stage", string(persistentTask.Stage)),
-			zap.String("stage", string(runningTask.Stage)),
+			zap.Stringer("op", op),
+			zap.Stringer("expected_stage", persistentTask.Stage),
+			zap.Stringer("stage", runningTask.Stage),
 		)
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {

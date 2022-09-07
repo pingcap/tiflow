@@ -145,7 +145,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.NoError(t, err)
 	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
-	require.Equal(t, "", string(taskStatus.ExpectedStage))
+	require.Equal(t, "", taskStatus.ExpectedStage.String())
 	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
@@ -155,7 +155,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	"job_id": "dm-jobmaster-id",
 	"task_status": {
 		"task1": {
-			"expected_stage": "paused",
+			"expected_stage": "Paused",
 			"worker_id": "",
 			"config_outdated": true,
 			"status": {
@@ -167,19 +167,19 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task2": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker2",
 			"config_outdated": true,
 			"status": {
 				"error_message": "task task2 is finished and status has been deleted",
 				"unit": 11,
-				"stage": "finished",
+				"stage": "Finished",
 				"result": null,
 				"status": null
 			}
 		},
 		"task3": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker3",
 			"config_outdated": false,
 			"status": {
@@ -191,13 +191,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task4": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker4",
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
 				"unit": 11,
-				"stage": "paused",
+				"stage": "Paused",
 				"result": {
 					"is_canceled": true
 				},
@@ -211,13 +211,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task5": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker5",
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
 				"unit": 12,
-				"stage": "error",
+				"stage": "Error",
 				"result": {
 					"errors": [
 						{
@@ -248,13 +248,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task6": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker6",
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
 				"unit": 10,
-				"stage": "running",
+				"stage": "Running",
 				"result": null,
 				"status": {
 					"totalTables": 10,
@@ -266,13 +266,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task7": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker7",
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
 				"unit": 11,
-				"stage": "finished",
+				"stage": "Finished",
 				"result": {},
 				"status": {
 					"finishedBytes": 4,
@@ -286,6 +286,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	}
 }`
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
+	fmt.Println(string(status))
 	require.NoError(t, err)
 	require.Equal(t, sortString(expectedStatus), sortString(string(status)))
 }
