@@ -70,7 +70,7 @@ func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 		return engineModel.JobTypeCDC
 	}
 
-	log.Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
+	log.Panic("unexpected fail when convert worker type to job type", zap.Stringer("worker_type", tp))
 	return engineModel.JobTypeInvalid
 }
 

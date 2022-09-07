@@ -60,9 +60,9 @@ func NewRegistry() Registry {
 // MustRegisterWorkerType implements Registry.MustRegisterWorkerType
 func (r *registryImpl) MustRegisterWorkerType(tp frameModel.WorkerType, factory WorkerFactory) {
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
-		log.Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
+		log.Panic("duplicate worker type", zap.Stringer("worker-type", tp))
 	}
-	log.Info("register worker", zap.Int64("worker-type", int64(tp)))
+	log.Info("register worker", zap.Stringer("worker-type", tp))
 }
 
 // RegisterWorkerType implements Registry.RegisterWorkerType

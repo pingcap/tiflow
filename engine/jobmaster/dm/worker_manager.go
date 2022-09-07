@@ -239,14 +239,14 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
-			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Int64("unit", int64(runningWorker.Unit)))
+			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit))
 			continue
 		} else if !ok {
-			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
+			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Stringer("unit", nextUnit))
 		} else if !runningWorker.RunAsExpected() {
-			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
 		}
 
 		var resources []resourcemeta.ResourceID
@@ -334,10 +334,10 @@ func (wm *WorkerManager) createWorker(
 	taskCfg *config.TaskCfg,
 	resources ...resourcemeta.ResourceID,
 ) error {
-	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
+	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
 	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
 	if err != nil {
-		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
+		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Stringer("unit", unit), zap.Error(err))
 	}
 	if len(workerID) != 0 {
 		//	There are two mechanisms for create workers status.

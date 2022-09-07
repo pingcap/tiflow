@@ -604,7 +604,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 	resources ...resModel.ResourceID,
 ) (frameModel.WorkerID, error) {
 	m.Logger().Info("CreateWorker",
-		zap.Int64("worker-type", int64(workerType)),
+		zap.Stringer("worker-type", workerType),
 		zap.Any("worker-config", config),
 		zap.Int("cost", int(cost)),
 		zap.Any("resources", resources),

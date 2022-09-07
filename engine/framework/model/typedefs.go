@@ -13,6 +13,11 @@
 
 package model
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
 type (
 	// MasterID is master id in master worker framework.
 	// - It is job manager id when master is job manager and worker is job master.
@@ -50,3 +55,59 @@ const (
 	WorkerDMSync
 	// extend the worker type here
 )
+
+var toString = map[WorkerType]string{
+	0:             "",
+	JobManager:    "JobManager",
+	CvsJobMaster:  "CVSJobMaster",
+	FakeJobMaster: "FakeJobMaster",
+	DMJobMaster:   "DMJobMaster",
+	CdcJobMaster:  "CDCJobMaster",
+	CvsTask:       "CVSTask",
+	FakeTask:      "FakeTask",
+	DmTask:        "DMTask",
+	CdcTask:       "CDCTask",
+	WorkerDMDump:  "DMDumpTask",
+	WorkerDMLoad:  "DMLoadTask",
+	WorkerDMSync:  "DMSyncTask",
+}
+
+var toID = map[string]WorkerType{
+	"":              0,
+	"JobManager":    JobManager,
+	"CVSJobMaster":  CvsJobMaster,
+	"FakeJobMaster": FakeJobMaster,
+	"DMJobMaster":   DMJobMaster,
+	"CDCJobMaster":  CdcJobMaster,
+	"CVSTask":       CvsTask,
+	"FakeTask":      FakeTask,
+	"DMTask":        DmTask,
+	"CDCTask":       CdcTask,
+	"DMDumpTask":    WorkerDMDump,
+	"DMLoadTask":    WorkerDMLoad,
+	"DMSyncTask":    WorkerDMSync,
+}
+
+// String implements fmt.Stringer interface
+func (wt WorkerType) String() string {
+	return toString[wt]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (wt WorkerType) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(wt.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (wt *WorkerType) UnmarshalJSON(b []byte) error {
+	var j string
+	err := json.Unmarshal(b, &j)
+	if err != nil {
+		return err
+	}
+	*wt = toID[j]
+	return nil
+}

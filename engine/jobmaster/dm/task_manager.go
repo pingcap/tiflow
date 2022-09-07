@@ -102,7 +102,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		"update task status",
 		zap.String("task_id", taskStatus.Task),
 		zap.Stringer("stage", taskStatus.Stage),
-		zap.Int("unit", int(taskStatus.Unit)),
+		zap.Stringer("unit", taskStatus.Unit),
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
