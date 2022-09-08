@@ -207,11 +207,17 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 			break
 		}
 	}
+
+	labelSet, err := label.NewSetFromMap(req.GetExecutor().GetLabels())
+	if err != nil {
+		return nil, err
+	}
 	executorMeta := &execModel.Executor{
 		ID:         executorID,
 		Name:       pbExecutor.GetName(),
 		Address:    pbExecutor.GetAddress(),
 		Capability: int(pbExecutor.GetCapability()),
+		Labels:     execModel.LabelSet(labelSet),
 	}
 	e.registerExecLocked(executorMeta)
 	e.mu.Unlock()

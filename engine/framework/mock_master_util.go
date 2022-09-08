@@ -134,12 +134,11 @@ func MockBaseMasterCreateWorker(
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
 			WorkerEpoch:  workerEpoch,
-		}), gomock.Any(), gomock.Any()).Do(
+		}), gomock.Any()).Do(
 		func(
 			ctx context.Context,
 			args *client.DispatchTaskArgs,
 			start client.StartWorkerCallback,
-			abort client.AbortWorkerCallback,
 		) {
 			start()
 		}).Times(1).Return(nil)

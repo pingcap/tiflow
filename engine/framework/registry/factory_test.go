@@ -74,3 +74,10 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, newWorker)
 }
+
+func TestDeserializeConfigError(t *testing.T) {
+	fac := NewSimpleWorkerFactory(fake.NewDummyWorker)
+	_, err := fac.DeserializeConfig([]byte(`{target-tick:100}`))
+	require.Error(t, err)
+	require.False(t, fac.IsRetryableError(err))
+}

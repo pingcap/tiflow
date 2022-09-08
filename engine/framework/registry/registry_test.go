@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -128,4 +129,26 @@ func TestSetImplMember(t *testing.T) {
 
 	setImplMember(iface, "MyBase", 2)
 	require.Equal(t, 2, iface.(*myImpl).MyBase.(int))
+}
+
+func TestIsRetryableError(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry()
+	ok := registry.RegisterWorkerType(framework.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	testCases := []struct {
+		err         error
+		isRetryable bool
+	}{
+		{NewDeserializeConfigError(errors.New("inner err")), false},
+		{errors.New("normal error"), true},
+	}
+
+	for _, tc := range testCases {
+		retryable, err := registry.IsRetryableError(tc.err, framework.FakeJobMaster)
+		require.NoError(t, err)
+		require.Equal(t, tc.isRetryable, retryable)
+	}
 }

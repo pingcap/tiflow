@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -306,11 +308,13 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		return nil, err
 	}
+
 	return &pb.Executor{
 		Id:         string(executorMeta.ID),
 		Name:       executorMeta.Name,
 		Address:    executorMeta.Address,
 		Capability: int64(executorMeta.Capability),
+		Labels:     label.Set(executorMeta.Labels).ToMap(),
 	}, nil
 }
 
@@ -367,10 +371,11 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		return resp2, err
 	}
 
-	schedulerReq := &schedModel.SchedulerRequest{
-		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+	schedulerReq, err := schedModel.NewSchedulerRequestFromPB(req)
+	if err != nil {
+		return nil, err
 	}
+
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
 		return nil, rpcerror.ToGRPCError(err)
