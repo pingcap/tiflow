@@ -48,7 +48,7 @@ func (i *strArray) Set(value string) error {
 	return nil
 }
 
-// LoadTLSContent load all tls config from file.
+// LoadTLSContent load all tls config from file or base64 fields.
 func (s *Security) LoadTLSContent() error {
 	var firstErr error
 	convertAndAssign := func(source string, convert func(string) ([]byte, error), target *[]byte) {

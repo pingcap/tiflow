@@ -377,7 +377,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 
 		dumpConfig.Security.SSLCABytes = db.Security.SSLCABytes
 		dumpConfig.Security.SSLCertBytes = db.Security.SSLCertBytes
-		dumpConfig.Security.SSLKEYBytes = db.Security.SSLKeyBytes
+		dumpConfig.Security.SSLKeyBytes = db.Security.SSLKeyBytes
 	}
 
 	// `true` means dumpling will release lock after working connection established

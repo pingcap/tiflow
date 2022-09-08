@@ -36,7 +36,6 @@ function run() {
 
 	run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "CREATE USER 'dm_user'@'%' REQUIRE X509;"
 
-read -p 123
 	# create job
 
   cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
