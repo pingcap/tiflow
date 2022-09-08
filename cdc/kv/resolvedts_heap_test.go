@@ -15,7 +15,6 @@ package kv
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +23,6 @@ func checkRegionTsInfoWithoutEvTime(t *testing.T, obtained, expected *regionTsIn
 	require.Equal(t, expected.regionID, obtained.regionID)
 	require.Equal(t, expected.index, obtained.index)
 	require.Equal(t, expected.ts.resolvedTs, obtained.ts.resolvedTs)
-	require.False(t, obtained.ts.sortByEvTime)
 }
 
 func TestRegionTsManagerResolvedTs(t *testing.T) {
@@ -119,27 +117,4 @@ func TestRegionTsManagerPenaltyForFallBackEvent(t *testing.T) {
 	rts = mgr.Pop()
 	require.Equal(t, 0, rts.ts.penalty)
 	require.Equal(t, uint64(2000), rts.ts.resolvedTs)
-}
-
-func TestRegionTsManagerEvTime(t *testing.T) {
-	t.Parallel()
-	mgr := newRegionTsManager()
-	initRegions := []*regionTsInfo{
-		{regionID: 100, ts: newEventTimeItem()},
-		{regionID: 101, ts: newEventTimeItem()},
-	}
-	for _, item := range initRegions {
-		mgr.Upsert(item)
-	}
-	info := mgr.Remove(101)
-	require.Equal(t, uint64(101), info.regionID)
-
-	ts := time.Now()
-	mgr.Upsert(&regionTsInfo{regionID: 100, ts: newEventTimeItem()})
-	info = mgr.Pop()
-	require.Equal(t, uint64(100), info.regionID)
-	require.True(t, ts.Before(info.ts.eventTime))
-	require.True(t, time.Now().After(info.ts.eventTime))
-	info = mgr.Pop()
-	require.Nil(t, info)
 }

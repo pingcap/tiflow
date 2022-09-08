@@ -131,8 +131,6 @@ func TestChangefeedUpdateCli(t *testing.T) {
 		"--sink-uri=abcd",
 		"--schema-registry=a",
 		"--sort-engine=memory",
-		"--sync-point=true",
-		"--sync-interval=1s",
 		"--changefeed-id=abc",
 		"--sort-dir=a",
 		"--upstream-pd=pd",
@@ -166,6 +164,5 @@ func TestChangefeedUpdateCli(t *testing.T) {
 	o.commonChangefeedOptions.noConfirm = true
 	o.commonChangefeedOptions.sortEngine = "unified"
 	o.changefeedID = "abcd"
-	o.commonChangefeedOptions.syncPointEnabled = true
 	require.NotNil(t, o.run(cmd))
 }

@@ -24,9 +24,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
-
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 )
@@ -53,6 +53,8 @@ type Config struct {
 	Join          string `toml:"join" json:"join" `
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
+
+	Labels map[string]string `toml:"labels" json:"labels"`
 
 	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
 
@@ -150,7 +152,11 @@ func (c *Config) Adjust() (err error) {
 		return
 	}
 
-	return
+	if _, err := label.NewSetFromMap(c.Labels); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetDefaultExecutorConfig returns a default executor config

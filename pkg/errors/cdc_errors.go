@@ -1118,4 +1118,10 @@ var (
 			"if you want to replicate this table, please add its old name to filter rule.",
 		errors.RFCCodeText("CDC:ErrSyncRenameTableFailed"),
 	)
+
+	// changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
+	)
 )

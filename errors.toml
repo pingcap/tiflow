@@ -476,6 +476,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
+'''
+
 ["CDC:ErrInvalidS3URI"]
 error = '''
 invalid s3 uri: %s
