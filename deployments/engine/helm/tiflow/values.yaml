@@ -30,8 +30,6 @@ master:
     initial-interval = "1s"
     max-interval = "15s"
 
-
-
 executor:
   replicas: 4
   logStorage: 1Gi
