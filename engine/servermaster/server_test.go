@@ -52,12 +52,12 @@ func prepareServerEnv(t *testing.T) *Config {
 	cfgTpl := `
 addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
-[framework-metastore-conf]
+[framework-meta]
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 schema = "test0"
-auth.user = "root"
-[business-metastore-conf]
+user = "root"
+[business-meta]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 schema = "test1"
