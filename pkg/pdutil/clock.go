@@ -41,24 +41,30 @@ type clock struct {
 	pdClient pd.Client
 	mu       struct {
 		sync.RWMutex
-		timeCache time.Time
-		err       error
+		// The time encoded in PD ts.
+		tsEventTime time.Time
+		// The time we receives PD ts.
+		tsProcessingTime time.Time
+		err              error
 	}
-	cancel context.CancelFunc
-	stopCh chan struct{}
+	updateInterval time.Duration
+	cancel         context.CancelFunc
+	stopCh         chan struct{}
 }
 
 // NewClock return a new clock
 func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 	ret := &clock{
-		pdClient: pdClient,
-		stopCh:   make(chan struct{}, 1),
+		pdClient:       pdClient,
+		stopCh:         make(chan struct{}, 1),
+		updateInterval: pdTimeUpdateInterval,
 	}
 	physical, _, err := pdClient.GetTS(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ret.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+	ret.mu.tsEventTime = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+	ret.mu.tsProcessingTime = time.Now()
 	return ret, nil
 }
 
@@ -66,7 +72,7 @@ func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 func (c *clock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
-	ticker := time.NewTicker(pdTimeUpdateInterval)
+	ticker := time.NewTicker(c.updateInterval)
 	defer func() { c.stopCh <- struct{}{} }()
 	for {
 		select {
@@ -81,7 +87,8 @@ func (c *clock) Run(ctx context.Context) {
 					return err
 				}
 				c.mu.Lock()
-				c.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+				c.mu.tsEventTime = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+				c.mu.tsProcessingTime = time.Now()
 				c.mu.err = nil
 				c.mu.Unlock()
 				return nil
@@ -89,7 +96,9 @@ func (c *clock) Run(ctx context.Context) {
 			if err != nil {
 				log.Warn("get time from pd failed, will use local time as pd time")
 				c.mu.Lock()
-				c.mu.timeCache = time.Now()
+				now := time.Now()
+				c.mu.tsEventTime = now
+				c.mu.tsProcessingTime = now
 				c.mu.err = err
 				c.mu.Unlock()
 			}
@@ -100,10 +109,10 @@ func (c *clock) Run(ctx context.Context) {
 // CurrentTime returns current time from timeCache
 func (c *clock) CurrentTime() (time.Time, error) {
 	c.mu.RLock()
-	err := c.mu.err
-	cacheTime := c.mu.timeCache
-	c.mu.RUnlock()
-	return cacheTime, errors.Trace(err)
+	defer c.mu.RUnlock()
+	tsEventTime := c.mu.tsEventTime
+	current := tsEventTime.Add(time.Since(c.mu.tsProcessingTime))
+	return current, errors.Trace(c.mu.err)
 }
 
 // Stop clock.
