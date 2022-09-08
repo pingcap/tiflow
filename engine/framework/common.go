@@ -107,15 +107,15 @@ const (
 	ExitReasonFailed
 )
 
-// WorkerStatusCodeToExitReason translates WorkerStatusCode to ExitReason
-// TODO: business logic should not sense 'WorkerStatus'
-func WorkerStatusCodeToExitReason(code model.WorkerStatusCode) ExitReason {
+// WorkerStateToExitReason translates WorkerState to ExitReason
+// TODO: business logic should not sense 'WorkerState'
+func WorkerStateToExitReason(code model.WorkerState) ExitReason {
 	switch code {
-	case model.WorkerStatusFinished:
+	case model.WorkerStateFinished:
 		return ExitReasonFinished
-	case model.WorkerStatusStopped:
+	case model.WorkerStateStopped:
 		return ExitReasonCanceled
-	case model.WorkerStatusError:
+	case model.WorkerStateError:
 		return ExitReasonFailed
 	}
 

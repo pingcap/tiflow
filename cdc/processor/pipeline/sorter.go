@@ -71,6 +71,8 @@ type sorterNode struct {
 
 	redoLogEnabled bool
 	changefeed     model.ChangeFeedID
+	// remainEvents record the amount of event remain in sorter engine
+	remainEvents int64
 }
 
 func newSorterNode(
@@ -120,7 +122,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			dbActorID := ssystem.DBActorID(uint64(tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
-				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
@@ -181,7 +183,7 @@ func (n *sorterNode) start(
 		case <-stdCtx.Done():
 			return nil
 		case <-n.preparedCh:
-			log.Info("table is prepared",
+			log.Debug("table is prepared",
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.String("namespace", n.changefeed.Namespace),
@@ -250,6 +252,7 @@ func (n *sorterNode) start(
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
+					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
@@ -297,7 +300,7 @@ func (n *sorterNode) start(
 					})
 					if err != nil {
 						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
+							log.Debug("flow control cancelled for table",
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
@@ -356,10 +359,16 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
 		if n.state.Load() == TableStatePreparing {
-			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
+			log.Debug("sorterNode, first resolved event received",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs))
 			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
+	} else {
+		atomic.AddInt64(&n.remainEvents, 1)
 	}
 	n.sorter.AddEntry(ctx, event)
 }
@@ -387,3 +396,7 @@ func (n *sorterNode) BarrierTs() model.Ts {
 }
 
 func (n *sorterNode) State() TableState { return n.state.Load() }
+
+func (n *sorterNode) remainEvent() int64 {
+	return atomic.LoadInt64(&n.remainEvents)
+}

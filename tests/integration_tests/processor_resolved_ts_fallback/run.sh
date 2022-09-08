@@ -18,7 +18,7 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/mysql/SinkFlushDMLPanic=return(true);github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka/SinkFlushDMLPanic=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkExecDMLError=return(true);github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer/KafkaSinkAsyncSendError=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 
 	TOPIC_NAME="ticdc-processor-resolved-ts-fallback-test-$RANDOM"
@@ -47,6 +47,9 @@ function run() {
 	ensure 10 "cdc cli processor list --server http://127.0.0.1:8301 |jq '.|length'|grep -E '^2$'"
 
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t1 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	cdc1_pid=$(lsof -i TCP:8301 -s TCP:LISTEN -t 2>/dev/null)
+	echo "killing cdc1: $cdc1_pid"
+	kill -9 $cdc1_pid &>/dev/null || true
 	# wait cdc server 1 is panic
 	ensure 10 "cdc cli capture list --server http://127.0.0.1:8302 |jq '.|length'|grep -E '^1$'"
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t1 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

@@ -6,6 +6,7 @@ port=3306
 user="root"
 password=""
 args=""
+tryNums=100
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -23,6 +24,10 @@ while [[ ${1} ]]; do
 		;;
 	--password)
 		password=${2}
+		shift
+		;;
+	--try-nums)
+		tryNums=${2}
 		shift
 		;;
 	*)
@@ -45,7 +50,7 @@ else
 fi
 while ! eval $check_cmd; do
 	i=$((i + 1))
-	if [ "$i" -gt 30 ]; then
+	if [ "$i" -gt ${tryNums} ]; then
 		echo 'Failed to start database'
 		exit 2
 	fi

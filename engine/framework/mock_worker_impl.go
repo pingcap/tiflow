@@ -94,11 +94,11 @@ func (w *mockWorkerImpl) Status() frameModel.WorkerStatus {
 	return args.Get(0).(frameModel.WorkerStatus)
 }
 
-func (w *mockWorkerImpl) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *mockWorkerImpl) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called(topic, message)
+	args := w.Called(ctx, topic, message)
 	return args.Error(0)
 }
 

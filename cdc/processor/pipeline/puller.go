@@ -65,9 +65,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 ) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	ctxC = contextutil.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
@@ -83,6 +81,8 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		n.tableSpan(),
 		kvCfg,
 		n.changefeed,
+		n.tableID,
+		n.tableName,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))

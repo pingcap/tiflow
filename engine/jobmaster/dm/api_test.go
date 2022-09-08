@@ -45,7 +45,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient, log.L()),
+			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
@@ -117,7 +117,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
@@ -292,7 +292,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock(), log.L()), nil, log.L()),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
 	}
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
@@ -301,19 +301,19 @@ func TestOperateTask(t *testing.T) {
 func TestGetJobCfg(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	jm := &JobMaster{
-		metadata: metadata.NewMetaData("master-id", kvClient, log.L()),
+		metadata: metadata.NewMetaData(kvClient, log.L()),
 	}
 	jobCfg, err := jm.GetJobCfg(context.Background())
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, jobCfg)
 
-	jobCfg = &config.JobCfg{Name: "job-id", Upstreams: []*config.UpstreamCfg{{}}}
+	jobCfg = &config.JobCfg{TaskMode: dmconfig.ModeFull, Upstreams: []*config.UpstreamCfg{{}}}
 	job := metadata.NewJob(jobCfg)
 	jm.metadata.JobStore().Put(context.Background(), job)
 
 	jobCfg, err = jm.GetJobCfg(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "job-id", jobCfg.Name)
+	require.Equal(t, dmconfig.ModeFull, jobCfg.TaskMode)
 }
 
 func TestUpdateJobCfg(t *testing.T) {
@@ -323,14 +323,14 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(mockBaseJobmaster.ID(), metaKVClient, log.L())
+		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {
@@ -375,7 +375,7 @@ func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm := &JobMaster{
-		metadata:     metadata.NewMetaData("master-id", kvClient, log.L()),
+		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
 	}
 	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})

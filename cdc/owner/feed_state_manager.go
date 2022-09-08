@@ -198,7 +198,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 	}
 	log.Info("handle admin job",
 		zap.String("namespace", m.state.ID.Namespace),
-		zap.String("changefeed", m.state.ID.ID), zap.Reflect("job", job))
+		zap.String("changefeed", m.state.ID.ID), zap.Any("job", job))
 	switch job.Type {
 	case model.AdminStop:
 		switch m.state.Info.State {
