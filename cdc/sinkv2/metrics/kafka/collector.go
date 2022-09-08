@@ -37,15 +37,12 @@ const (
 	recordPerRequestMetricName = "records-per-request"
 	compressionRatioMetricName = "compression-ratio"
 
-	// metrics at broker level.
-	incomingByteRateMetricNamePrefix   = "incoming-byte-rate-for-broker-"
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
 	requestSizeMetricNamePrefix        = "request-size-for-broker-"
 	requestLatencyInMsMetricNamePrefix = "request-latency-in-ms-for-broker-"
 	requestsInFlightMetricNamePrefix   = "requests-in-flight-for-broker-"
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
-	responseSizeMetricNamePrefix       = "response-size-for-broker-"
 )
 
 // Collector is a metric collector for kafka.
@@ -154,14 +151,6 @@ func (m *Collector) collectBrokerMetrics() {
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
 
-		incomingByteRateMetric := m.registry.Get(
-			getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
-		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
-			incomingByteRateGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().Rate1())
-		}
-
 		outgoingByteRateMetric := m.registry.Get(
 			getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
@@ -209,14 +198,6 @@ func (m *Collector) collectBrokerMetrics() {
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
 		}
-
-		responseSizeMetric := m.registry.Get(getBrokerMetricName(
-			responseSizeMetricNamePrefix, brokerID))
-		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
-			responseSizeGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean())
-		}
 	}
 }
 
@@ -240,8 +221,6 @@ func (m *Collector) cleanupBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-		incomingByteRateGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
 		outgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestRateGauge.
@@ -254,8 +233,7 @@ func (m *Collector) cleanupBrokerMetrics() {
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		responseRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		responseSizeGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
+
 	}
 }
 
