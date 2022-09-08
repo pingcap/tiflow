@@ -74,25 +74,6 @@ function run() {
 
 	kill_dm_worker
 
-	# test invalid connection with status synced
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test invalid connection with status synced"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
-	echo "check count"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'" 1
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "check test invalid connection with status synced successfully"
-
-	kill_dm_worker
-
 	# test invalid connection with status running
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"running\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -192,12 +173,6 @@ function run() {
 		"query-status gbk" \
 		"origin SQL: \[ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(i)\]: DDL ALTER TABLE \`gbk\`.\`invalid_conn_test1\` ADD UNIQUE(\`i\`) executed in background and met error" 1
 	echo "check test adding UNIQUE on column with duplicate data successfully"
-
-	dmctl_stop_task $cur/conf/dm-task.yaml
-	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	kill_dm_worker
 }
 
 cleanup_data gbk gbk2 gbk3

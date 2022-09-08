@@ -232,7 +232,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		for {
 			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
 			if err2 != nil {
-				s.tctx.L().Warn("error when getting DDL status fromTiDB", zap.String("error", err2.Error()))
+				s.tctx.L().Warn("error when getting DDL status fromTiDB", zap.Error(err2))
 			}
 			failpoint.Inject("TestStatus", func(val failpoint.Value) {
 				status = val.(string)
@@ -242,10 +242,11 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 			case model.JobStateDone.String(), model.JobStateSynced.String():
 				return nil
 			case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
-				return terror.ErrCancelledDDL.Generate(ddls[index])
+				return terror.ErrSyncerCancelledDDL.Generate(ddls[index])
 			case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
 			default:
 				tctx.L().Warn("Unexpected DDL status", zap.String("DDL status", status))
+				return err
 			}
 			select {
 			case <-tctx.Ctx.Done():

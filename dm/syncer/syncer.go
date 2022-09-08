@@ -1388,16 +1388,15 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			var ddlCreateTime int64
-			ddlCreateTime = -1 // default when scan failed
+			var ddlCreateTime int64 = -1 // default when scan failed
 			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
 			if err2 != nil {
-				s.tctx.L().Warn("selecting unix timestamp failed", zap.String("error", err2.Error()))
+				s.tctx.L().Warn("selecting unix timestamp failed", zap.Error(err2))
 			} else {
 				for row.Next() {
 					err2 = row.Scan(&ddlCreateTime)
 					if err2 != nil {
-						s.tctx.L().Warn("getting ddlCreateTime failed", zap.String("error", err2.Error()))
+						s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
 					}
 				}
 				row.Close()
