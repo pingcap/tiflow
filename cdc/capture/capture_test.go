@@ -21,6 +21,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -101,13 +103,65 @@ func TestDrainCaptureBySignal(t *testing.T) {
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
-	done := cp.Drain()
+	cp.Drain()
+	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+}
+
+func TestDrainWaitsOwnerResign(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	cp := &captureImpl{
+		EtcdClient: me,
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+	cp.config.Debug.EnableSchedulerV3 = true
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	ownerStopCh := make(chan struct{}, 1)
+	mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
+		query *owner.Query, done chan<- error,
+	) {
+		// Two captures to allow owner resign.
+		query.Data = []*model.CaptureInfo{{}, {}}
+		close(done)
+	}).AnyTimes()
+	mo.EXPECT().AsyncStop().Do(func() {
+		select {
+		case ownerStopCh <- struct{}{}:
+		default:
+		}
+	}).AnyTimes()
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
+	mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 0
+			close(done)
+		})
+
+	cp.Drain()
+
+	// Must wait owner resign by wait for async close.
 	select {
-	case <-done:
-		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
-	case <-time.After(time.Second):
+	case <-ownerStopCh:
+		// Simulate owner has resigned.
+		require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+		cp.setOwner(nil)
+	case <-time.After(3 * time.Second):
 		require.Fail(t, "timeout")
 	}
+
+	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 }
 
 type mockElection struct {

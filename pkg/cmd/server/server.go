@@ -150,7 +150,12 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 	// Drain the server before shutdown.
-	shutdownNotify := func() <-chan struct{} { return server.Drain() }
+	shutdownNotify := func() <-chan struct{} {
+		server.Drain()
+		done := make(chan struct{})
+		close(done)
+		return done
+	}
 	util.InitSignalHandling(shutdownNotify, cancel)
 
 	// Run TiCDC server.

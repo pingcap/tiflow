@@ -51,7 +51,7 @@ import (
 type Capture interface {
 	Run(ctx context.Context) error
 	AsyncClose()
-	Drain() <-chan struct{}
+	Drain()
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
@@ -582,16 +582,17 @@ func (c *captureImpl) AsyncClose() {
 }
 
 // Drain removes tables in the current TiCDC instance.
-func (c *captureImpl) Drain() <-chan struct{} {
+func (c *captureImpl) Drain() {
+	// if the instance is the owner, resign the ownership
+	if o, _ := c.GetOwner(); o != nil {
+		o.AsyncStop()
+	}
+
 	// Set liveness stopping, this is triggered by user manually stop
 	// the TiCDC instance by sent signals.
 	// It may cost a few seconds before cdc server fully stop, set it to `stopping` to prevent
 	// the capture become the leader or tables dispatched to it.
 	c.liveness.Store(model.LivenessCaptureStopping)
-
-	done := make(chan struct{})
-	close(done)
-	return done
 }
 
 // Liveness returns liveness of the capture.
