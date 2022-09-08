@@ -516,6 +516,7 @@ func (jm *JobManagerImpl) UpdateJobStatus(
 func NewJobManagerImpl(
 	dctx *dcontext.Context,
 	id frameModel.MasterID,
+	backoffConfig *jobop.BackoffConfig,
 ) (*JobManagerImpl, error) {
 	metaCli, err := dctx.Deps().Construct(func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 		return cli, nil
@@ -532,6 +533,13 @@ func NewJobManagerImpl(
 		return nil, err
 	}
 
+	backoffOpts := []jobop.BackoffOption{
+		jobop.WithResetInterval(backoffConfig.ResetInterval),
+		jobop.WithInitialInterval(backoffConfig.InitialInterval),
+		jobop.WithMaxInterval(backoffConfig.MaxInterval),
+		jobop.WithMultiplier(backoffConfig.Multiplier),
+	}
+
 	impl := &JobManagerImpl{
 		JobFsm:              NewJobFsm(),
 		uuidGen:             uuid.NewGenerator(),
@@ -542,7 +550,7 @@ func NewJobManagerImpl(
 		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 		jobOperatorNotifier: new(notify.Notifier),
 		jobHTTPClient:       engineHTTPUtil.NewJobHTTPClient(httpCli),
-		JobBackoffMgr:       jobop.NewBackoffManager(),
+		JobBackoffMgr:       jobop.NewBackoffManager(backoffOpts...),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,

@@ -29,16 +29,6 @@ const (
 	backoffOffline
 )
 
-const (
-	defaultBackoffInitInterval = 10 * time.Second
-	defaultBackoffMaxInterval  = 5 * time.Minute
-	defaultBackoffMultiplier   = 2.0
-	// If a job can keep running for more than 10 minutes, it won't be backoff
-	// If a job keeps failing, the max back interval is 5 minutes, and 10 minutes
-	// can keep at least one failed record.
-	defaultBackoffRestInterval = 2 * defaultBackoffMaxInterval
-)
-
 type backoffOpts struct {
 	clocker         clock.Clock
 	resetInterval   time.Duration
@@ -92,11 +82,12 @@ type backoffEvent struct {
 
 // NewJobBackoff creates a new job backoff
 func NewJobBackoff(jobID string, options ...BackoffOption) *JobBackoff {
+	defaultConfig := NewDefaultBackoffConfig()
 	opts := &backoffOpts{
-		resetInterval:   defaultBackoffRestInterval,
-		initialInterval: defaultBackoffInitInterval,
-		maxInterval:     defaultBackoffMaxInterval,
-		multiplier:      defaultBackoffMultiplier,
+		resetInterval:   defaultConfig.ResetInterval,
+		initialInterval: defaultConfig.InitialInterval,
+		maxInterval:     defaultConfig.MaxInterval,
+		multiplier:      defaultConfig.Multiplier,
 		clocker:         clock.New(),
 	}
 	for _, option := range options {

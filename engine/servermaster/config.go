@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -78,6 +79,8 @@ type Config struct {
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
 	Security *security.Credential `toml:"security" json:"security"`
+
+	JobBackoff *jobop.BackoffConfig `toml:"job-backoff" json:"job-backoff"`
 }
 
 func (c *Config) String() string {
@@ -131,15 +134,6 @@ func (c *Config) AdjustAndValidate() (err error) {
 	)
 }
 
-// configFromFile loads config from file and merges items into Config.
-func (c *Config) configFromFile(path string) error {
-	metaData, err := toml.DecodeFile(path, c)
-	if err != nil {
-		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
-	}
-	return checkUndecodedItems(metaData)
-}
-
 func (c *Config) configFromString(data string) error {
 	metaData, err := toml.Decode(data, c)
 	if err != nil {
@@ -162,6 +156,7 @@ func GetDefaultMasterConfig() *Config {
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
+		JobBackoff:           jobop.NewDefaultBackoffConfig(),
 	}
 }
 

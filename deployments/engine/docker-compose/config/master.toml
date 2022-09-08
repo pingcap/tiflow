@@ -13,3 +13,8 @@ endpoints = ["mysql-standalone:3306"]
 schema = "test_business"
 auth.user = "root"
 auth.passwd = ""
+
+[job-backoff]
+reset-interval = "2s"
+initial-interval = "1s"
+max-interval = "15s"
