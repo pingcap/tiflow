@@ -1,0 +1,8 @@
+{
+  "job-name": "test-selectors",
+  "worker-count": 4,
+  "target-tick": 100,
+  "etcd-watch-enable": true,
+  "etcd-endpoints": ["etcd-standalone:2379"],
+  "etcd-watch-prefix": "/fake-job/test/"
+}

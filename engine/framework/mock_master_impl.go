@@ -236,6 +236,15 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// StopImpl implements MasterImpl.StopImpl
+func (m *MockMasterImpl) StopImpl(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 // MasterClient returns internal server master client
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
 	return m.serverMasterClient

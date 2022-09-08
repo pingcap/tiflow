@@ -20,8 +20,6 @@ import (
 	cpu "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 )
 
 // used for ddlPendingCounter, no "Resolved" lock because they will be
@@ -48,7 +46,8 @@ const (
 )
 
 var (
-	workerState = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
+	f           = &promutil.PromFactory{}
+	workerState = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "master",
@@ -64,7 +63,7 @@ var (
 			Help:      "the cpu usage of master",
 		})
 
-	ddlPendingCounter = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
+	ddlPendingCounter = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "master",
@@ -72,7 +71,7 @@ var (
 			Help:      "number of pending DDL in different states, Un-synced (waiting all upstream), Synced (all upstream finished, waiting all downstream)",
 		}, []string{"task", "type"})
 
-	ddlErrCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
+	ddlErrCounter = f.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "master",
@@ -80,7 +79,7 @@ var (
 			Help:      "number of shard DDL lock/operation error",
 		}, []string{"task", "type"})
 
-	workerEventErrCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
+	workerEventErrCounter = f.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "master",
@@ -137,7 +136,7 @@ func ReportWorkerStage(name string, state float64) {
 
 // RemoveWorkerState cleans state of deleted worker.
 func RemoveWorkerState(name string) {
-	workerState.DeleteAllAboutLabels(prometheus.Labels{"worker": name})
+	workerState.DeletePartialMatch(prometheus.Labels{"worker": name})
 }
 
 // ReportDDLPending inc/dec by 1 to ddlPendingCounter.
@@ -152,7 +151,7 @@ func ReportDDLPending(task, oldStatus, newStatus string) {
 
 // RemoveDDLPending removes all counter of this task.
 func RemoveDDLPending(task string) {
-	ddlPendingCounter.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	ddlPendingCounter.DeletePartialMatch(prometheus.Labels{"task": task})
 }
 
 // ReportDDLError is a setter for ddlErrCounter.

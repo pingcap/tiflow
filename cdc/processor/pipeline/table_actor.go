@@ -410,7 +410,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
 		log.Warn("send fails",
-			zap.Reflect("msg", msg),
+			zap.Any("msg", msg),
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
@@ -418,15 +418,11 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
-func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
+func (t *tableActor) AsyncStop(_ model.Ts) bool {
 	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
 	// and then stop the whole table pipeline by call Cancel
 	msg := message.StopMessage[pmessage.Message]()
 	err := t.router.Send(t.actorID, msg)
-	log.Info("send async stop signal to table",
-		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Uint64("targetTs", targetTs))
 	if err != nil {
 		if cerror.ErrMailboxFull.Equal(err) {
 			return false

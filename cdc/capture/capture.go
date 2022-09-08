@@ -120,6 +120,8 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
+	sorterSystem *ssystem.System,
+	tableActorSystem *system.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -129,6 +131,8 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
+		sorterSystem:        sorterSystem,
+		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 
@@ -206,32 +210,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = newElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.GetClusterID()))
-
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-	}
-	c.tableActorSystem = system.NewSystem()
-	err = c.tableActorSystem.Start(ctx)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
-	if c.config.Debug.EnableDBSorter {
-		if c.sorterSystem != nil {
-			err := c.sorterSystem.Stop()
-			if err != nil {
-				log.Warn("stop sorter system failed", zap.Error(err))
-			}
-		}
-		// Sorter dir has been set and checked when server starts.
-		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
-		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		memPercentage := float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
-		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
-		err = c.sorterSystem.Start(ctx)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-	}
 
 	c.grpcService.Reset(nil)
 
@@ -593,22 +571,6 @@ func (c *captureImpl) AsyncClose() {
 		c.processorManager.AsyncClose()
 	}
 	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
-
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-		c.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.String("captureID", c.info.ID))
-
-	if c.sorterSystem != nil {
-		err := c.sorterSystem.Stop()
-		if err != nil {
-			log.Warn("stop sorter system failed",
-				zap.String("captureID", c.info.ID), zap.Error(err))
-		}
-		c.sorterSystem = nil
-	}
-	log.Info("sorter actor system closed", zap.String("captureID", c.info.ID))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {

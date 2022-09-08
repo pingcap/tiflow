@@ -70,7 +70,7 @@ func TestSelectorFilter(t *testing.T) {
 
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "type",
 				Target: "2",
@@ -88,7 +88,7 @@ func TestSelectorFilter(t *testing.T) {
 
 	_, err = sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "type",
 				Target: "3",
@@ -151,7 +151,7 @@ func TestCandidateExecutorGone(t *testing.T) {
 	sf := newSelectorFilter(provider)
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "function",
 				Target: "1",

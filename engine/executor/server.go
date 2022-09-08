@@ -187,10 +187,10 @@ func (s *Server) makeTask(
 	logutil.NewContextWithLogger(dctx, logger)
 
 	// NOTICE: only take effect when job type is job master
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: dctx.ProjectInfo.UniqueID(),
 		ID:        workerID,
-		Tp:        workerType,
+		Type:      workerType,
 		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
@@ -552,6 +552,7 @@ func (s *Server) selfRegister(ctx context.Context) error {
 			Name:       s.cfg.Name,
 			Address:    s.cfg.AdvertiseAddr,
 			Capability: defaultCapability,
+			Labels:     s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)

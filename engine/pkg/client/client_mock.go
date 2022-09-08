@@ -49,17 +49,17 @@ func (mr *MockExecutorClientMockRecorder) Close() *gomock.Call {
 }
 
 // DispatchTask mocks base method.
-func (m *MockExecutorClient) DispatchTask(arg0 context.Context, arg1 *DispatchTaskArgs, arg2 func(), arg3 func(error)) error {
+func (m *MockExecutorClient) DispatchTask(arg0 context.Context, arg1 *DispatchTaskArgs, arg2 func()) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchTask", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "DispatchTask", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DispatchTask indicates an expected call of DispatchTask.
-func (mr *MockExecutorClientMockRecorder) DispatchTask(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockExecutorClientMockRecorder) DispatchTask(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchTask", reflect.TypeOf((*MockExecutorClient)(nil).DispatchTask), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchTask", reflect.TypeOf((*MockExecutorClient)(nil).DispatchTask), arg0, arg1, arg2)
 }
 
 // RemoveResource mocks base method.
