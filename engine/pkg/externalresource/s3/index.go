@@ -15,14 +15,210 @@ package s3
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"go.uber.org/zap"
 )
 
+// indexManager is used to manage the set of all persisted file resources
+// on s3.
+//
+// The logic is that, when a worker or executor goes offline, as
+// a garbage collection mechanism, we remove all files on s3 that's NOT in
+// the index.
+//
+// This mechanism helps keeping the garbage collection mechanism consistent
+// with what we have for the local file resources.
 type indexManager interface {
 	SetPersisted(ctx context.Context, ident internal.ResourceIdent) (bool, error)
 	UnsetPersisted(ctx context.Context, ident internal.ResourceIdent) (bool, error)
+	Close()
+}
+
+type indexFile struct {
+	PersistedFileSet map[model.ResourceName]struct{} `json:"persisted_file_set"`
+}
+
+func newIndexFile() *indexFile {
+	return &indexFile{
+		PersistedFileSet: map[model.ResourceName]struct{}{},
+	}
+}
+
+func (f *indexFile) SetPersisted(ident internal.ResourceIdent) bool {
+	if _, ok := f.PersistedFileSet[ident.Name]; ok {
+		return false
+	}
+	f.PersistedFileSet[ident.Name] = struct{}{}
+	return true
+}
+
+func (f *indexFile) UnsetPersisted(ident internal.ResourceIdent) bool {
+	if _, ok := f.PersistedFileSet[ident.Name]; !ok {
+		return false
+	}
+	delete(f.PersistedFileSet, ident.Name)
+	return true
+}
+
+func (f *indexFile) DeserializeFrom(bytes []byte) error {
+	if err := json.Unmarshal(bytes, &f.PersistedFileSet); err != nil {
+		return errors.Annotate(err, "deserialize index file from s3")
+	}
+	return nil
+}
+
+func (f *indexFile) Serialize() ([]byte, error) {
+	bytes, err := json.Marshal(f.PersistedFileSet)
+	if err != nil {
+		return nil, errors.Annotate(err, "serialize index file to s3")
+	}
+	return bytes, nil
 }
 
 type indexManagerImpl struct {
+	projectInfo    tenant.ProjectInfo
+	executorID     model.ExecutorID
+	bucketSelector BucketSelector
+	options        *brStorage.S3BackendOptions
+
+	indexMu     sync.Mutex
+	indexFiles  map[model.WorkerID]*indexFile
+	updateCount int
+
+	wg                 sync.WaitGroup
+	flushIndexNotifyCh chan struct {
+		workerID model.WorkerID
+		doneCh   chan error
+	}
+	closeCh chan struct{}
+}
+
+func newIndexManager(
+	projectInfo tenant.ProjectInfo,
+	executorID model.ExecutorID,
+	bucketSelector BucketSelector,
+	s3Options *brStorage.S3BackendOptions,
+) *indexManagerImpl {
+	ret := &indexManagerImpl{
+		projectInfo:    projectInfo,
+		executorID:     executorID,
+		bucketSelector: bucketSelector,
+		options:        s3Options,
+
+		indexFiles: make(map[model.WorkerID]*indexFile),
+
+		// a maximum of one pending notification is enough.
+		flushIndexNotifyCh: make(chan struct {
+			workerID model.WorkerID
+			doneCh   chan error
+		}, 1),
+		// closeCh is closed when we want the background task to exit.
+		closeCh: make(chan struct{}),
+	}
+
+	ret.wg.Add(1)
+	go func() {
+		defer ret.wg.Done()
+		ret.backgroundTask()
+	}()
+	return ret
+}
+
+func (m *indexManagerImpl) backgroundTask() {
+	for {
+		select {
+		case <-m.closeCh:
+			return
+		case flushTask := <-m.flushIndexNotifyCh:
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := m.doFlush(ctx, flushTask.workerID)
+			cancel()
+			flushTask.doneCh <- err
+		}
+	}
+}
+
+func (m *indexManagerImpl) triggerFlush(ctx context.Context, workerID model.WorkerID) error {
+	done := make(chan error, 1)
+	flushTask := struct {
+		workerID model.WorkerID
+		doneCh   chan error
+	}{
+		workerID: workerID,
+		doneCh:   done,
+	}
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case m.flushIndexNotifyCh <- flushTask:
+	}
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err := <-done:
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID) error {
+	m.indexMu.Lock()
+	index, ok := m.indexFiles[workerID]
+	if !ok {
+		m.indexMu.Unlock()
+		log.Info("indexManager: worker has been removed",
+			zap.String("worker-id", workerID))
+		return nil
+	}
+
+	bytes, err := index.Serialize()
+	m.indexMu.Unlock()
+	if err != nil {
+		return err
+	}
+
+	uri, err := m.indexFileURI(ctx, workerID)
+	if err != nil {
+		return err
+	}
+
+	storage, err := newS3ExternalStorage(ctx, uri, m.options)
+	if err != nil {
+		return err
+	}
+
+	err = storage.WriteFile(ctx, ".index", bytes)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *indexManagerImpl) indexFileURI(ctx context.Context, workerID model.WorkerID) (string, error) {
+	bucket, err := m.bucketSelector.GetBucket(ctx, internal.ResourceScope{
+		ProjectInfo: m.projectInfo,
+		Executor:    m.executorID,
+		WorkerID:    workerID,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("s3://%s/%s/%s",
+		bucket, m.executorID, workerID), nil
 }

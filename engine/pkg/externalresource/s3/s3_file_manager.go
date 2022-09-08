@@ -81,21 +81,21 @@ func (m *FileManager) GetPersistedResource(
 func (m *FileManager) RemoveTemporaryFiles(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *FileManager) RemoveResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *FileManager) SetPersisted(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

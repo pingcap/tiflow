@@ -64,21 +64,7 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 
 // makeExternalStorage actually creates the storage object.
 func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
-	uri := r.generateURI()
-	opts := &brStorage.BackendOptions{
-		S3: *r.Options,
-	}
-	backEnd, err := brStorage.ParseBackend(uri, opts)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// Note that we may have network I/O here.
-	ret, err := brStorage.New(ctx, backEnd, &brStorage.ExternalStorageOptions{})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return ret, nil
+	return newS3ExternalStorage(ctx, r.generateURI(), r.Options)
 }
 
 func (r *resourceDescriptor) URI() string {
@@ -86,7 +72,7 @@ func (r *resourceDescriptor) URI() string {
 }
 
 func (r *resourceDescriptor) generateURI() string {
-	return fmt.Sprintf("s3:///%s/%s/%s/%s",
+	return fmt.Sprintf("s3://%s/%s/%s/%s",
 		url.QueryEscape(r.Bucket),
 		url.QueryEscape(string(r.Ident.Executor)),
 		url.QueryEscape(r.Ident.WorkerID),
