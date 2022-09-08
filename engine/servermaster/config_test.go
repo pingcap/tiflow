@@ -60,7 +60,7 @@ store-type = "ETCD"
 
 	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
 	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
-	require.Empty(t, config.BusinessMetaConf.Schema)
+	require.Equal(t, defaultBusinessMetaSchema, config.BusinessMetaConf.Schema)
 
 	frameworkSecurityConfig := &security.Credential{
 		CAPath:        "ca.pem",
