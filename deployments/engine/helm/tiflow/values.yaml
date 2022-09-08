@@ -7,8 +7,7 @@
 image:
   repository: dataflow
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: test
+  tag: chaos
 
 master:
   replicas: 3
@@ -40,4 +39,4 @@ metastore:
 cases:
   enabled: false
   repository: dataflow
-  tag: test
+  tag: chaos
