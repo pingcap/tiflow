@@ -802,7 +802,7 @@ description = ""
 workaround = "Please use `binlog skip` command to skip this error."
 tags = ["internal", "medium"]
 
-[error.DM-functional-11129]
+[error.DM-sync-unit-11129]
 message = "DDL %s executed in background and met error"
 description = ""
 workaround = "Please manually check the error from TiDB and handle it."
