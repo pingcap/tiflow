@@ -96,6 +96,13 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 	return jm, nil
 }
 
+// IsRetryableError implements WorkerFactory.IsRetryableError
+func (j dmJobMasterFactory) IsRetryableError(err error) bool {
+	// TODO: business logic implements this, err is a *terror.Error if it is
+	// generated from DM code.
+	return true
+}
+
 // initComponents initializes components of dm job master
 // it need to be called firstly in InitImpl and OnMasterRecovered
 // we should create all components if there is any error

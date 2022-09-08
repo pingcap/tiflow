@@ -121,3 +121,21 @@ func TestMasterMetaExtValue(t *testing.T) {
 	require.IsType(t, "" /* string */, val)
 	require.Equal(t, `{"selectors":[{"label":"test","target":"test-val","op":"eq"}]}`, val)
 }
+
+func TestMasterStateIsTerminated(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		code         MasterState
+		isTerminated bool
+	}{
+		{MasterStateUninit, false},
+		{MasterStateInit, false},
+		{MasterStateFinished, true},
+		{MasterStateStopped, true},
+		{MasterStateFailed, true},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.isTerminated, tc.code.IsTerminatedState())
+	}
+}
