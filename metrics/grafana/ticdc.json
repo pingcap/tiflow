@@ -6988,7 +6988,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Producer Inflight Requests",
+          "title": "Kafka Inflight Requests",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7091,7 +7091,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Producer Outgong Bytes",
+          "title": "Kafka Outgong Bytes",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7194,7 +7194,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Producer Request Rate",
+          "title": "Kafka Request Rate",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7297,7 +7297,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Producer Rquest Latency",
+          "title": "Kafka Request Latency",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7503,7 +7503,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Producer Request Ack Rate",
+          "title": "Kafka Response Rate",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7541,7 +7541,7 @@
           }
         }
       ],
-      "title": "SinkV2 - Kafka Producer",
+      "title": "SinkV2 - Kafka",
       "type": "row"
     },
     {

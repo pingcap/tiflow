@@ -31,7 +31,9 @@ const flushMetricsInterval = 5 * time.Second
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
-	compressionRatioMetricName         = "compression-ratio"
+	// Producer level.
+	compressionRatioMetricName = "compression-ratio"
+	// Broker level.
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
 	requestLatencyInMsMetricNamePrefix = "request-latency-in-ms-for-broker-"
