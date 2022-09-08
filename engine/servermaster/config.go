@@ -54,7 +54,7 @@ const (
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = ""
-	defaultFrameMetaSchema    = "test"
+	defaultFrameMetaSchema    = "test_framework"
 
 	defaultFrameworkStoreType = metaModel.StoreTypeMySQL
 	defaultBusinessStoreType  = metaModel.StoreTypeMySQL
