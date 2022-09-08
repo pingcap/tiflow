@@ -140,7 +140,7 @@ type regionWorker struct {
 	session   *eventFeedSession
 
 	inputCh  chan []*regionStatefulEvent
-	outputCh chan<- model.RegionFeedEvent
+	outputCh chan<- []model.RegionFeedEvent
 	errorCh  chan error
 
 	// event handlers in region worker
@@ -150,7 +150,7 @@ type regionWorker struct {
 	statesManager *regionStateManager
 
 	rtsManager  *regionTsManager
-	rtsUpdateCh chan *regionTsInfo
+	rtsUpdateCh chan []*regionTsInfo
 
 	metrics *regionWorkerMetrics
 
@@ -194,7 +194,7 @@ func newRegionWorker(
 		errorCh:       make(chan error, 1),
 		statesManager: newRegionStateManager(-1),
 		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
+		rtsUpdateCh:   make(chan []*regionTsInfo, 10),
 		storeAddr:     addr,
 		concurrent:    s.client.config.WorkerConcurrent,
 		metrics:       metrics,
@@ -309,7 +309,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case rtsUpdate := <-w.rtsUpdateCh:
-			w.rtsManager.Upsert(rtsUpdate)
+			for _, e := range rtsUpdate {
+				w.rtsManager.Upsert(e)
+			}
 		case <-advanceCheckTicker.C:
 			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
@@ -394,52 +396,119 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 	}
 }
 
-func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
-	if event.finishedCallbackCh != nil {
-		event.finishedCallbackCh <- struct{}{}
-		return nil
-	}
-	var err error
-	event.state.lock.Lock()
-	if event.changeEvent != nil {
-		w.metrics.metricReceivedEventSize.Observe(float64(event.changeEvent.Event.Size()))
-		switch x := event.changeEvent.Event.(type) {
-		case *cdcpb.Event_Entries_:
-			err = w.handleEventEntry(ctx, x, event.state)
-			if err != nil {
-				err = w.handleSingleRegionError(err, event.state)
-			}
-		case *cdcpb.Event_Admin_:
-			log.Info("receive admin event",
-				zap.Stringer("event", event.changeEvent),
-				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID))
-		case *cdcpb.Event_Error:
-			err = w.handleSingleRegionError(
-				cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
-				event.state,
-			)
-		case *cdcpb.Event_ResolvedTs:
-			if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state); err != nil {
-				err = w.handleSingleRegionError(err, event.state)
-			}
-		}
+func (w *regionWorker) processEvent(ctx context.Context, events []*regionStatefulEvent) error {
+	var rfe []model.RegionFeedEvent
+	var ri []*regionTsInfo
+	f := func(
+		resolvedTs uint64,
+		state *regionFeedState) {
+		regionID := state.sri.verID.GetID()
+		ri = append(ri, &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)})
+		rfe = append(rfe, model.RegionFeedEvent{
+			RegionID: regionID,
+			Resolved: &model.ResolvedSpan{
+				Span:       state.sri.span,
+				ResolvedTs: resolvedTs,
+			},
+		})
 	}
 
-	if event.resolvedTs != nil {
-		if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state); err != nil {
-			err = w.handleSingleRegionError(err, event.state)
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		if event.finishedCallbackCh != nil {
+			event.finishedCallbackCh <- struct{}{}
+			continue
+		}
+		var err error
+		event.state.lock.Lock()
+		if event.changeEvent != nil {
+			w.metrics.metricReceivedEventSize.Observe(float64(event.changeEvent.Event.Size()))
+			switch x := event.changeEvent.Event.(type) {
+			case *cdcpb.Event_Entries_:
+				err = w.handleEventEntry(ctx, x, event.state)
+				if err != nil {
+					err = w.handleSingleRegionError(err, event.state)
+				}
+			case *cdcpb.Event_Admin_:
+				log.Info("receive admin event",
+					zap.Stringer("event", event.changeEvent),
+					zap.String("namespace", w.session.client.changefeed.Namespace),
+					zap.String("changefeed", w.session.client.changefeed.ID))
+			case *cdcpb.Event_Error:
+				err = w.handleSingleRegionError(
+					cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
+					event.state,
+				)
+			case *cdcpb.Event_ResolvedTs:
+				if event.state.initialized {
+					f(x.ResolvedTs, event.state)
+				}
+				//if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state); err != nil {
+				//	err = w.handleSingleRegionError(err, event.state)
+				//}
+				//s = append(s, event)
+			}
+		}
+
+		if event.resolvedTs != nil {
+			if event.state.initialized {
+				f(event.resolvedTs.Ts, event.state)
+			}
+			//
+			//if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state); err != nil {
+			//	err = w.handleSingleRegionError(err, event.state)
+			//}
+		}
+		event.state.lock.Unlock()
+		if err != nil {
+			return err
 		}
 	}
-	event.state.lock.Unlock()
-	return err
+	select {
+	case w.rtsUpdateCh <- ri:
+	default:
+	}
+	//for _, re := range rfe {
+	select {
+	case w.outputCh <- rfe:
+		w.metrics.metricSendEventResolvedCounter.Add(float64(len(rfe)))
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	}
+	//}
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		if event.changeEvent == nil {
+			continue
+		}
+		switch x := event.changeEvent.Event.(type) {
+		case *cdcpb.Event_ResolvedTs:
+			if event.state.initialized {
+				event.state.lock.Lock()
+				event.state.lastResolvedTs = x.ResolvedTs
+				event.state.lock.Unlock()
+			}
+		}
+		if event.resolvedTs != nil {
+			if event.state.initialized {
+				event.state.lock.Lock()
+				event.state.lastResolvedTs = event.resolvedTs.Ts
+				event.state.lock.Unlock()
+			}
+		}
+	}
+	return nil
 }
 
 func (w *regionWorker) initPoolHandles(handleCount int) {
 	handles := make([]workerpool.EventHandle, 0, handleCount)
 	for i := 0; i < handleCount; i++ {
 		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
-			event := eventI.(*regionStatefulEvent)
+			event := eventI.([]*regionStatefulEvent)
 			return w.processEvent(ctx, event)
 		}).OnExit(func(err error) {
 			w.onHandleExit(err)
@@ -507,10 +576,10 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if highWatermarkMet {
 			// All events in one batch can be hashed into one handle slot.
 			slot := w.inputCalcSlot(events[0].regionID)
-			eventsX := make([]interface{}, 0, len(events))
-			for _, event := range events {
-				eventsX = append(eventsX, event)
-			}
+			var eventsX []interface{}
+			//for _, event := range events {
+			eventsX = append(eventsX, events)
+			//}
 			err = w.handles[slot].AddEvents(ctx, eventsX)
 			if err != nil {
 				return err
@@ -526,7 +595,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
 			finishedCallbackCh := make(chan struct{}, 1)
-			err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+			err = w.handles[slot].AddEvent(ctx, []*regionStatefulEvent{{finishedCallbackCh: finishedCallbackCh}})
 			if err != nil {
 				return err
 			}
@@ -543,17 +612,19 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// watermark, we send events to worker pool to increase processing
 			// throughput. Otherwise we process event in local region worker to
 			// ensure low processing latency.
+			s := make([]*regionStatefulEvent, len(events))
 			for _, event := range events {
 				exitEventHandler, skipEvent := preprocess(event, ok)
 				if exitEventHandler {
 					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 				}
 				if !skipEvent {
-					err = w.processEvent(ctx, event)
-					if err != nil {
-						return err
-					}
+					s = append(s, event)
 				}
+			}
+			err = w.processEvent(ctx, s)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -683,7 +754,7 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(err)
 				}
 				select {
-				case w.outputCh <- revent:
+				case w.outputCh <- []model.RegionFeedEvent{revent}:
 					w.metrics.metricSendEventCommitCounter.Inc()
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
@@ -706,7 +777,7 @@ func (w *regionWorker) handleEventEntry(
 				return errUnreachable
 			}
 			select {
-			case w.outputCh <- revent:
+			case w.outputCh <- []model.RegionFeedEvent{revent}:
 				w.metrics.metricSendEventCommittedCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
@@ -742,7 +813,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 
 			select {
-			case w.outputCh <- revent:
+			case w.outputCh <- []model.RegionFeedEvent{revent}:
 				w.metrics.metricSendEventCommitCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
@@ -759,53 +830,53 @@ func (w *regionWorker) handleEventEntry(
 	return nil
 }
 
-func (w *regionWorker) handleResolvedTs(
-	ctx context.Context,
-	resolvedTs uint64,
-	state *regionFeedState,
-) error {
-	if !state.initialized {
-		return nil
-	}
-	regionID := state.sri.verID.GetID()
-	// Send resolved ts update in non-blocking way, since we can re-query real
-	// resolved ts from region state even if resolved ts update is discarded.
-	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
-	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;
-	// (2) if it is a normal one, update rtsManager and check sinceLastResolvedTs
-	select {
-	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
-	default:
-	}
-
-	if resolvedTs < state.lastResolvedTs {
-		log.Debug("The resolvedTs is fallen back in kvclient",
-			zap.String("namespace", w.session.client.changefeed.Namespace),
-			zap.String("changefeed", w.session.client.changefeed.ID),
-			zap.String("EventType", "RESOLVED"),
-			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
-			zap.Uint64("regionID", regionID))
-		return nil
-	}
-	state.lastResolvedTs = resolvedTs
-	// emit a checkpointTs
-	revent := model.RegionFeedEvent{
-		RegionID: regionID,
-		Resolved: &model.ResolvedSpan{
-			Span:       state.sri.span,
-			ResolvedTs: resolvedTs,
-		},
-	}
-
-	select {
-	case w.outputCh <- revent:
-		w.metrics.metricSendEventResolvedCounter.Inc()
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	}
-	return nil
-}
+//func (w *regionWorker) handleResolvedTs(
+//	ctx context.Context,
+//	resolvedTs uint64,
+//	state *regionFeedState,
+//) error {
+//	if !state.initialized {
+//		return nil
+//	}
+//	regionID := state.sri.verID.GetID()
+//	// Send resolved ts update in non-blocking way, since we can re-query real
+//	// resolved ts from region state even if resolved ts update is discarded.
+//	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
+//	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;
+//	// (2) if it is a normal one, update rtsManager and check sinceLastResolvedTs
+//	select {
+//	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
+//	default:
+//	}
+//
+//	if resolvedTs < state.lastResolvedTs {
+//		log.Debug("The resolvedTs is fallen back in kvclient",
+//			zap.String("namespace", w.session.client.changefeed.Namespace),
+//			zap.String("changefeed", w.session.client.changefeed.ID),
+//			zap.String("EventType", "RESOLVED"),
+//			zap.Uint64("resolvedTs", resolvedTs),
+//			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
+//			zap.Uint64("regionID", regionID))
+//		return nil
+//	}
+//	state.lastResolvedTs = resolvedTs
+//	// emit a checkpointTs
+//	revent := model.RegionFeedEvent{
+//		RegionID: regionID,
+//		Resolved: &model.ResolvedSpan{
+//			Span:       state.sri.span,
+//			ResolvedTs: resolvedTs,
+//		},
+//	}
+//
+//	select {
+//	case w.outputCh <- revent:
+//		w.metrics.metricSendEventResolvedCounter.Inc()
+//	case <-ctx.Done():
+//		return errors.Trace(ctx.Err())
+//	}
+//	return nil
+//}
 
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
