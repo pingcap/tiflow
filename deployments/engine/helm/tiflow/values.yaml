@@ -24,10 +24,6 @@ master:
     user = "root"
     password = ""
     schema = "test_business"
-  resources: 
-    requests:
-      cpu: 2000m
-      memory: 4Gi
 
 executor:
   replicas: 4
@@ -36,10 +32,6 @@ executor:
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
     session-ttl = 20
-  resources: 
-    requests:
-      cpu: 2000m
-      memory: 4Gi
 
 metastore:
   frameworkStorage: 5Gi
@@ -49,16 +41,3 @@ cases:
   enabled: false
   repository: dataflow
   tag: test
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
