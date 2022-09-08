@@ -610,7 +610,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("create framework meta client fail", zap.Error(err))
 		return err
 	}
-	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameworkMeta))
+	log.Info("register framework metastore successfully", zap.Any("config", cfg.FrameworkMeta))
 
 	// register metastore for business
 	err = s.metaStoreManager.Register(cfg.BusinessMeta.StoreID, cfg.BusinessMeta)
@@ -633,7 +633,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMeta), zap.Error(err))
 		return err
 	}
-	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMeta))
+	log.Info("register business metastore successfully", zap.Any("config", cfg.BusinessMeta))
 
 	return nil
 }

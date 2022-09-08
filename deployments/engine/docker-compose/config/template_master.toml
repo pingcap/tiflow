@@ -21,8 +21,8 @@ user = "root"
 password = ""
 # NOTE: Schema Convention:
 #   1.It needs to stay UNCHANGED for one dataflow engine cluster
-# 	2.It needs be different between any two dataflow engine clusters
-# 	3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
+#   2.It needs be different between any two dataflow engine clusters
+#   3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
 schema = "test_framework"
 
 [framework-meta.security]

@@ -47,7 +47,7 @@ const (
 	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
 	defaultBusinessMetaUser      = "root"
 	defaultBusinessMetaPassword  = ""
-	defaultBusinessMetaSchema    = "test"
+	defaultBusinessMetaSchema    = "test_business"
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
