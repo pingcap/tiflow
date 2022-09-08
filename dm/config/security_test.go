@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -165,7 +164,7 @@ func (c *testTLSConfig) TestClone() {
 	}
 	// When add new fields, also update this value
 	// TODO: check it
-	c.Require().Equal(7, reflect.TypeOf(*s).NumField())
+	c.Require().Equal(10, reflect.TypeOf(*s).NumField())
 	clone := s.Clone()
 	c.Require().Equal(s, clone)
 	clone.CertAllowedCN[0] = "g"
@@ -201,13 +200,4 @@ func (c *testTLSConfig) TestLoadDumpTLSContent() {
 	c.Require().FileExists(s.SSLCA)
 	c.Require().FileExists(s.SSLCert)
 	c.Require().FileExists(s.SSLKey)
-}
-
-func TestYamlLoadString(t *testing.T) {
-	content := `ssl-key-bytes: '<downstream-key>'
-ssl-cert-bytes: '<downstream-cert>'
-`
-	var s Security
-	err := yaml.Unmarshal([]byte(content), &s)
-	require.NoError(t, err)
 }
