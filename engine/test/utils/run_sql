@@ -27,14 +27,14 @@ while [[ ${1} ]]; do
 		password=${2}
 		shift
 		;;
-  --ssl-key)
-    ssl_key=${2}
-    shift
-    ;;
-  --ssl-cert)
-    ssl_cert=${2}
-    shift
-    ;;
+	--ssl-key)
+		ssl_key=${2}
+		shift
+		;;
+	--ssl-cert)
+		ssl_cert=${2}
+		shift
+		;;
 	*)
 		sql="$sql ${1}"
 		;;
@@ -48,13 +48,13 @@ done
 
 cmd="mysql -u${user} -h${host} -P${port}"
 if [[ -n ${password} ]]; then
-  cmd="${cmd} -p${password}"
+	cmd="${cmd} -p${password}"
 fi
 if [[ -n ${ssl_key} ]]; then
-  cmd="${cmd} --ssl-key=${ssl_key}"
+	cmd="${cmd} --ssl-key=${ssl_key}"
 fi
 if [[ -n ${ssl_cert} ]]; then
-  cmd="${cmd} --ssl-cert=${ssl_cert}"
+	cmd="${cmd} --ssl-cert=${ssl_cert}"
 fi
 cmd="${cmd} --default-character-set utf8mb4 -e \"${sql}\""
 

@@ -32,9 +32,9 @@ openssl req -new -x509 -days 1000 -key ca.key -out ca.pem -subj "/CN=localhost" 
 # generate server certificate
 
 for role in "$@"; do
-  openssl genrsa -out "$role.key" 2048
-  openssl req -new -key "$role.key" -out "$role.csr" -subj "/CN=${role}"
-  openssl x509 -req -days 365 -extensions EXT -extfile "ipsan.cnf" -in "$role.csr" -CA "ca.pem" -CAkey "ca.key" -CAcreateserial -out "$role.pem" 2>/dev/null
+	openssl genrsa -out "$role.key" 2048
+	openssl req -new -key "$role.key" -out "$role.csr" -subj "/CN=${role}"
+	openssl x509 -req -days 365 -extensions EXT -extfile "ipsan.cnf" -in "$role.csr" -CA "ca.pem" -CAkey "ca.key" -CAcreateserial -out "$role.pem" 2>/dev/null
 done
 
 # generate client certificate
