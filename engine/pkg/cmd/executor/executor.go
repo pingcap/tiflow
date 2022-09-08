@@ -110,29 +110,14 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.AdvertiseAddr = o.executorConfig.AdvertiseAddr
 		case "join":
 			cfg.Join = o.executorConfig.Join
+		case "labels":
+			cfg.Labels = o.executorConfig.Labels
 		case "config":
 			// do nothing
 		case "log-file":
 			cfg.LogConf.File = o.executorConfig.LogConf.File
 		case "log-level":
 			cfg.LogConf.Level = o.executorConfig.LogConf.Level
-<<<<<<< HEAD
-		case "join":
-			cfg.Join = o.executorConfig.Join
-		case "ca":
-			cfg.Security.CAPath = o.executorConfig.Security.CAPath
-		case "cert":
-			cfg.Security.CertPath = o.executorConfig.Security.CertPath
-		case "key":
-			cfg.Security.KeyPath = o.executorConfig.Security.KeyPath
-		case "cert-allowed-cn":
-			cfg.Security.CertAllowedCN = o.executorConfig.Security.CertAllowedCN
-		case "labels":
-			cfg.Labels = o.executorConfig.Labels
-		case "config":
-			// do nothing
-=======
->>>>>>> e09188167 (fix params)
 		default:
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
 		}
