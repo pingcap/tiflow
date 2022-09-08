@@ -302,8 +302,8 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		metric := string(body)
-		return strings.Contains(metric, "dataflow_server_master_job_num") &&
-			strings.Contains(metric, "dataflow_server_master_executor_num")
+		return strings.Contains(metric, "tiflow_server_master_job_num") &&
+			strings.Contains(metric, "tiflow_server_master_executor_num")
 	}, time.Second, time.Millisecond*20)
 }
 
