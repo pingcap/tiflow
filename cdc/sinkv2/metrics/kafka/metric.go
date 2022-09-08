@@ -16,79 +16,6 @@ package kafka
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	// Histogram update by the `batch-size`.
-	batchSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_batch_size",
-			Help:      "The number of bytes sent per partition per request for all topics.",
-		}, []string{"namespace", "changefeed"})
-
-	// Meter mark by total records count.
-	recordSendRateGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_record_send_rate",
-			Help:      "Records/second sent to all topics.",
-		}, []string{"namespace", "changefeed"})
-
-	// Histogram update by all records count.
-	recordPerRequestGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_records_per_request",
-			Help:      "The number of records sent per request for all topics.",
-		}, []string{"namespace", "changefeed"})
-
-	// Histogram update by `compression-ratio`.
-	compressionRatioGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_compression_ratio",
-			Help:      "The compression ratio times 100 of record batches for all topics.",
-		}, []string{"namespace", "changefeed"})
-
-	// Metrics for outgoing events. Meter mark for each request's size in bytes.
-	outgoingByteRateGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_outgoing_byte_rate",
-			Help:      "Bytes/second written off all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
-	// Meter mark by 1 for each request.
-	requestRateGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_request_rate",
-			Help:      "Requests/second sent to all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
-	// Meter mark for each request's size in bytes.
-	requestSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_request_size",
-			Help:      "The request size in bytes for all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
-	// Histogram update for each received response,
-	// requestLatency := time.Since(response.requestTime).
-	requestLatencyInMsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "kafka_producer_request_latency",
-			Help:      "The request latency in ms for all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
 	// Counter inc by 1 once a request send, dec by 1 for a response received.
 	requestsInFlightGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -98,7 +25,39 @@ var (
 			Help: "The current number of in-flight requests" +
 				" awaiting a response for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
-
+	// Metrics for outgoing events. Meter mark for each request's size in bytes.
+	outgoingByteRateGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "kafka_producer_outgoing_byte_rate",
+			Help:      "Bytes/second written off all brokers.",
+		}, []string{"namespace", "changefeed", "broker"})
+	// Meter mark by 1 for each request.
+	requestRateGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "kafka_producer_request_rate",
+			Help:      "Requests/second sent to all brokers.",
+		}, []string{"namespace", "changefeed", "broker"})
+	// Histogram update for each received response,
+	// requestLatency := time.Since(response.requestTime).
+	requestLatencyInMsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "kafka_producer_request_latency",
+			Help:      "The request latency in ms for all brokers.",
+		}, []string{"namespace", "changefeed", "broker"})
+	// Histogram update by `compression-ratio`.
+	compressionRatioGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "kafka_producer_compression_ratio",
+			Help:      "The compression ratio times 100 of record batches for all topics.",
+		}, []string{"namespace", "changefeed"})
 	// Meter mark by 1 once a response received.
 	responseRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -111,12 +70,8 @@ var (
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(batchSizeGauge)
-	registry.MustRegister(recordSendRateGauge)
-	registry.MustRegister(recordPerRequestGauge)
 	registry.MustRegister(compressionRatioGauge)
 	registry.MustRegister(outgoingByteRateGauge)
-	registry.MustRegister(requestSizeGauge)
 	registry.MustRegister(requestRateGauge)
 	registry.MustRegister(requestLatencyInMsGauge)
 	registry.MustRegister(requestsInFlightGauge)

@@ -31,15 +31,9 @@ const flushMetricsInterval = 5 * time.Second
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
-	// metrics at producer level.
-	batchSizeMetricName        = "batch-size"
-	recordSendRateMetricName   = "record-send-rate"
-	recordPerRequestMetricName = "records-per-request"
-	compressionRatioMetricName = "compression-ratio"
-
+	compressionRatioMetricName         = "compression-ratio"
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
-	requestSizeMetricNamePrefix        = "request-size-for-broker-"
 	requestLatencyInMsMetricNamePrefix = "request-latency-in-ms-for-broker-"
 	requestsInFlightMetricNamePrefix   = "requests-in-flight-for-broker-"
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
@@ -116,27 +110,6 @@ func (m *Collector) collectProducerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 
-	batchSizeMetric := m.registry.Get(batchSizeMetricName)
-	if histogram, ok := batchSizeMetric.(metrics.Histogram); ok {
-		batchSizeGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean())
-	}
-
-	recordSendRateMetric := m.registry.Get(recordSendRateMetricName)
-	if meter, ok := recordSendRateMetric.(metrics.Meter); ok {
-		recordSendRateGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(meter.Snapshot().Rate1())
-	}
-
-	recordPerRequestMetric := m.registry.Get(recordPerRequestMetricName)
-	if histogram, ok := recordPerRequestMetric.(metrics.Histogram); ok {
-		recordPerRequestGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean())
-	}
-
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
@@ -165,14 +138,6 @@ func (m *Collector) collectBrokerMetrics() {
 			requestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
-		}
-
-		requestSizeMetric := m.registry.Get(
-			getBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
-		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
-			requestSizeGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean())
 		}
 
 		requestLatencyMetric := m.registry.Get(
@@ -206,12 +171,6 @@ func getBrokerMetricName(prefix, brokerID string) string {
 }
 
 func (m *Collector) cleanupProducerMetrics() {
-	batchSizeGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	recordSendRateGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	recordPerRequestGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	compressionRatioGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 }
@@ -224,8 +183,6 @@ func (m *Collector) cleanupBrokerMetrics() {
 		outgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestRateGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestSizeGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestLatencyInMsGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
