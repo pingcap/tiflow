@@ -528,7 +528,7 @@ func TestJob(t *testing.T) {
 			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
 			fn: "QueryJobsByState",
 			inputs: []interface{}{
-				"j111",
+				"p111",
 				1,
 			},
 			output: []*frameModel.MasterMeta{
@@ -550,8 +550,8 @@ func TestJob(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "SELECT * FROM `master_meta` WHERE (id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
-				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnRows(
+				expectedSQL := "SELECT * FROM `master_meta` WHERE (project_id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("p111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
 						"type", "state", "node_id", "address", "epoch", "config", "seq_id", "ext",
@@ -562,13 +562,13 @@ func TestJob(t *testing.T) {
 		{
 			fn: "QueryJobsByState",
 			inputs: []interface{}{
-				"j111",
+				"p111",
 				1,
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "SELECT * FROM `master_meta` WHERE (id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
-				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnError(
+				expectedSQL := "SELECT * FROM `master_meta` WHERE (project_id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("p111", 1).WillReturnError(
 					errors.New("QueryJobsByState error"))
 			},
 		},
