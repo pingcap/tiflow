@@ -30,7 +30,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -608,16 +609,12 @@ func isRetryableDMLError(err error) bool {
 		return false
 	}
 
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
 		return true
 	}
-
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
-		return false
-	}
-	return true
+	// Check if the error is an retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {

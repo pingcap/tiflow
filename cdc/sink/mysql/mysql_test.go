@@ -2086,3 +2086,40 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 
 	_ = sink.Close(ctx)
 }
+
+func TestIsRetryableDMLError(t *testing.T) {
+	cases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			err:      nil,
+			expected: false,
+		},
+		{
+			err:      errors.New("test"),
+			expected: false,
+		},
+		{
+			err:      context.Canceled,
+			expected: false,
+		},
+		{
+			err: &dmysql.MySQLError{
+				Number:  1292,
+				Message: "Incorrect date value: '0000-00-00' for column 'ts' at row 1",
+			},
+			expected: false,
+		},
+		{
+			err: &dmysql.MySQLError{
+				Number:  9007,
+				Message: "write conflict error",
+			},
+			expected: true,
+		},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.expected, isRetryableDMLError(c.err), c.err)
+	}
+}
