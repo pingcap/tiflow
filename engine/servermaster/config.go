@@ -70,8 +70,8 @@ type Config struct {
 
 	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
 
-	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-meta" json:"framework-meta"`
-	BusinessMetaConf *metaModel.StoreConfig `toml:"business-meta" json:"business-meta"`
+	FrameworkMeta *metaModel.StoreConfig `toml:"framework-meta" json:"framework-meta"`
+	BusinessMeta  *metaModel.StoreConfig `toml:"business-meta" json:"business-meta"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -108,14 +108,14 @@ func (c *Config) Toml() (string, error) {
 // AdjustAndValidate validates and adjusts the master configuration
 func (c *Config) AdjustAndValidate() (err error) {
 	// adjust the metastore type
-	c.FrameMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
-	c.BusinessMetaConf.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+	c.FrameworkMeta.StoreType = strings.ToLower(strings.TrimSpace(c.FrameworkMeta.StoreType))
+	c.BusinessMeta.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMeta.StoreType))
 
-	if c.FrameMetaConf.Schema == defaultFrameMetaSchema {
+	if c.FrameworkMeta.Schema == defaultFrameMetaSchema {
 		log.Warn("use default test schema for framework metastore, " +
 			"better to use predefined schema in production environment")
 	}
-	if c.BusinessMetaConf.Schema == defaultBusinessMetaSchema {
+	if c.BusinessMeta.Schema == defaultBusinessMetaSchema {
 		log.Warn("use default test schema for business metastore, " +
 			"better to use predefined schema in production environment")
 	}
@@ -144,8 +144,8 @@ func (c *Config) AdjustAndValidate() (err error) {
 	}
 
 	return validation.ValidateStruct(c,
-		validation.Field(&c.FrameMetaConf),
-		validation.Field(&c.BusinessMetaConf),
+		validation.Field(&c.FrameworkMeta),
+		validation.Field(&c.BusinessMeta),
 	)
 }
 
@@ -177,8 +177,8 @@ func GetDefaultMasterConfig() *Config {
 		Addr:                 defaultMasterAddr,
 		AdvertiseAddr:        "",
 		ETCDEndpoints:        []string{defaultEtcdEndpoint},
-		FrameMetaConf:        newFrameMetaConfig(),
-		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
+		FrameworkMeta:        newFrameMetaConfig(),
+		BusinessMeta:         NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,

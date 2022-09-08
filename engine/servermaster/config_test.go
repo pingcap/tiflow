@@ -52,15 +52,15 @@ store-type = "ETCD"
 	require.Nil(t, err)
 
 	require.Equal(t, "server-master-test", config.Name)
-	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
-	require.Equal(t, "root", config.FrameMetaConf.User)
-	require.Equal(t, "passwd", config.FrameMetaConf.Password)
-	require.Equal(t, "test0", config.FrameMetaConf.Schema)
-	require.Equal(t, "mysql", config.FrameMetaConf.StoreType)
+	require.Equal(t, "mysql-0:3306", config.FrameworkMeta.Endpoints[0])
+	require.Equal(t, "root", config.FrameworkMeta.User)
+	require.Equal(t, "passwd", config.FrameworkMeta.Password)
+	require.Equal(t, "test0", config.FrameworkMeta.Schema)
+	require.Equal(t, "mysql", config.FrameworkMeta.StoreType)
 
-	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
-	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
-	require.Equal(t, defaultBusinessMetaSchema, config.BusinessMetaConf.Schema)
+	require.Equal(t, "etcd", config.BusinessMeta.StoreType)
+	require.Equal(t, "metastore:12479", config.BusinessMeta.Endpoints[0])
+	require.Equal(t, defaultBusinessMetaSchema, config.BusinessMeta.Schema)
 
 	frameworkSecurityConfig := &security.Credential{
 		CAPath:        "ca.pem",
@@ -68,7 +68,7 @@ store-type = "ETCD"
 		KeyPath:       "key.pem",
 		CertAllowedCN: []string{"framework"},
 	}
-	require.Equal(t, frameworkSecurityConfig, config.FrameMetaConf.Security)
+	require.Equal(t, frameworkSecurityConfig, config.FrameworkMeta.Security)
 
 	fmt.Printf("config: %+v\n", config)
 }

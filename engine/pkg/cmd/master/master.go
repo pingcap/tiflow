@@ -53,8 +53,8 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.masterConfig.AdvertiseAddr, "advertise-addr", o.masterConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
 	cmd.Flags().StringSliceVar(&o.masterConfig.ETCDEndpoints, "etcd-endpoints", o.masterConfig.ETCDEndpoints, "etcd endpoints")
-	cmd.Flags().StringSliceVar(&o.masterConfig.FrameMetaConf.Endpoints, "framework-meta-endpoints", o.masterConfig.FrameMetaConf.Endpoints, "framework metastore endpoint")
-	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMetaConf.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMetaConf.Endpoints, "business metastore endpoint")
+	cmd.Flags().StringSliceVar(&o.masterConfig.FrameworkMeta.Endpoints, "framework-meta-endpoints", o.masterConfig.FrameworkMeta.Endpoints, "framework metastore endpoint")
+	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMeta.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMeta.Endpoints, "business metastore endpoint")
 
 	cmd.Flags().StringVar(&o.masterConfigFilePath, "config", "", "Path of the configuration file")
 	cmd.Flags().StringVar(&o.masterConfig.LogConf.File, "log-file", o.masterConfig.LogConf.File, "log file path")
@@ -115,9 +115,9 @@ func (o *options) complete(cmd *cobra.Command) error {
 		case "etcd-endpoints":
 			cfg.ETCDEndpoints = o.masterConfig.ETCDEndpoints
 		case "framework-meta-endpoints":
-			cfg.FrameMetaConf.Endpoints = o.masterConfig.FrameMetaConf.Endpoints
+			cfg.FrameworkMeta.Endpoints = o.masterConfig.FrameworkMeta.Endpoints
 		case "business-meta-endpoints":
-			cfg.BusinessMetaConf.Endpoints = o.masterConfig.BusinessMetaConf.Endpoints
+			cfg.BusinessMeta.Endpoints = o.masterConfig.BusinessMeta.Endpoints
 		case "config":
 			// do nothing
 		case "log-file":
