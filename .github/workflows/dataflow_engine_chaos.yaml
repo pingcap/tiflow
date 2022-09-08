@@ -85,7 +85,7 @@ jobs:
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
-          helm install -f $GITHUB_WORKSPACE/engine/chaos/manifests/chaos-values.yaml chaos $GITHUB_WORKSPACE/deployments/engine/helm/tiflow
+          helm install -f $GITHUB_WORKSPACE/deployments/engine/helm/tiflow/values.yaml chaos $GITHUB_WORKSPACE/deployments/engine/helm/tiflow
           helm list
           sleep 5
           kubectl get pods

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,15 +27,22 @@ func TestMetaStoreConfig(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-[framework-metastore-conf]
+name = "server-master-test"
+[framework-meta]
 endpoints = ["mysql-0:3306"]
-auth.user = "root"
-auth.passwd = "passwd"
+user = "root"
+password = "passwd"
 schema = "test0"
 
-[business-metastore-conf]
+[framework-meta.security]
+ca-path = "ca.pem"
+cert-path = "cert.pem"
+key-path = "key.pem"
+cert-allowed-cn = ["framework"]
+
+[business-meta]
 endpoints = ["metastore:12479"]
-store-type = "etcd"
+store-type = "ETCD"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 
@@ -44,15 +52,24 @@ store-type = "etcd"
 	err = config.AdjustAndValidate()
 	require.Nil(t, err)
 
-	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
-	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
-	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
-	require.Equal(t, "test0", config.FrameMetaConf.Schema)
-	require.Equal(t, "mysql", config.FrameMetaConf.StoreType)
+	require.Equal(t, "server-master-test", config.Name)
+	require.Equal(t, "mysql-0:3306", config.FrameworkMeta.Endpoints[0])
+	require.Equal(t, "root", config.FrameworkMeta.User)
+	require.Equal(t, "passwd", config.FrameworkMeta.Password)
+	require.Equal(t, "test0", config.FrameworkMeta.Schema)
+	require.Equal(t, "mysql", config.FrameworkMeta.StoreType)
 
-	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
-	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
-	require.Empty(t, config.BusinessMetaConf.Schema)
+	require.Equal(t, "etcd", config.BusinessMeta.StoreType)
+	require.Equal(t, "metastore:12479", config.BusinessMeta.Endpoints[0])
+	require.Equal(t, defaultBusinessMetaSchema, config.BusinessMeta.Schema)
+
+	frameworkSecurityConfig := &security.Credential{
+		CAPath:        "ca.pem",
+		CertPath:      "cert.pem",
+		KeyPath:       "key.pem",
+		CertAllowedCN: []string{"framework"},
+	}
+	require.Equal(t, frameworkSecurityConfig, config.FrameworkMeta.Security)
 }
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
