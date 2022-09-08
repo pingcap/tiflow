@@ -99,16 +99,6 @@ var (
 				" awaiting a response for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
 
-	// Metrics for incoming events.
-	// Meter mark for each received response's size in bytes.
-	incomingByteRateGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "kafka_producer_incoming_byte_rate",
-			Help:      "Bytes/second read off all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
 	// Meter mark by 1 once a response received.
 	responseRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -116,15 +106,6 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_response_rate",
 			Help:      "Responses/second received from all brokers.",
-		}, []string{"namespace", "changefeed", "broker"})
-
-	// Meter mark by each read response size.
-	responseSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "kafka_producer_response_size",
-			Help:      "The response size in bytes for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
 )
 
@@ -134,13 +115,10 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(recordSendRateGauge)
 	registry.MustRegister(recordPerRequestGauge)
 	registry.MustRegister(compressionRatioGauge)
-
-	registry.MustRegister(incomingByteRateGauge)
 	registry.MustRegister(outgoingByteRateGauge)
 	registry.MustRegister(requestSizeGauge)
 	registry.MustRegister(requestRateGauge)
 	registry.MustRegister(requestLatencyInMsGauge)
 	registry.MustRegister(requestsInFlightGauge)
-	registry.MustRegister(responseSizeGauge)
 	registry.MustRegister(responseRateGauge)
 }
