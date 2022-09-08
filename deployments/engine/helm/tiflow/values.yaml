@@ -46,7 +46,7 @@ metastore:
   businessStorage: 5Gi
 
 cases:
-  enabled: true
+  enabled: false
   repository: dataflow
   tag: test
 
