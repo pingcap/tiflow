@@ -30,9 +30,6 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -42,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
 // Dumpling dumps full data from a MySQL-compatible database.
@@ -81,8 +79,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		// will register and deregister metrics, so we must use NoopRegistry
 		// to avoid duplicated registration.
 		m.metricProxies = &metricProxies{}
-		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
-			m.cfg.MetricsFactory,
+		m.metricProxies.dumplingExitWithErrorCounter = m.cfg.MetricsFactory.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "dm",
 				Subsystem: "dumpling",

@@ -1,4 +1,3 @@
-name: test
 task-mode: all
 target-database:
   host: host.docker.internal

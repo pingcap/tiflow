@@ -53,7 +53,6 @@ function run() {
 
 	# wait for dump and load finished
 
-read -p 123
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == 12'"
 
 	# check data
@@ -71,6 +70,4 @@ read -p 123
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
 run $*
-# TODO: handle log properly
-# check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
