@@ -54,6 +54,8 @@ var (
 )
 
 func createTestFixture(t *testing.T) {
+	t.Helper()
+
 	dir := t.TempDir()
 
 	caFilePath = path.Join(dir, caFile)
