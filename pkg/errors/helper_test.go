@@ -142,7 +142,7 @@ func TestChangefeedFastFailError(t *testing.T) {
 	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
 }
 
-func TestChangefeedNotRetryError(t *testing.T) {
+func TestIsChangefeedUnRetryableError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		err      error
@@ -170,6 +170,10 @@ func TestChangefeedNotRetryError(t *testing.T) {
 		},
 		{
 			err:      ErrSyncRenameTableFailed.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      WrapChangefeedUnRetryableErr(errors.New("whatever")),
 			expected: true,
 		},
 	}
