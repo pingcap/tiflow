@@ -3,10 +3,10 @@ package mock
 import (
 	"database/sql"
 	"database/sql/driver"
-	"log"
 	"sync"
 
 	"github.com/glebarez/go-sqlite"
+	"github.com/pingcap/log"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
