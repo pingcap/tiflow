@@ -43,6 +43,9 @@ type Registry interface {
 		config []byte,
 		epoch frameModel.Epoch,
 	) (framework.Worker, error)
+	// IsRetryableError returns whether error is treated as retryable from the
+	// perspective of business logic.
+	IsRetryableError(err error, tp framework.WorkerType) (bool, error)
 }
 
 type registryImpl struct {
@@ -130,6 +133,15 @@ func (r *registryImpl) CreateWorker(
 		zap.String("reason", "impl has no member BaseWorker or BaseJobMaster"),
 		zap.Any("workerType", tp))
 	return nil, nil
+}
+
+// IsRetryableError checks whether an error is retryable in business logic
+func (r *registryImpl) IsRetryableError(err error, tp frameModel.WorkerType) (bool, error) {
+	factory, ok := r.getWorkerFactory(tp)
+	if !ok {
+		return false, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+	}
+	return factory.IsRetryableError(err), nil
 }
 
 func (r *registryImpl) getWorkerFactory(tp frameModel.WorkerType) (factory WorkerFactory, ok bool) {
