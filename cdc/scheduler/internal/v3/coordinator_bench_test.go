@@ -70,7 +70,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		}
 		coord = &coordinator{
 			trans:        transport.NewMockTrans(),
-			replicationM: replication.NewManager(10, model.ChangeFeedID{}),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: member.NewCaptureManager(
 				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
@@ -105,7 +105,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		}
 		coord = &coordinator{
 			trans:        transport.NewMockTrans(),
-			replicationM: replication.NewManager(10, model.ChangeFeedID{}),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
@@ -132,7 +132,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 				State: member.CaptureStateInitialized,
 			}
 		}
-		replicationM := replication.NewManager(10, model.ChangeFeedID{})
+		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
 		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
 		for i := 0; i < total; i++ {

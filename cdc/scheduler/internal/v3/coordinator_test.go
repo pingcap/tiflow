@@ -286,7 +286,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.Equal(t, 0, count)
 
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
-	coord.replicationM = replication.NewManager(10, model.ChangeFeedID{})
+	coord.replicationM = replication.NewReplicationManager(10, model.ChangeFeedID{})
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
@@ -312,7 +312,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.schedulerM = scheduler.NewManager(
+	coord.schedulerM = scheduler.NewSchedulerManager(
 		model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
 	count, err = coord.DrainCapture("b")
 	require.NoError(t, err)

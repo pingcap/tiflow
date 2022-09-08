@@ -26,7 +26,7 @@ import (
 func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
-	m := NewManager(model.DefaultChangeFeedID("test-changefeed"),
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
 		config.NewDefaultSchedulerConfig())
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerPriorityBasic])
@@ -41,7 +41,7 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 
 	cfg := config.NewDefaultSchedulerConfig()
 	cfg.MaxTaskConcurrency = 1
-	m := NewManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
