@@ -14,10 +14,11 @@
 package servermaster
 
 import (
-	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,7 @@ store-type = "ETCD"
 	fileName := mustWriteToTempFile(t, testToml)
 
 	config := GetDefaultMasterConfig()
-	err := config.configFromFile(fileName)
+	err := util.StrictDecodeFile(fileName, "tiflow master", config)
 	require.Nil(t, err)
 	err = config.AdjustAndValidate()
 	require.Nil(t, err)
@@ -69,8 +70,6 @@ store-type = "ETCD"
 		CertAllowedCN: []string{"framework"},
 	}
 	require.Equal(t, frameworkSecurityConfig, config.FrameworkMeta.Security)
-
-	fmt.Printf("config: %+v\n", config)
 }
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
@@ -93,4 +92,21 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 	store = NewDefaultBusinessMetaConfig()
 	require.Equal(t, DefaultBusinessMetaID, store.StoreID)
 	require.Equal(t, defaultBusinessMetaEndpoints, store.Endpoints[0])
+}
+
+func TestLoadConfigFromFile(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultMasterConfig()
+	data, err := cfg.Toml()
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "master-ut.toml")
+	err = os.WriteFile(filename, []byte(data), 0o600)
+	require.NoError(t, err)
+
+	cfg2 := &Config{}
+	err = util.StrictDecodeFile(filename, "tiflow master", cfg2)
+	require.NoError(t, err)
+	require.Equal(t, cfg, cfg2)
 }

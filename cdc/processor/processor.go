@@ -960,7 +960,7 @@ func (p *processor) createTablePipelineImpl(
 		}
 
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(tableID)
+		s := p.sinkV2Factory.CreateTableSink(tableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,

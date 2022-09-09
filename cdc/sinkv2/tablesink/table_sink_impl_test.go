@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -153,7 +154,7 @@ func TestNewEventTableSink(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	require.Equal(t, uint64(0), tb.eventID, "eventID should start from 0")
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
@@ -168,7 +169,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
@@ -178,7 +179,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
@@ -221,7 +222,7 @@ func TestGetCheckpointTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
@@ -254,7 +255,7 @@ func TestClose(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -281,7 +282,7 @@ func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	tb.UpdateResolvedTs(model.NewResolvedTs(105))
