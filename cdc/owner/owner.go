@@ -148,7 +148,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	}
 
 	o.captures = state.Captures
-	o.updateMetrics(state)
+	o.updateMetrics()
 
 	// handleJobs() should be called before clusterVersionConsistent(), because
 	// when there are different versions of cdc nodes in the cluster,
@@ -341,7 +341,7 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	changefeedStatusGauge.Reset()
 }
 
-func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
+func (o *ownerImpl) updateMetrics() {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
