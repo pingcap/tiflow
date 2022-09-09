@@ -28,6 +28,7 @@ spec:
             - "/tiflow-chaos-case"
             - "--duration=20m"
             - "--etcd-addr={{ include "tiflow.name" . }}-metastore-etcd:12479"
+            - "--business-meta-addr={{ include "tiflow.name" . }}-metastore-mysql:3306"
             - "--addr={{ include "tiflow.name" . }}-server-master:10240"
             - "--master-count={{ .Values.master.replicas }}"
             - "--worker-count={{ .Values.executor.replicas }}"

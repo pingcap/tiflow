@@ -14,10 +14,12 @@
 package servermaster
 
 import (
-	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,35 +27,49 @@ func TestMetaStoreConfig(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-[framework-metastore-conf]
+name = "server-master-test"
+[framework-meta]
 endpoints = ["mysql-0:3306"]
-auth.user = "root"
-auth.passwd = "passwd"
+user = "root"
+password = "passwd"
 schema = "test0"
 
-[business-metastore-conf]
+[framework-meta.security]
+ca-path = "ca.pem"
+cert-path = "cert.pem"
+key-path = "key.pem"
+cert-allowed-cn = ["framework"]
+
+[business-meta]
 endpoints = ["metastore:12479"]
-store-type = "etcd"
+store-type = "ETCD"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 
 	config := GetDefaultMasterConfig()
-	err := config.configFromFile(fileName)
+	err := util.StrictDecodeFile(fileName, "tiflow master", config)
 	require.Nil(t, err)
 	err = config.AdjustAndValidate()
 	require.Nil(t, err)
 
-	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
-	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
-	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
-	require.Equal(t, "test0", config.FrameMetaConf.Schema)
-	require.Equal(t, "mysql", config.FrameMetaConf.StoreType)
+	require.Equal(t, "server-master-test", config.Name)
+	require.Equal(t, "mysql-0:3306", config.FrameworkMeta.Endpoints[0])
+	require.Equal(t, "root", config.FrameworkMeta.User)
+	require.Equal(t, "passwd", config.FrameworkMeta.Password)
+	require.Equal(t, "test0", config.FrameworkMeta.Schema)
+	require.Equal(t, "mysql", config.FrameworkMeta.StoreType)
 
-	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
-	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
-	require.Empty(t, config.BusinessMetaConf.Schema)
+	require.Equal(t, "etcd", config.BusinessMeta.StoreType)
+	require.Equal(t, "metastore:12479", config.BusinessMeta.Endpoints[0])
+	require.Equal(t, defaultBusinessMetaSchema, config.BusinessMeta.Schema)
 
-	fmt.Printf("config: %+v\n", config)
+	frameworkSecurityConfig := &security.Credential{
+		CAPath:        "ca.pem",
+		CertPath:      "cert.pem",
+		KeyPath:       "key.pem",
+		CertAllowedCN: []string{"framework"},
+	}
+	require.Equal(t, frameworkSecurityConfig, config.FrameworkMeta.Security)
 }
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
@@ -76,4 +92,21 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 	store = NewDefaultBusinessMetaConfig()
 	require.Equal(t, DefaultBusinessMetaID, store.StoreID)
 	require.Equal(t, defaultBusinessMetaEndpoints, store.Endpoints[0])
+}
+
+func TestLoadConfigFromFile(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultMasterConfig()
+	data, err := cfg.Toml()
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "master-ut.toml")
+	err = os.WriteFile(filename, []byte(data), 0o600)
+	require.NoError(t, err)
+
+	cfg2 := &Config{}
+	err = util.StrictDecodeFile(filename, "tiflow master", cfg2)
+	require.NoError(t, err)
+	require.Equal(t, cfg, cfg2)
 }
