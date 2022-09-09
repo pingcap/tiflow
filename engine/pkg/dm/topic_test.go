@@ -22,7 +22,7 @@ import (
 
 func TestOperateType(t *testing.T) {
 	t.Parallel()
-	for _, s := range typesStringify {
+	for i, s := range typesStringify {
 		op, ok := toOperateType[s]
 		require.True(t, ok)
 		bs, err := json.Marshal(op)
@@ -30,6 +30,7 @@ func TestOperateType(t *testing.T) {
 		var op2 OperateType
 		require.NoError(t, json.Unmarshal(bs, &op2))
 		require.Equal(t, op, op2)
+		require.Equal(t, op, OperateType(i))
 	}
 
 	op := OperateType(1000)

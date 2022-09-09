@@ -14,7 +14,6 @@
 package dm
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -83,10 +82,7 @@ func (op OperateType) String() string {
 
 // MarshalJSON marshals the enum as a quoted json string
 func (op OperateType) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString(`"`)
-	buffer.WriteString(op.String())
-	buffer.WriteString(`"`)
-	return buffer.Bytes(), nil
+	return json.Marshal(op.String())
 }
 
 // UnmarshalJSON unmashals a quoted json string to the enum value

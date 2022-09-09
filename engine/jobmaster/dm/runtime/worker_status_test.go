@@ -66,7 +66,7 @@ func TestWorkerStatus(t *testing.T) {
 	require.True(t, workerStatus.CreateFailed())
 	require.True(t, workerStatus.IsTombStone())
 
-	for _, s := range typesStringify {
+	for i, s := range typesStringify {
 		ws, ok := toWorkerStage[s]
 		require.True(t, ok)
 		bs, err := json.Marshal(ws)
@@ -74,6 +74,7 @@ func TestWorkerStatus(t *testing.T) {
 		var ws2 WorkerStage
 		require.NoError(t, json.Unmarshal(bs, &ws2))
 		require.Equal(t, ws, ws2)
+		require.Equal(t, ws, WorkerStage(i))
 	}
 
 	ws := WorkerStage(1000)

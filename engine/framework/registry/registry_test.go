@@ -135,7 +135,7 @@ func TestIsRetryableError(t *testing.T) {
 	t.Parallel()
 
 	registry := NewRegistry()
-	ok := registry.RegisterWorkerType(framework.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
+	ok := registry.RegisterWorkerType(frameModel.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
 	require.True(t, ok)
 
 	testCases := []struct {
@@ -147,7 +147,7 @@ func TestIsRetryableError(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		retryable, err := registry.IsRetryableError(tc.err, framework.FakeJobMaster)
+		retryable, err := registry.IsRetryableError(tc.err, frameModel.FakeJobMaster)
 		require.NoError(t, err)
 		require.Equal(t, tc.isRetryable, retryable)
 	}

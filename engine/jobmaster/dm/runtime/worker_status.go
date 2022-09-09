@@ -14,7 +14,6 @@
 package runtime
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -67,7 +66,7 @@ const (
 	// WorkerDestroying
 )
 
-var typesStringify = []string{
+var typesStringify = [...]string{
 	0:              "",
 	WorkerCreating: "Creating",
 	WorkerOnline:   "Online",
@@ -94,10 +93,7 @@ func (ws WorkerStage) String() string {
 
 // MarshalJSON marshals the enum as a quoted json string
 func (ws WorkerStage) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString(`"`)
-	buffer.WriteString(ws.String())
-	buffer.WriteString(`"`)
-	return buffer.Bytes(), nil
+	return json.Marshal(ws.String())
 }
 
 // UnmarshalJSON unmashals a quoted json string to the enum value

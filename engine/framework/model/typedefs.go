@@ -14,7 +14,6 @@
 package model
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -92,10 +91,7 @@ func (wt WorkerType) String() string {
 
 // MarshalJSON marshals the enum as a quoted json string
 func (wt WorkerType) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString(`"`)
-	buffer.WriteString(wt.String())
-	buffer.WriteString(`"`)
-	return buffer.Bytes(), nil
+	return json.Marshal(wt.String())
 }
 
 // UnmarshalJSON unmashals a quoted json string to the enum value

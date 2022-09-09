@@ -14,7 +14,6 @@
 package metadata
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -76,10 +75,7 @@ func (ts TaskStage) String() string {
 
 // MarshalJSON marshals the enum as a quoted json string
 func (ts TaskStage) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString(`"`)
-	buffer.WriteString(ts.String())
-	buffer.WriteString(`"`)
-	return buffer.Bytes(), nil
+	return json.Marshal(ts.String())
 }
 
 // UnmarshalJSON unmashals a quoted json string to the enum value

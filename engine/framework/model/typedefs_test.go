@@ -22,7 +22,7 @@ import (
 
 func TestWorkerType(t *testing.T) {
 	t.Parallel()
-	for _, s := range typesStringify {
+	for i, s := range typesStringify {
 		wt, ok := toWorkerType[s]
 		require.True(t, ok)
 		bs, err := json.Marshal(wt)
@@ -30,6 +30,7 @@ func TestWorkerType(t *testing.T) {
 		var wt2 WorkerType
 		require.NoError(t, json.Unmarshal(bs, &wt2))
 		require.Equal(t, wt, wt2)
+		require.Equal(t, wt, WorkerType(i))
 	}
 
 	wt := WorkerType(1000)
