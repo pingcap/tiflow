@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Assert TableSink implementation
@@ -36,6 +37,9 @@ type eventTableSink[E eventsink.TableEvent] struct {
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
+
+	// For dataflow metrics.
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -43,21 +47,24 @@ func New[E eventsink.TableEvent](
 	tableID model.TableID,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
+	totalRowsCounter prometheus.Counter,
 ) *eventTableSink[E] {
 	return &eventTableSink[E]{
-		tableID:         tableID,
-		eventID:         0,
-		maxResolvedTs:   model.NewResolvedTs(0),
-		backendSink:     backendSink,
-		progressTracker: newProgressTracker(tableID),
-		eventAppender:   appender,
-		eventBuffer:     make([]E, 0, 1024),
-		state:           state.TableSinkSinking,
+		tableID:                   tableID,
+		eventID:                   0,
+		maxResolvedTs:             model.NewResolvedTs(0),
+		backendSink:               backendSink,
+		progressTracker:           newProgressTracker(tableID),
+		eventAppender:             appender,
+		eventBuffer:               make([]E, 0, 1024),
+		state:                     state.TableSinkSinking,
+		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
 
 func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
+	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
 func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
