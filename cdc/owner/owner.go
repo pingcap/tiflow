@@ -332,7 +332,7 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 func (o *ownerImpl) cleanStaleMetrics() {
 	// The gauge metrics of the Owner should be reset
 	// each time a new owner is launched, in case the previous owner
-	// has crashed and has not cleaned ugip the stale metrics values.
+	// has crashed and has not cleaned up the stale metrics values.
 	changefeedCheckpointTsGauge.Reset()
 	changefeedCheckpointTsLagGauge.Reset()
 	changefeedResolvedTsGauge.Reset()
