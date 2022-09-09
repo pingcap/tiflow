@@ -47,7 +47,7 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
-			Name:      "checkpoint_lag_duration",
+			Name:      "checkpoint_lag_histogram",
 			Help:      "checkpoint lag histogram of changefeeds",
 			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
 		}, []string{"namespace", "changefeed"})
@@ -71,7 +71,7 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
-			Name:      "resolved_ts_lag_duration",
+			Name:      "resolved_ts_lag_histogram",
 			Help:      "resolved_ts lag histogram of changefeeds",
 			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
 		}, []string{"namespace", "changefeed"})
