@@ -19,6 +19,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 const (
@@ -57,9 +58,10 @@ type StoreConfig struct {
 	// StoreID is the unique readable identifier for a store
 	StoreID string `toml:"store-id" json:"store-id"`
 	// StoreType supports 'etcd' or 'mysql', default is 'mysql'
-	StoreType StoreType       `toml:"store-type" json:"store-type"`
-	Endpoints []string        `toml:"endpoints" json:"endpoints"`
-	Auth      *AuthConfParams `toml:"auth" json:"auth"`
+	StoreType StoreType `toml:"store-type" json:"store-type"`
+	Endpoints []string  `toml:"endpoints" json:"endpoints"`
+	User      string    `toml:"user" json:"user"`
+	Password  string    `toml:"password" json:"password"`
 	// Schema is the predefine schema name for mysql-compatible metastore
 	// 1.It needs to stay UNCHANGED for one dataflow engine cluster
 	// 2.It needs be different between any two dataflow engine clusters
@@ -70,6 +72,8 @@ type StoreConfig struct {
 	DialTimeout  string `toml:"dial-timeout" json:"dial-timeout"`
 	// DBConf is the db config for mysql-compatible metastore
 	DBConf *dbutil.DBConfig `toml:"dbconfs" json:"dbconfs"`
+
+	Security *security.Credential `toml:"security" json:"security"`
 }
 
 // SetEndpoints sets endpoints to StoreConfig
@@ -92,7 +96,6 @@ func DefaultStoreConfig() *StoreConfig {
 	return &StoreConfig{
 		StoreType:    defaultStoreType,
 		Endpoints:    []string{},
-		Auth:         &AuthConfParams{},
 		ReadTimeout:  defaultReadTimeout,
 		WriteTimeout: defaultWriteTimeout,
 		DialTimeout:  defaultDialTimeout,
@@ -111,9 +114,11 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
-	if storeConf.Auth != nil {
-		dsnCfg.User = storeConf.Auth.User
-		dsnCfg.Passwd = storeConf.Auth.Passwd
+	if storeConf.User != "" {
+		dsnCfg.User = storeConf.User
+	}
+	if storeConf.Password != "" {
+		dsnCfg.Passwd = storeConf.Password
 	}
 	dsnCfg.Net = "tcp"
 	dsnCfg.Addr = storeConf.Endpoints[0]

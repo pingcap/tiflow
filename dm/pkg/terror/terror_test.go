@@ -199,3 +199,12 @@ func (t *testTErrorSuite) TestTerrorWithOperate(c *check.C) {
 	c.Assert(err.Equal(err2), check.IsTrue)
 	c.Assert(err2.Error(), check.Equals, fmt.Sprintf(errFormatWithArg, code, newClass, scope, level, "message with args", arg, workaround))
 }
+
+func (t *testTErrorSuite) TestTerrorCodeMap(c *check.C) {
+	err, ok := ErrorFromCode(codeDBDriverError)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(ErrDBDriverError.Equal(err), check.IsTrue)
+
+	_, ok = ErrorFromCode(1000)
+	c.Assert(ok, check.IsFalse)
+}
