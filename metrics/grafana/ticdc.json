@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1661842709670,
+  "iteration": 1662710865206,
   "links": [],
   "panels": [
     {
@@ -3807,7 +3807,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:318",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -3816,7 +3815,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:319",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3921,7 +3919,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:115",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -3930,7 +3927,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:116",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -4147,7 +4143,7 @@
           },
           "yaxes": [
             {
-              "format": "short",
+              "format": "s",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -4368,7 +4364,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:14704",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -4377,7 +4372,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:14705",
               "format": "none",
               "label": null,
               "logBase": 1,
@@ -6133,7 +6127,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:683",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6142,7 +6135,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:684",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6233,7 +6225,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:683",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6242,7 +6233,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:684",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6301,7 +6291,6 @@
           "renderer": "flot",
           "seriesOverrides": [
             {
-              "$$hashKey": "object:652",
               "alias": "/duration/",
               "yaxis": 2
             }
@@ -6347,7 +6336,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:683",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6356,7 +6344,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:684",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -6455,7 +6442,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:683",
               "format": "short",
               "label": null,
               "logBase": 2,
@@ -6464,7 +6450,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:684",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6555,7 +6540,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:683",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6564,7 +6548,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:684",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6677,7 +6660,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:762",
               "format": "s",
               "label": null,
               "logBase": 2,
@@ -6686,7 +6668,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:763",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6784,7 +6765,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:762",
               "format": "s",
               "label": null,
               "logBase": 2,
@@ -6793,7 +6773,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:763",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -6884,7 +6863,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:762",
               "format": "percent",
               "label": null,
               "logBase": 1,
@@ -6893,7 +6871,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:763",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -18669,8 +18646,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -18855,8 +18832,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [],
@@ -18962,8 +18939,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19084,8 +19061,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19189,7 +19166,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 18
       },
       "id": 187,
       "panels": [
@@ -19706,7 +19683,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 19
       },
       "id": 402,
       "panels": [
@@ -21701,7 +21678,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1",
-  "version": 41
+  "title": "Test-Cluster-TiCDCx",
+  "uid": "YiGL8hBZ1x",
+  "version": 3
 }
