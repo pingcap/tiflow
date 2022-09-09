@@ -14,3 +14,6 @@ insert into t4 (id, name) values (1, '你好1'), (2, '你好2');
 insert into t4 (id, name) values (3, '你好3'), (4, '你好4');
 update t4 set name = '你好5' where id = 1;
 delete from t4 where id = 2;
+
+insert into t5 (id, name) values (1, 'Müller');
+alter table t5 add column name2 varchar(20) character set latin1 default 'Müller';
