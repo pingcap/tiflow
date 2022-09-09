@@ -1322,9 +1322,6 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			return
 		}
 
-		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
-		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
-
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
@@ -1352,12 +1349,6 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			}
 		}
 
-		failpoint.Inject("ExecDDLError", func() {
-			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
-			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
-			failpoint.Goto("bypass")
-		})
-
 		// set timezone
 		if ddlJob.timezone != "" {
 			s.timezoneLastTime = ddlJob.timezone
@@ -1373,8 +1364,16 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		}
 		// set timestamp
+		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
 		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
+		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
 		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
+
+		failpoint.Inject("ExecDDLError", func() {
+			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
+			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
+			failpoint.Goto("bypass")
+		})
 
 		if !ignore {
 			var affected int
