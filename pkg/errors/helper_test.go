@@ -173,7 +173,7 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 			expected: true,
 		},
 		{
-			err:      WrapChangefeedUnRetryableErr(errors.New("whatever")),
+			err:      WrapChangefeedUnretryableErr(errors.New("whatever")),
 			expected: true,
 		},
 	}
