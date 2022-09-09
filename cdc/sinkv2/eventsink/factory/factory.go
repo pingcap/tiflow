@@ -28,6 +28,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // SinkFactory is the factory of sink.
@@ -83,15 +84,15 @@ func New(ctx context.Context,
 }
 
 // CreateTableSink creates a TableSink by schema.
-func (s *SinkFactory) CreateTableSink(tableID model.TableID) tablesink.TableSink {
+func (s *SinkFactory) CreateTableSink(tableID model.TableID, totalRowsCounter prometheus.Counter) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](tableID,
-			s.rowSink, &eventsink.RowChangeEventAppender{})
+			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](tableID,
-			s.txnSink, &eventsink.TxnEventAppender{})
+			s.txnSink, &eventsink.TxnEventAppender{}, totalRowsCounter)
 	default:
 		panic("unknown sink type")
 	}

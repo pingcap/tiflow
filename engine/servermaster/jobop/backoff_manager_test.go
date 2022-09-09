@@ -25,7 +25,7 @@ func TestJobBackoffManager(t *testing.T) {
 
 	jobID := "mgr-test-job"
 	clocker := clock.NewMock()
-	mgr := NewBackoffManager(WithClocker(clocker))
+	mgr := NewBackoffManager(clocker, NewDefaultBackoffConfig())
 
 	require.True(t, mgr.Allow(jobID))
 	mgr.JobOnline(jobID)
