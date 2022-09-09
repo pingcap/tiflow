@@ -9,10 +9,9 @@ services:
     command:
       - "/tiflow"
       - "master"
-      - "--config=/config.toml"
-      - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-master-0.log"
     ports:
       - "10240:10240"
@@ -30,11 +29,10 @@ services:
     command:
       - "/tiflow"
       - "executor"
-      - "--config=/config.toml"
-      - "--log-level=debug"
-      - "--join=server-master:10240"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-executor-0.log"
     ports:
       - "10241:10241"
