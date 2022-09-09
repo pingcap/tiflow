@@ -25,6 +25,11 @@ master:
     password = ""
     schema = "test_business"
 
+    [job-backoff]
+    reset-interval = "2s"
+    initial-interval = "1s"
+    max-interval = "15s"
+
 executor:
   replicas: 4
   logStorage: 1Gi
