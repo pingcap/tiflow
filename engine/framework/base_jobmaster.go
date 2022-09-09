@@ -201,6 +201,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 
 	if isFirstStartUp {
 		if err := d.impl.InitImpl(ctx); err != nil {
+			d.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
 		if err := d.master.markStateInMetadata(ctx, frameModel.MasterStateInit); err != nil {
@@ -208,6 +209,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 		}
 	} else {
 		if err := d.impl.OnMasterRecovered(ctx); err != nil {
+			d.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
 	}
@@ -234,6 +236,7 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 		return nil
 	}
 	if err := d.impl.Tick(ctx); err != nil {
+		d.errCenter.OnError(err)
 		return errors.Trace(err)
 	}
 	return nil
@@ -253,6 +256,7 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 		}
 	})
 
+	d.master.persistMetaError()
 	d.master.doClose()
 	d.worker.doClose()
 	return nil

@@ -528,7 +528,7 @@ func (m *DefaultBaseMaster) doClose() {
 	m.wg.Wait()
 	if err := m.messageHandlerManager.Clean(closeCtx); err != nil {
 		m.Logger().Warn("Failed to clean up message handlers",
-			zap.String("master-id", m.id))
+			zap.String("master-id", m.id), zap.Error(err))
 	}
 	promutil.UnregisterWorkerMetrics(m.id)
 	m.businessMetaKVClient.Close()
@@ -543,6 +543,7 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 		m.Logger().Error("Failed to close MasterImpl", zap.Error(err))
 	}
 
+	m.persistMetaError()
 	m.doClose()
 	return errors.Trace(err)
 }
@@ -577,7 +578,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 
-	if err := metaClient.Update(ctx, masterMeta); err != nil {
+	if err := metaClient.Update(ctx, masterMeta.RefreshValues()); err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
@@ -592,13 +593,22 @@ func (m *DefaultBaseMaster) markStateInMetadata(
 	ctx context.Context, code frameModel.MasterState,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	masterMeta, err := metaClient.Load(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	m.masterMeta.State = code
+	return metaClient.Update(ctx, m.masterMeta.UpdateStateValues())
+}
 
-	masterMeta.State = code
-	return metaClient.Update(ctx, masterMeta)
+func (m *DefaultBaseMaster) persistMetaError() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	if err := m.errCenter.CheckError(); err != nil {
+		metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
+		m.masterMeta.ErrorMsg = err.Error()
+		if err2 := metaClient.Update(ctx, m.masterMeta.UpdateErrorValues()); err2 != nil {
+			m.Logger().Warn("Failed to update error message",
+				zap.String("master-id", m.id), zap.Error(err2))
+		}
+	}
 }
 
 // PrepareWorkerConfig extracts information from WorkerConfig into detail fields.
@@ -737,9 +747,8 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 		m.masterMeta.ErrorMsg = err.Error()
 	}
 	m.masterMeta.Detail = detail
-
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	return metaClient.Update(ctx, m.masterMeta)
+	return metaClient.Update(ctx, m.masterMeta.ExitValues())
 }
 
 // SetProjectInfo set the project info of specific worker

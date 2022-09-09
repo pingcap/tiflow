@@ -143,20 +143,36 @@ func (m *MasterMeta) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
-// Map is used for update the orm model
-func (m *MasterMeta) Map() map[string]interface{} {
-	return map[string]interface{}{
-		"project_id":    m.ProjectID,
-		"id":            m.ID,
-		"type":          m.Type,
-		"state":         m.State,
-		"node_id":       m.NodeID,
-		"address":       m.Addr,
-		"epoch":         m.Epoch,
-		"config":        m.Config,
+// RefreshValues is used to generate orm value map when refreshing metadata.
+func (m *MasterMeta) RefreshValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"node_id": m.NodeID,
+		"address": m.Addr,
+		"epoch":   m.Epoch,
+	}
+}
+
+// UpdateStateValues is used to generate orm value map when updating state of master meta.
+func (m *MasterMeta) UpdateStateValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"state": m.State,
+	}
+}
+
+// UpdateErrorValues is used to generate orm value map when job master meets error and records it.
+func (m *MasterMeta) UpdateErrorValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
 		"error_message": m.ErrorMsg,
 		"detail":        m.Detail,
-		"ext":           m.Ext,
+	}
+}
+
+// ExitValues is used to generate orm value map when job master exits.
+func (m *MasterMeta) ExitValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"state":         m.State,
+		"error_message": m.ErrorMsg,
+		"detail":        m.Detail,
 	}
 }
 
