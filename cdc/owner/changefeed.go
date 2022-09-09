@@ -536,7 +536,6 @@ LOOP:
 }
 
 func (c *changefeed) initMetrics() {
-
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
