@@ -26,7 +26,12 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
+)
+
+const (
+	indexFileName = ".index"
 )
 
 // indexManager is used to manage the set of all persisted file resources
@@ -39,8 +44,14 @@ import (
 // This mechanism helps keeping the garbage collection mechanism consistent
 // with what we have for the local file resources.
 type indexManager interface {
-	SetPersisted(ctx context.Context, ident internal.ResourceIdent) (bool, error)
-	UnsetPersisted(ctx context.Context, ident internal.ResourceIdent) (bool, error)
+	SetPersisted(
+		ctx context.Context, ident internal.ResourceIdent,
+	) (bool, error)
+
+	LoadPersistedFileSet(
+		ctx context.Context, scope internal.ResourceScope,
+	) (map[model.ResourceName]struct{}, error)
+
 	Close()
 }
 
@@ -85,6 +96,10 @@ func (f *indexFile) Serialize() ([]byte, error) {
 	return bytes, nil
 }
 
+func (f *indexFile) GetPersistedFileSet() map[model.ResourceName]struct{} {
+	return f.PersistedFileSet
+}
+
 type indexManagerImpl struct {
 	projectInfo    tenant.ProjectInfo
 	executorID     model.ExecutorID
@@ -100,7 +115,8 @@ type indexManagerImpl struct {
 		workerID model.WorkerID
 		doneCh   chan error
 	}
-	closeCh chan struct{}
+	closeCh  chan struct{}
+	isClosed atomic.Bool
 }
 
 func newIndexManager(
@@ -132,6 +148,68 @@ func newIndexManager(
 		ret.backgroundTask()
 	}()
 	return ret
+}
+
+func (m *indexManagerImpl) SetPersisted(ctx context.Context, ident internal.ResourceIdent) (bool, error) {
+	if m.isClosed.Load() {
+		return false, errors.New("indexManager already closed")
+	}
+
+	if m.executorID != ident.Executor {
+		log.Panic("Cannot persist resource that is not created on the local executor",
+			zap.Any("ident", ident))
+	}
+
+	m.indexMu.Lock()
+	index, ok := m.indexFiles[ident.WorkerID]
+	if !ok {
+		index = newIndexFile()
+		m.indexFiles[ident.WorkerID] = index
+	}
+
+	ok = index.SetPersisted(ident)
+	m.indexMu.Unlock()
+	if !ok {
+		return false, nil
+	}
+
+	if err := m.triggerFlush(ctx, ident.WorkerID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (m *indexManagerImpl) LoadPersistedFileSet(
+	ctx context.Context, scope internal.ResourceScope,
+) (map[model.ResourceName]struct{}, error) {
+	uri, err := m.indexFilePathURI(ctx, scope.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+
+	storage, err := newS3ExternalStorage(ctx, uri, m.options)
+	if err != nil {
+		return nil, err
+	}
+
+	bytes, err := storage.ReadFile(ctx, indexFileName)
+	if err != nil {
+		return nil, err
+	}
+	index := newIndexFile()
+	if err := index.DeserializeFrom(bytes); err != nil {
+		return nil, err
+	}
+
+	return index.GetPersistedFileSet(), nil
+}
+
+func (m *indexManagerImpl) Close() {
+	if m.isClosed.Swap(true) {
+		// Already closed
+		return
+	}
+	close(m.closeCh)
 }
 
 func (m *indexManagerImpl) backgroundTask() {
@@ -191,7 +269,7 @@ func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID)
 		return err
 	}
 
-	uri, err := m.indexFileURI(ctx, workerID)
+	uri, err := m.indexFilePathURI(ctx, workerID)
 	if err != nil {
 		return err
 	}
@@ -209,7 +287,7 @@ func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID)
 	return nil
 }
 
-func (m *indexManagerImpl) indexFileURI(ctx context.Context, workerID model.WorkerID) (string, error) {
+func (m *indexManagerImpl) indexFilePathURI(ctx context.Context, workerID model.WorkerID) (string, error) {
 	bucket, err := m.bucketSelector.GetBucket(ctx, internal.ResourceScope{
 		ProjectInfo: m.projectInfo,
 		Executor:    m.executorID,

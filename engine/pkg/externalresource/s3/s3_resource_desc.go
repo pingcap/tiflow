@@ -15,8 +15,7 @@ package s3
 
 import (
 	"context"
-	"fmt"
-	"net/url"
+	"path"
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
@@ -72,9 +71,5 @@ func (r *resourceDescriptor) URI() string {
 }
 
 func (r *resourceDescriptor) generateURI() string {
-	return fmt.Sprintf("s3://%s/%s/%s/%s",
-		url.QueryEscape(r.Bucket),
-		url.QueryEscape(string(r.Ident.Executor)),
-		url.QueryEscape(r.Ident.WorkerID),
-		url.QueryEscape(r.Ident.Name))
+	return path.Join(scopeURI(r.Bucket, r.Ident.Scope()), r.Ident.Name)
 }

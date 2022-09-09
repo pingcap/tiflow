@@ -15,10 +15,13 @@ package s3
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"go.uber.org/zap"
 )
 
 const (
@@ -28,6 +31,7 @@ const (
 type FileManager struct {
 	bucketSelector BucketSelector
 	options        *brStorage.S3BackendOptions
+	index          indexManager
 }
 
 func (m *FileManager) CreateResource(
@@ -81,8 +85,51 @@ func (m *FileManager) GetPersistedResource(
 func (m *FileManager) RemoveTemporaryFiles(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
-	// TODO implement me
-	panic("implement me")
+	persistedFiles, err := m.index.LoadPersistedFileSet(ctx, scope)
+	if err != nil {
+		return err
+	}
+
+	bucket, err := m.bucketSelector.GetBucket(ctx, scope)
+	if err != nil {
+		return err
+	}
+
+	storage, err := newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
+	if err != nil {
+		return err
+	}
+
+	var toRemoveFiles map[string]struct{}
+	err = storage.WalkDir(ctx, &brStorage.WalkOption{}, func(path string, _ int64) error {
+		path = strings.TrimPrefix(path, "/")
+		resName, _, ok := strings.Cut(path, "/")
+		if !ok {
+			return nil
+		}
+
+		if _, ok := persistedFiles[resName]; ok {
+			// Skip persisted files
+			return nil
+		}
+
+		toRemoveFiles[path] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return errors.Annotate(err, "RemoveTemporaryFiles")
+	}
+
+	log.Info("Removing temporary resources",
+		zap.Any("scope", scope),
+		zap.Any("file-set", toRemoveFiles))
+
+	for name := range toRemoveFiles {
+		if err := storage.DeleteFile(ctx, name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *FileManager) RemoveResource(
@@ -95,8 +142,15 @@ func (m *FileManager) RemoveResource(
 func (m *FileManager) SetPersisted(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	// TODO implement me
-	panic("implement me")
+	ok, err := m.index.SetPersisted(ctx, ident)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		log.Warn("resource is already persisted",
+			zap.Any("ident", ident))
+	}
+	return nil
 }
 
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
