@@ -533,24 +533,18 @@ func NewJobManagerImpl(
 		return nil, err
 	}
 
-	backoffOpts := []jobop.BackoffOption{
-		jobop.WithResetInterval(backoffConfig.ResetInterval),
-		jobop.WithInitialInterval(backoffConfig.InitialInterval),
-		jobop.WithMaxInterval(backoffConfig.MaxInterval),
-		jobop.WithMultiplier(backoffConfig.Multiplier),
-	}
-
+	clocker := clock.New()
 	impl := &JobManagerImpl{
 		JobFsm:              NewJobFsm(),
 		uuidGen:             uuid.NewGenerator(),
 		masterMetaClient:    cli,
-		clocker:             clock.New(),
+		clocker:             clocker,
 		frameMetaClient:     metaClient,
 		jobStatusChangeMu:   ctxmu.New(),
 		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 		jobOperatorNotifier: new(notify.Notifier),
 		jobHTTPClient:       engineHTTPUtil.NewJobHTTPClient(httpCli),
-		JobBackoffMgr:       jobop.NewBackoffManager(backoffOpts...),
+		JobBackoffMgr:       jobop.NewBackoffManager(clocker, backoffConfig),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,

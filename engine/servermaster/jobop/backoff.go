@@ -29,80 +29,23 @@ const (
 	backoffOffline
 )
 
-type backoffOpts struct {
-	clocker         clock.Clock
-	resetInterval   time.Duration
-	initialInterval time.Duration
-	maxInterval     time.Duration
-	multiplier      float64
-}
-
-// BackoffOption is used to set options to job backoff
-type BackoffOption func(*backoffOpts)
-
-// WithResetInterval sets resetInterval to backoffOpts
-func WithResetInterval(interval time.Duration) BackoffOption {
-	return func(opts *backoffOpts) {
-		opts.resetInterval = interval
-	}
-}
-
-// WithInitialInterval sets initialInterval to backoffOpts
-func WithInitialInterval(interval time.Duration) BackoffOption {
-	return func(opts *backoffOpts) {
-		opts.initialInterval = interval
-	}
-}
-
-// WithMaxInterval sets maxInterval to backoffOpts
-func WithMaxInterval(interval time.Duration) BackoffOption {
-	return func(opts *backoffOpts) {
-		opts.maxInterval = interval
-	}
-}
-
-// WithMultiplier sets multiplier to backoffOpts
-func WithMultiplier(multiplier float64) BackoffOption {
-	return func(opts *backoffOpts) {
-		opts.multiplier = multiplier
-	}
-}
-
-// WithClocker sets clocker to backoffOpts
-func WithClocker(clocker clock.Clock) BackoffOption {
-	return func(opts *backoffOpts) {
-		opts.clocker = clocker
-	}
-}
-
 type backoffEvent struct {
 	tp backoffEventType
 	ts time.Time
 }
 
 // NewJobBackoff creates a new job backoff
-func NewJobBackoff(jobID string, options ...BackoffOption) *JobBackoff {
-	defaultConfig := NewDefaultBackoffConfig()
-	opts := &backoffOpts{
-		resetInterval:   defaultConfig.ResetInterval,
-		initialInterval: defaultConfig.InitialInterval,
-		maxInterval:     defaultConfig.MaxInterval,
-		multiplier:      defaultConfig.Multiplier,
-		clocker:         clock.New(),
-	}
-	for _, option := range options {
-		option(opts)
-	}
-
+func NewJobBackoff(jobID string, clocker clock.Clock, config *BackoffConfig) *JobBackoff {
 	errBackoff := backoff.NewExponentialBackOff()
-	errBackoff.InitialInterval = opts.initialInterval
-	errBackoff.MaxInterval = opts.maxInterval
-	errBackoff.Multiplier = opts.multiplier
+	errBackoff.InitialInterval = config.InitialInterval
+	errBackoff.MaxInterval = config.MaxInterval
+	errBackoff.Multiplier = config.Multiplier
 	errBackoff.Reset()
 
 	return &JobBackoff{
 		jobID:      jobID,
-		opts:       opts,
+		clocker:    clocker,
+		config:     config,
 		errBackoff: errBackoff,
 	}
 }
@@ -115,9 +58,11 @@ func NewJobBackoff(jobID string, options ...BackoffOption) *JobBackoff {
 // - If a job is success for more than `resetInterval`, the backoff history will
 //   be cleared, and backoff time will be re-calculated.
 type JobBackoff struct {
-	jobID           string
+	jobID   string
+	clocker clock.Clock
+	config  *BackoffConfig
+
 	events          []backoffEvent
-	opts            *backoffOpts
 	errBackoff      *backoff.ExponentialBackOff
 	backoffInterval time.Duration
 }
@@ -132,14 +77,14 @@ func (b *JobBackoff) Allow() bool {
 			break
 		}
 	}
-	return b.opts.clocker.Since(lastErrorTime) >= b.backoffInterval
+	return b.clocker.Since(lastErrorTime) >= b.backoffInterval
 }
 
 // Success is called when a success event happens
 func (b *JobBackoff) Success() {
 	event := backoffEvent{
 		tp: backoffOnline,
-		ts: b.opts.clocker.Now(),
+		ts: b.clocker.Now(),
 	}
 	b.addEvent(event)
 }
@@ -148,7 +93,7 @@ func (b *JobBackoff) Success() {
 func (b *JobBackoff) Fail() {
 	event := backoffEvent{
 		tp: backoffOffline,
-		ts: b.opts.clocker.Now(),
+		ts: b.clocker.Now(),
 	}
 	b.addEvent(event)
 	b.nextBackoff()
@@ -161,7 +106,7 @@ func (b *JobBackoff) addEvent(event backoffEvent) {
 	if len(b.events) > 0 {
 		lastEvent := b.events[len(b.events)-1]
 		if lastEvent.tp == backoffOnline &&
-			b.opts.clocker.Since(lastEvent.ts) >= b.opts.resetInterval {
+			b.clocker.Since(lastEvent.ts) >= b.config.ResetInterval {
 			b.events = make([]backoffEvent, 0)
 			b.resetErrBackoff()
 		}
