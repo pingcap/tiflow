@@ -716,9 +716,9 @@ func (c *metaOpsClient) SetJobCanceling(ctx context.Context, jobID string) (Resu
 }
 
 // SetJobCanceled sets a cancelled status if a cancelling op exists.
-// - If cancelling operation is not found, it can be triggered by unexpected
-//   SetJobCanceled don't make any change and return nil error.
-// - If a job is already cancelled, don't make any change and return nil error.
+//   - If cancelling operation is not found, it can be triggered by unexpected
+//     SetJobCanceled don't make any change and return nil error.
+//   - If a job is already cancelled, don't make any change and return nil error.
 func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Result, error) {
 	result := &ormResult{}
 	ops := &model.JobOp{

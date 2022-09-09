@@ -1322,25 +1322,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			return
 		}
 
-		// set timezone
-		if ddlJob.timezone != "" {
-			s.timezoneLastTime = ddlJob.timezone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		} else if s.timezoneLastTime != "" {
-			// use last time's time zone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		}
-		// set timestamp
 		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
-		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
 		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
-		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
 
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
@@ -1374,6 +1357,24 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
 			failpoint.Goto("bypass")
 		})
+
+		// set timezone
+		if ddlJob.timezone != "" {
+			s.timezoneLastTime = ddlJob.timezone
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
+			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+		} else if s.timezoneLastTime != "" {
+			// use last time's time zone
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
+			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+		}
+		// set timestamp
+		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
+		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
 
 		if !ignore {
 			var affected int
