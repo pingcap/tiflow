@@ -75,7 +75,7 @@ var (
 			Help:      "resolved_ts lag histogram of changefeeds",
 			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
 		}, []string{"namespace", "changefeed"})
-	
+
 	ownershipCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -137,10 +137,15 @@ const (
 // InitMetrics registers all metrics used in owner
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedBarrierTsGauge)
+
 	registry.MustRegister(changefeedCheckpointTsGauge)
-	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedCheckpointTsLagGauge)
+	registry.MustRegister(changefeedCheckpointLagHistogram)
+
+	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedResolvedTsLagGauge)
+	registry.MustRegister(changefeedResolvedTsLagHistogram)
+
 	registry.MustRegister(ownershipCounter)
 	registry.MustRegister(ownerMaintainTableNumGauge)
 	registry.MustRegister(changefeedStatusGauge)
