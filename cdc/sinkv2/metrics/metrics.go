@@ -14,7 +14,7 @@
 package metrics
 
 import (
-	// "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -105,5 +105,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecutionErrorCounter)
 
 	// Register Kafka producer and broker metrics.
-	// kafka.InitMetrics(registry)
+	kafka.InitMetrics(registry)
 }
