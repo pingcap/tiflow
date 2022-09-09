@@ -42,6 +42,16 @@ var (
 			Name:      "checkpoint_ts_lag",
 			Help:      "checkpoint ts lag of changefeeds in seconds",
 		}, []string{"namespace", "changefeed"})
+
+	changefeedCheckpointLagHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "checkpoint_lag_hist",
+			Help:      "checkpoint lag histogram of changefeeds",
+			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
+		}, []string{"namespace", "changefeed"})
+
 	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -56,6 +66,16 @@ var (
 			Name:      "resolved_ts_lag",
 			Help:      "resolved ts lag of changefeeds in seconds",
 		}, []string{"namespace", "changefeed"})
+
+	changefeedResolvedTsLagHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "resolved_ts_lag_hist",
+			Help:      "resolved_ts lag histogram of changefeeds",
+			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
+		}, []string{"namespace", "changefeed"})
+	
 	ownershipCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
