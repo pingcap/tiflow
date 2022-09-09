@@ -1632,9 +1632,9 @@ func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLog
 
 func (t *testMaster) testHTTPInterface(c *check.C, url string, contain []byte) {
 	// we use HTTPS in some test cases.
-	tls, err := toolutils.NewTLS(pwd+"/tls_for_test/ca.pem", pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key", url, []string{})
+	tls, err := toolutils.ToTLSConfigWithVerify(pwd+"/tls_for_test/ca.pem", pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key", []string{})
 	c.Assert(err, check.IsNil)
-	cli := toolutils.ClientWithTLS(tls.TLSConfig())
+	cli := toolutils.ClientWithTLS(tls)
 
 	// nolint:noctx
 	resp, err := cli.Get(url)
