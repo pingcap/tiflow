@@ -136,7 +136,7 @@ func TestWorker(t *testing.T) {
 	// placeholder
 	require.Equal(t, model.RescUnit(0), dmWorker.Workload())
 	require.NoError(t, dmWorker.OnMasterFailover(framework.MasterFailoverReason{}))
-	require.NoError(t, dmWorker.OnMasterMessage("", nil))
+	require.NoError(t, dmWorker.OnMasterMessage(context.Background(), "", nil))
 
 	// Finished
 	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Times(3)

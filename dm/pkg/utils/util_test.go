@@ -17,13 +17,11 @@ import (
 	"context"
 	"errors"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/errno"
-	"github.com/stretchr/testify/require"
 )
 
 func (t *testUtilsSuite) TestDecodeBinlogPosition(c *C) {
@@ -75,36 +73,6 @@ func (t *testUtilsSuite) TestWaitSomething(c *C) {
 
 	c.Assert(WaitSomething(backoff, waitTime, f2), IsTrue)
 	c.Assert(count, Equals, 5)
-}
-
-func TestHideSensitive(t *testing.T) {
-	strs := []struct {
-		old string
-		new string
-	}{
-		{ // operate source
-			`from:\n  host: 127.0.0.1\n  user: root\n  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=\n  port: 3306\n`,
-			`from:\n  host: 127.0.0.1\n  user: root\n  password: ******\n  port: 3306\n`,
-		}, { // operate source empty password
-			`from:\n  host: 127.0.0.1\n  user: root\n  password: \n  port: 3306\n`,
-			`from:\n  host: 127.0.0.1\n  user: root\n  password: ******\n  port: 3306\n`,
-		}, { // start task
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-		}, { // start task empty passowrd
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-		}, { // operate source
-			`user: root\n  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=\n  port: 3306 security:\n ssl-ca-bytes:\n    - 45\n    ssl-key-bytes:\n    - 45\n    ssl-cert-bytes:\n    - 45\npurge:`,
-			`user: root\n  password: ******\n  port: 3306 security:\n ssl-ca-bytes: "******"\n    ssl-key-bytes: "******"\n    ssl-cert-bytes: "******"\npurge:`,
-		}, { // start task with ssl
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"\"\n security:\n ssl-ca-bytes:\n    - 45\n    ssl-key-bytes:\n    - 45\n    ssl-cert-bytes:\n    - 45\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n security:\n ssl-ca-bytes: "******"\n    ssl-key-bytes: "******"\n    ssl-cert-bytes: "******"\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
-		},
-	}
-	for _, str := range strs {
-		require.Equal(t, str.new, HideSensitive(str.old))
-	}
 }
 
 func (t *testUtilsSuite) TestUnwrapScheme(c *C) {

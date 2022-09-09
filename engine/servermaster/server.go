@@ -24,11 +24,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -43,12 +57,14 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
@@ -58,17 +74,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -132,16 +137,16 @@ type Server struct {
 }
 
 type serverMasterMetric struct {
-	metricJobNum      map[pb.Job_Status]prometheus.Gauge
+	metricJobNum      map[pb.Job_State]prometheus.Gauge
 	metricExecutorNum map[model.ExecutorStatus]prometheus.Gauge
 }
 
 func newServerMasterMetric() *serverMasterMetric {
 	// Following are leader only metrics
-	metricJobNum := make(map[pb.Job_Status]prometheus.Gauge)
-	for status, statusName := range pb.Job_Status_name {
+	metricJobNum := make(map[pb.Job_State]prometheus.Gauge)
+	for status, statusName := range pb.Job_State_name {
 		metric := serverJobNumGauge.WithLabelValues(statusName)
-		metricJobNum[pb.Job_Status(status)] = metric
+		metricJobNum[pb.Job_State(status)] = metric
 	}
 
 	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
@@ -160,11 +165,9 @@ func newServerMasterMetric() *serverMasterMetric {
 func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
-	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
-
 	id := "server-master-" + uuid.New().String()
 	info := &model.NodeInfo{
-		Type: model.NodeTypeServerMaster,
+		Name: cfg.Name,
 		ID:   model.DeployNodeID(id),
 		Addr: cfg.AdvertiseAddr,
 	}
@@ -193,7 +196,6 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		cfg:               cfg,
 		info:              info,
 		resignCh:          make(chan struct{}),
-		executorManager:   executorManager,
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
@@ -230,9 +232,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 	resp, err := s.executorManager.HandleHeartbeat(req)
 	if err == nil && resp.Err == nil {
 		for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
-			if nodeInfo.Type == model.NodeTypeServerMaster {
-				resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
-			}
+			resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
 		}
 		// `discoveryKeeper.Keepalive` starts at early stage, so it's unlikely that
 		// GetSnapshot() returns nil. For safety, we check it here. If it returns nil,
@@ -300,21 +300,23 @@ func (s *Server) DeleteJob(ctx context.Context, req *pb.DeleteJobRequest) (*empt
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.Executor, error) {
-	executor := &pb.Executor{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &executor)
+	pbExecutor := &pb.Executor{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &pbExecutor)
 	if shouldRet {
-		return executor, err
+		return pbExecutor, err
 	}
 
-	nodeInfo, err := s.executorManager.AllocateNewExec(req)
+	executorMeta, err := s.executorManager.AllocateNewExec(ctx, req)
 	if err != nil {
 		return nil, err
 	}
+
 	return &pb.Executor{
-		Id:         string(nodeInfo.ID),
-		Name:       nodeInfo.Name,
-		Address:    nodeInfo.Addr,
-		Capability: int64(nodeInfo.Capability),
+		Id:         string(executorMeta.ID),
+		Name:       executorMeta.Name,
+		Address:    executorMeta.Address,
+		Capability: int64(executorMeta.Capability),
+		Labels:     label.Set(executorMeta.Labels).ToMap(),
 	}, nil
 }
 
@@ -326,13 +328,13 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 		return resp, err
 	}
 
-	nodeInfos := s.executorManager.ListExecutors()
-	for _, nodeInfo := range nodeInfos {
+	executors := s.executorManager.ListExecutors()
+	for _, executor := range executors {
 		resp.Executors = append(resp.Executors, &pb.Executor{
-			Id:         string(nodeInfo.ID),
-			Name:       nodeInfo.Name,
-			Address:    nodeInfo.Addr,
-			Capability: int64(nodeInfo.Capability),
+			Id:         string(executor.ID),
+			Name:       executor.Name,
+			Address:    executor.Address,
+			Capability: int64(executor.Capability),
 		})
 	}
 	sort.Slice(resp.Executors, func(i, j int) bool {
@@ -346,15 +348,13 @@ func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*
 	resp := &pb.ListMastersResponse{}
 	leaderAddr, ok := s.LeaderAddr()
 	for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
-		if nodeInfo.Type == model.NodeTypeServerMaster {
-			isLeader := ok && nodeInfo.Addr == leaderAddr
-			resp.Masters = append(resp.Masters, &pb.Master{
-				Id:       string(nodeInfo.ID),
-				Name:     nodeInfo.Name,
-				Address:  nodeInfo.Addr,
-				IsLeader: isLeader,
-			})
-		}
+		isLeader := ok && nodeInfo.Addr == leaderAddr
+		resp.Masters = append(resp.Masters, &pb.Master{
+			Id:       string(nodeInfo.ID),
+			Name:     nodeInfo.Name,
+			Address:  nodeInfo.Addr,
+			IsLeader: isLeader,
+		})
 	}
 	sort.Slice(resp.Masters, func(i, j int) bool {
 		return resp.Masters[i].Id < resp.Masters[j].Id
@@ -373,10 +373,11 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		return resp2, err
 	}
 
-	schedulerReq := &schedModel.SchedulerRequest{
-		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+	schedulerReq, err := schedModel.NewSchedulerRequestFromPB(req)
+	if err != nil {
+		return nil, err
 	}
+
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
 		return nil, rpcerror.ToGRPCError(err)
@@ -501,7 +502,6 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		return err
 	}
 
-	s.executorManager.Start(ctx)
 	// TODO: start job manager
 	s.leader.Store(&rpcutil.Member{Name: s.name(), IsLeader: true})
 	s.leaderInitialized.Store(true)
@@ -546,6 +546,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
+	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval, s.testCtx)
+
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.
 	s.initResourceManagerService()
@@ -577,24 +584,24 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) registerMetaStore(ctx context.Context) error {
 	// register metastore for framework
 	cfg := s.cfg
-	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
+	if err := s.metaStoreManager.Register(cfg.FrameworkMeta.StoreID, cfg.FrameworkMeta); err != nil {
 		return err
 	}
-	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeMySQL {
-		// Normally, a schema will be created in advance and we may have no privilege
+	if cfg.FrameworkMeta.StoreType == metaModel.StoreTypeMySQL {
+		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for framework meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameMetaConf)); err != nil {
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameworkMeta)); err != nil {
 			log.Warn("create schema for framework metastore fail, but it can be ignored.",
-				zap.String("schema", s.cfg.FrameMetaConf.Schema),
+				zap.String("schema", s.cfg.FrameworkMeta.Schema),
 				zap.Error(err))
 		}
 	}
 	var err error
-	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
+	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameworkMeta)
 	if err != nil {
-		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
+		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameworkMeta), zap.Error(err))
 		return err
 	}
 	// some components depend on this framework meta client
@@ -603,30 +610,30 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("create framework meta client fail", zap.Error(err))
 		return err
 	}
-	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+	log.Info("register framework metastore successfully", zap.Any("config", cfg.FrameworkMeta))
 
 	// register metastore for business
-	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
+	err = s.metaStoreManager.Register(cfg.BusinessMeta.StoreID, cfg.BusinessMeta)
 	if err != nil {
 		return err
 	}
-	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
-		// Normally, a schema will be created in advance and we may have no privilege
+	if cfg.BusinessMeta.StoreType == metaModel.StoreTypeMySQL {
+		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for business meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMetaConf)); err != nil {
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMeta)); err != nil {
 			log.Warn("create schema for business metastore fail, but it can be ignored.",
-				zap.String("schema", s.cfg.BusinessMetaConf.Schema),
+				zap.String("schema", s.cfg.BusinessMeta.Schema),
 				zap.Error(err))
 		}
 	}
-	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
+	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMeta)
 	if err != nil {
-		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
+		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMeta), zap.Error(err))
 		return err
 	}
-	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
+	log.Info("register business metastore successfully", zap.Any("config", cfg.BusinessMeta))
 
 	return nil
 }
@@ -688,6 +695,16 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true},
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
+		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux,
+			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error,
+		) {
+			errOut := rpcerror.ToGRPCError(err)
+			st, ok := status.FromError(errOut)
+			if !ok {
+				st = status.FromContextError(err)
+			}
+			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, writer, request, st.Err())
+		}),
 	)
 	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
 		return nil, errors.Trace(err)
@@ -706,13 +723,15 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 
 func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 	if err := s.handleForwardJobAPI(w, r); err != nil {
+		// using normalized error to construct grpc.status if possible
+		// NOTE: normalized error should have 'message' to keep the same as normal error
 		st, ok := status.FromError(rpcerror.ToGRPCError(err))
 		if !ok {
 			st = status.FromContextError(err)
 		}
 		payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(st.Proto())
 		if err != nil {
-			log.Warn("failed to  marshal grpc status", zap.Error(err))
+			log.Warn("failed to marshal grpc status", zap.Error(err))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(runtime.HTTPStatusFromCode(st.Code()))
@@ -723,7 +742,7 @@ func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) error {
-	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
+	apiPath := strings.TrimPrefix(r.URL.Path, openapi.JobAPIPrefix)
 	fields := strings.SplitN(apiPath, "/", 2)
 	if len(fields) != 2 {
 		return errors.New("invalid job api path")
@@ -781,7 +800,7 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
-	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
+	if s.cfg.BusinessMeta.StoreType == metaModel.StoreTypeMySQL {
 		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
 			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err
@@ -796,12 +815,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// leader master need Initialize all backend tables first
 	err = s.initializedBackendMeta(ctx)
-	if err != nil {
-		return
-	}
-
-	// rebuild states from existing meta if needed
-	err = s.resetExecutor(ctx)
 	if err != nil {
 		return
 	}
@@ -823,10 +836,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
 
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Tp:        framework.JobManager,
+		Type:      framework.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -883,7 +896,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
 	if err != nil {
 		return
 	}
@@ -915,8 +928,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			s.executorManager.Stop()
 			log.Info("executor manager exited")
 		}()
-		s.executorManager.Start(errgCtx)
-		return nil
+		return s.executorManager.Start(errgCtx)
 	})
 
 	errg.Go(func() error {
@@ -941,7 +953,11 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 
 	errg.Go(func() error {
-		return serverutil2.WatchExecutors(errgCtx, s.executorManager, executorClients)
+		updater := executorInfoUpdater{
+			msgRouter:     s.p2pMsgRouter,
+			executorGroup: executorClients,
+		}
+		return serverutil2.WatchExecutors(errgCtx, s.executorManager, updater)
 	})
 
 	s.leaderInitialized.Store(true)
@@ -950,9 +966,31 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	return errg.Wait()
 }
 
+type executorInfoUpdater struct {
+	msgRouter     p2p.MessageRouter
+	executorGroup *pkgClient.DefaultExecutorGroup
+}
+
+func (e executorInfoUpdater) UpdateExecutorList(executors map[model.ExecutorID]string) error {
+	for id, addr := range executors {
+		e.msgRouter.AddPeer(string(id), addr)
+	}
+	return e.executorGroup.UpdateExecutorList(executors)
+}
+
+func (e executorInfoUpdater) AddExecutor(executorID model.ExecutorID, addr string) error {
+	e.msgRouter.AddPeer(string(executorID), addr)
+	return e.executorGroup.AddExecutor(executorID, addr)
+}
+
+func (e executorInfoUpdater) RemoveExecutor(executorID model.ExecutorID) error {
+	e.msgRouter.RemovePeer(string(executorID))
+	return e.executorGroup.RemoveExecutor(executorID)
+}
+
 func (s *Server) collectLeaderMetric() {
-	for statusName := range pb.Job_Status_name {
-		pbStatus := pb.Job_Status(statusName)
+	for statusName := range pb.Job_State_name {
+		pbStatus := pb.Job_State(statusName)
 		s.metrics.metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
 	}
 	for statusName := range model.ExecutorStatusNameMapping {

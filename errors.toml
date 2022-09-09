@@ -471,6 +471,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
+'''
+
 ["CDC:ErrInvalidS3URI"]
 error = '''
 invalid s3 uri: %s
@@ -1091,6 +1096,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrSyncRenameTableFailed"]
+error = '''
+table's old name is not in filter rule, and its new name in filter rule table id '%d', ddl query: [%s], it's an unexpected behavior, if you want to replicate this table, please add its old name to filter rule.
+'''
+
 ["CDC:ErrTCPServerClosed"]
 error = '''
 The TCP server has been closed
@@ -1401,6 +1411,31 @@ error = '''
 invalid worker type: %s
 '''
 
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job is already canceled: %s
+'''
+
+["DFLOW:ErrJobManagerGetJobDetailFail"]
+error = '''
+failed to get job detail from job master
+'''
+
+["DFLOW:ErrJobManagerReadRespBodyFail"]
+error = '''
+failed to read response body
+'''
+
+["DFLOW:ErrJobManagerRespStatusCode404"]
+error = '''
+get job detail response status code is 404
+'''
+
+["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
+error = '''
+get job detail response status code is not 2XX
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
@@ -1444,6 +1479,11 @@ parse config flag set failed
 ["DFLOW:ErrMasterConfigUnknownItem"]
 error = '''
 master config contains unknown configuration options: %s
+'''
+
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]
@@ -1706,6 +1746,16 @@ error = '''
 cannot find executor ID: %s
 '''
 
+["DFLOW:ErrWorkerCancel"]
+error = '''
+worker is canceled
+'''
+
+["DFLOW:ErrWorkerFailed"]
+error = '''
+worker is failed permanently
+'''
+
 ["DFLOW:ErrWorkerFinish"]
 error = '''
 worker finished and exited
@@ -1729,11 +1779,6 @@ worker is not found: worker ID %s
 ["DFLOW:ErrWorkerOffline"]
 error = '''
 worker is offline: workerID: %s, error message: %s
-'''
-
-["DFLOW:ErrWorkerStop"]
-error = '''
-worker is stopped
 '''
 
 ["DFLOW:ErrWorkerSuicide"]

@@ -37,7 +37,7 @@ type DebugConfig struct {
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
 	// EnableNewSink enables the new sink.
-	// The default value is false.
+	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
 }
 

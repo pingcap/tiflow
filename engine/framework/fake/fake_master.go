@@ -117,7 +117,7 @@ type Master struct {
 	statusRateLimiter *rate.Limiter
 	statusCode        struct {
 		sync.RWMutex
-		code frameModel.WorkerStatusCode
+		code frameModel.WorkerState
 	}
 
 	ctx         context.Context
@@ -130,45 +130,38 @@ type businessStatus struct {
 	status map[frameModel.WorkerID]*dummyWorkerStatus
 }
 
-// OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
-func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
-	switch msg := message.(type) {
-	case *frameModel.StatusChangeRequest:
-		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			m.setStatusCode(frameModel.WorkerStatusStopped)
-			m.workerListMu.Lock()
-			for _, worker := range m.workerList {
-				if worker == nil {
-					continue
-				}
-				wTopic := frameModel.WorkerStatusChangeRequestTopic(m.BaseJobMaster.ID(), worker.ID())
-				wMessage := &frameModel.StatusChangeRequest{
-					SendTime:     m.clocker.Mono(),
-					FromMasterID: m.BaseJobMaster.ID(),
-					Epoch:        m.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  frameModel.WorkerStatusStopped,
-				}
-				ctx, cancel := context.WithTimeout(m.ctx, time.Second*2)
-				runningHandle := worker.Unwrap()
-				if runningHandle == nil {
-					cancel()
-					continue
-				}
-				if err := runningHandle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
-					cancel()
-					m.workerListMu.Unlock()
-					return err
-				}
-				cancel()
-			}
-			m.workerListMu.Unlock()
-		default:
-			log.Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+// OnCancel implements JobMasterImpl.OnCancel
+func (m *Master) OnCancel(ctx context.Context) error {
+	log.Info("FakeMaster: OnCancel")
+	return m.cancelWorkers(ctx)
+}
+
+func (m *Master) cancelWorkers(ctx context.Context) error {
+	m.setState(frameModel.WorkerStateStopped)
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+	for _, worker := range m.workerList {
+		if worker == nil {
+			continue
 		}
-	default:
-		log.Info("unsupported message", zap.Any("message", message))
+		wTopic := frameModel.WorkerStatusChangeRequestTopic(m.BaseJobMaster.ID(), worker.ID())
+		wMessage := &frameModel.StatusChangeRequest{
+			SendTime:     m.clocker.Mono(),
+			FromMasterID: m.BaseJobMaster.ID(),
+			Epoch:        m.BaseJobMaster.CurrentEpoch(),
+			ExpectState:  frameModel.WorkerStateStopped,
+		}
+		ctx, cancel := context.WithTimeout(ctx, time.Second*2)
+		runningHandle := worker.Unwrap()
+		if runningHandle == nil {
+			cancel()
+			continue
+		}
+		if err := runningHandle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+			cancel()
+			return err
+		}
+		cancel()
 	}
 	return nil
 }
@@ -368,16 +361,16 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	}
 
 	// check for special worker status
-	if m.getStatusCode() == frameModel.WorkerStatusStopped {
+	if m.getState() == frameModel.WorkerStateStopped {
 		log.Info("FakeMaster: received pause command, stop now")
-		m.setStatusCode(frameModel.WorkerStatusStopped)
-		return m.Exit(ctx, framework.ExitReasonCanceled, nil, "FakeMaster: received pause command")
+		m.setState(frameModel.WorkerStateStopped)
+		return m.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("FakeMaster: received pause command"))
 	}
 
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
-		m.setStatusCode(frameModel.WorkerStatusFinished)
-		return m.Exit(ctx, framework.ExitReasonFinished, nil, "all workers have been finished")
+		m.setState(frameModel.WorkerStateFinished)
+		return m.Exit(ctx, framework.ExitReasonFinished, nil, []byte("all workers have been finished"))
 	}
 
 	return nil
@@ -505,8 +498,14 @@ func (m *Master) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
+// StopImpl implements MasterImpl.StopImpl
+func (m *Master) StopImpl(ctx context.Context) error {
+	log.Info("FakeMaster: Stop", zap.Stack("stack"))
+	return nil
+}
+
 // OnMasterMessage implements MasterImpl.OnMasterMessage
-func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (m *Master) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("FakeMaster: OnMasterMessage", zap.Any("message", message))
 	return nil
 }
@@ -525,18 +524,18 @@ func (m *Master) marshalBusinessStatus() []byte {
 func (m *Master) Status() frameModel.WorkerStatus {
 	extBytes := m.marshalBusinessStatus()
 	return frameModel.WorkerStatus{
-		Code:     m.getStatusCode(),
+		State:    m.getState(),
 		ExtBytes: extBytes,
 	}
 }
 
-func (m *Master) setStatusCode(code frameModel.WorkerStatusCode) {
+func (m *Master) setState(code frameModel.WorkerState) {
 	m.statusCode.Lock()
 	defer m.statusCode.Unlock()
 	m.statusCode.code = code
 }
 
-func (m *Master) getStatusCode() frameModel.WorkerStatusCode {
+func (m *Master) getState() frameModel.WorkerState {
 	m.statusCode.RLock()
 	defer m.statusCode.RUnlock()
 	return m.statusCode.code
@@ -544,8 +543,10 @@ func (m *Master) getStatusCode() frameModel.WorkerStatusCode {
 
 func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 	dws := &dummyWorkerStatus{}
-	err := json.Unmarshal(data, dws)
-	return dws, err
+	if err := json.Unmarshal(data, dws); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dws, nil
 }
 
 // CheckpointKey returns key path used in etcd for checkpoint
@@ -621,6 +622,6 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		initialized:         atomic.NewBool(false),
 		cachedCheckpoint:    ckpt,
 	}
-	ret.setStatusCode(frameModel.WorkerStatusNormal)
+	ret.setState(frameModel.WorkerStateNormal)
 	return ret
 }

@@ -63,13 +63,13 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
-			metadata:        metadata.NewMetaData(mockBaseJobmaster.ID(), mock.NewMetaMock(), log.L()),
+			metadata:        metadata.NewMetaData(mock.NewMetaMock(), log.L()),
 			messageAgent:    mockMessageAgent,
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)

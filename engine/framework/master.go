@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,7 +30,6 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
@@ -59,6 +60,7 @@ type Master interface {
 	Poll(ctx context.Context) error
 	MasterID() frameModel.MasterID
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -93,14 +95,34 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
+
+	// StopImpl is called when the master is being canceled
+	StopImpl(ctx context.Context) error
 }
 
 const (
 	createWorkerWaitQuotaTimeout = 5 * time.Second
 	createWorkerTimeout          = 10 * time.Second
-	genEpochTimeout              = 5 * time.Second
 	maxCreateWorkerConcurrency   = 100
 )
+
+// CreateWorkerOpt specifies an option for creating a worker.
+type CreateWorkerOpt = master.CreateWorkerOpt
+
+// CreateWorkerWithCost specifies the cost of a worker.
+func CreateWorkerWithCost(cost model.RescUnit) CreateWorkerOpt {
+	return master.CreateWorkerWithCost(cost)
+}
+
+// CreateWorkerWithResourceRequirements specifies the resource requirement of a worker.
+func CreateWorkerWithResourceRequirements(resources ...resModel.ResourceID) CreateWorkerOpt {
+	return master.CreateWorkerWithResourceRequirements(resources...)
+}
+
+// CreateWorkerWithSelectors specifies the selectors used to dispatch the worker.
+func CreateWorkerWithSelectors(selectors ...*label.Selector) CreateWorkerOpt {
+	return master.CreateWorkerWithSelectors(selectors...)
+}
 
 // BaseMaster defines the master interface, it embeds the Master interface and
 // contains more core logic of a master
@@ -117,7 +139,7 @@ type BaseMaster interface {
 	Logger() *zap.Logger
 
 	// MasterMeta return the meta data of master
-	MasterMeta() *frameModel.MasterMetaKVData
+	MasterMeta() *frameModel.MasterMeta
 
 	// GetWorkers return the handle of all workers, from which we can get the worker status、worker id and
 	// the method for sending message to specific worker
@@ -131,7 +153,7 @@ type BaseMaster interface {
 	// Exit should be called when master (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -141,6 +163,14 @@ type BaseMaster interface {
 		config WorkerConfig,
 		cost model.RescUnit,
 		resources ...resModel.ResourceID,
+	) (frameModel.WorkerID, error)
+
+	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// a more flexible way of passing options.
+	CreateWorkerV2(
+		workerType frameModel.WorkerType,
+		config WorkerConfig,
+		opts ...CreateWorkerOpt,
 	) (frameModel.WorkerID, error)
 }
 
@@ -174,7 +204,9 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
-	masterMeta    *frameModel.MasterMetaKVData
+	masterMeta    *frameModel.MasterMeta
+
+	workerCreator *master.WorkerCreator
 
 	// workerProjectMap keep the <WorkerID, ProjectInfo> map
 	// It's only used by JobManager who has workers(jobmaster) with different project info
@@ -230,7 +262,7 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &frameModel.MasterMetaKVData{}
+		masterMeta    = &frameModel.MasterMeta{}
 		params        masterParams
 	)
 	if ctx != nil {
@@ -305,8 +337,10 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	// Don't cancel this context until it meets first error. In this way this
+	// context can be used in business logic and leaves a robust way to cancel
+	// business logic from runtime.(If business uses context correctly)
+	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -323,7 +357,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		}
 	}
 
-	if err := m.markStatusCodeInMetadata(ctx, frameModel.MasterStatusInit); err != nil {
+	if err := m.markStateInMetadata(ctx, frameModel.MasterStateInit); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -353,6 +387,18 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		func(_ context.Context, handle master.WorkerHandle, err error) error {
 			return m.Impl.OnWorkerDispatched(handle, err)
 		}, isInit, m.timeoutConfig, m.clock)
+
+	inheritedSelectors := m.masterMeta.Ext.Selectors
+	workerCreator := master.NewWorkerCreatorBuilder().
+		WithMasterID(m.id).
+		WithHooks(&master.WorkerCreationHooks{BeforeStartingWorker: m.workerManager.BeforeStartingWorker}).
+		WithExecutorGroup(m.executorGroup).
+		WithServerMasterClient(m.serverMasterClient).
+		WithFrameMetaClient(m.frameMetaClient).
+		WithLogger(m.Logger()).
+		WithInheritedSelectors(inheritedSelectors...).
+		Build()
+	m.workerCreator = workerCreator
 
 	if err := m.registerMessageHandlers(ctx); err != nil {
 		return false, errors.Trace(err)
@@ -460,7 +506,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 }
 
 // MasterMeta implements BaseMaster.MasterMeta
-func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMetaKVData {
+func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMeta {
 	return m.masterMeta
 }
 
@@ -501,6 +547,15 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+// Stop implements Master.Stop
+func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
+	err := m.Impl.StopImpl(ctx)
+	if err != nil {
+		m.Logger().Error("stop master impl failed", zap.Error(err))
+	}
+	return err
+}
+
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
@@ -528,13 +583,13 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 
 	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterMeta.StatusCode == frameModel.MasterStatusUninit
+	isInit = masterMeta.State == frameModel.MasterStateUninit
 
 	return
 }
 
-func (m *DefaultBaseMaster) markStatusCodeInMetadata(
-	ctx context.Context, code frameModel.MasterStatusCode,
+func (m *DefaultBaseMaster) markStateInMetadata(
+	ctx context.Context, code frameModel.MasterState,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
@@ -542,21 +597,21 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 		return errors.Trace(err)
 	}
 
-	masterMeta.StatusCode = code
+	masterMeta.State = code
 	return metaClient.Update(ctx, masterMeta)
 }
 
-// prepareWorkerConfig extracts information from WorkerConfig into detail fields.
-//   - If workerType is master type, the config is a `*MasterMetaKVData` struct and
+// PrepareWorkerConfig extracts information from WorkerConfig into detail fields.
+//   - If workerType is master type, the config is a `*MasterMeta` struct and
 //     contains pre allocated maseter ID, and json marshalled config.
 //   - If workerType is worker type, the config is a user defined config struct, we
 //     marshal it to byte slice as returned config, and generate a random WorkerID.
-func (m *DefaultBaseMaster) prepareWorkerConfig(
+func (m *DefaultBaseMaster) PrepareWorkerConfig(
 	workerType frameModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*frameModel.MasterMetaKVData)
+		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
@@ -595,6 +650,26 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
+	return m.CreateWorkerV2(workerType, config,
+		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
+}
+
+// CreateWorkerV2 implements BaseMaster.CreateWorkerV2
+func (m *DefaultBaseMaster) CreateWorkerV2(
+	workerType frameModel.WorkerType,
+	config WorkerConfig,
+	opts ...CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	m.Logger().Info("CreateWorker",
+		zap.Int64("worker-type", int64(workerType)),
+		zap.Any("worker-config", config),
+		zap.String("master-id", m.id))
+
+	rawConfig, workerID, err := m.PrepareWorkerConfig(workerType, config)
+	if err != nil {
+		return "", err
+	}
+
 	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
 	defer cancel()
 	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
@@ -603,76 +678,23 @@ func (m *DefaultBaseMaster) CreateWorker(
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
 	}
 
-	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
-	if err != nil {
-		return "", err
-	}
-
 	go func() {
 		defer func() {
 			m.createWorkerQuota.Release()
 		}()
 
-		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
-		defer cancel()
-		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
-		defer cancel()
+		errCtx, cancelErrCtx := m.errCenter.WithCancelOnFirstError(context.Background())
+		defer cancelErrCtx()
 
-		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
-			TaskId:               workerID,
-			Cost:                 int64(cost),
-			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
-		})
-		if err != nil {
-			// TODO log the gRPC errors from a lower level such as by an interceptor.
-			m.Logger().Warn("ScheduleTask returned error", zap.Error(err))
-			m.workerManager.AbortCreatingWorker(workerID, err)
-			return
-		}
-		m.Logger().Debug("ScheduleTask succeeded", zap.Any("response", resp))
+		requestCtx, cancelRequestCtx := context.WithTimeout(errCtx, createWorkerTimeout)
+		defer cancelRequestCtx()
 
-		executorID := model.ExecutorID(resp.ExecutorId)
-		executorClient, err := m.executorGroup.GetExecutorClientB(requestCtx, executorID)
-		if err != nil {
-			m.workerManager.AbortCreatingWorker(workerID, errors.Annotate(err, "CreateWorker"))
-			return
-		}
-
-		genEpochCtx, cancel := context.WithTimeout(errCtx, genEpochTimeout)
-		defer cancel()
-		epoch, err := m.frameMetaClient.GenEpoch(genEpochCtx)
+		err := m.workerCreator.CreateWorker(
+			requestCtx, m.GetProjectInfo(workerID), workerType, workerID, rawConfig,
+			opts...)
 		if err != nil {
 			m.workerManager.AbortCreatingWorker(workerID, err)
-			return
 		}
-
-		dispatchArgs := &client.DispatchTaskArgs{
-			// [NOTICE]:
-			// For JobManager, <JobID, ProjectInfo> pair is set in advance
-			// For JobMaster, we always get the 'masterProjectInfo'
-			ProjectInfo:  m.GetProjectInfo(workerID),
-			WorkerID:     workerID,
-			MasterID:     m.id,
-			WorkerType:   int64(workerType),
-			WorkerConfig: configBytes,
-			WorkerEpoch:  epoch,
-		}
-
-		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
-			m.workerManager.BeforeStartingWorker(workerID, executorID, epoch)
-		}, func(err error) {
-			m.workerManager.AbortCreatingWorker(workerID, err)
-		})
-
-		if err != nil {
-			// All cleaning up should have been done in AbortCreatingWorker.
-			m.Logger().Info("DispatchTask failed",
-				zap.Error(err))
-			return
-		}
-
-		m.Logger().Info("Dispatch Worker succeeded",
-			zap.Any("args", dispatchArgs))
 	}()
 
 	return workerID, nil
@@ -685,7 +707,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 
 // Exit implements BaseMaster.Exit
 // NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
-func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	// keep the original error in errCenter if possible
 	defer func() {
@@ -695,26 +717,26 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 		m.errCenter.OnError(err)
 	}()
 
-	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)
+	return m.exitWithoutSetErrCenter(ctx, exitReason, err, detail)
 }
 
-func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
+func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, detail []byte) (errRet error) {
 	switch exitReason {
 	case ExitReasonFinished:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
+		m.masterMeta.State = frameModel.MasterStateFinished
 	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
-		m.masterMeta.StatusCode = frameModel.MasterStatusStopped
+		m.masterMeta.State = frameModel.MasterStateStopped
 	case ExitReasonFailed:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+		m.masterMeta.State = frameModel.MasterStateFailed
 	default:
-		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+		m.masterMeta.State = frameModel.MasterStateFailed
 	}
 
 	if err != nil {
 		m.masterMeta.ErrorMsg = err.Error()
 	}
-	m.masterMeta.ExtMsg = extMsg
+	m.masterMeta.Detail = detail
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	return metaClient.Update(ctx, m.masterMeta)
@@ -748,7 +770,7 @@ func (m *DefaultBaseMaster) GetProjectInfo(masterID frameModel.MasterID) tenant.
 
 // InitProjectInfosAfterRecover set project infos for all worker after master recover
 // NOTICE: Only used by JobMananger when failover
-func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*frameModel.MasterMetaKVData) {
+func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*frameModel.MasterMeta) {
 	for _, meta := range jobs {
 		// TODO: fix the TenantID
 		m.workerProjectMap.Store(meta.ID, tenant.NewProjectInfo("", meta.ProjectID))

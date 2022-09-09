@@ -51,12 +51,12 @@ func TestJobStore(t *testing.T) {
 	)
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", mock.NewMetaMock(), log.L())
+	jobStore := NewJobStore(mock.NewMetaMock(), log.L())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
-	require.Equal(t, keys[0], "job_test")
+	require.Equal(t, keys[0], "")
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{}, StageRunning))
 	require.Error(t, jobStore.UpdateConfig(context.Background(), nil))

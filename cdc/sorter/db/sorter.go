@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
@@ -86,13 +85,12 @@ type Sorter struct {
 
 // NewSorter creates a new Sorter
 func NewSorter(
-	ctx context.Context, tableID int64, startTs uint64,
+	ctx context.Context, changefeedID model.ChangeFeedID, tableID int64, startTs uint64,
 	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
 	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
 		prometheus.Labels{
 			"namespace": changefeedID.Namespace,
@@ -104,7 +102,7 @@ func NewSorter(
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	metricOutputKV := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-	metricOutputResolved := sorter.InputEventCount.
+	metricOutputResolved := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
@@ -263,7 +261,4 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
-	log.Info("db sorter: send start ts to reader",
-		zap.Uint64("tableID", ls.common.tableID),
-		zap.Uint64("ts", ts))
 }

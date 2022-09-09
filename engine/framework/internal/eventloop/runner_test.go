@@ -35,6 +35,7 @@ const (
 	toyTaskRunning
 	toyTaskClosing
 	toyTaskClosed
+	toyTaskCanceled
 )
 
 type toyTask struct {
@@ -76,8 +77,16 @@ func (t *toyTask) Poll(ctx context.Context) error {
 	}
 }
 
+func (t *toyTask) Stop(ctx context.Context) error {
+	require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskCanceled))
+	args := t.Called(ctx)
+	return args.Error(0)
+}
+
 func (t *toyTask) NotifyExit(ctx context.Context, errIn error) error {
-	require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosing))
+	if derrors.ErrWorkerCancel.NotEqual(errIn) {
+		require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosing))
+	}
 
 	args := t.Called(ctx, errIn)
 	return args.Error(0)
@@ -187,4 +196,38 @@ func TestRunnerContextCanceled(t *testing.T) {
 	err := runner.Run(ctx)
 	require.Error(t, err)
 	require.Regexp(t, "context canceled", err)
+}
+
+func TestRunnerStopByCancel(t *testing.T) {
+	t.Parallel()
+
+	task := newToyTask(t, true)
+	runner := NewRunner(task)
+	errIn := derrors.ErrWorkerCancel.GenWithStackByArgs()
+
+	task.On("Init", mock.Anything).Return(nil).Once()
+	task.On("NotifyExit", mock.Anything, errIn).Return(nil).Once()
+	task.On("Stop", mock.Anything).Return(nil).Once()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := runner.Run(context.Background())
+		require.Error(t, err)
+		require.Regexp(t, "worker is canceled", err)
+	}()
+
+	require.Eventually(t, func() bool {
+		return task.status.Load() == toyTaskRunning
+	}, 1*time.Second, 10*time.Millisecond)
+
+	// Inject canceled worker and check runner.Stop is called
+	task.injectedErrCh <- errIn
+	require.Eventually(t, func() bool {
+		return task.status.Load() == toyTaskCanceled
+	}, 1*time.Second, 10*time.Millisecond)
+
+	wg.Wait()
+	task.AssertExpectations(t)
 }

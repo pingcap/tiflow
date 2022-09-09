@@ -19,6 +19,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -132,7 +135,7 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-new-sink": false
+    "enable-new-sink": true
   },
   "cluster-id": "default"
 }`
@@ -142,6 +145,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -182,6 +188,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"

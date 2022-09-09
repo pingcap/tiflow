@@ -32,7 +32,7 @@ const (
 	ErrorCode_NotEnoughResource ErrorCode = 3
 	// submit subjob failed
 	ErrorCode_SubJobSubmitFailed ErrorCode = 4
-	// TombstoneExecuto
+	// TombstoneExecutor
 	ErrorCode_TombstoneExecutor ErrorCode = 5
 	//
 	ErrorCode_SubJobBuildFailed ErrorCode = 6
