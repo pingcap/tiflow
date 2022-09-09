@@ -19,11 +19,16 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const (
@@ -58,6 +63,7 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
+		S3Retryer:       defaultS3Retryer(),
 	})
 	if err != nil {
 		return nil, cerror.WrapChangefeedUnRetryableErr(cerror.ErrS3StorageInitialize, err)
@@ -119,4 +125,38 @@ func ParseLogFileName(name string) (uint64, string, error) {
 		return 0, "", errors.Annotatef(err, "bad log name: %s", name)
 	}
 	return commitTs, fileType, nil
+}
+
+// retryerWithLog wrappes the client.DefaultRetryer, and logging when retry triggered.
+type retryerWithLog struct {
+	client.DefaultRetryer
+}
+
+func isDeadlineExceedError(err error) bool {
+	return strings.Contains(err.Error(), "context deadline exceeded")
+}
+
+func (rl retryerWithLog) ShouldRetry(r *request.Request) bool {
+	if isDeadlineExceedError(r.Error) {
+		return false
+	}
+	return rl.DefaultRetryer.ShouldRetry(r)
+}
+
+func (rl retryerWithLog) RetryRules(r *request.Request) time.Duration {
+	backoffTime := rl.DefaultRetryer.RetryRules(r)
+	if backoffTime > 0 {
+		log.Warn("failed to request s3, retrying", zap.Error(r.Error), zap.Duration("backoff", backoffTime))
+	}
+	return backoffTime
+}
+
+func defaultS3Retryer() request.Retryer {
+	return retryerWithLog{
+		DefaultRetryer: client.DefaultRetryer{
+			NumMaxRetries:    3,
+			MinRetryDelay:    1 * time.Second,
+			MinThrottleDelay: 2 * time.Second,
+		},
+	}
 }
