@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -87,12 +88,17 @@ func (op OperateType) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmashals a quoted json string to the enum value
 func (op *OperateType) UnmarshalJSON(b []byte) error {
-	var j string
-	err := json.Unmarshal(b, &j)
-	if err != nil {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*op = toOperateType[j]
+	*op, ok = toOperateType[j]
+	if !ok {
+		return errors.Errorf("Unknown OperateType %s", j)
+	}
 	return nil
 }
 

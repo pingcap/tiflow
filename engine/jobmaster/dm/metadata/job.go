@@ -80,12 +80,17 @@ func (ts TaskStage) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmashals a quoted json string to the enum value
 func (ts *TaskStage) UnmarshalJSON(b []byte) error {
-	var j string
-	err := json.Unmarshal(b, &j)
-	if err != nil {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*ts = toTaskStage[j]
+	*ts, ok = toTaskStage[j]
+	if !ok {
+		return errors.Errorf("Unknown TaskStage %s", j)
+	}
 	return nil
 }
 

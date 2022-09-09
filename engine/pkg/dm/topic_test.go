@@ -38,6 +38,6 @@ func TestOperateType(t *testing.T) {
 	bs, err := json.Marshal(op)
 	require.NoError(t, err)
 	var op2 OperateType
-	require.NoError(t, json.Unmarshal(bs, &op2))
+	require.EqualError(t, json.Unmarshal(bs, &op2), "Unknown OperateType Unknown OperateType 1000")
 	require.Equal(t, OperateType(0), op2)
 }

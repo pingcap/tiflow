@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pkg/errors"
 )
 
 // HeartbeatInterval is heartbeat interval for checking worker stage
@@ -98,12 +99,17 @@ func (ws WorkerStage) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmashals a quoted json string to the enum value
 func (ws *WorkerStage) UnmarshalJSON(b []byte) error {
-	var j string
-	err := json.Unmarshal(b, &j)
-	if err != nil {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*ws = toWorkerStage[j]
+	*ws, ok = toWorkerStage[j]
+	if !ok {
+		return errors.Errorf("Unknown WorkerStage %s", j)
+	}
 	return nil
 }
 

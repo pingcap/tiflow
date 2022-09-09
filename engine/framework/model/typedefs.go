@@ -16,6 +16,8 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pingcap/errors"
 )
 
 type (
@@ -96,11 +98,16 @@ func (wt WorkerType) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmashals a quoted json string to the enum value
 func (wt *WorkerType) UnmarshalJSON(b []byte) error {
-	var j string
-	err := json.Unmarshal(b, &j)
-	if err != nil {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
 		return err
 	}
-	*wt = toWorkerType[j]
+	*wt, ok = toWorkerType[j]
+	if !ok {
+		return errors.Errorf("Unknown WorkerType %s", j)
+	}
 	return nil
 }

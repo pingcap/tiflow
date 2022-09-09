@@ -38,6 +38,6 @@ func TestWorkerType(t *testing.T) {
 	bs, err := json.Marshal(wt)
 	require.NoError(t, err)
 	var wt2 WorkerType
-	require.NoError(t, json.Unmarshal(bs, &wt2))
+	require.EqualError(t, json.Unmarshal(bs, &wt2), "Unknown WorkerType Unknown WorkerType 1000")
 	require.Equal(t, WorkerType(0), wt2)
 }
