@@ -61,7 +61,12 @@ const (
 // into several buckets to reduce lock contention
 type regionStateManager struct {
 	bucket int
-	states []*sync.Map
+	states []*regionBucket
+}
+
+type regionBucket struct {
+	lck       sync.RWMutex
+	regionMap map[uint64]*regionFeedState
 }
 
 func newRegionStateManager(bucket int) *regionStateManager {
@@ -76,10 +81,13 @@ func newRegionStateManager(bucket int) *regionStateManager {
 	}
 	rsm := &regionStateManager{
 		bucket: bucket,
-		states: make([]*sync.Map, bucket),
+		states: make([]*regionBucket, bucket),
 	}
 	for i := range rsm.states {
-		rsm.states[i] = new(sync.Map)
+		rsm.states[i] = &regionBucket{
+			lck:       sync.RWMutex{},
+			regionMap: map[uint64]*regionFeedState{},
+		}
 	}
 	return rsm
 }
@@ -89,21 +97,30 @@ func (rsm *regionStateManager) getBucket(regionID uint64) int {
 }
 
 func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool) {
-	bucket := rsm.getBucket(regionID)
-	if val, ok := rsm.states[bucket].Load(regionID); ok {
-		return val.(*regionFeedState), true
+	bucket := int(regionID) % rsm.bucket
+	rb := rsm.states[bucket]
+	rb.lck.RLock()
+	defer rb.lck.RUnlock()
+	if val, ok := rb.regionMap[regionID]; ok {
+		return val, true
 	}
 	return nil, false
 }
 
 func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
-	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Store(regionID, state)
+	bucket := int(regionID) % rsm.bucket
+	rb := rsm.states[bucket]
+	rb.lck.Lock()
+	defer rb.lck.Unlock()
+	rb.regionMap[regionID] = state
 }
 
 func (rsm *regionStateManager) delState(regionID uint64) {
-	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Delete(regionID)
+	bucket := int(regionID) % rsm.bucket
+	rb := rsm.states[bucket]
+	rb.lck.Lock()
+	defer rb.lck.Unlock()
+	delete(rb.regionMap, regionID)
 }
 
 type regionWorkerMetrics struct {
@@ -221,10 +238,11 @@ func (w *regionWorker) delRegionState(regionID uint64) {
 func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
 	empty = true
 	for _, states := range w.statesManager.states {
-		states.Range(func(_, _ interface{}) bool {
+		states.lck.RLock()
+		if len(states.regionMap) > 0 {
 			empty = false
-			return false
-		})
+		}
+		states.lck.RUnlock()
 		if !empty {
 			return
 		}
@@ -397,8 +415,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 }
 
 func (w *regionWorker) processEvent(ctx context.Context, events []*regionStatefulEvent) error {
-	var rfe []model.RegionFeedEvent
-	var ri []*regionTsInfo
+	rfe := make([]model.RegionFeedEvent, 0, len(events))
+	ri := make([]*regionTsInfo, 0, len(events))
 	f := func(
 		resolvedTs uint64,
 		state *regionFeedState) {
@@ -882,16 +900,21 @@ func (w *regionWorker) handleEventEntry(
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
-		states.Range(func(_, value interface{}) bool {
-			state := value.(*regionFeedState)
+		states.lck.Lock()
+		//states.Range(func(_, value interface{}) bool {
+		for _, state := range states.regionMap {
 			state.lock.Lock()
 			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
 			if state.isStopped() {
 				state.lock.Unlock()
-				return true
+				//return true
+				continue
 			}
 			state.markStopped()
-			w.delRegionState(state.sri.verID.GetID())
+			regionID := state.sri.verID.GetID()
+			bucket := int(regionID) % w.statesManager.bucket
+			rb := w.statesManager.states[bucket]
+			delete(rb.regionMap, regionID)
 			if state.lastResolvedTs > state.sri.ts {
 				state.sri.ts = state.lastResolvedTs
 			}
@@ -902,8 +925,9 @@ func (w *regionWorker) evictAllRegions() {
 			// regionErrorInfo loss.
 			errInfo := newRegionErrorInfo(state.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
 			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
-			return true
-		})
+			//return true
+		}
+		states.lck.Unlock()
 	}
 }
 
