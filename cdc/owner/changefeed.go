@@ -541,14 +541,14 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedCheckpointLagHist = changefeedCheckpointLagHistogram.
+	c.metricsChangefeedCheckpointLagHist = changefeedCheckpointLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsLagHist = changefeedResolvedTsLagHistogram.
+	c.metricsChangefeedResolvedTsLagHist = changefeedResolvedTsLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
@@ -608,14 +608,14 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 func (c *changefeed) cleanupMetrics() {
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
-	changefeedCheckpointLagHistogram.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
 	c.metricsChangefeedCheckpointLagHist = nil
 
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
-	changefeedResolvedTsLagHistogram.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 	c.metricsChangefeedResolvedTsLagHist = nil
