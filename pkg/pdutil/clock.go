@@ -30,7 +30,7 @@ const pdTimeUpdateInterval = 200 * time.Millisecond
 
 // Clock is a time source of PD cluster.
 type Clock interface {
-	// CurrentTime returns current time from PD.
+	// CurrentTime returns approximate current time from pd.
 	CurrentTime() (time.Time, error)
 	Run(ctx context.Context)
 	Stop()
@@ -68,7 +68,7 @@ func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 	return ret, nil
 }
 
-// Run will get time from pd periodically to cache in timeCache
+// Run gets time from pd periodically.
 func (c *clock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
@@ -106,7 +106,7 @@ func (c *clock) Run(ctx context.Context) {
 	}
 }
 
-// CurrentTime returns current time from timeCache
+// CurrentTime returns approximate current time from pd.
 func (c *clock) CurrentTime() (time.Time, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
