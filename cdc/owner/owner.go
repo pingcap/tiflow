@@ -625,15 +625,19 @@ func (o *ownerImpl) isHealthy() bool {
 	if !o.clusterVersionConsistent(o.captures) {
 		return false
 	}
-	for _, cfReactor := range o.changefeeds {
-		provider := cfReactor.GetInfoProvider()
+	for _, changefeed := range o.changefeeds {
+		if changefeed.state == nil && changefeed.state.Info.State != model.StateNormal {
+			log.Warn("changefeed not normal", zap.Any("state", changefeed.state))
+			continue
+		}
+		provider := changefeed.GetInfoProvider()
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
 			// todo: this may caused by the paused changefeeds.
 			log.Warn("owner is not healthy since not all changefeeds are initialized",
-				zap.String("namespace", cfReactor.id.Namespace),
-				zap.String("changefeed", cfReactor.id.ID))
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
 			return false
 		}
 	}
