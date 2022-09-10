@@ -610,33 +610,34 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy, err := o.isHealthy()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		query.Data = isHealthy
+		query.Data = o.isHealthy()
 	}
 	return nil
 }
 
-func (o *ownerImpl) isHealthy() (bool, error) {
+func (o *ownerImpl) isHealthy() bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
-		return false, nil
+		log.Warn("owner is not healthy since changefeeds are not ticked")
+		return false
 	}
 	if !o.clusterVersionConsistent(o.captures) {
-		return false, nil
+		return false
 	}
 	for _, cfReactor := range o.changefeeds {
 		provider := cfReactor.GetInfoProvider()
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
-			return false, nil
+			// todo: this may caused by the paused changefeeds.
+			log.Warn("owner is not healthy since not all changefeeds are initialized",
+				zap.String("namespace", cfReactor.id.Namespace),
+				zap.String("changefeed", cfReactor.id.ID))
+			return false
 		}
 	}
-	return true, nil
+	return true
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
