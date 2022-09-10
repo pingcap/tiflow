@@ -105,7 +105,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
-	return e.progressTracker.minTs()
+	return e.progressTracker.advance()
 }
 
 // Close the table sink and wait for all callbacks be called.

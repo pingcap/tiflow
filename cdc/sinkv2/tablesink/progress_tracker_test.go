@@ -30,7 +30,7 @@ func TestNewProgressTracker(t *testing.T) {
 	require.Equal(
 		t,
 		uint64(0),
-		tracker.minTs().Ts,
+		tracker.advance().Ts,
 		"init lastMinResolvedTs should be 0",
 	)
 }
@@ -54,7 +54,7 @@ func TestAddResolvedTs(t *testing.T) {
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
 	require.Equal(t, 0, tracker.trackingCount(), "resolved ts should not be added")
-	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
 	tracker = newProgressTracker(1, defaultBufferSize)
@@ -62,7 +62,7 @@ func TestAddResolvedTs(t *testing.T) {
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
 	require.Equal(t, 1, tracker.trackingCount(), "resolved ts should be added")
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 }
 
 func TestRemove(t *testing.T) {
@@ -71,7 +71,7 @@ func TestRemove(t *testing.T) {
 
 	// Only event.
 	tracker := newProgressTracker(1, defaultBufferSize)
-	cb1 = tracker.addEvent()
+	tracker.addEvent()
 	cb2 = tracker.addEvent()
 	tracker.addEvent()
 	cb2()
@@ -92,22 +92,22 @@ func TestRemove(t *testing.T) {
 	cb2()
 	tracker.advance()
 	require.Equal(t, 4, tracker.trackingCount())
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 	// Remove one more event.
 	cb4()
 	tracker.advance()
 	require.Equal(t, 4, tracker.trackingCount())
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 	// Remove one more event.
 	cb1()
 	tracker.advance()
 	require.Equal(t, 1, tracker.trackingCount())
-	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be advanced")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be advanced")
 	// Remove the last event.
 	cb5()
 	tracker.advance()
 	require.Equal(t, 0, tracker.trackingCount())
-	require.Equal(t, uint64(8), tracker.minTs().Ts, "lastMinResolvedTs should be 8")
+	require.Equal(t, uint64(8), tracker.advance().Ts, "lastMinResolvedTs should be 8")
 }
 
 func TestCloseTracker(t *testing.T) {

@@ -17,7 +17,7 @@ import (
 	"context"
 	"math"
 	"sync"
-	stdAtomic "sync/atomic"
+	stdatomic "sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -45,12 +45,17 @@ type pendingResolvedTs struct {
 }
 
 // progressTracker is used to track the progress of the table sink.
+//
 // For example,
 // We have txn1, txn2, resolvedTs2, txn3-1, txn3-2, resolvedTs3, resolvedTs4, resolvedTs5.
 // txn3-1 and txn3-2 are in the same big txn.
 // First txn1 and txn2 are written, then the progress can be updated to resolvedTs2.
 // Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
 // Next, since no data is being written, we can update to resolvedTs5 in order.
+//
+// The core of the algorithm is `pendingEvents`, which is a bit map for all events.
+// Every event is associated with a `eventID` which is a continuous number. `eventID`
+// can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
 	// tableID is the table ID of the table sink.
 	tableID model.TableID
@@ -105,9 +110,9 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.nextEventID += 1
-	eventID := r.nextEventID - 1
+	eventID := r.nextEventID
 	bit := eventID % 64
+	r.nextEventID += 1
 
 	bufferCount := len(r.pendingEvents)
 	if bufferCount == 0 || (uint64(len(r.pendingEvents[bufferCount-1])) == r.bufferSize && bit == 0) {
@@ -121,7 +126,7 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	}
 	lastBuffer := r.pendingEvents[bufferCount-1]
 
-	postEventFlush = func() { stdAtomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
+	postEventFlush = func() { stdatomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
 	return
 }
 
@@ -141,6 +146,7 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	})
 }
 
+// advance tries to move forward the tracker and returns the latest resolved timestamp.
 func (r *progressTracker) advance() model.ResolvedTs {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -158,7 +164,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 			break
 		}
 
-		currBitMap := stdAtomic.LoadUint64(&r.pendingEvents[idx1][idx2])
+		currBitMap := stdatomic.LoadUint64(&r.pendingEvents[idx1][idx2])
 		if currBitMap == math.MaxUint64 {
 			idx2 += 1
 			if idx2 >= r.bufferSize {
@@ -204,14 +210,6 @@ func (r *progressTracker) advance() model.ResolvedTs {
 	return r.lastMinResolvedTs
 }
 
-// minTs returns the last min resolved ts.
-// This means that all data prior to this point has already been processed.
-// It can be considered as CheckpointTs of the table.
-// Notice: must hold the lock.
-func (r *progressTracker) minTs() model.ResolvedTs {
-	return r.advance()
-}
-
 // trackingCount returns the number of pending events and resolved tss.
 // Notice: must hold the lock.
 func (r *progressTracker) trackingCount() int {
@@ -237,7 +235,7 @@ func (r *progressTracker) close(ctx context.Context) error {
 			log.Warn("Close process doesn't return in time, may be stuck",
 				zap.Int64("tableID", r.tableID),
 				zap.Int("trackingCount", r.trackingCount()),
-				zap.Any("lastMinResolvedTs", r.minTs()),
+				zap.Any("lastMinResolvedTs", r.advance()),
 			)
 		case <-waitingTicker.C:
 			r.advance()
