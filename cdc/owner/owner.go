@@ -626,16 +626,25 @@ func (o *ownerImpl) isHealthy() bool {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {
-		if changefeed.state == nil || changefeed.state.Info.State != model.StateNormal {
-			log.Warn("changefeed not normal", zap.Any("state", changefeed.state))
+		if changefeed.state == nil {
+			log.Warn("changefeed state is nil",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
 			continue
 		}
+		if changefeed.state.Info.State != model.StateNormal {
+			log.Warn("changefeed not normal",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID),
+				zap.Any("state", changefeed.state.Info.State))
+			continue
+		}
+
 		provider := changefeed.GetInfoProvider()
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
-			// todo: this may caused by the paused changefeeds.
-			log.Warn("owner is not healthy since not all changefeeds are initialized",
+			log.Warn("owner is not healthy since changefeed not initialized",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID))
 			return false
