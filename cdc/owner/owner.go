@@ -626,7 +626,7 @@ func (o *ownerImpl) isHealthy() bool {
 		return false
 	}
 	for _, changefeed := range o.changefeeds {
-		if changefeed.state == nil && changefeed.state.Info.State != model.StateNormal {
+		if changefeed.state == nil || changefeed.state.Info.State != model.StateNormal {
 			log.Warn("changefeed not normal", zap.Any("state", changefeed.state))
 			continue
 		}
