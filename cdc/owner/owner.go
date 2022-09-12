@@ -627,7 +627,7 @@ func (o *ownerImpl) isHealthy() bool {
 	}
 	for _, changefeed := range o.changefeeds {
 		if changefeed.state == nil {
-			log.Warn("changefeed state is nil",
+			log.Warn("isHealthy: changefeed state is nil",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID))
 			continue
