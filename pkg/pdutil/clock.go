@@ -71,7 +71,9 @@ func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 // Run gets time from pd periodically.
 func (c *clock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
+	c.mu.Lock()
 	c.cancel = cancel
+	c.mu.Unlock()
 	ticker := time.NewTicker(c.updateInterval)
 	defer func() { c.stopCh <- struct{}{} }()
 	for {
@@ -117,6 +119,8 @@ func (c *clock) CurrentTime() (time.Time, error) {
 
 // Stop clock.
 func (c *clock) Stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.cancel()
 	<-c.stopCh
 }
