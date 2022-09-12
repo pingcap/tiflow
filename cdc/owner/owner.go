@@ -644,7 +644,7 @@ func (o *ownerImpl) isHealthy() bool {
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
-			log.Warn("owner is not healthy since changefeed not initialized",
+			log.Warn("isHealthy: changefeed is not initialized",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID))
 			return false
