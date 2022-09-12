@@ -824,7 +824,7 @@ func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
 	}
 	err = o.handleQueries(query)
 	require.NoError(t, err)
-	require.False(t, query.Data.(bool))
+	require.True(t, query.Data.(bool))
 }
 
 func TestIsHealthy(t *testing.T) {
@@ -863,8 +863,11 @@ func TestIsHealthy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
-	// Unhealthy, scheduler is not set.
+	// changefeed in normal, but the scheduler is not set, Unhealthy.
 	cf := &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
 		scheduler: nil, // scheduler is not set.
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
@@ -888,6 +891,9 @@ func TestIsHealthy(t *testing.T) {
 
 	// Unhealthy, there is another changefeed is not initialized.
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
 		scheduler: &healthScheduler{init: false},
 	}
 	o.changefeedTicked = true
