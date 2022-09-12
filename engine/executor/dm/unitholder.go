@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -89,26 +90,36 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.processMu.Lock()
 	defer u.processMu.Unlock()
 
+	var err error
+	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
+	if err != nil {
+		return err
+	}
+	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
+		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
+	)
+
 	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
 	switch u.tp {
 	case framework.WorkerDMDump:
 		u.unit = dumpling.NewDumpling(u.cfg)
 	case framework.WorkerDMLoad:
+		sqlMode, err2 := utils.GetGlobalVariable(ctx, u.upstreamDB.DB, "sql_mode")
+		if err2 != nil {
+			u.logger.Error("get global sql_mode from upstream failed",
+				zap.String("db", u.cfg.From.Host),
+				zap.Int("port", u.cfg.From.Port),
+				zap.String("user", u.cfg.From.User),
+				zap.Error(err))
+			return err2
+		}
+		u.cfg.LoaderConfig.SQLMode = sqlMode
 		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
 	case framework.WorkerDMSync:
 		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
 	}
 
-	var err error
 	if err = u.unit.Init(ctx); err != nil {
-		return err
-	}
-
-	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
-		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
-	)
-	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
-	if err != nil {
 		return err
 	}
 
@@ -230,7 +241,7 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 		u.cfg.Flavor,
 	)
 	if err != nil {
-		u.logger.Error("failed to get source status", zap.Error(err))
+		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
 	u.sourceStatusMu.Lock()
 	u.sourceStatus = sourceStatus

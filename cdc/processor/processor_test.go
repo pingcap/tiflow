@@ -174,6 +174,10 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
+func (m *mockTablePipeline) RemainEvents() int64 {
+	return 1
+}
+
 func (m *mockTablePipeline) State() pipeline.TableState {
 	if m.state == pipeline.TableStateStopped {
 		return m.state
@@ -304,7 +308,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
-	done := p.IsAddTableFinished(ctx, 1, true)
+	done := p.IsAddTableFinished(1, true)
 	require.False(t, done)
 	require.Equal(t, pipeline.TableStatePreparing, table1.State())
 
@@ -315,7 +319,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(ctx, 1, true)
+	done = p.IsAddTableFinished(1, true)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStatePrepared, table1.State())
 
@@ -339,7 +343,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(ctx, 1, false)
+	done = p.IsAddTableFinished(1, false)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStateReplicating, table1.State())
 
@@ -410,16 +414,16 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
-	done := p.IsAddTableFinished(ctx, 1, false)
+	done := p.IsAddTableFinished(1, false)
 	require.False(t, done)
 	require.Equal(t, pipeline.TableStatePreparing, table1.State())
-	done = p.IsAddTableFinished(ctx, 2, false)
+	done = p.IsAddTableFinished(2, false)
 	require.False(t, done)
 	require.Equal(t, pipeline.TableStatePreparing, table2.State())
-	done = p.IsAddTableFinished(ctx, 3, false)
+	done = p.IsAddTableFinished(3, false)
 	require.False(t, done)
 	require.Equal(t, pipeline.TableStatePreparing, table3.State())
-	done = p.IsAddTableFinished(ctx, 4, false)
+	done = p.IsAddTableFinished(4, false)
 	require.False(t, done)
 	require.Equal(t, pipeline.TableStatePreparing, table4.State())
 	require.Len(t, p.tables, 4)
@@ -439,16 +443,16 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	table3.checkpointTs = 30
 	table4.checkpointTs = 30
 
-	done = p.IsAddTableFinished(ctx, 1, false)
+	done = p.IsAddTableFinished(1, false)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStateReplicating, table1.State())
-	done = p.IsAddTableFinished(ctx, 2, false)
+	done = p.IsAddTableFinished(2, false)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStateReplicating, table2.State())
-	done = p.IsAddTableFinished(ctx, 3, false)
+	done = p.IsAddTableFinished(3, false)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStateReplicating, table3.State())
-	done = p.IsAddTableFinished(ctx, 4, false)
+	done = p.IsAddTableFinished(4, false)
 	require.True(t, done)
 	require.Equal(t, pipeline.TableStateReplicating, table4.State())
 
@@ -474,7 +478,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.NoError(t, err)
 	tester.MustApplyPatches()
 
-	ok = p.RemoveTable(ctx, 3)
+	ok = p.RemoveTable(3)
 	require.True(t, ok)
 
 	err = p.Tick(ctx)
@@ -486,7 +490,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.False(t, table3.canceled)
 	require.Equal(t, model.Ts(60), table3.stopTs)
 
-	checkpointTs, done = p.IsRemoveTableFinished(ctx, 3)
+	checkpointTs, done = p.IsRemoveTableFinished(3)
 	require.False(t, done)
 	require.Equal(t, model.Ts(0), checkpointTs)
 
@@ -509,7 +513,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Len(t, p.tables, 4)
 	require.False(t, table3.canceled)
 
-	checkpointTs, done = p.IsRemoveTableFinished(ctx, 3)
+	checkpointTs, done = p.IsRemoveTableFinished(3)
 	require.True(t, done)
 	require.Equal(t, model.Ts(65), checkpointTs)
 	meta = p.GetTableMeta(model.TableID(3))

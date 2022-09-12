@@ -45,7 +45,7 @@ func TestJobCfg(t *testing.T) {
 
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	require.Equal(t, "test", jobCfg.Name)
+	require.Equal(t, dmconfig.ModeAll, jobCfg.TaskMode)
 	content, err := jobCfg.Yaml()
 	require.NoError(t, err)
 
@@ -93,7 +93,7 @@ func TestTaskCfg(t *testing.T) {
 	require.Equal(t, jobCfg.ModRevision, jobCfg2.ModRevision)
 
 	for _, taskCfg := range taskCfgs {
-		subTaskCfg := taskCfg.ToDMSubTaskCfg()
+		subTaskCfg := taskCfg.ToDMSubTaskCfg("test")
 		expectCfg := &dmconfig.SubTaskConfig{}
 		_, err := toml.DecodeFile(fmt.Sprintf("%s/dm_subtask_%d.toml", subtaskTemplateDir, taskCfg.Upstreams[0].DBCfg.Port), expectCfg)
 		require.NoError(t, err)

@@ -112,12 +112,16 @@ type changefeed struct {
 	// `ddlWg` is used to manage this backend goroutine.
 	ddlWg sync.WaitGroup
 
-	metricsChangefeedBarrierTsGauge       prometheus.Gauge
-	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
-	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
-	metricsChangefeedResolvedTsGauge      prometheus.Gauge
-	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
-	metricsChangefeedTickDuration         prometheus.Observer
+	metricsChangefeedCheckpointTsGauge     prometheus.Gauge
+	metricsChangefeedCheckpointTsLagGauge  prometheus.Gauge
+	metricsChangefeedCheckpointLagDuration prometheus.Observer
+
+	metricsChangefeedResolvedTsGauge       prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
+	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+
+	metricsChangefeedBarrierTsGauge prometheus.Gauge
+	metricsChangefeedTickDuration   prometheus.Observer
 
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
@@ -128,6 +132,8 @@ type changefeed struct {
 
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+
+	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
 
 func newChangefeed(
@@ -369,6 +375,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		if newResolvedTs < prevResolvedTs {
 			newResolvedTs = prevResolvedTs
 		}
+		failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
+			if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
+				log.Info("owner won't update checkpoint because of failpoint",
+					zap.String("namespace", c.id.Namespace),
+					zap.String("changefeed", c.id.ID),
+					zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
+					zap.Uint64("skipCheckpoint", newCheckpointTs))
+				newCheckpointTs = c.state.Status.CheckpointTs
+			}
+		})
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	} else if c.state.Status != nil {
@@ -447,38 +463,39 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+
+	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// been executed or not. So the DDL puller must start at checkpointTs-1.
+	var ddlStartTs uint64
+	if resolvedTs > checkpointTs {
+		ddlStartTs = checkpointTs
+	} else {
+		ddlStartTs = checkpointTs - 1
+	}
+
 	c.barriers = newBarriers()
-	if c.state.Info.SyncPointEnabled {
+	if c.state.Info.Config.EnableSyncPoint {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
-	// Since we are starting DDL puller from (checkpointTs-1) to make
-	// the DDL committed at checkpointTs executable by CDC, we need to set
-	// the DDL barrier to the correct start point.
-	// TODO: get DDL barrier based on resolvedTs.
-	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
+	c.barriers.Update(ddlJobBarrier, ddlStartTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
-	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
-	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
-	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage,
-		checkpointTs-1, c.state.Info.Config, c.id)
+	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
 	c.sink = c.newSink()
 	c.sink.run(cancelCtx, c.id, c.state.Info)
 
-	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		c.state.Info.Config, c.upstream, checkpointTs-1, c.id)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	c.ddlWg.Add(1)
 	go func() {
 		defer c.ddlWg.Done()
@@ -499,25 +516,13 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	// init metrics
-	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-	c.metricsChangefeedTickDuration = changefeedTickDuration.
-		WithLabelValues(c.id.Namespace, c.id.ID)
-
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	c.initMetrics()
 
 	c.initialized = true
 	log.Info("changefeed initialized",
@@ -528,6 +533,27 @@ LOOP:
 		zap.Stringer("info", c.state.Info))
 
 	return nil
+}
+
+func (c *changefeed) initMetrics() {
+	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedCheckpointLagDuration = changefeedCheckpointLagDuration.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedTickDuration = changefeedTickDuration.
+		WithLabelValues(c.id.Namespace, c.id.ID)
 }
 
 // releaseResources is idempotent.
@@ -581,13 +607,17 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 func (c *changefeed) cleanupMetrics() {
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
+	c.metricsChangefeedCheckpointLagDuration = nil
 
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
+	c.metricsChangefeedResolvedTsLagDuration = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -713,20 +743,19 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !done {
 			return barrierTs, nil
 		}
+		c.lastDDLTs = ddlResolvedTs
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
-
 	case syncPointBarrier:
 		if !blocked {
 			return barrierTs, nil
 		}
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
 		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-
 	case finishBarrier:
 		if blocked {
 			c.feedStateManager.MarkFinished()
@@ -748,7 +777,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 ) (bool, error) {
 	if job.BinlogInfo == nil {
 		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id.ID),
-			zap.Reflect("job", job))
+			zap.Any("job", job))
 		return true, nil
 	}
 
@@ -757,7 +786,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
-				zap.Reflect("job", job), zap.Error(err))
+				zap.Any("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 		c.ddlEventCache = ddlEvents
@@ -815,7 +844,7 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
-			zap.String("changefeed", c.id.ID), zap.Reflect("event", ddlEvent))
+			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
 	}
 	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)
@@ -829,11 +858,17 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
+
+	checkpointLag := float64(currentTs-phyCkpTs) / 1e3
+	c.metricsChangefeedCheckpointTsLagGauge.Set(checkpointLag)
+	c.metricsChangefeedCheckpointLagDuration.Observe(checkpointLag)
 
 	phyRTs := oracle.ExtractPhysical(resolvedTs)
 	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
-	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+
+	resolvedLag := float64(currentTs-phyRTs) / 1e3
+	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
+	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {

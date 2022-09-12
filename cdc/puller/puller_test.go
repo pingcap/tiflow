@@ -61,8 +61,10 @@ func newMockCDCKVClient(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -74,7 +76,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	span regionspan.ComparableSpan,
 	ts uint64,
 	lockResolver txnutil.LockResolver,
-	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	for {
@@ -128,7 +129,7 @@ func newPullerForTest(
 	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient,
-		model.DefaultChangeFeedID("changefeed-id-test"))
+		model.DefaultChangeFeedID("changefeed-id-test"), 0, "table-test")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

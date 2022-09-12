@@ -375,7 +375,7 @@ func TestNewTableActor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}
@@ -426,7 +426,7 @@ func TestTableActorStart(t *testing.T) {
 	realStartSorterFunc := startSorter
 	ctx, cancel := context.WithCancel(context.TODO())
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}

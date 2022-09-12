@@ -222,6 +222,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		l.regionIDLock[regionID] = newEntry
 
 		log.Info("range locked",
+			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.Uint64("version", version),
 			zap.Uint64("checkpointTs", checkpointTs),
@@ -252,7 +253,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		retryRanges := make([]ComparableSpan, 0)
 		currentRangeStartKey := startKey
 
-		log.Info("tryLockRange stale",
+		log.Info("try lock range staled",
 			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
@@ -332,7 +333,7 @@ func (l *RegionRangeLock) LockRange(ctx context.Context, startKey, endKey []byte
 	return res
 }
 
-// UnlockRange unlocks a range and update checkpointTs of the range to specivied value.
+// UnlockRange unlocks a range and update checkpointTs of the range to specified value.
 func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version uint64, checkpointTs uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -104,13 +104,6 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 
-	failpoint.Inject("SinkFlushDMLPanic", func() {
-		time.Sleep(time.Second)
-		log.Panic("SinkFlushDMLPanic",
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	})
-
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),

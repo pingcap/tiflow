@@ -91,16 +91,16 @@ func NewMySQLDDLSink(
 }
 
 func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	m.statistics.AddDDLCount()
 	err := m.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
-		err := m.execDDL(ctx, ddl)
+		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
 			if errorutil.IsIgnorableMySQLDDLError(err) {
+				// NOTE: don't change the log, some tests depend on it.
 				log.Info("Execute DDL failed, but error can be ignored",
 					zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 					zap.String("namespace", m.id.Namespace),
@@ -200,6 +200,9 @@ func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []model.
 func (m *mysqlDDLSink) Close() error {
 	if err := m.db.Close(); err != nil {
 		return errors.Trace(err)
+	}
+	if m.statistics != nil {
+		m.statistics.Close()
 	}
 
 	return nil

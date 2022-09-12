@@ -60,6 +60,7 @@ type CheckpointAgent interface {
 type WorkerManager struct {
 	*ticker.DefaultTicker
 
+	jobID           string
 	jobStore        *metadata.JobStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
@@ -72,9 +73,10 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
+func NewWorkerManager(jobID string, initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:           jobID,
 		jobStore:        jobStore,
 		workerAgent:     workerAgent,
 		messageAgent:    messageAgent,
@@ -252,7 +254,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
-			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
+			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
 		// createWorker should be an asynchronous operation

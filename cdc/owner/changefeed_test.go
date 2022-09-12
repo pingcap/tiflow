@@ -423,8 +423,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx.ChangefeedVars().Info.SyncPointEnabled = true
-	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
+	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
+	ctx.ChangefeedVars().Info.Config.SyncPointInterval = 1 * time.Second
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
@@ -990,8 +990,8 @@ func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		ctx := cdcContext.NewBackendContext4Test(true)
 		if i == 1 {
-			ctx.ChangefeedVars().Info.SyncPointEnabled = true
-			ctx.ChangefeedVars().Info.SyncPointInterval = 100 * time.Second
+			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
+			ctx.ChangefeedVars().Info.Config.SyncPointInterval = 100 * time.Second
 		}
 
 		cf, captures, tester := createChangefeed4Test(ctx, t)
@@ -1014,7 +1014,7 @@ func TestBarrierAdvance(t *testing.T) {
 		// Then the first tick barrier won't be changed.
 		barrier, err := cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		require.Equal(t, cf.state.Info.StartTs-1, barrier)
+		require.Equal(t, cf.state.Info.StartTs, barrier)
 
 		// If sync-point is enabled, must tick more 1 time to advance barrier.
 		if i == 1 {

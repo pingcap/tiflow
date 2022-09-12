@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	dbsroter "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
@@ -48,6 +49,7 @@ func init() {
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
+	sinkv2.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	processor.InitMetrics(registry)
 	owner.InitMetrics(registry)

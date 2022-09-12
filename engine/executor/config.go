@@ -24,19 +24,19 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
-
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
 var (
+	defaultJoinAddr          = "127.0.0.1:10240"
 	defaultSessionTTL        = 20
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
-	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 
 	defaultCapability            int64 = 100 // TODO: make this configurable
@@ -55,9 +55,9 @@ type Config struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
+	Labels map[string]string `toml:"labels" json:"labels"`
 
-	ConfigFile string `toml:"config-file" json:"config-file"`
+	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
 
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -120,10 +120,6 @@ func getDefaultLocalStorageDir(executorName string) string {
 
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
-	if c.Join == "" {
-		return errors.ErrInvalidCliParameter.GenWithStack("join must be provided")
-	}
-
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
 	}
@@ -151,7 +147,11 @@ func (c *Config) Adjust() (err error) {
 		return
 	}
 
-	return
+	if _, err := label.NewSetFromMap(c.Labels); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetDefaultExecutorConfig returns a default executor config
@@ -162,7 +162,7 @@ func GetDefaultExecutorConfig() *Config {
 			File:  "",
 		},
 		Name:                 "",
-		Join:                 "",
+		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,

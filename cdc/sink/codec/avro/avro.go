@@ -62,7 +62,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
 	topic string,
 	e *model.RowChangedEvent,
-	_ func(),
+	callback func(),
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
 	message := common.NewMsg(
@@ -74,6 +74,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
+	message.Callback = callback
 	topic = sanitizeTopic(topic)
 
 	if !e.IsDelete() {

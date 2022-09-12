@@ -69,6 +69,7 @@ service TaskScheduler {
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 }
 
+// Refer to: https://cloud.google.com/apis/design/standard_methods 
 service JobManager {
     rpc CreateJob(CreateJobRequest) returns (Job){
         option (google.api.http) = {
@@ -89,6 +90,9 @@ service JobManager {
         };
     };
 
+    // NOTE: for the compability of existing openapi(ticdc) format, 
+    // we use `/cancel` but not `:cancel`(google api suggested) 
+    // refer to: https://cloud.google.com/apis/design/custom_methods
     rpc CancelJob(CancelJobRequest) returns (Job){
         option (google.api.http) = {
             post: "/api/v1/jobs/{id=*}/cancel"
@@ -100,6 +104,19 @@ service JobManager {
             delete: "/api/v1/jobs/{id=*}"
         };
     }
+}
+
+message Selector {
+    enum Op {
+        TypeUnknown = 0;
+        Eq = 1;
+        Neq = 2;
+        Regex = 3;
+    }
+
+    string label = 1;
+    string target = 2;
+    Op op = 3;
 }
 
 message HeartbeatRequest {
@@ -123,6 +140,7 @@ message Executor {
     string name = 2;
     string address = 3;
     int64  capability = 4;
+    map<string, string> labels = 5;
 }
 
 message RegisterExecutorRequest {
@@ -156,6 +174,7 @@ message ScheduleTaskRequest {
     string task_id = 1;
     int64 cost = 2;
     repeated ResourceKey resource_requirements = 3;
+    repeated Selector selectors = 4;
 }
 
 message ScheduleTaskResponse {
@@ -197,8 +216,8 @@ message Job {
         FakeJob = 4;
     }
 
-    enum Status{
-        StatusUnknown = 0;
+    enum State{
+        StateUnknown = 0;
         Created = 1;
         Running = 2;
         Failed = 3;
@@ -209,9 +228,11 @@ message Job {
 
     string id = 1;
     Type type = 2;
-    Status status = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    State state = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
     bytes config = 4;
-    Error error = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+    bytes detail = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+    Error error = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+    repeated Selector selectors = 7;
 }
 
 message CreateJobRequest {

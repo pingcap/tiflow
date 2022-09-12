@@ -66,14 +66,14 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	ctx.ProjectInfo = tenant.TestProjectInfo
 	epoch, err := cli.GenEpoch(ctx)
 	require.NoError(t, err)
-	masterMeta := &frameModel.MasterMetaKVData{
-		ProjectID:  tenant.TestProjectInfo.UniqueID(),
-		Addr:       ctx.Environ.Addr,
-		NodeID:     ctx.Environ.NodeID,
-		ID:         id,
-		Tp:         FakeJobMaster,
-		Epoch:      epoch,
-		StatusCode: frameModel.MasterStatusUninit,
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		Addr:      ctx.Environ.Addr,
+		NodeID:    ctx.Environ.NodeID,
+		ID:        id,
+		Type:      FakeJobMaster,
+		Epoch:     epoch,
+		State:     frameModel.MasterStateUninit,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
 	require.NoError(t, err)
@@ -134,12 +134,11 @@ func MockBaseMasterCreateWorker(
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
 			WorkerEpoch:  workerEpoch,
-		}), gomock.Any(), gomock.Any()).Do(
+		}), gomock.Any()).Do(
 		func(
 			ctx context.Context,
 			args *client.DispatchTaskArgs,
 			start client.StartWorkerCallback,
-			abort client.AbortWorkerCallback,
 		) {
 			start()
 		}).Times(1).Return(nil)
@@ -208,7 +207,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *frameModel.WorkerStatus,
 ) {
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.frameMetaClient)
+	workerMetaClient := metadata.NewWorkerStatusClient(masterID, master.frameMetaClient)
 	err := workerMetaClient.Store(ctx, status)
 	require.NoError(t, err)
 

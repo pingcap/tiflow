@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
@@ -137,16 +136,6 @@ func init() {
 		return mq.NewPulsarSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
-
-	failpoint.Inject("SimpleMySQLSinkTester", func() {
-		sinkIniterMap["simple-mysql"] = func(
-			ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-			config *config.ReplicaConfig,
-			errCh chan error,
-		) (Sink, error) {
-			return mysql.NewSimpleMySQLSink(ctx, sinkURI, config)
-		}
-	})
 }
 
 // New creates a new sink with the sink-uri

@@ -258,7 +258,7 @@ const (
 type LoaderConfig struct {
 	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
 	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 }

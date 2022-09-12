@@ -88,6 +88,7 @@ func TestCreateTopic(t *testing.T) {
 	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
+
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
@@ -115,6 +116,22 @@ func TestCreateTopic(t *testing.T) {
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
+		err,
+	)
+
+	// Invalid replication factor.
+	// It happens when replication-factor is greater than the number of brokers.
+	cfg = &kafkaconfig.AutoCreateTopicConfig{
+		AutoCreate:        true,
+		PartitionNum:      2,
+		ReplicationFactor: 4,
+	}
+	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
+	_, err = manager.createTopic("new-topic-failed")
+	require.Regexp(
+		t,
+		"new sarama producer: kafka server: Replication-factor is invalid",
 		err,
 	)
 }
