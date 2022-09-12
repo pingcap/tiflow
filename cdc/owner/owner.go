@@ -633,7 +633,7 @@ func (o *ownerImpl) isHealthy() bool {
 			continue
 		}
 		if changefeed.state.Info.State != model.StateNormal {
-			log.Warn("changefeed not normal",
+			log.Warn("isHealthy: changefeed not normal",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID),
 				zap.Any("state", changefeed.state.Info.State))
