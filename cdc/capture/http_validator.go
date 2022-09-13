@@ -66,7 +66,12 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
-		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
+		ctx,
+		capture.pdClient,
+		gc.EnsureGCServiceCreating,
+		changefeedConfig.ID,
+		ensureTTL,
+		changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
