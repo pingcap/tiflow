@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
@@ -71,6 +72,13 @@ func New(ctx context.Context,
 		}
 		s.rowSink = mqs
 		s.sinkType = sink.RowSink
+	case sink.S3Schema, sink.NFSSchema, sink.LocalSchema:
+		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
+		if err != nil {
+			return nil, err
+		}
+		s.txnSink = storageSink
+		s.sinkType = sink.TxnSink
 	case sink.BlackHoleSchema:
 		bs := blackhole.New()
 		s.rowSink = bs
