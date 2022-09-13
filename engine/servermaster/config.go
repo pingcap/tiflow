@@ -33,12 +33,10 @@ import (
 )
 
 const (
-	defaultSessionTTL        = 5 * time.Second
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
 	defaultCampaignTimeout   = 5 * time.Second
-	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
 	defaultEtcdEndpoint      = "127.0.0.1:2379"

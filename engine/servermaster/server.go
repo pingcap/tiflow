@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -23,8 +24,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/pingcap/tiflow/pkg/label"
 
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -43,7 +42,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -52,6 +50,7 @@ import (
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
+	"github.com/pingcap/tiflow/engine/pkg/election"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
@@ -62,18 +61,24 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
+	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+)
+
+// TODO: make it configurable in the future.
+const (
+	leaderElectionTable  = "leader_election"
+	resignLeaderInterval = 10 * time.Second
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -96,7 +101,10 @@ type Server struct {
 	// Notify the server to resign leadership.
 	resignCh chan struct{}
 
+	// TODO: remove it.
 	etcdClient *clientv3.Client
+
+	elector *election.Elector
 
 	leader    atomic.Value
 	masterCli *rpcutil.LeaderClientWithLock[multiClient]
@@ -117,9 +125,6 @@ type Server struct {
 	msgService   *p2p.MessageRPCService
 	p2pMsgRouter p2p.MessageRouter
 	rpcLogRL     *rate.Limiter
-
-	// Deprecated. Will be replaced with `discovery.Agent`.
-	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
 
@@ -162,7 +167,7 @@ func newServerMasterMetric() *serverMasterMetric {
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
+func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
 	id := "server-master-" + uuid.New().String()
@@ -173,23 +178,6 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 	}
 	msgService := p2p.NewMessageRPCServiceWithRPCServer(id, nil, nil)
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
-
-	etcdClient, err := etcdutil.CreateClient(cfg.ETCDEndpoints, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if finalErr != nil {
-			if err := etcdClient.Close(); err != nil {
-				log.Warn("close etcd client failed", zap.Error(err))
-			}
-		}
-	}()
-
-	discoveryKeeper := serverutil.NewDiscoveryKeepaliver(
-		info, etcdClient, int(defaultSessionTTL/time.Second),
-		defaultDiscoverTicker, p2pMsgRouter,
-	)
 
 	server := &Server{
 		id:                id,
@@ -203,10 +191,8 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		msgService:        msgService,
 		p2pMsgRouter:      p2pMsgRouter,
 		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		discoveryKeeper:   discoveryKeeper,
 		metrics:           newServerMasterMetric(),
 		metaStoreManager:  NewMetaStoreManager(),
-		etcdClient:        etcdClient,
 	}
 	server.leaderServiceFn = server.runLeaderService
 	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
@@ -231,14 +217,8 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 	resp, err := s.executorManager.HandleHeartbeat(req)
 	if err == nil && resp.Err == nil {
-		for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
-			resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
-		}
-		// `discoveryKeeper.Keepalive` starts at early stage, so it's unlikely that
-		// GetSnapshot() returns nil. For safety, we check it here. If it returns nil,
-		// we will add own node address to the response.
-		if len(resp.Addrs) == 0 {
-			resp.Addrs = append(resp.Addrs, s.cfg.AdvertiseAddr)
+		for _, m := range s.elector.GetMembers() {
+			resp.Addrs = append(resp.Addrs, m.Address)
 		}
 		leader, exists := s.masterRPCHook.CheckLeader()
 		if exists {
@@ -347,12 +327,12 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*pb.ListMastersResponse, error) {
 	resp := &pb.ListMastersResponse{}
 	leaderAddr, ok := s.LeaderAddr()
-	for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
-		isLeader := ok && nodeInfo.Addr == leaderAddr
+	for _, m := range s.elector.GetMembers() {
+		isLeader := ok && m.Address == leaderAddr
 		resp.Masters = append(resp.Masters, &pb.Master{
-			Id:       string(nodeInfo.ID),
-			Name:     nodeInfo.Name,
-			Address:  nodeInfo.Addr,
+			Id:       m.ID,
+			Name:     m.Name,
+			Address:  m.Address,
 			IsLeader: isLeader,
 		})
 	}
@@ -436,18 +416,6 @@ func (s *Server) QueryMetaStore(
 	}
 
 	switch req.Tp {
-	case pb.StoreType_ServiceDiscovery:
-		if len(s.cfg.ETCDEndpoints) > 0 {
-			return &pb.QueryMetaStoreResponse{
-				Address: s.cfg.ETCDEndpoints[0],
-			}, nil
-		}
-		return &pb.QueryMetaStoreResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_MetaStoreNotExists,
-				Message: fmt.Sprintf("store type: %s", req.Tp),
-			},
-		}, nil
 	case pb.StoreType_SystemMetaStore:
 		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
@@ -474,10 +442,9 @@ func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLe
 }
 
 // ResignLeader implements DiscoveryServer.ResignLeader.
-func (s *Server) ResignLeader(_ context.Context, _ *pb.ResignLeaderRequest) (*emptypb.Empty, error) {
-	select {
-	case s.resignCh <- struct{}{}:
-	default:
+func (s *Server) ResignLeader(ctx context.Context, _ *pb.ResignLeaderRequest) (*emptypb.Empty, error) {
+	if err := s.elector.ResignLeader(ctx, resignLeaderInterval); err != nil {
+		return nil, err
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -514,9 +481,6 @@ func (s *Server) Stop() {
 	if s.mockGrpcServer != nil {
 		s.mockGrpcServer.Stop()
 	}
-	if s.etcdClient != nil {
-		s.etcdClient.Close()
-	}
 	// in some tests this fields is not initialized
 	if s.masterCli != nil {
 		s.masterCli.Close()
@@ -546,6 +510,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Elector relies on meta store, so it should be initialized after meta store.
+	if err := s.initElector(); err != nil {
+		return errors.Trace(err)
+	}
+
 	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
 	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
 	if err != nil {
@@ -571,11 +540,11 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		return s.leaderLoop(ctx)
+		return s.elector.Run(ctx)
 	})
 
 	wg.Go(func() error {
-		return s.discoveryKeeper.Keepalive(ctx)
+		return s.watchNewLeader(ctx)
 	})
 
 	return wg.Wait()
@@ -644,6 +613,31 @@ func (s *Server) initResourceManagerService() {
 		s.executorManager,
 		s.masterRPCHook,
 	)
+}
+
+func (s *Server) initElector() error {
+	conn, err := s.frameworkClientConn.GetConn()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	db, ok := conn.(*sql.DB)
+	if !ok {
+		return errors.Errorf("failed to convert conn to *sql.DB, got %T", conn)
+	}
+
+	sqlStorage, err := election.NewSQLStorage(db, leaderElectionTable)
+	if err != nil {
+		return err
+	}
+
+	s.elector, err = election.NewElector(election.Config{
+		ID:             s.id,
+		Name:           s.cfg.Name,
+		Address:        s.cfg.AdvertiseAddr,
+		Storage:        sqlStorage,
+		LeaderCallback: s.leaderServiceFn,
+	})
+	return err
 }
 
 func (s *Server) serve(ctx context.Context) error {
@@ -957,7 +951,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			msgRouter:     s.p2pMsgRouter,
 			executorGroup: executorClients,
 		}
-		return serverutil2.WatchExecutors(errgCtx, s.executorManager, updater)
+		return serverutil.WatchExecutors(errgCtx, s.executorManager, updater)
 	})
 
 	s.leaderInitialized.Store(true)
