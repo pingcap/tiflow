@@ -479,7 +479,7 @@ func TestJob(t *testing.T) {
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec(regexp.QuoteMeta(
-					"UPDATE `master_meta` SET `detail`=?,`error_message`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
+					"UPDATE `master_meta` SET `error_message`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},

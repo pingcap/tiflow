@@ -163,7 +163,6 @@ func (m *MasterMeta) UpdateStateValues() ormModel.KeyValueMap {
 func (m *MasterMeta) UpdateErrorValues() ormModel.KeyValueMap {
 	return ormModel.KeyValueMap{
 		"error_message": m.ErrorMsg,
-		"detail":        m.Detail,
 	}
 }
 

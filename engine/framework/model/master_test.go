@@ -167,7 +167,6 @@ func TestOrmKeyValues(t *testing.T) {
 
 	require.Equal(t, ormModel.KeyValueMap{
 		"error_message": meta.ErrorMsg,
-		"detail":        meta.Detail,
 	}, meta.UpdateErrorValues())
 
 	require.Equal(t, ormModel.KeyValueMap{
