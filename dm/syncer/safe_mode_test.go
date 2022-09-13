@@ -54,7 +54,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	defer mockCluster.Terminate(t)
 	etcdTestCli := mockCluster.RandClient()
 
-	log.InitLogger(&log.Config{Level: "debug"})
+	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
 	l := log.With(zap.String("unit test", "TestEnableSafeModeInitializationPhase"))
 	s := &Syncer{
 		tctx:     tcontext.Background().WithLogger(l),
