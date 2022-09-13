@@ -196,7 +196,7 @@ var (
 	ErrOwnerNotFound                = errors.Normalize("owner not found", errors.RFCCodeText("CDC:ErrOwnerNotFound"))
 	ErrTableListenReplicated        = errors.Normalize("A table(%d) is being replicated by at least two processors(%s, %s), please report a bug", errors.RFCCodeText("CDC:ErrTableListenReplicated"))
 	ErrTableIneligible              = errors.Normalize("some tables are not eligible to replicate(%v), if you want to ignore these tables, please set ignore_ineligible_table to true", errors.RFCCodeText("CDC:ErrTableIneligible"))
-
+	ErrCaptureNotInitialized        = errors.Normalize("capture has not been initialized yet", errors.RFCCodeText("CDC:ErrCaptureNotInitialized"))
 	// EtcdWorker related errors. Internal use only.
 	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
 	ErrEtcdTryAgain = errors.Normalize("the etcd txn should be aborted and retried immediately", errors.RFCCodeText("CDC:ErrEtcdTryAgain"))

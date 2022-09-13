@@ -133,7 +133,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if s.capture != nil {
-		st.ID = s.capture.Info().ID
+		info, err := s.capture.Info()
+		if err != nil {
+			writeInternalServerError(w, err)
+			return
+		}
+		st.ID = info.ID
 		st.IsOwner = s.capture.IsOwner()
 	}
 	writeData(w, st)

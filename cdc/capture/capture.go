@@ -355,10 +355,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	// when c.reset has not been called yet, c.info is nil.
+	if c.info != nil {
+		return *c.info, nil
+	}
+	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
