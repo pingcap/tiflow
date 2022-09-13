@@ -179,6 +179,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {
@@ -241,19 +242,17 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	return &model.ChangeFeedInfo{
-		UpstreamID:        pdClient.GetClusterID(ctx),
-		Namespace:         cfg.Namespace,
-		ID:                cfg.ID,
-		SinkURI:           cfg.SinkURI,
-		CreateTime:        time.Now(),
-		StartTs:           cfg.StartTs,
-		TargetTs:          cfg.TargetTs,
-		Engine:            cfg.Engine,
-		Config:            replicaCfg,
-		State:             model.StateNormal,
-		SyncPointEnabled:  cfg.SyncPointEnabled,
-		SyncPointInterval: cfg.SyncPointInterval,
-		CreatorVersion:    version.ReleaseVersion,
+		UpstreamID:     pdClient.GetClusterID(ctx),
+		Namespace:      cfg.Namespace,
+		ID:             cfg.ID,
+		SinkURI:        cfg.SinkURI,
+		CreateTime:     time.Now(),
+		StartTs:        cfg.StartTs,
+		TargetTs:       cfg.TargetTs,
+		Engine:         cfg.Engine,
+		Config:         replicaCfg,
+		State:          model.StateNormal,
+		CreatorVersion: version.ReleaseVersion,
 	}, nil
 }
 
@@ -310,14 +309,13 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newInfo.TargetTs = cfg.TargetTs
 	}
 
-	// verify syncPoint
-	newInfo.SyncPointEnabled = cfg.SyncPointEnabled
-	if cfg.SyncPointInterval != 0 {
-		newInfo.SyncPointInterval = cfg.SyncPointInterval
-	}
-
+	// verify replica config
 	if cfg.ReplicaConfig != nil {
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+		err = newInfo.Config.ValidateAndAdjust(nil)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	f, err := filter.NewFilter(newInfo.Config, "")

@@ -19,6 +19,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -89,7 +92,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 10485760,
+  "per-table-memory-quota": 67108864,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
@@ -142,6 +145,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -182,6 +188,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"

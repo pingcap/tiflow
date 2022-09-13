@@ -58,7 +58,7 @@ func (t *table) getAndUpdateTableState() (schedulepb.TableState, bool) {
 	t.state = state
 
 	if oldState != state {
-		log.Info("schedulerv3: table state changed",
+		log.Debug("schedulerv3: table state changed",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.Int64("tableID", t.id),
@@ -114,7 +114,7 @@ func newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Me
 	return message
 }
 
-func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
+func (t *table) handleRemoveTableTask() *schedulepb.Message {
 	state, _ := t.getAndUpdateTableState()
 	changed := true
 	for changed {
@@ -130,7 +130,7 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 			schedulepb.TableStateStopped:
 			// release table resource, and get the latest checkpoint
 			// this will let the table become `absent`
-			checkpointTs, done := t.executor.IsRemoveTableFinished(ctx, t.id)
+			checkpointTs, done := t.executor.IsRemoveTableFinished(t.id)
 			if !done {
 				// actually, this should never be hit, since we know that table is stopped.
 				status := t.getTableStatus()
@@ -145,7 +145,7 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 		case schedulepb.TableStatePreparing,
 			schedulepb.TableStatePrepared,
 			schedulepb.TableStateReplicating:
-			done := t.executor.RemoveTable(ctx, t.task.TableID)
+			done := t.executor.RemoveTable(t.task.TableID)
 			if !done {
 				status := t.getTableStatus()
 				status.State = schedulepb.TableStateStopping
@@ -170,7 +170,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 		case schedulepb.TableStateAbsent:
 			done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, t.task.IsPrepare)
 			if err != nil || !done {
-				log.Info("schedulerv3: agent add table failed",
+				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.id), zap.Any("task", t.task),
@@ -201,7 +201,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 			if t.task.status == dispatchTableTaskReceived {
 				done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, false)
 				if err != nil || !done {
-					log.Info("schedulerv3: agent add table failed",
+					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
 						zap.String("changefeed", t.changefeedID.ID),
 						zap.Int64("tableID", t.id), zap.Stringer("state", state),
@@ -212,7 +212,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 				t.task.status = dispatchTableTaskProcessed
 			}
 
-			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, false)
+			done := t.executor.IsAddTableFinished(t.task.TableID, false)
 			if !done {
 				return newAddTableResponseMessage(t.getTableStatus()), nil
 			}
@@ -220,7 +220,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 		case schedulepb.TableStatePreparing:
 			// `preparing` is not stable state and would last a long time,
 			// it's no need to return such a state, to make the coordinator become burdensome.
-			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, t.task.IsPrepare)
+			done := t.executor.IsAddTableFinished(t.task.TableID, t.task.IsPrepare)
 			if !done {
 				return nil, nil
 			}
@@ -279,7 +279,7 @@ func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
 		return nil, nil
 	}
 	if t.task.IsRemove {
-		return t.handleRemoveTableTask(ctx), nil
+		return t.handleRemoveTableTask(), nil
 	}
 	return t.handleAddTableTask(ctx)
 }

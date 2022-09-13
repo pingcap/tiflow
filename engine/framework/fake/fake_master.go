@@ -543,8 +543,10 @@ func (m *Master) getState() frameModel.WorkerState {
 
 func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 	dws := &dummyWorkerStatus{}
-	err := json.Unmarshal(data, dws)
-	return dws, err
+	if err := json.Unmarshal(data, dws); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dws, nil
 }
 
 // CheckpointKey returns key path used in etcd for checkpoint
