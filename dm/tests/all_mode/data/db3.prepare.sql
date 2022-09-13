@@ -13,16 +13,15 @@ create table t_extract
     j3 json as (json_object('a', j ->> '$.a', 'b', j ->> '$.b')),
     j4 json as (json_merge_preserve(b, '{"k": "v"}')),
     j5 json as (json_merge_patch(b, '{"k": "v"}')),
-    j6 json as (json_merge(b, '{"k": "v"}')),
     j7 json as (json_set(b, '$.k', 'v')),
     j8 json as (json_insert(b, '$.k', 'v')),
     j9 json as (json_replace(b, '$.k', 'v')),
     j10 json as (json_remove(b, '$.k')),
     j11 int as (json_contains(b, '{"k": "v"}')),
     j12 int as (json_contains_path(b, 'one', '$.k')),
-    j13 json as (json_array_append(b, '$.k', 'v')),
+    j13 json as (json_array_append(b, '$[0]', 'v')),
 
-    j14 json as (json_array_insert(j3, '$.k', 'v'))
+    j14 json as (json_array_insert(j3, '$[0]', 'v'))
 );
 
 insert into t_extract(j)values ('{"a":1, "b": {"a":1}}');
