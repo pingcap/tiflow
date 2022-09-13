@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -63,6 +64,7 @@ func (op dmlOpType) String() (str string) {
 
 // genDMLParam stores pruned columns, data as well as the original columns, data, index.
 type genDMLParam struct {
+<<<<<<< HEAD
 	targetTableID   string              // as a key in map like `schema`.`table`
 	sourceTable     *filter.Table       // origin table
 	safeMode        bool                // only used in update
@@ -76,6 +78,69 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo) []int
 	value := make([]interface{}, 0, len(data))
 	for i := range data {
 		value = append(value, castUnsigned(data[i], &columns[i].FieldType))
+=======
+	sourceTable     *filter.Table // origin table
+	targetTable     *filter.Table
+	safeMode        bool             // only used in update
+	originalData    [][]interface{}  // all data
+	sourceTableInfo *model.TableInfo // all table info
+	extendData      [][]interface{}  // all data include extend data
+}
+
+var latin1Decoder = charmap.ISO8859_1.NewDecoder()
+
+// extractValueFromData adjust the values obtained from go-mysql so that
+// - the values can be correctly converted to TiDB datum
+// - the values are in the correct type that go-sql-driver/mysql uses.
+func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourceTI *model.TableInfo) []interface{} {
+	value := make([]interface{}, 0, len(data))
+	var err error
+
+	for i, d := range data {
+		d = castUnsigned(d, &columns[i].FieldType)
+		isLatin1 := columns[i].GetCharset() == charset.CharsetLatin1 || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetLatin1
+
+		switch v := d.(type) {
+		case int8:
+			d = int64(v)
+		case int16:
+			d = int64(v)
+		case int32:
+			d = int64(v)
+		case uint8:
+			d = uint64(v)
+		case uint16:
+			d = uint64(v)
+		case uint32:
+			d = uint64(v)
+		case uint:
+			d = uint64(v)
+		case decimal.Decimal:
+			d = v.String()
+		case []byte:
+			if isLatin1 {
+				d, err = latin1Decoder.Bytes(v)
+				if err != nil {
+					log.L().DPanic("can't convert latin1 to utf8", zap.ByteString("value", v), zap.Error(err))
+				}
+			}
+		case string:
+			isGBK := columns[i].GetCharset() == charset.CharsetGBK || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK
+			switch {
+			case isGBK:
+				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
+				d = []byte(v)
+			case isLatin1:
+				// TiDB has bug in latin1 so we must convert it to utf8 at DM's scope
+				// https://github.com/pingcap/tidb/issues/18955
+				d, err = latin1Decoder.String(v)
+				if err != nil {
+					log.L().DPanic("can't convert latin1 to utf8", zap.String("value", v), zap.Error(err))
+				}
+			}
+		}
+		value = append(value, d)
+>>>>>>> 81c8e09bd (syncer(dm): fix corrupt latin1 data when replicating (#7027))
 	}
 	return value
 }
