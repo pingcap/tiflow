@@ -96,26 +96,15 @@ GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 GOVERSION := $(shell go version)
 
-# CDC LDFLAGS.
+# Version LDFLAGS.
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
-# DM LDFLAGS.
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GoVersion=$(GOVERSION)"
-
-# Engine LDFLAGS.
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GoVersion=$(GOVERSION)"
+include tools/Makefile
+include Makefile.engine
 
 default: build buildsucc
 
@@ -279,7 +268,11 @@ generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
 
-generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
+generate-protobuf: ## Generate code from protobuf files.
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster \
+	tools/bin/protoc-gen-go tools/bin/protoc-gen-go-grpc \
+	tools/bin/protoc-gen-grpc-gateway tools/bin/protoc-gen-grpc-gateway-v2 \
+	tools/bin/protoc-gen-openapiv2
 	@echo "generate-protobuf"
 	./scripts/generate-protobuf.sh
 
@@ -298,7 +291,7 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec tiflow-swagger-spec check-makefiles
+	swagger-spec check-makefiles check_engine_integration_test
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -329,6 +322,7 @@ generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
+	tools/bin/mockgen -source cdc/sinkv2/eventsink/txn/backend.go -destination cdc/sinkv2/eventsink/txn/mock/backend_mock.go
 
 clean:
 	go clean -i ./...
@@ -480,59 +474,6 @@ dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
 	go tool cover -html "$(DM_TEST_DIR)/unit_test.out" -o "$(DM_TEST_DIR)/unit_test_cov.html"
 
-tools/bin/failpoint-ctl: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl
-
-tools/bin/gocovmerge: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gocovmerge github.com/zhouqiang-cl/gocovmerge
-
-tools/bin/goveralls: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/goveralls github.com/mattn/goveralls
-
-tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
-
-tools/bin/mockgen: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/mockgen github.com/golang/mock/mockgen
-
-tools/bin/protoc-gen-gogofaster: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster
-
-tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-
-tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
-
-tools/bin/shfmt: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
-
-tools/bin/oapi-codegen: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/oapi-codegen github.com/deepmap/oapi-codegen/cmd/oapi-codegen
-
-tools/bin/gocov: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov  github.com/axw/gocov/gocov
-
-tools/bin/gocov-xml: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gocov-xml github.com/AlekSi/gocov-xml
-
-tools/bin/gotestsum: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gotestsum gotest.tools/gotestsum
-
-tools/bin/errdoc-gen: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
-
-tools/bin/swag: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
-
-tools/bin/msgp: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
-
-tools/bin/protoc:
-	./scripts/download-protoc.sh
-
-tools/bin/goimports:
-	cd tools/check && $(GO) build -mod=mod -o ../bin/goimports golang.org/x/tools/cmd/goimports
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
@@ -556,40 +497,27 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build
-
-engine_image_amd64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
-
-engine_image_arm64: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/arm64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
-
-engine_image_from_local:
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/utils/run_engine.sh build-local
-
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: bin/sync_diff_inspector
+engine_integration_test: check_third_party_binary_for_engine
+	mkdir -p /tmp/tiflow_engine_test || true
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
+	./engine/test/utils/check_log.sh
+
+check_third_party_binary_for_engine:
+	@which bash || (echo "bash not found in ${PATH}"; exit 1)
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+	@which go || (echo "go not found in ${PATH}"; exit 1)
+	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
+	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
+
+check_engine_integration_test:
+	./engine/test/utils/check_case.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh
-
-tiflow-swagger-spec: tools/bin/swag
-	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)

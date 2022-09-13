@@ -37,10 +37,10 @@ while [[ ${1} ]]; do
 done
 
 if [ -z ${password} ]; then
-	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 -e '${sql}'"
+	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 -e \"${sql}\""
 else
-	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e '${sql}'"
+	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e \"${sql}\""
 fi
 
-echo "will execute: $cmd"
+echo "will execute: $cmd" >&2
 eval $cmd

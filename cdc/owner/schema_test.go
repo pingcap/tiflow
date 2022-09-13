@@ -537,5 +537,4 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	events, err = schema.BuildDDLEvents(job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
-	require.Nil(t, schema.HandleDDL(job))
 }

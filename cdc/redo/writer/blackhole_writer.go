@@ -36,6 +36,10 @@ func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
 	return nil
 }
 
+func (bs *blackHoleWriter) GC(ctx context.Context, checkpointTs model.Ts) error {
+	return nil
+}
+
 // NewBlackHoleWriter creates a blackHole writer
 func NewBlackHoleWriter() *blackHoleWriter {
 	return &blackHoleWriter{

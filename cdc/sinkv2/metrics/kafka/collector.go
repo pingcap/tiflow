@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -31,21 +31,14 @@ const flushMetricsInterval = 5 * time.Second
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
-	// metrics at producer level.
-	batchSizeMetricName        = "batch-size"
-	recordSendRateMetricName   = "record-send-rate"
-	recordPerRequestMetricName = "records-per-request"
+	// Producer level.
 	compressionRatioMetricName = "compression-ratio"
-
-	// metrics at broker level.
-	incomingByteRateMetricNamePrefix   = "incoming-byte-rate-for-broker-"
+	// Broker level.
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
-	requestSizeMetricNamePrefix        = "request-size-for-broker-"
 	requestLatencyInMsMetricNamePrefix = "request-latency-in-ms-for-broker-"
 	requestsInFlightMetricNamePrefix   = "requests-in-flight-for-broker-"
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
-	responseSizeMetricNamePrefix       = "response-size-for-broker-"
 )
 
 // Collector is a metric collector for kafka.
@@ -119,27 +112,6 @@ func (m *Collector) collectProducerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 
-	batchSizeMetric := m.registry.Get(batchSizeMetricName)
-	if histogram, ok := batchSizeMetric.(metrics.Histogram); ok {
-		batchSizeGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean())
-	}
-
-	recordSendRateMetric := m.registry.Get(recordSendRateMetricName)
-	if meter, ok := recordSendRateMetric.(metrics.Meter); ok {
-		recordSendRateGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(meter.Snapshot().Rate1())
-	}
-
-	recordPerRequestMetric := m.registry.Get(recordPerRequestMetricName)
-	if histogram, ok := recordPerRequestMetric.(metrics.Histogram); ok {
-		recordPerRequestGauge.
-			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean())
-	}
-
 	compressionRatioMetric := m.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
@@ -153,14 +125,6 @@ func (m *Collector) collectBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-
-		incomingByteRateMetric := m.registry.Get(
-			getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
-		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
-			incomingByteRateGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().Rate1())
-		}
 
 		outgoingByteRateMetric := m.registry.Get(
 			getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
@@ -176,14 +140,6 @@ func (m *Collector) collectBrokerMetrics() {
 			requestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
-		}
-
-		requestSizeMetric := m.registry.Get(
-			getBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
-		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
-			requestSizeGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean())
 		}
 
 		requestLatencyMetric := m.registry.Get(
@@ -209,14 +165,6 @@ func (m *Collector) collectBrokerMetrics() {
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
 		}
-
-		responseSizeMetric := m.registry.Get(getBrokerMetricName(
-			responseSizeMetricNamePrefix, brokerID))
-		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
-			responseSizeGauge.
-				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean())
-		}
 	}
 }
 
@@ -225,12 +173,6 @@ func getBrokerMetricName(prefix, brokerID string) string {
 }
 
 func (m *Collector) cleanupProducerMetrics() {
-	batchSizeGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	recordSendRateGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	recordPerRequestGauge.
-		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	compressionRatioGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 }
@@ -240,13 +182,9 @@ func (m *Collector) cleanupBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-		incomingByteRateGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
 		outgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestRateGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestSizeGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestLatencyInMsGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
@@ -254,8 +192,7 @@ func (m *Collector) cleanupBrokerMetrics() {
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		responseRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		responseSizeGauge.
-			DeleteLabelValues(namespace, changefeedID, brokerID)
+
 	}
 }
 

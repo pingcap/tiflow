@@ -5,6 +5,7 @@ host="127.0.0.1"
 port=3306
 user="root"
 password=""
+tryNums=100
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -24,8 +25,13 @@ while [[ ${1} ]]; do
 		password=${2}
 		shift
 		;;
+	--try-nums)
+		tryNums=${2}
+		shift
+		;;
 	*)
 		echo "Unknown parameter: ${1}" >&2
+		echo "Only support: --host/--port/--user/--password/--try-nums" >&2
 		exit 1
 		;;
 	esac
@@ -45,7 +51,7 @@ else
 fi
 while ! eval $check_cmd; do
 	i=$((i + 1))
-	if [ "$i" -gt 30 ]; then
+	if [ "$i" -gt ${tryNums} ]; then
 		echo 'Failed to start database'
 		exit 2
 	fi

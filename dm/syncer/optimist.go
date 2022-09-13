@@ -68,7 +68,7 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 				s.optimist.DoneRedirectOperation(utils.GenTableID(targetTable))
 				resync := &ShardingReSync{
 					currLocation:   redirectLocation,
-					latestLocation: ec.currentLocation.Clone(),
+					latestLocation: ec.endLocation,
 					targetTable:    targetTable,
 					allResolved:    true,
 				}

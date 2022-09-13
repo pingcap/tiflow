@@ -84,6 +84,31 @@ func NewSet() Set {
 	return make(map[Key]Value, 8)
 }
 
+// NewSetFromMap tries to create a Set from an input of type
+// map[string]string. It is used to verify user input and create
+// a Set.
+func NewSetFromMap(input map[string]string) (Set, error) {
+	ret := NewSet()
+	for k, v := range input {
+		key, err := NewKey(k)
+		if err != nil {
+			return nil, err
+		}
+
+		value, err := NewValue(v)
+		if err != nil {
+			return nil, err
+		}
+
+		if !ret.Add(key, value) {
+			// Reachable only if there are duplicate keys,
+			// which are not possible because the input is a map.
+			panic("unreachable")
+		}
+	}
+	return ret, nil
+}
+
 // Add adds a key-value pair to the Set.
 // Duplicates are not allowed.
 func (s Set) Add(key Key, value Value) (success bool) {
@@ -109,4 +134,17 @@ func (s Set) Get(key Key) (value Value, exists bool) {
 		return invalidLabelValue, false
 	}
 	return retVal, true
+}
+
+// ToMap converts a Set to a plain map that can be used to
+// produce a protobuf message.
+func (s Set) ToMap() map[string]string {
+	if len(s) == 0 {
+		return nil
+	}
+	ret := make(map[string]string, len(s))
+	for k, v := range s {
+		ret[string(k)] = string(v)
+	}
+	return ret
 }

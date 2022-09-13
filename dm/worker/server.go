@@ -461,9 +461,6 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	//s.closeMu.Lock()
-	//defer s.closeMu.Unlock()
-
 	if s.closed.Load() {
 		return
 	}

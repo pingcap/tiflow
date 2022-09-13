@@ -120,7 +120,15 @@ func fullBytes(n int) []byte {
 
 // assembleEvent assembles header fields, postHeader and payload together to an event.
 // header: pass as a struct to make a copy
-func assembleEvent(buf *bytes.Buffer, event replication.Event, decodeWithChecksum bool, header replication.EventHeader, eventType replication.EventType, latestPos uint32, postHeader, payload []byte) (*replication.BinlogEvent, error) {
+func assembleEvent(
+	buf *bytes.Buffer,
+	event replication.Event,
+	decodeWithChecksum bool,
+	header replication.EventHeader,
+	eventType replication.EventType,
+	latestPos uint32,
+	postHeader, payload []byte,
+) (*replication.BinlogEvent, error) {
 	eventSize := uint32(eventHeaderLen) + uint32(len(postHeader)) + uint32(len(payload)) + crc32Len
 	// update some fields in header
 	header.EventSize = eventSize

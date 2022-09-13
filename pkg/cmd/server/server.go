@@ -131,7 +131,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
 	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
-	version.LogVersionInfo()
+	version.LogVersionInfo("Change Data Capture (CDC)")
 	if ticdcutil.FailpointBuild {
 		for _, path := range failpoint.List() {
 			status, err := failpoint.Status(path)
@@ -146,7 +146,8 @@ func (o *options) run(cmd *cobra.Command) error {
 	server.RecordGoRuntimeSettings()
 	server, err := server.New(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
-		return errors.Annotate(err, "new server")
+		log.Error("create cdc server failed", zap.Error(err))
+		return errors.Trace(err)
 	}
 	// Drain the server before shutdown.
 	shutdownNotify := func() <-chan struct{} { return server.Drain(ctx) }
@@ -155,13 +156,12 @@ func (o *options) run(cmd *cobra.Command) error {
 	// Run TiCDC server.
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
-		return errors.Annotate(err, "run server")
+		log.Warn("cdc server exits with error", zap.Error(err))
+	} else {
+		log.Info("cdc server exits normally")
 	}
 	server.Close()
 	unified.CleanUp()
-	log.Info("cdc server exits successfully")
-
 	return nil
 }
 
@@ -265,7 +265,7 @@ func (o *options) validate() error {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
 		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
-			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
+			return cerror.WrapError(cerror.ErrInvalidServerOption, err)
 		}
 	}
 	return nil

@@ -114,7 +114,11 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	changefeedTicked bool
 
-	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
+	newChangefeed func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+	) *changefeed
 }
 
 // NewOwner creates a new Owner
@@ -144,7 +148,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	}
 
 	o.captures = state.Captures
-	o.updateMetrics(state)
+	o.updateMetrics()
 
 	// handleJobs() should be called before clusterVersionConsistent(), because
 	// when there are different versions of cdc nodes in the cluster,
@@ -174,45 +178,38 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			}
 			continue
 		}
-		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
-		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
-				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
-			cfReactor = o.newChangefeed(changefeedID, up)
+			cfReactor = o.newChangefeed(changefeedID, changefeedState, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
-		cfReactor.Tick(ctx, changefeedState, state.Captures)
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			ID: changefeedID,
+		})
+		cfReactor.Tick(ctx, state.Captures)
 	}
 	o.changefeedTicked = true
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
-		for changefeedID, cfReactor := range o.changefeeds {
+		for changefeedID, reactor := range o.changefeeds {
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+			reactor.Close(ctx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
 
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
-		for changefeedID, cfReactor := range o.changefeeds {
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+		for _, reactor := range o.changefeeds {
+			reactor.Close(ctx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -344,7 +341,7 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	changefeedStatusGauge.Reset()
 }
 
-func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
+func (o *ownerImpl) updateMetrics() {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
@@ -478,7 +475,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
-			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
+			log.Warn("changefeed not found when handle a job", zap.Any("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
 			continue
@@ -613,33 +610,47 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy, err := o.isHealthy()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		query.Data = isHealthy
+		query.Data = o.isHealthy()
 	}
 	return nil
 }
 
-func (o *ownerImpl) isHealthy() (bool, error) {
+func (o *ownerImpl) isHealthy() bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
-		return false, nil
+		log.Warn("owner is not healthy since changefeeds are not ticked")
+		return false
 	}
 	if !o.clusterVersionConsistent(o.captures) {
-		return false, nil
+		return false
 	}
-	for _, cfReactor := range o.changefeeds {
-		provider := cfReactor.GetInfoProvider()
+	for _, changefeed := range o.changefeeds {
+		if changefeed.state == nil {
+			log.Warn("isHealthy: changefeed state is nil",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			continue
+		}
+		if changefeed.state.Info.State != model.StateNormal {
+			log.Warn("isHealthy: changefeed not normal",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID),
+				zap.Any("state", changefeed.state.Info.State))
+			continue
+		}
+
+		provider := changefeed.GetInfoProvider()
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
-			return false, nil
+			log.Warn("isHealthy: changefeed is not initialized",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			return false
 		}
 	}
-	return true, nil
+	return true
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
@@ -688,7 +699,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {
 			upstreamInfo := state.Upstreams[upstreamID]
-			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			up = o.upstreamManager.AddUpstream(upstreamInfo)
 		}
 		if !up.IsNormal() {
 			log.Warn("upstream is not ready, skip",

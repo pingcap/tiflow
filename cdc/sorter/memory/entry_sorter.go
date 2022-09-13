@@ -24,13 +24,13 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-// EntrySorter accepts out-of-order raw kv entries and output sorted entries
+// EntrySorter accepts out-of-order raw kv entries and output sorted entries.
+// For now, it only uses for DDL puller and test.
 type EntrySorter struct {
 	unsorted        []*model.PolymorphicEvent
 	lock            sync.Mutex
@@ -53,7 +53,7 @@ func NewEntrySorter() *EntrySorter {
 func (es *EntrySorter) Run(ctx context.Context) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	_, tableName := contextutil.TableIDFromCtx(ctx)
-	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.
+	metricEntrySorterResolvedChanSizeGauge := entrySorterResolvedChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
@@ -89,7 +89,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			case <-time.After(defaultMetricInterval):
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
+				metricEntrySorterResolvedChanSizeGauge.Set(float64(len(es.resolvedTsGroup)))
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
 			case <-receiver.C:
@@ -149,22 +149,13 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 }
 
-// TryAddEntry tries to add an entry.
-func (es *EntrySorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
-	if atomic.LoadInt32(&es.closed) != 0 {
-		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
-	}
-	es.AddEntry(ctx, entry)
-	return true, nil
-}
-
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh
 }
 
 // EmitStartTs implement sorter interface
-func (es *EntrySorter) EmitStartTs(ctx context.Context, ts uint64) {}
+func (es *EntrySorter) EmitStartTs(_ context.Context, _ uint64) {}
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 	return model.ComparePolymorphicEvents(i, j)
@@ -190,6 +181,7 @@ func mergeEvents(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent,
 }
 
 // SortOutput receives a channel from a puller, then sort event and output to the channel returned.
+// Only for DDL puller.
 func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *model.RawKVEntry {
 	ctx, cancel := context.WithCancel(ctx)
 	sorter := NewEntrySorter()

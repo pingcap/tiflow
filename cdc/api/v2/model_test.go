@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	parserModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -71,9 +70,6 @@ func TestToAPIReplicaConfig(t *testing.T) {
 			IgnoreDBs: []string{"aa", "b2"},
 		},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
-		DDLAllowlist: []parserModel.ActionType{
-			parserModel.ActionType(2),
-		},
 		EventFilters: []*config.EventFilterRule{{
 			Matcher:                  []string{"test.t1", "test.t2"},
 			IgnoreEvent:              []bf.EventType{bf.AllDML, bf.AllDDL, bf.AlterTable},

@@ -20,6 +20,7 @@ import (
 )
 
 // Deque implements Queue with edwingeng/deque
+//
 //nolint:structcheck
 type Deque[T any] struct {
 	// mu protects deque, because it is not thread-safe.

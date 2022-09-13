@@ -505,10 +505,10 @@ func (c *slowActor) OnClose() {}
 
 // Test router send during actor poll and before close.
 //
-//  ----------------------> time
-//     '-----------' Poll
-//        ' Send
-//                 ' Close
+//	----------------------> time
+//	   '-----------' Poll
+//	      ' Send
+//	               ' Close
 func TestSendBeforeClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -555,11 +555,11 @@ func TestSendBeforeClose(t *testing.T) {
 
 // Test router send after close and before enqueue.
 //
-//  ----------------------> time
-//   '-----' Poll
-//         ' Close
-//            ' Send
-//                'Enqueue
+//	----------------------> time
+//	 '-----' Poll
+//	       ' Close
+//	          ' Send
+//	              'Enqueue
 func TestSendAfterClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

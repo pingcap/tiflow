@@ -60,6 +60,7 @@ type CheckpointAgent interface {
 type WorkerManager struct {
 	*ticker.DefaultTicker
 
+	jobID           string
 	jobStore        *metadata.JobStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
@@ -72,9 +73,10 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
+func NewWorkerManager(jobID string, initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:           jobID,
 		jobStore:        jobStore,
 		workerAgent:     workerAgent,
 		messageAgent:    messageAgent,
@@ -113,9 +115,9 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 	wm.removeOfflineWorkers()
 
 	state, err := wm.jobStore.Get(ctx)
-	if err != nil {
-		wm.logger.Error("get job state failed", zap.Error(err))
-		if err2 := wm.onJobNotExist(ctx); err2 != nil {
+	if err != nil || state.(*metadata.Job).Deleting {
+		wm.logger.Info("on job deleting", zap.Error(err))
+		if err2 := wm.onJobDel(ctx); err2 != nil {
 			return err2
 		}
 		return err
@@ -151,7 +153,7 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 }
 
 // stop all workers, usually happened when delete jobs.
-func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
+func (wm *WorkerManager) onJobDel(ctx context.Context) error {
 	var recordError error
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		workerStatus := value.(runtime.WorkerStatus)
@@ -218,6 +220,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	var (
 		runningWorker runtime.WorkerStatus
 		nextUnit      frameModel.WorkerType
+		isFresh       bool
 		err           error
 		recordError   error
 	)
@@ -228,7 +231,8 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		if ok {
 			runningWorker = worker.(runtime.WorkerStatus)
 			nextUnit = getNextUnit(persistentTask, runningWorker)
-		} else if nextUnit, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
+			isFresh = nextUnit != runningWorker.Unit
+		} else if nextUnit, isFresh, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
 			wm.logger.Error("get current unit failed", zap.String("task", taskID), zap.Error(err))
 			recordError = err
 			continue
@@ -246,9 +250,11 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		var resources []resourcemeta.ResourceID
-		// we can assure only first worker don't need local resource.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 {
-			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
+		// first worker don't need local resource.
+		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
+		// TODO: storage should be created/discarded in jobmaster instead of worker.
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
+			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
 		// createWorker should be an asynchronous operation
@@ -275,7 +281,7 @@ var workerSeqMap = map[string][]frameModel.WorkerType{
 	},
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, error) {
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, bool, error) {
 	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
 	if !ok {
 		wm.logger.Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
@@ -284,14 +290,14 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	for i := len(workerSeq) - 1; i >= 0; i-- {
 		isFresh, err := wm.checkpointAgent.IsFresh(ctx, workerSeq[i], task)
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if !isFresh {
-			return workerSeq[i], nil
+			return workerSeq[i], false, nil
 		}
 	}
 
-	return workerSeq[0], nil
+	return workerSeq[0], true, nil
 }
 
 func workerIdxInSeq(taskMode string, worker frameModel.WorkerType) int {
@@ -369,4 +375,17 @@ func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.Worker
 		}
 		return true
 	})
+}
+
+func (wm *WorkerManager) allTombStone() bool {
+	result := true
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		workerStatus := value.(runtime.WorkerStatus)
+		if !workerStatus.IsTombStone() {
+			result = false
+			return false
+		}
+		return true
+	})
+	return result
 }

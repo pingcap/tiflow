@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
@@ -358,19 +360,31 @@ func TestJob(t *testing.T) {
 	createdAt := tm.Add(time.Duration(1))
 	updatedAt := tm.Add(time.Duration(1))
 
+	extForTest := frameModel.MasterMetaExt{
+		Selectors: []*label.Selector{
+			{
+				Key:    "test",
+				Target: "test-val",
+				Op:     label.OpEq,
+			},
+		},
+	}
+	extJSONForTest := `{"selectors":[{"label":"test","target":"test-val","op":"eq"}]}`
+
 	testCases := []tCase{
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&frameModel.MasterMetaKVData{
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
+				&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -384,13 +398,13 @@ func TestJob(t *testing.T) {
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "UPDATE `master_meta_kv_data` SET `deleted`=? WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				expectedSQL := "UPDATE `master_meta` SET `deleted`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL"
 				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).WithArgs(
 					anyTime{}, "j111").WillReturnError(errors.New("DeleteJob error"))
 			},
 		},
 		{
-			// DELETE FROM `master_meta_kv_data` WHERE project_id = '111-222-334' AND job_id = '111'
+			// DELETE FROM `master_meta` WHERE project_id = '111-222-334' AND job_id = '111'
 			fn: "DeleteJob",
 			inputs: []interface{}{
 				"j112",
@@ -399,59 +413,60 @@ func TestJob(t *testing.T) {
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "UPDATE `master_meta_kv_data` SET `deleted`=? WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				expectedSQL := "UPDATE `master_meta` SET `deleted`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL"
 				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).WithArgs(
 					anyTime{}, "j112").WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
 		{
-			// "UPDATE `master_meta_kv_data` SET `addr`=?,`config`=?,`epoch`=?,`id`=?,`node_id`=?,`project-id`=?,`status`=?,`type`=?,`updated_at`=? WHERE id = ?"
 			fn: "UpdateJob",
 			inputs: []interface{}{
-				&frameModel.MasterMetaKVData{
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
+				&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("UPDATE `master_meta_kv_data` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("UPDATE `master_meta` SET").WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
 		{
-			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333' AND job_id = '111' ORDER BY `master_meta_kv_data`.`id` LIMIT 1
+			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_id = '111' ORDER BY `master_meta`.`id` LIMIT 1
 			fn: "GetJobByID",
 			inputs: []interface{}{
 				"j111",
 			},
-			output: &frameModel.MasterMetaKVData{
+			output: &frameModel.MasterMeta{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
 				},
-				ProjectID:  "p111",
-				ID:         "j111",
-				Tp:         1,
-				NodeID:     "n111",
-				Epoch:      1,
-				StatusCode: 1,
-				Addr:       "127.0.0.1",
-				Config:     []byte{0x11, 0x22},
+				ProjectID: "p111",
+				ID:        "j111",
+				Type:      1,
+				NodeID:    "n111",
+				Epoch:     1,
+				State:     1,
+				Addr:      "127.0.0.1",
+				Config:    []byte{0x11, 0x22},
+				Ext:       extForTest,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				expectedSQL := "SELECT * FROM `master_meta` WHERE id = ? AND `master_meta`.`deleted` IS NULL"
 				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "state", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1,
+						extJSONForTest))
 			},
 		},
 		{
@@ -461,40 +476,41 @@ func TestJob(t *testing.T) {
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE id").WithArgs("j111").WillReturnError(
+				mock.ExpectQuery("SELECT [*] FROM `master_meta` WHERE id").WithArgs("j111").WillReturnError(
 					errors.New("GetJobByID error"))
 			},
 		},
 		{
-			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333'
+			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333'
 			fn: "QueryJobsByProjectID",
 			inputs: []interface{}{
 				"p111",
 			},
-			output: []*frameModel.MasterMetaKVData{
+			output: []*frameModel.MasterMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "1.1.1.1",
-					Config:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "1.1.1.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE project_id").WithArgs("p111").WillReturnRows(
+				mock.ExpectQuery("SELECT [*] FROM `master_meta` WHERE project_id").WithArgs("p111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "state", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "1.1.1.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "1.1.1.1", 1, []byte{0x11, 0x22}, 1, extJSONForTest))
 			},
 		},
 		{
@@ -504,55 +520,56 @@ func TestJob(t *testing.T) {
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE project_id").WithArgs("p111").WillReturnError(
+				mock.ExpectQuery("SELECT [*] FROM `master_meta` WHERE project_id").WithArgs("p111").WillReturnError(
 					errors.New("QueryJobsByProjectID error"))
 			},
 		},
 		{
-			//  SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333' AND job_status = 1
-			fn: "QueryJobsByStatus",
+			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
-				"j111",
+				"p111",
 				1,
 			},
-			output: []*frameModel.MasterMetaKVData{
+			output: []*frameModel.MasterMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE (id = ? AND status = ?) AND `master_meta_kv_data`.`deleted` IS NULL"
-				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnRows(
+				expectedSQL := "SELECT * FROM `master_meta` WHERE (project_id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("p111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
-						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
+						"type", "state", "node_id", "address", "epoch", "config", "seq_id", "ext",
 					}).AddRow(
-						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1))
+						createdAt, updatedAt, "p111", "j111", 1, 1, "n111", "127.0.0.1", 1, []byte{0x11, 0x22}, 1, extJSONForTest))
 			},
 		},
 		{
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
-				"j111",
+				"p111",
 				1,
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE (id = ? AND status = ?) AND `master_meta_kv_data`.`deleted` IS NULL"
-				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnError(
-					errors.New("QueryJobsByStatus error"))
+				expectedSQL := "SELECT * FROM `master_meta` WHERE (project_id = ? AND state = ?) AND `master_meta`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("p111", 1).WillReturnError(
+					errors.New("QueryJobsByState error"))
 			},
 		},
 	}
@@ -579,10 +596,10 @@ func TestWorker(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`id`,`type`,`status`,`epoch`,`errmsg`,`ext_bytes`)
+			// INSERT INTO `worker_statuses` (`created_at`,`updated_at`,`project_id`,`job_id`,`id`,`type`,`state`,`epoch`,`error_message`,`extend_bytes`)
 			// VALUES ('2022-04-29 18:49:40.932','2022-04-29 18:49:40.932','p111','j111','w222',1,'1',10,'error','<binary>') ON DUPLICATE KEY
 			// UPDATE `updated_at`=VALUES(`updated_at`),`project_id`=VALUES(`project_id`),`job_id`=VALUES(`job_id`),`id`=VALUES(`id`),
-			// `type`=VALUES(`type`),`status`=VALUES(`status`),`epoch`=VALUES(`epoch`),`errmsg`=VALUES(`errmsg`),`ext_bytes`=VALUES(`ext_bytes`)
+			// `type`=VALUES(`type`),`state`=VALUES(`state`),`epoch`=VALUES(`epoch`),`error_message`=VALUES(`error_message`),`extend_bytes`=VALUES(`extend_bytes`)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
 				&frameModel.WorkerStatus{
@@ -590,14 +607,14 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					State:     1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -613,20 +630,20 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					State:     1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO `worker_statuses` [(]`created_at`,`updated_at`,`project_id`,`job_id`," +
-					"`id`,`type`,`status`,`epoch`,`errmsg`,`ext_bytes`,`seq_id`[)]").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
+					"`id`,`type`,`state`,`epoch`,`error_message`,`extend_bytes`,`seq_id`[)]").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "error"})
 			},
 		},
 		{
@@ -657,18 +674,18 @@ func TestWorker(t *testing.T) {
 			},
 		},
 		{
-			// 'UPDATE `worker_statuses` SET `epoch`=?,`error-message`=?,`ext-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
+			// 'UPDATE `worker_statuses` SET `epoch`=?,`error-message`=?,`extend-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
 			fn: "UpdateWorker",
 			inputs: []interface{}{
 				&frameModel.WorkerStatus{
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w111",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w111",
+					Type:      1,
+					State:     1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
@@ -689,20 +706,20 @@ func TestWorker(t *testing.T) {
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
 				},
-				ProjectID:    "p111",
-				JobID:        "j111",
-				ID:           "w222",
-				Type:         1,
-				Code:         1,
-				Epoch:        10,
-				ErrorMessage: "error",
-				ExtBytes:     []byte{0x11, 0x22},
+				ProjectID: "p111",
+				JobID:     "j111",
+				ID:        "w222",
+				Type:      1,
+				State:     1,
+				Epoch:     10,
+				ErrorMsg:  "error",
+				ExtBytes:  []byte{0x11, 0x22},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", "w222").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "state", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},
@@ -732,21 +749,21 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					State:     1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "state", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},
@@ -764,7 +781,7 @@ func TestWorker(t *testing.T) {
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -776,27 +793,27 @@ func TestWorker(t *testing.T) {
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:    "p111",
-					JobID:        "j111",
-					ID:           "w222",
-					Type:         1,
-					Code:         1,
-					Epoch:        10,
-					ErrorMessage: "error",
-					ExtBytes:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					JobID:     "j111",
+					ID:        "w222",
+					Type:      1,
+					State:     1,
+					Epoch:     10,
+					ErrorMsg:  "error",
+					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "job_id",
-						"id", "type", "status", "epoch", "errmsg", "ext_bytes", "seq_id",
+						"id", "type", "state", "epoch", "error_message", "extend_bytes", "seq_id",
 					}).AddRow(
 						createdAt, updatedAt, "p111", "j111", "w222", 1, 1, 10, "error", []byte{0x11, 0x22}, 1))
 			},
 		},
 		{
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -804,7 +821,7 @@ func TestWorker(t *testing.T) {
 			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery("SELECT [*] FROM `worker_statuses` WHERE job_id").WithArgs("j111", 1).WillReturnError(
-					errors.New("QueryWorkersByStatus error"))
+					errors.New("QueryWorkersByState error"))
 			},
 		},
 	}
@@ -1227,6 +1244,175 @@ func TestContext(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
+}
+
+func TestJobOp(t *testing.T) {
+	t.Parallel()
+
+	sqlDB, mock, err := mockGetDBConn(t)
+	defer sqlDB.Close()
+	defer mock.ExpectClose()
+	require.Nil(t, err)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
+	require.Nil(t, err)
+	require.NotNil(t, cli)
+
+	tm := time.Now()
+	createdAt := tm.Add(time.Duration(1))
+	updatedAt := tm.Add(time.Duration(1))
+
+	testCases := []tCase{
+		// SetJobCanceling successfully
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(0)",
+					}).AddRow(0))
+				mock.ExpectExec(regexp.QuoteMeta(
+					"INSERT INTO `job_ops` (`created_at`,`updated_at`,`op`,`job_id`")).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), model.JobOpStatusCanceling, "job-111").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+		},
+		// SetJobCanceling does nothing because cancelling op exists
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectQuery(
+					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"created_at", "updated_at", "op", "job_id", "seq_id",
+					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-111", 1))
+				mock.ExpectCommit()
+			},
+		},
+		// SetJobCanceling returns error if job is already cancelled
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectQuery(
+					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"created_at", "updated_at", "op", "job_id", "seq_id",
+					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceled, "job-111", 1))
+				mock.ExpectRollback()
+			},
+			err: derror.ErrJobAlreadyCanceled.GenWithStackByArgs("job-111"),
+		},
+		// SetJobCanceling updates job operation to canceling if exists a noop job operation
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 2,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectQuery(
+					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"created_at", "updated_at", "op", "job_id", "seq_id",
+					}).AddRow(createdAt, updatedAt, model.JobOpStatusNoop, "job-111", 1))
+				mock.ExpectExec("ON DUPLICATE KEY UPDATE").WillReturnResult(sqlmock.NewResult(1, 2))
+				mock.ExpectCommit()
+			},
+		},
+		// SetJobCanceled
+		{
+			fn: "SetJobCanceled",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "UPDATE `job_ops` SET `op`=?,`updated_at`=? WHERE job_id = ? AND op = ?"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
+					WithArgs(model.JobOpStatusCanceled, anyTime{}, "job-111", model.JobOpStatusCanceling).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		// QueryJobOpsByStatus
+		{
+			fn: "QueryJobOpsByStatus",
+			inputs: []interface{}{
+				model.JobOpStatusCanceling,
+			},
+			output: []*model.JobOp{
+				{
+					Model: model.Model{
+						SeqID:     1,
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					JobID: "job-1",
+					Op:    model.JobOpStatusCanceling,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "SELECT * FROM `job_ops` WHERE op = ?"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).
+					WithArgs(model.JobOpStatusCanceling).
+					WillReturnRows(
+						sqlmock.NewRows([]string{"created_at", "updated_at", "op", "job_id", "seq_id"}).
+							AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-1", 1))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		testInner(t, mock, cli, tc)
+	}
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {

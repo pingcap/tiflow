@@ -29,17 +29,17 @@ import (
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage  metadata.TaskStage
-	WorkerID       frameModel.WorkerID
-	ConfigOutdated bool
-	Status         *dmpkg.QueryStatusResponse
+	ExpectedStage  metadata.TaskStage         `json:"expected_stage"`
+	WorkerID       frameModel.WorkerID        `json:"worker_id"`
+	ConfigOutdated bool                       `json:"config_outdated"`
+	Status         *dmpkg.QueryStatusResponse `json:"status"`
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobID frameModel.MasterID
+	JobID frameModel.MasterID `json:"job_id"`
 	// taskID -> Status
-	TaskStatus map[string]TaskStatus
+	TaskStatus map[string]TaskStatus `json:"task_status"`
 }
 
 // QueryJobStatus is the api of query job status.
@@ -100,10 +100,19 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 					cfgModRevision = workerStatus.CfgModRevision
 					finishedStatus, ok := jm.finishedStatus.Load(taskID)
 					if !ok {
-						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID)}
+						queryStatusResp = &dmpkg.QueryStatusResponse{
+							Unit:     workerStatus.Unit,
+							Stage:    metadata.StageFinished,
+							ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID),
+						}
 					} else {
 						s := finishedStatus.(runtime.FinishedTaskStatus)
-						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, Result: s.Result, Status: s.Status}
+						queryStatusResp = &dmpkg.QueryStatusResponse{
+							Unit:   workerStatus.Unit,
+							Stage:  metadata.StageFinished,
+							Result: dmpkg.NewProcessResultFromPB(s.Result),
+							Status: s.Status,
+						}
 					}
 				} else {
 					workerID = workerStatus.ID
@@ -171,7 +180,8 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
 		return err
 	}
-	if err := jm.checkpointAgent.Update(ctx, cfg); err != nil {
+	// we don't know whether we can remove the old checkpoint, so we just create new checkpoint when update.
+	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
 		return err
 	}
 	// reset finished status, all tasks will be restarted now.

@@ -54,8 +54,8 @@ type Receiver[T any] struct {
 
 	closeOnce sync.Once
 
-	// closed MUST be set to true before closing `C`.
-	closed atomic.Bool
+	// closed MUST be closed before closing `C`.
+	closed chan struct{}
 
 	notifier *Notifier[T]
 }
@@ -64,7 +64,7 @@ type Receiver[T any] struct {
 func (r *Receiver[T]) Close() {
 	r.closeOnce.Do(
 		func() {
-			r.closed.Store(true)
+			close(r.closed)
 			// Waits for the synchronization barrier, which
 			// means that run() has finished the last iteration,
 			// and since we have set `closed` to true, the `C` channel,
@@ -99,6 +99,7 @@ func (n *Notifier[T]) NewReceiver() *Receiver[T] {
 	receiver := &Receiver[T]{
 		id:       n.nextID.Add(1),
 		C:        ch,
+		closed:   make(chan struct{}),
 		notifier: n,
 	}
 
@@ -176,13 +177,11 @@ func (n *Notifier[T]) run() {
 				n.receivers.Range(func(_, value any) bool {
 					receiver := value.(*Receiver[T])
 
-					if receiver.closed.Load() {
-						return true
-					}
-
 					select {
 					case <-n.closeCh:
 						return false
+					case <-receiver.closed:
+						// Receiver has been closed.
 					case receiver.C <- event:
 						// send the event to the receiver.
 					}

@@ -70,7 +70,7 @@ jobs:
 
   from_v2:
     name: From V2
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
     strategy:
@@ -182,7 +182,7 @@ jobs:
 
   upgrade_tidb:
     name: Upgrade TiDB
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
     steps:

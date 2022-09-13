@@ -54,10 +54,6 @@ var (
 		errors.RFCCodeText("DFLOW:ErrBuildJobFailed"),
 	)
 
-	ErrExecutorDupRegister = errors.Normalize(
-		"executor %s has been registered",
-		errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"),
-	)
 	ErrGrpcBuildConn = errors.Normalize(
 		"dial grpc connection to %s failed",
 		errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"),
@@ -164,6 +160,10 @@ var (
 		"master has reached concurrency quota",
 		errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"),
 	)
+	ErrMasterCreateWorkerBackoff = errors.Normalize(
+		"create worker is being backoff, retry later",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerBackoff"),
+	)
 	ErrMasterInvalidMeta = errors.Normalize(
 		"invalid master meta data: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"),
@@ -187,6 +187,10 @@ var (
 	ErrMasterInterfaceNotFound = errors.Normalize(
 		"basemaster interface not found",
 		errors.RFCCodeText("DFLOW:ErrMasterInterfaceNotFound"),
+	)
+	ErrExecutorWatcherClosed = errors.Normalize(
+		"executor watcher is closed",
+		errors.RFCCodeText("DFLOW:ErrExecutorWatcherClosed"),
 	)
 
 	ErrWorkerTypeNotFound = errors.Normalize(
@@ -221,13 +225,18 @@ var (
 		"invalid job type: %s",
 		errors.RFCCodeText("DFLOW:ErrInvalidJobType"),
 	)
+	// TODO: unify the following three errors into one ErrWorkerTerminated
 	ErrWorkerFinish = errors.Normalize(
 		"worker finished and exited",
 		errors.RFCCodeText("DFLOW:ErrWorkerFinish"),
 	)
-	ErrWorkerStop = errors.Normalize(
-		"worker is stopped",
-		errors.RFCCodeText("DFLOW:ErrWorkerStop"),
+	ErrWorkerCancel = errors.Normalize(
+		"worker is canceled",
+		errors.RFCCodeText("DFLOW:ErrWorkerCancel"),
+	)
+	ErrWorkerFailed = errors.Normalize(
+		"worker is failed permanently",
+		errors.RFCCodeText("DFLOW:ErrWorkerFailed"),
 	)
 	ErrTooManyStatusUpdates = errors.Normalize(
 		"there are too many pending worker status updates: %d",
@@ -240,6 +249,27 @@ var (
 	ErrInvalidWorkerType = errors.Normalize(
 		"invalid worker type: %s",
 		errors.RFCCodeText("DFLOW:ErrInvalidWorkerType"),
+	)
+
+	// job manager related errors
+	ErrJobManagerGetJobDetailFail = errors.Normalize(
+		"failed to get job detail from job master",
+		errors.RFCCodeText("DFLOW:ErrJobManagerGetJobDetailFail"),
+	)
+
+	ErrJobManagerReadRespBodyFail = errors.Normalize(
+		"failed to read response body",
+		errors.RFCCodeText("DFLOW:ErrJobManagerReadRespBodyFail"),
+	)
+
+	ErrJobManagerRespStatusCode404 = errors.Normalize(
+		"get job detail response status code is 404",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCode404"),
+	)
+
+	ErrJobManagerRespStatusCodeNot2XX = errors.Normalize(
+		"get job detail response status code is not 2XX",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCodeNot2XX"),
 	)
 
 	// master etcd related errors
@@ -466,6 +496,12 @@ var (
 	ErrLocalFileDirNotWritable = errors.Normalize(
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
+	)
+
+	// JobOps related error
+	ErrJobAlreadyCanceled = errors.Normalize(
+		"job is already canceled: %s",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyCanceled"),
 	)
 
 	// cli related errors

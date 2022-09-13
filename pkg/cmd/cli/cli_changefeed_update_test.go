@@ -44,7 +44,7 @@ func TestApplyChanges(t *testing.T) {
 
 	// Test for cli command flags that should be ignored.
 	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
-	require.Nil(t, cmd.ParseFlags([]string{"--interact"}))
+	require.Nil(t, cmd.ParseFlags([]string{"--log-level=debug"}))
 	_, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
 
@@ -62,7 +62,7 @@ func TestApplyChanges(t *testing.T) {
 	// Test for flag that cannot be updated.
 	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
 	require.Nil(t, cmd.ParseFlags([]string{"--sort-dir=/home"}))
-	newInfo, err = o.applyChanges(oldInfo, cmd)
+	_, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
 	file, err := os.ReadFile(filename)
 	require.Nil(t, err)
@@ -101,11 +101,14 @@ func TestChangefeedUpdateCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	f := newMockFactory(ctrl)
-
+	o := newUpdateChangefeedOptions(newChangefeedCommonOptions())
+	o.complete(f)
 	cmd := newCmdUpdateChangefeed(f)
 	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").Return(nil, errors.New("test"))
 	os.Args = []string{"update", "--no-confirm=true", "--changefeed-id=abc"}
-	require.NotNil(t, cmd.Execute())
+	o.commonChangefeedOptions.noConfirm = true
+	o.changefeedID = "abc"
+	require.NotNil(t, o.run(cmd))
 
 	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
 		Return(&v2.ChangeFeedInfo{
@@ -128,8 +131,6 @@ func TestChangefeedUpdateCli(t *testing.T) {
 		"--sink-uri=abcd",
 		"--schema-registry=a",
 		"--sort-engine=memory",
-		"--sync-point=true",
-		"--sync-interval=1s",
 		"--changefeed-id=abc",
 		"--sort-dir=a",
 		"--upstream-pd=pd",
@@ -158,14 +159,10 @@ func TestChangefeedUpdateCli(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 
 	cmd = newCmdUpdateChangefeed(f)
-	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
-		Return(&v2.ChangeFeedInfo{ID: "abc"}, nil)
-	f.changefeedsv2.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
-		Return(nil, errors.New("test"))
-	os.Args = []string{
-		"update", "--no-confirm=true",
-		"--sort-engine=memory",
-		"-c", "abc",
-	}
-	require.NotNil(t, cmd.Execute())
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abcd").
+		Return(&v2.ChangeFeedInfo{ID: "abcd"}, errors.New("test"))
+	o.commonChangefeedOptions.noConfirm = true
+	o.commonChangefeedOptions.sortEngine = "unified"
+	o.changefeedID = "abcd"
+	require.NotNil(t, o.run(cmd))
 }

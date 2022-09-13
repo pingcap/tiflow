@@ -45,7 +45,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
+			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
@@ -87,7 +87,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
-		processError = &pb.ProcessError{
+		processError = &dmpkg.ProcessError{
 			ErrCode:    1,
 			ErrClass:   "class",
 			ErrScope:   "scope",
@@ -100,8 +100,8 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
 		finishedTaskStatus = runtime.FinishedTaskStatus{
 			TaskStatus: runtime.TaskStatus{
 				Unit:           framework.WorkerDMLoad,
@@ -117,7 +117,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
@@ -145,81 +145,63 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.NoError(t, err)
 	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
-	require.Equal(t, 0, int(taskStatus.ExpectedStage))
+	require.Equal(t, "", string(taskStatus.ExpectedStage))
 	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
 
 	expectedStatus := `{
-	"JobID": "dm-jobmaster-id",
-	"TaskStatus": {
+	"job_id": "dm-jobmaster-id",
+	"task_status": {
 		"task1": {
-			"ExpectedStage": 3,
-			"WorkerID": "",
-			"ConfigOutdated": true,
-			"Status": {
-				"ErrorMsg": "worker for task task1 not found",
-				"Unit": 0,
-				"Stage": 0,
-				"Result": null,
-				"Status": null
+			"expected_stage": "paused",
+			"worker_id": "",
+			"config_outdated": true,
+			"status": {
+				"error_message": "worker for task task1 not found",
+				"unit": 0,
+				"stage": "",
+				"result": null,
+				"status": null
 			}
 		},
 		"task2": {
-			"ExpectedStage": 4,
-			"WorkerID": "worker2",
-			"ConfigOutdated": true,
-			"Status": {
-				"ErrorMsg": "task task2 is finished and status has been deleted",
-				"Unit": 11,
-				"Stage": 4,
-				"Result": null,
-				"Status": null
+			"expected_stage": "finished",
+			"worker_id": "worker2",
+			"config_outdated": true,
+			"status": {
+				"error_message": "task task2 is finished and status has been deleted",
+				"unit": 11,
+				"stage": "finished",
+				"result": null,
+				"status": null
 			}
 		},
 		"task3": {
-			"ExpectedStage": 4,
-			"WorkerID": "worker3",
-			"ConfigOutdated": false,
-			"Status": {
-				"ErrorMsg": "context deadline exceeded",
-				"Unit": 0,
-				"Stage": 0,
-				"Result": null,
-				"Status": null
+			"expected_stage": "finished",
+			"worker_id": "worker3",
+			"config_outdated": false,
+			"status": {
+				"error_message": "context deadline exceeded",
+				"unit": 0,
+				"stage": "",
+				"result": null,
+				"status": null
 			}
 		},
 		"task4": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker4",
-			"ConfigOutdated": true,
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 10,
-				"Stage": 2,
-				"Result": null,
-				"Status": {
-					"totalTables": 10,
-					"completedTables": 1,
-					"finishedBytes": 100,
-					"finishedRows": 10,
-					"estimateTotalRows": 1000
-				}
-			}
-		},
-		"task5": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker5",
-			"ConfigOutdated": false,
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 11,
-				"Stage": 3,
-				"Result": {
-					"isCanceled": true
+			"expected_stage": "running",
+			"worker_id": "worker4",
+			"config_outdated": true,
+			"status": {
+				"error_message": "",
+				"unit": 11,
+				"stage": "paused",
+				"result": {
+					"is_canceled": true
 				},
-				"Status": {
+				"status": {
 					"finishedBytes": 4,
 					"totalBytes": 100,
 					"progress": "4%",
@@ -228,28 +210,28 @@ func TestQueryStatusAPI(t *testing.T) {
 				}
 			}
 		},
-		"task6": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker6",
-			"ConfigOutdated": true,
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 12,
-				"Stage": 5,
-				"Result": {
+		"task5": {
+			"expected_stage": "running",
+			"worker_id": "worker5",
+			"config_outdated": false,
+			"status": {
+				"error_message": "",
+				"unit": 12,
+				"stage": "error",
+				"result": {
 					"errors": [
 						{
-							"ErrCode": 1,
-							"ErrClass": "class",
-							"ErrScope": "scope",
-							"ErrLevel": "low",
-							"Message": "msg",
-							"RawCause": "raw cause",
-							"Workaround": "workaround"
+							"error_code": 1,
+							"error_class": "class",
+							"error_scope": "scope",
+							"error_level": "low",
+							"message": "msg",
+							"raw_cause": "raw cause",
+							"workaround": "workaround"
 						}
 					]
 				},
-				"Status": {
+				"status": {
 					"totalEvents": 10,
 					"totalTps": 10,
 					"recentTps": 10,
@@ -265,16 +247,34 @@ func TestQueryStatusAPI(t *testing.T) {
 				}
 			}
 		},
+		"task6": {
+			"expected_stage": "running",
+			"worker_id": "worker6",
+			"config_outdated": true,
+			"status": {
+				"error_message": "",
+				"unit": 10,
+				"stage": "running",
+				"result": null,
+				"status": {
+					"totalTables": 10,
+					"completedTables": 1,
+					"finishedBytes": 100,
+					"finishedRows": 10,
+					"estimateTotalRows": 1000
+				}
+			}
+		},
 		"task7": {
-			"ExpectedStage": 4,
-			"WorkerID": "worker7",
-			"ConfigOutdated": false,
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 11,
-				"Stage": 4,
-				"Result": {},
-				"Status": {
+			"expected_stage": "finished",
+			"worker_id": "worker7",
+			"config_outdated": false,
+			"status": {
+				"error_message": "",
+				"unit": 11,
+				"stage": "finished",
+				"result": {},
+				"status": {
 					"finishedBytes": 4,
 					"totalBytes": 100,
 					"progress": "4%",
@@ -292,7 +292,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil, log.L()),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
 	}
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
@@ -301,19 +301,19 @@ func TestOperateTask(t *testing.T) {
 func TestGetJobCfg(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	jm := &JobMaster{
-		metadata: metadata.NewMetaData("master-id", kvClient),
+		metadata: metadata.NewMetaData(kvClient, log.L()),
 	}
 	jobCfg, err := jm.GetJobCfg(context.Background())
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, jobCfg)
 
-	jobCfg = &config.JobCfg{Name: "job-id", Upstreams: []*config.UpstreamCfg{{}}}
+	jobCfg = &config.JobCfg{TaskMode: dmconfig.ModeFull, Upstreams: []*config.UpstreamCfg{{}}}
 	job := metadata.NewJob(jobCfg)
 	jm.metadata.JobStore().Put(context.Background(), job)
 
 	jobCfg, err = jm.GetJobCfg(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "job-id", jobCfg.Name)
+	require.Equal(t, dmconfig.ModeFull, jobCfg.TaskMode)
 }
 
 func TestUpdateJobCfg(t *testing.T) {
@@ -323,14 +323,14 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(mockBaseJobmaster.ID(), metaKVClient)
+		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {
@@ -375,7 +375,7 @@ func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm := &JobMaster{
-		metadata:     metadata.NewMetaData("master-id", kvClient),
+		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
 	}
 	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})

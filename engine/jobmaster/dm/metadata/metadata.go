@@ -14,22 +14,32 @@
 package metadata
 
 import (
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"context"
+
+	"github.com/coreos/go-semver/semver"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"go.uber.org/zap"
 )
 
 // MetaData is the metadata of dm.
 type MetaData struct {
-	jobStore *JobStore
-	ddlStore *DDLStore
+	clusterInfoStore *ClusterInfoStore
+	jobStore         *JobStore
+	ddlStore         *DDLStore
 }
 
 // NewMetaData creates a new MetaData instance
-func NewMetaData(id frameModel.WorkerID, kvClient metaModel.KVClient) *MetaData {
+func NewMetaData(kvClient metaModel.KVClient, pLogger *zap.Logger) *MetaData {
 	return &MetaData{
-		jobStore: NewJobStore(id, kvClient),
-		ddlStore: NewDDLStore(id, kvClient),
+		clusterInfoStore: NewClusterInfoStore(kvClient),
+		jobStore:         NewJobStore(kvClient, pLogger),
+		ddlStore:         NewDDLStore(kvClient),
 	}
+}
+
+// ClusterInfoStore returns internal infoStore
+func (m *MetaData) ClusterInfoStore() *ClusterInfoStore {
+	return m.clusterInfoStore
 }
 
 // JobStore returns internal jobStore
@@ -40,4 +50,10 @@ func (m *MetaData) JobStore() *JobStore {
 // DDLStore returns internal ddlStore
 func (m *MetaData) DDLStore() *DDLStore {
 	return m.ddlStore
+}
+
+// Upgrade upgrades metadata.
+func (m *MetaData) Upgrade(ctx context.Context, fromVer semver.Version) error {
+	// call infoStore.Upgrade/ddlStore.Upgrade if needed.
+	return m.jobStore.Upgrade(ctx, fromVer)
 }

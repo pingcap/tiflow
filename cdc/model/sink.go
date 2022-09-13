@@ -506,9 +506,9 @@ type RedoDDLEvent struct {
 	Type byte      `msg:"type"`
 }
 
-// FromJob fills the values of DDLEvent from DDL job
+// FromJob fills the values with DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	// populating DDLEvent of a rename tables job is handled in `FromRenameTablesJob()`
+	// populating DDLEvent of an `rename tables` job is handled in `FromRenameTablesJob()`
 	if d.Type == model.ActionRenameTables {
 		return
 	}
@@ -602,6 +602,7 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
+//
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
@@ -631,4 +632,9 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
+}
+
+// ToWaitFlush indicates whether to wait flushing after the txn is processed or not.
+func (t *SingleTableTxn) ToWaitFlush() bool {
+	return t.FinishWg != nil
 }

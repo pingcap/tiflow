@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package enginepb;
 
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
+
 message ProjectInfo {
     string tenant_id = 1;
     string project_id = 2;

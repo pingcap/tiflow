@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package enginepb;
 
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
+
 enum ErrorCode {
     None = 0;
     // This master is not leader right now.
@@ -12,7 +14,7 @@ enum ErrorCode {
     NotEnoughResource = 3;
     // submit subjob failed
     SubJobSubmitFailed = 4;
-    // TombstoneExecuto
+    // TombstoneExecutor
     TombstoneExecutor = 5;
     //
     SubJobBuildFailed = 6;

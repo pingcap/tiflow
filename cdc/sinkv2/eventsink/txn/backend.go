@@ -14,19 +14,25 @@
 package txn
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 )
 
 // backend indicates a transaction backend like MySQL, TiDB, ...
+
+//go:generate mockery --name=Backend --inpackage
 type backend interface {
 	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
+	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
 
 	// Flush pending events in the backend.
-	Flush() error
+	Flush(ctx context.Context) error
 
 	// To reduce latency for low throughput cases.
 	MaxFlushInterval() time.Duration
+
+	// Close the backend.
+	Close() error
 }

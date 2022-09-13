@@ -70,29 +70,30 @@ func (s *OptShardingGroup) Remove(sourceTableIDs []string) {
 
 // OptShardingGroupKeeper used to keep OptShardingGroup.
 // It's used to keep sharding group meta data to make sure optimistic sharding resync redirection works correctly.
-//                                                    newer
-//   │                       ───────────────────────► time
-//   │
-//   │ tb1 conflict DDL1     │  ▲      │
-//   │                       │  │      │
-//   │       ...             │  │      │
-//   │                       │  │      │
-//   │ tb1 conflict DDL2     │  │      │  ▲     │
-//   │                       │  │      │  │     │
-//   │       ...             │  │      │  │     │
-//   │                       │  │      │  │     │
-//   │ tb2 conflict DDL1     ▼  │      │  │     │
-//   │                                 │  │     │
-//   │       ...           redirect    │  │     │
-//   │                                 │  │     │
-//   │ tb2 conflict DDL2               ▼  │     │
-//   │                                          │
-//   │       ...                     redirect   │
-//   │                                          │
-//   │  other dml events                        ▼
-//   │
-//   │                                       continue
-//   ▼                                      replicating
+//
+//	                                                 newer
+//	│                       ───────────────────────► time
+//	│
+//	│ tb1 conflict DDL1     │  ▲      │
+//	│                       │  │      │
+//	│       ...             │  │      │
+//	│                       │  │      │
+//	│ tb1 conflict DDL2     │  │      │  ▲     │
+//	│                       │  │      │  │     │
+//	│       ...             │  │      │  │     │
+//	│                       │  │      │  │     │
+//	│ tb2 conflict DDL1     ▼  │      │  │     │
+//	│                                 │  │     │
+//	│       ...           redirect    │  │     │
+//	│                                 │  │     │
+//	│ tb2 conflict DDL2               ▼  │     │
+//	│                                          │
+//	│       ...                     redirect   │
+//	│                                          │
+//	│  other dml events                        ▼
+//	│
+//	│                                       continue
+//	▼                                      replicating
 //
 // newer
 // binlog
@@ -114,12 +115,6 @@ func NewOptShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig
 		tctx:            tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
 		shardingReSyncs: make(map[string]binlog.Location),
 	}
-}
-
-func (k *OptShardingGroupKeeper) reset() {
-	k.Lock()
-	defer k.Unlock()
-	k.groups = make(map[string]*OptShardingGroup)
 }
 
 func (k *OptShardingGroupKeeper) resolveGroup(targetTable *filter.Table) (map[string]binlog.Location, binlog.Location) {
@@ -228,7 +223,6 @@ func (k *OptShardingGroupKeeper) RemoveGroup(targetTable *filter.Table, sourceTa
 			delete(k.groups, targetTableID)
 		}
 	}
-	return
 }
 
 func (k *OptShardingGroupKeeper) RemoveSchema(schema string) {

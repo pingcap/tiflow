@@ -62,8 +62,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
             "rules": [
                 "*.*"
             ],
-            "ignore-txn-start-ts": null,
-            "ddl-allow-list": null
+            "ignore-txn-start-ts": null
         },
         "mounter": {
             "worker-num": 16
@@ -114,12 +113,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ClusterID: etcd.DefaultCDCClusterID,
 				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
-					SinkURI:           "blackhole://",
-					CreateTime:        createTime,
-					StartTs:           421980685886554116,
-					Engine:            model.SortInMemory,
-					State:             "normal",
-					SyncPointInterval: time.Minute * 10,
+					SinkURI:    "blackhole://",
+					CreateTime: createTime,
+					StartTs:    421980685886554116,
+					Engine:     model.SortInMemory,
+					State:      "normal",
 					Config: &config.ReplicaConfig{
 						CaseSensitive:    true,
 						CheckGCSafePoint: true,
@@ -163,12 +161,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ClusterID: etcd.DefaultCDCClusterID,
 				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
-					SinkURI:           "blackhole://",
-					CreateTime:        createTime,
-					StartTs:           421980685886554116,
-					Engine:            model.SortInMemory,
-					State:             "normal",
-					SyncPointInterval: time.Minute * 10,
+					SinkURI:    "blackhole://",
+					CreateTime: createTime,
+					StartTs:    421980685886554116,
+					Engine:     model.SortInMemory,
+					State:      "normal",
 					Config: &config.ReplicaConfig{
 						CaseSensitive:    true,
 						CheckGCSafePoint: true,
@@ -218,12 +215,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ClusterID: etcd.DefaultCDCClusterID,
 				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
-					SinkURI:           "blackhole://",
-					CreateTime:        createTime,
-					StartTs:           421980685886554116,
-					Engine:            model.SortInMemory,
-					State:             "normal",
-					SyncPointInterval: time.Minute * 10,
+					SinkURI:    "blackhole://",
+					CreateTime: createTime,
+					StartTs:    421980685886554116,
+					Engine:     model.SortInMemory,
+					State:      "normal",
 					Config: &config.ReplicaConfig{
 						CaseSensitive:    true,
 						CheckGCSafePoint: true,

@@ -70,7 +70,7 @@ type (
 
 		statusCode struct {
 			sync.RWMutex
-			code frameModel.WorkerStatusCode
+			code frameModel.WorkerState
 		}
 
 		startTime time.Time
@@ -115,13 +115,13 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 func (d *dummyWorker) InitImpl(_ context.Context) error {
 	if !d.init {
 		if d.config.EtcdWatchEnable {
-			// Don't use the ctx from the caller, because it may be cancelled by the caller after InitImpl() returns.
+			// Don't use the ctx from the caller, because it may be canceled by the caller after InitImpl() returns.
 			ctx, cancel := context.WithCancel(context.Background())
 			d.bgRunEtcdWatcher(ctx)
 			d.cancel = cancel
 		}
 		d.init = true
-		d.setStatusCode(frameModel.WorkerStatusNormal)
+		d.setState(frameModel.WorkerStateNormal)
 		d.startTime = time.Now()
 		return nil
 	}
@@ -155,14 +155,19 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return nil
 	}
 
-	if d.getStatusCode() == frameModel.WorkerStatusStopped {
-		d.setStatusCode(frameModel.WorkerStatusStopped)
-		return d.Exit(ctx, d.Status(), nil)
+	extMsg, err := d.status.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if d.getState() == frameModel.WorkerStateStopped {
+		d.setState(frameModel.WorkerStateStopped)
+		return d.Exit(ctx, framework.ExitReasonCanceled, nil, extMsg)
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
-		d.setStatusCode(frameModel.WorkerStatusFinished)
-		return d.Exit(ctx, d.Status(), nil)
+		d.setState(frameModel.WorkerStateFinished)
+		return d.Exit(ctx, framework.ExitReasonFinished, nil, extMsg)
 	}
 
 	if d.config.InjectErrorInterval != 0 {
@@ -180,24 +185,24 @@ func (d *dummyWorker) Status() frameModel.WorkerStatus {
 			log.Panic("unexpected error", zap.Error(err))
 		}
 		return frameModel.WorkerStatus{
-			Code:     d.getStatusCode(),
+			State:    d.getState(),
 			ExtBytes: extBytes,
 		}
 	}
-	return frameModel.WorkerStatus{Code: frameModel.WorkerStatusCreated}
+	return frameModel.WorkerStatus{State: frameModel.WorkerStateCreated}
 }
 
 func (d *dummyWorker) Workload() model.RescUnit {
 	return model.RescUnit(10)
 }
 
-func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			d.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			d.setState(frameModel.WorkerStateStopped)
 		default:
 			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -217,13 +222,13 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) setStatusCode(code frameModel.WorkerStatusCode) {
+func (d *dummyWorker) setState(code frameModel.WorkerState) {
 	d.statusCode.Lock()
 	defer d.statusCode.Unlock()
 	d.statusCode.code = code
 }
 
-func (d *dummyWorker) getStatusCode() frameModel.WorkerStatusCode {
+func (d *dummyWorker) getState() frameModel.WorkerState {
 	d.statusCode.RLock()
 	defer d.statusCode.RUnlock()
 	return d.statusCode.code
