@@ -20,7 +20,6 @@ create table t_extract
     j11 int as (json_contains(b, '{"k": "v"}')),
     j12 int as (json_contains_path(b, 'one', '$.k')),
     j13 json as (json_array_append(b, '$[0]', 'v')),
-
     j14 json as (json_array_insert(j3, '$[0]', 'v'))
 );
 
@@ -34,23 +33,3 @@ insert into t_extract(j)values ('"string"');
 insert into t_extract(j)values ('1');
 insert into t_extract(j)values ('3.14');
 insert into t_extract(j)values ('{"a":1, "b": {"a":1}, "c": "string"}');
-
-create table t_funcs
-(
-    id int primary key auto_increment,
-    j  json,
-    j1 json as (json_extract(j, '$.a')),
-    j2 json as (json_extract(j1, '$.b')),
-    c char(20) as (j2->>'$[0].a')
-);
-
-insert into t_funcs(j) values ('{"a": {"b": {"a":1}}}');
-insert into t_funcs(j) values ('{"a":[{"a": {"b": {"a":1}}}, 1, 2, "string", [1,2,3]]}');
-insert into t_funcs(j) values ('[1,2]');
-insert into t_funcs(j) values ('true');
-insert into t_funcs(j) values ('false');
-insert into t_funcs(j) values (null);
-insert into t_funcs(j) values ('"string"');
-insert into t_funcs(j) values ('1');
-insert into t_funcs(j) values ('3.14');
-insert into t_funcs(j) values ('{"a":1, "b": {"a":1}, "c": "string"}');
