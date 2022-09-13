@@ -32,6 +32,7 @@ import (
 
 // DMLWorker is used to sync dml.
 type DMLWorker struct {
+	compact       bool
 	batch         int
 	workerCount   int
 	chanSize      int
@@ -65,6 +66,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		chanSize /= 2
 	}
 	dmlWorker := &DMLWorker{
+		compact:              syncer.cfg.Compact,
 		batch:                syncer.cfg.Batch,
 		workerCount:          syncer.cfg.WorkerCount,
 		chanSize:             chanSize,
@@ -269,6 +271,12 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 			affect, err = len(queries)-1, terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
 		}
 	})
+
+	if w.judgeKeyNotFound(affect, jobs) {
+		// throw an error if needed in the future.
+		// err = terror.ErrDBExecuteFailed.Delegate(errors.New("key not found"), "mock")
+		w.logger.Warn("no matching record is found to update/delete, ER_KEY_NOT_FOUND", zap.Int("affect", affect), zap.Int("jobs", len(jobs)), zap.Stringer("start from", jobs[0].startLocation), zap.Stringer("end at", jobs[len(jobs)-1].currentLocation))
+	}
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
@@ -311,4 +319,16 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 		appendQueryAndArg()
 	}
 	return queries, args
+}
+
+func (w *DMLWorker) judgeKeyNotFound(affect int, jobs []*job) bool {
+	if w.compact || w.multipleRows {
+		return false
+	}
+	for _, j := range jobs {
+		if j.safeMode {
+			return false
+		}
+	}
+	return affect < len(jobs)
 }
