@@ -179,12 +179,12 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	query := `CREATE TABLE IF NOT EXISTS %s 
 	(
 		ticdc_cluster_id varchar (255),
-		cf varchar(255),
+		changefeed varchar(255),
 		primary_ts varchar(18),
 		secondary_ts varchar(18),
 		created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		INDEX (created_at),
-		PRIMARY KEY (cf, primary_ts)
+		PRIMARY KEY (changefeed, primary_ts)
 	);`
 	query = fmt.Sprintf(query, syncPointTableName)
 	_, err = tx.Exec(query)
@@ -221,7 +221,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	}
 	// insert ts map
 	query := "insert ignore into " + schemaName + "." + syncPointTableName +
-		"(ticdc_cluster_id, cf, primary_ts, secondary_ts) VALUES (?,?,?,?)"
+		"(ticdc_cluster_id, changefeed, primary_ts, secondary_ts) VALUES (?,?,?,?)"
 	_, err = tx.Exec(query, s.clusterID, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
@@ -237,7 +237,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			"DELETE IGNORE FROM "+
 				schemaName+"."+
 				syncPointTableName+
-				" WHERE cf like '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
+				" WHERE changefeed like '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
 			id.Namespace+"_"+id.ID,
 			s.syncPointRetention.Seconds())
 		_, err = tx.Exec(query)
