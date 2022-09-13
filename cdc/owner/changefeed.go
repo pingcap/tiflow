@@ -253,30 +253,21 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
-<<<<<<< HEAD
-			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
-=======
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+			ctx, ctx.GlobalVars().PDClient,
+			gc.EnsureGCServiceInitializing,
 			c.state.ID, ensureTTL, checkpointTs)
->>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		// clean service GC safepoint '-creating-' if there are any.
 		err = gc.UndoEnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx, ctx.GlobalVars().PDClient,
+			gc.EnsureGCServiceCreating,
 			ctx.ChangefeedVars().ID,
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = gc.UndoEnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-			ctx.ChangefeedVars().ID,
-		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -410,21 +401,19 @@ func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
 	}
 
 	serviceIDs := []string{
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+		gc.EnsureGCServiceCreating,
+		gc.EnsureGCServiceInitializing,
 	}
 
 	for _, serviceID := range serviceIDs {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
-			c.upstream.PDClient,
+			ctx.GlobalVars().PDClient,
 			serviceID,
 			ctx.ChangefeedVars().ID)
 		if err != nil {
 			log.Error("failed to remove gc safepoint",
-				zap.String("namespace", c.state.ID.Namespace),
-				zap.String("changefeed", c.state.ID.ID),
+				zap.String("changefeed", c.state.ID),
 				zap.String("serviceID", serviceID))
 		}
 	}
