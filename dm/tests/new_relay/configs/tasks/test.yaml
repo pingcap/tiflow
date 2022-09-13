@@ -43,9 +43,6 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
-clean-dump-file: false
-ansi-quotes: false
-remove-meta: false
 syncers:
   sync-01:
     meta-file: ""
@@ -58,6 +55,9 @@ syncers:
     disable-detect: false
     safe-mode: false
     enable-ansi-quotes: false
+clean-dump-file: false
+ansi-quotes: false
+remove-meta: false
 mysql-instances:
 - source-id: mysql-replica-01
   meta: null
