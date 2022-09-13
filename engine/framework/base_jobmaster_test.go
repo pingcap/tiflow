@@ -418,7 +418,7 @@ func TestJobMasterExit(t *testing.T) {
 	}
 }
 
-func TestJobMasterInitImplReturnError(t *testing.T) {
+func TestJobMasterInitReturnError(t *testing.T) {
 	t.Parallel()
 
 	jobMaster := &testJobMasterImpl{}
@@ -453,6 +453,7 @@ func TestJobMasterInitImplReturnError(t *testing.T) {
 
 	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
 	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateUninit, meta.State)
 	require.Equal(t, initError.Error(), meta.ErrorMsg)
 }
 
@@ -505,5 +506,6 @@ func TestJobMasterPollReturnError(t *testing.T) {
 
 	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
 	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateInit, meta.State)
 	require.Equal(t, pollError.Error(), meta.ErrorMsg)
 }
