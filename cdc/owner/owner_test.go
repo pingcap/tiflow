@@ -68,8 +68,12 @@ func newOwner4Test(
 	o := NewOwner(m).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, up, newDDLPuller, newSink, newScheduler)
+	o.newChangefeed = func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+	) *changefeed {
+		return newChangefeed4Test(id, state, up, newDDLPuller, newSink, newScheduler)
 	}
 	return o
 }
@@ -769,14 +773,58 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	require.Nil(t, <-done)
 }
 
-type heathScheduler struct {
+type healthScheduler struct {
 	scheduler.Scheduler
 	scheduler.InfoProvider
 	init bool
 }
 
-func (h *heathScheduler) IsInitialized() bool {
+func (h *healthScheduler) IsInitialized() bool {
 	return h.init
+}
+
+func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
+	t.Parallel()
+
+	// There is at least one changefeed not in the normal state, the whole cluster should
+	// still be healthy, since abnormal changefeeds does not affect other normal changefeeds.
+	o := &ownerImpl{
+		changefeeds:      make(map[model.ChangeFeedID]*changefeed),
+		changefeedTicked: true,
+	}
+
+	query := &Query{Tp: QueryHealth}
+
+	// no changefeed at the first, should be healthy
+	err := o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// 1 changefeed, state is nil
+	cf := &changefeed{}
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// state is not normal
+	cf.state = &orchestrator.ChangefeedReactorState{
+		Info: &model.ChangeFeedInfo{State: model.StateStopped},
+	}
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// 2 changefeeds, another is normal, and scheduler initialized.
+	o.changefeeds[model.ChangeFeedID{ID: "2"}] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+		scheduler: &healthScheduler{init: true},
+	}
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
 }
 
 func TestIsHealthy(t *testing.T) {
@@ -815,8 +863,11 @@ func TestIsHealthy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
-	// Unhealthy, scheduler is not set.
+	// changefeed in normal, but the scheduler is not set, Unhealthy.
 	cf := &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
 		scheduler: nil, // scheduler is not set.
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
@@ -826,7 +877,7 @@ func TestIsHealthy(t *testing.T) {
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
-	cf.scheduler = &heathScheduler{init: true}
+	cf.scheduler = &healthScheduler{init: true}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
 	require.NoError(t, err)
@@ -840,7 +891,10 @@ func TestIsHealthy(t *testing.T) {
 
 	// Unhealthy, there is another changefeed is not initialized.
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = &changefeed{
-		scheduler: &heathScheduler{init: false},
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+		scheduler: &healthScheduler{init: false},
 	}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)

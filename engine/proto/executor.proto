@@ -1,10 +1,12 @@
-
 syntax = "proto3";
 
 package enginepb;
-import "projects.proto";
 
-service Executor {
+import "engine/proto/projects.proto";
+
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
+
+service ExecutorService {
     rpc PreDispatchTask(PreDispatchTaskRequest) returns (PreDispatchTaskResponse) {}
     rpc ConfirmDispatchTask(ConfirmDispatchTaskRequest) returns (ConfirmDispatchTaskResponse) {}
 }

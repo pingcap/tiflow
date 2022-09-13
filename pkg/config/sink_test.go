@@ -143,7 +143,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		},
 		{
 			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
-			expectedErr: ".*unknown .* protocol for Message Queue sink.*",
+			expectedErr: ".*unknown .* message protocol for sink.*",
 		},
 	}
 

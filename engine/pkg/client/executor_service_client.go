@@ -30,12 +30,9 @@ type (
 	// StartWorkerCallback alias to the function that is called after the pre
 	// dispatch task is successful and before confirm dispatch task.
 	StartWorkerCallback = func()
-	// AbortWorkerCallback alias to the function that is called only if the
-	// failure is guaranteed when creating worker.
-	AbortWorkerCallback = func(error)
 )
 
-// ExecutorServiceClient wraps a pb.ExecutorClient and
+// ExecutorServiceClient wraps a pb.ExecutorServiceClient and
 // provides a DispatchTask method, which will call PreDispatchTask
 // and ConfirmDispatchTask.
 // TODO The service called "Executor" should be renamed "Dispatch", so that
@@ -46,7 +43,6 @@ type ExecutorServiceClient interface {
 		ctx context.Context,
 		args *DispatchTaskArgs,
 		startWorkerTimer StartWorkerCallback,
-		abortWorker AbortWorkerCallback,
 	) error
 }
 
@@ -61,11 +57,11 @@ type DispatchTaskArgs struct {
 }
 
 type executorServiceClient struct {
-	cli pb.ExecutorClient
+	cli pb.ExecutorServiceClient
 }
 
 // NewExecutorServiceClient creates a new ExecutorServiceClient.
-func NewExecutorServiceClient(cli pb.ExecutorClient) ExecutorServiceClient {
+func NewExecutorServiceClient(cli pb.ExecutorServiceClient) ExecutorServiceClient {
 	return &executorServiceClient{
 		cli: cli,
 	}
@@ -75,7 +71,6 @@ func (c *executorServiceClient) DispatchTask(
 	ctx context.Context,
 	args *DispatchTaskArgs,
 	startWorkerTimer StartWorkerCallback,
-	abortWorker AbortWorkerCallback,
 ) error {
 	// requestID is regenerated each time for tracing purpose.
 	requestID := uuid.New().String()
@@ -95,7 +90,6 @@ func (c *executorServiceClient) DispatchTask(
 
 	_, err := internal.NewCall(c.cli.PreDispatchTask, predispatchReq).Do(ctx)
 	if err != nil {
-		abortWorker(err)
 		return err
 	}
 
@@ -131,7 +125,6 @@ func (c *executorServiceClient) DispatchTask(
 	// pkg/rpcerror.
 	if code == codes.NotFound || code == codes.Aborted {
 		// Guaranteed to have failed.
-		abortWorker(err)
 		return err
 	}
 

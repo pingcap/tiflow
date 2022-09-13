@@ -26,6 +26,7 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
 )
@@ -187,7 +188,7 @@ func MainStart(args []string) {
 		if printVersion, err := cmd.Flags().GetBool("version"); err != nil {
 			return errors.Trace(err)
 		} else if printVersion {
-			cmd.Println(utils.GetRawInfo())
+			cmd.Println(version.GetRawInfo())
 			os.Exit(0)
 		}
 

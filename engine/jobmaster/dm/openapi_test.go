@@ -25,6 +25,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
@@ -62,13 +63,13 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
-			metadata:        metadata.NewMetaData(mockBaseJobmaster.ID(), mock.NewMetaMock()),
+			metadata:        metadata.NewMetaData(mock.NewMetaMock(), log.L()),
 			messageAgent:    mockMessageAgent,
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)

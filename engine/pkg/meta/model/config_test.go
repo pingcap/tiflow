@@ -26,8 +26,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 
 	sf := DefaultStoreConfig()
 	sf.Endpoints = []string{"1.1.1.1"}
-	sf.Auth.User = "user"
-	sf.Auth.Passwd = "passwd"
+	sf.User = "user"
+	sf.Password = "passwd"
 	dsn := GenerateDSNByParams(sf, map[string]string{
 		"sql_model": dbutil.GetSQLStrictMode(),
 	})

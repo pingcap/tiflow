@@ -14,11 +14,18 @@
 package txn
 
 import (
+	"context"
+	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -28,22 +35,46 @@ type txnWithNotifier struct {
 }
 
 type worker struct {
+	ctx         context.Context
+	changefeed  string
+	workerCount int
+
 	ID      int
 	txnCh   *chann.Chann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
 	backend backend
+	errCh   chan<- error
+
+	// Metrics.
+	metricConflictDetectDuration prometheus.Observer
+	metricTxnWorkerFlushDuration prometheus.Observer
+	metricTxnWorkerBusyRatio     prometheus.Counter
 
 	// Fields only used in the background loop.
-	timer *time.Timer
+	flushInterval     time.Duration
+	timer             *time.Timer
+	wantMoreCallbacks []func()
 }
 
-func newWorker(ID int, backend backend) *worker {
+func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error, workerCount int) *worker {
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
+		ctx:         ctx,
+		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
+		workerCount: workerCount,
+
 		ID:      ID,
 		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
 		backend: backend,
+		errCh:   errCh,
+
+		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+
+		flushInterval: backend.MaxFlushInterval(),
 	}
 }
 
@@ -62,37 +93,114 @@ func (w *worker) runBackgroundLoop() {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
-		w.timer = time.NewTimer(w.backend.MaxFlushInterval())
+		defer func() {
+			if err := w.backend.Close(); err != nil {
+				log.Info("Transaction sink backend close fail",
+					zap.String("changefeedID", w.changefeed),
+					zap.Int("workerID", w.ID),
+					zap.Error(err))
+			}
+		}()
+		defer func() {
+			var r interface{}
+			if r = recover(); r == nil {
+				return
+			}
+			buf := make([]byte, 4096)
+			stackSize := runtime.Stack(buf, false)
+			buf = buf[:stackSize]
+			log.Error("Transaction sink worker panics", zap.Reflect("r", r), zap.Stack("stacktrace"))
+			w.errCh <- cerror.ErrMySQLWorkerPanic.GenWithStack("Transaction sink worker panics, stack: %v", string(buf))
+		}()
+		log.Info("Transaction sink worker starts",
+			zap.String("changefeedID", w.changefeed),
+			zap.Int("workerID", w.ID))
+
+		w.timer = time.NewTimer(w.flushInterval)
+		w.wantMoreCallbacks = make([]func(), 0, 1024)
+
+		var flushTimeSlice, totalTimeSlice time.Duration
+		overseerTimer := time.NewTicker(2 * time.Second)
+		startToWork := time.Now()
+		defer overseerTimer.Stop()
+	LOOP:
 		for {
 			select {
+			case <-w.ctx.Done():
+				log.Info("Transaction sink worker exits as canceled",
+					zap.String("changefeedID", w.changefeed),
+					zap.Int("workerID", w.ID))
+				return
 			case <-w.stopped:
-				log.Info("Transaction sink backend worker exits expectedly",
+				log.Info("Transaction sink worker exits as closed",
+					zap.String("changefeedID", w.changefeed),
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
-				txn.wantMore()
-				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
-					log.Warn("Transaction sink backend exits unexceptedly")
-					return
+				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
+					break LOOP
 				}
 			case <-w.timer.C:
-				if w.doFlush() {
-					log.Warn("Transaction sink backend exits unexceptedly")
-					return
+				if w.doFlush(&flushTimeSlice) {
+					break LOOP
 				}
+			case now := <-overseerTimer.C:
+				totalTimeSlice = now.Sub(startToWork)
+				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
+				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
+				startToWork = now
+				flushTimeSlice = 0
 			}
 		}
+		log.Warn("Transaction sink worker exits unexceptedly",
+			zap.String("changefeedID", w.changefeed),
+			zap.Int("workerID", w.ID))
 	}()
 }
 
-func (w *worker) doFlush() bool {
-	if err := w.backend.Flush(); err != nil {
-		// TODO: handle err.
+func (w *worker) onEvent(txn txnWithNotifier) bool {
+	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
+	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
+		if !w.timer.Stop() {
+			<-w.timer.C
+		}
 		return true
 	}
-	if !w.timer.Stop() {
-		<-w.timer.C
+	return false
+}
+
+// doFlush flushes the backend. Returns true if the goroutine can exit.
+func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		*flushTimeSlice += elapsed
+		w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+	}()
+
+	if err := w.backend.Flush(w.ctx); err != nil {
+		log.Warn("Transaction sink backend flush fail",
+			zap.String("changefeedID", w.changefeed),
+			zap.Int("workerID", w.ID),
+			zap.Error(err))
+		select {
+		case <-w.ctx.Done():
+		case w.errCh <- err:
+		}
+		return true
 	}
-	w.timer.Reset(w.backend.MaxFlushInterval())
+
+	// Flush successfully, call callbacks to notify conflict detector.
+	for _, wantMore := range w.wantMoreCallbacks {
+		wantMore()
+	}
+	w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
+	if cap(w.wantMoreCallbacks) > 1024 {
+		// Resize the buffer if it's too big.
+		w.wantMoreCallbacks = make([]func(), 0, 1024)
+	}
+
+	w.timer.Reset(w.flushInterval)
 	return false
 }

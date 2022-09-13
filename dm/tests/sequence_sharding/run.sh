@@ -69,8 +69,7 @@ function run() {
 	cp $cur/conf/dm-task.yaml $WORK_DIR/task.yaml
 	echo "ignore-checking-items: [\"all\"]" >>$WORK_DIR/task.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $WORK_DIR/task.yaml" \
-		"\"result\": true" 3
+		"start-task $WORK_DIR/task.yaml"
 
 	# still conflict
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

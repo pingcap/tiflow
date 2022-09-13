@@ -41,8 +41,9 @@ const (
 )
 
 type tCase struct {
-	fn     string        // function name
-	inputs []interface{} // function args
+	caseName string        // case name
+	fn       string        // function name
+	inputs   []interface{} // function args
 
 	output interface{} // function output
 	err    error       // function error
@@ -62,7 +63,7 @@ func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sq
 		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` blob,"+
-		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`,`meta_key`))", table))).
+		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
@@ -139,7 +140,25 @@ func TestGet(t *testing.T) {
 
 	testCases := []tCase{
 		{
-			fn: "Get",
+			caseName: "RecordNotFoundErrReturnEmptyResp",
+			fn:       "Get",
+			inputs: []interface{}{
+				"key0",
+			},
+			output: &metaModel.GetResponse{
+				Header: &metaModel.ResponseHeader{},
+				Kvs:    []*metaModel.KeyValue{},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `fakeTable` WHERE job_id = ? AND "+
+					"meta_key = ? ORDER BY `fakeTable`.`seq_id` LIMIT 1")).
+					WithArgs(fakeJob, []byte("key0")).
+					WillReturnRows(sqlmock.NewRows([]string{"meta_key", "meta_value"}))
+			},
+		},
+		{
+			caseName: "NormalGet",
+			fn:       "Get",
 			inputs: []interface{}{
 				"key0",
 			},
@@ -160,7 +179,8 @@ func TestGet(t *testing.T) {
 			},
 		},
 		{
-			fn: "Get",
+			caseName: "RangeGet",
+			fn:       "Get",
 			inputs: []interface{}{
 				"key0",
 				metaModel.WithRange("key999"),
@@ -187,7 +207,8 @@ func TestGet(t *testing.T) {
 			},
 		},
 		{
-			fn: "Get",
+			caseName: "FromKeyGet",
+			fn:       "Get",
 			inputs: []interface{}{
 				"key0",
 				metaModel.WithFromKey(),
@@ -209,7 +230,8 @@ func TestGet(t *testing.T) {
 			},
 		},
 		{
-			fn: "Get",
+			caseName: "PrefixGet",
+			fn:       "Get",
 			inputs: []interface{}{
 				"key0",
 				metaModel.WithPrefix(),

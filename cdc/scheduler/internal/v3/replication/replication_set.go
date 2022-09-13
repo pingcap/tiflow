@@ -27,18 +27,19 @@ import (
 
 // ReplicationSetState is the state of ReplicationSet in owner.
 //
-//   AddTable
-//  ┌────────┐   ┌─────────┐
-//  │ Absent ├─> │ Prepare │
-//  └────────┘   └──┬──────┘
-//       ┌──────────┘   ^
-//       v              │ MoveTable
-//  ┌────────┐   ┌──────┴──────┐ RemoveTable ┌──────────┐
-//  │ Commit ├──>│ Replicating │────────────>│ Removing │
-//  └────────┘   └─────────────┘             └──────────┘
+//	 AddTable
+//	┌────────┐   ┌─────────┐
+//	│ Absent ├─> │ Prepare │
+//	└────────┘   └──┬──────┘
+//	     ┌──────────┘   ^
+//	     v              │ MoveTable
+//	┌────────┐   ┌──────┴──────┐ RemoveTable ┌──────────┐
+//	│ Commit ├──>│ Replicating │────────────>│ Removing │
+//	└────────┘   └─────────────┘             └──────────┘
 //
 // When a capture shutdown unexpectedly, we may need to transit the state to
 // Absent or Replicating immediately.
+//
 //nolint:revive
 type ReplicationSetState int
 
@@ -98,7 +99,7 @@ const (
 	RolePrimary = 1
 	// RoleSecondary secondary role.
 	RoleSecondary = 2
-	// RoleUndetermined means that we don't known its state, it may be
+	// RoleUndetermined means that we don't know its state, it may be
 	// replicating, stopping or stopped.
 	RoleUndetermined = 3
 )

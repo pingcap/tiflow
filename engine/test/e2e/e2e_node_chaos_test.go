@@ -27,7 +27,6 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
@@ -109,7 +108,7 @@ func TestNodeFailure(t *testing.T) {
 
 	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 	defer cancel()
-	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
+	jobID, err := cli.CreateJob(ctx1, pb.Job_FakeJob, cfgBytes)
 	require.NoError(t, err)
 	log.Info("create fake job successful", zap.String("job-id", jobID))
 
@@ -180,10 +179,10 @@ func TestNodeFailure(t *testing.T) {
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 
 	log.Info("pause job and check if the job status is stopped")
-	err = cli.PauseJob(ctx, jobID)
+	err = cli.CancelJob(ctx, jobID)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.QueryJobResponse_stopped)
+		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.Job_Canceled)
 		if err != nil {
 			log.Warn("check job status failed", zap.Error(err))
 			return false
@@ -197,9 +196,9 @@ func TestNodeFailure(t *testing.T) {
 }
 
 func masterContainerName(index int) string {
-	return fmt.Sprintf("3m3e-server-master-%d", index)
+	return fmt.Sprintf("server-master-%d", index)
 }
 
 func executorContainerName(index int) string {
-	return fmt.Sprintf("3m3e-server-executor-%d", index)
+	return fmt.Sprintf("server-executor-%d", index)
 }

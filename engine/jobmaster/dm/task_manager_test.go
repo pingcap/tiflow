@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -39,12 +40,14 @@ const (
 func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
+	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
-	require.NoError(t.T(), jobStore.Put(context.Background(), job))
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	taskManager := NewTaskManager(nil, jobStore, nil, log.L())
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	dumpStatus1 := runtime.TaskStatus{
 		Unit:  framework.WorkerDMDump,
@@ -67,9 +70,14 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	loadStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  framework.WorkerDMLoad,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
+	}
+	loadStatus2 := runtime.TaskStatus{
+		Unit:  framework.WorkerDMLoad,
+		Task:  jobCfg.Upstreams[1].SourceID,
+		Stage: metadata.StageFinished,
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
@@ -110,12 +118,23 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	loadStatus1.Stage = metadata.StageFinished
+	dumpStatus2.Stage = metadata.StageFinished
+	taskManager.UpdateTaskStatus(loadStatus1)
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	taskManager.UpdateTaskStatus(loadStatus2)
+	require.True(t.T(), taskManager.allFinished(context.Background()))
+	taskManager.tasks.Delete(loadStatus2.Task)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
 }
 
 func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L())
 
 	source1 := jobCfg.Upstreams[0].SourceID
@@ -152,6 +171,13 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
+	require.False(t.T(), job.Deleting)
+
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Deleting, nil, nil))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t.T(), err)
+	job = state.(*metadata.Job)
+	require.True(t.T(), job.Deleting)
 
 	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
@@ -195,10 +221,10 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	require.True(t.T(), ok)
 	require.Equal(t.T(), syncStatus1, taskStatus)
 
-	taskManager.onJobNotExist(context.Background())
+	taskManager.onJobDel(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
-	taskManager.onJobNotExist(context.Background())
+	taskManager.onJobDel(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 
@@ -246,7 +272,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
+	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}

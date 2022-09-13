@@ -63,12 +63,12 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil, nil
 		}
 		tbInfo := binlogInfo.TableInfo
 		if tbInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil, nil
 		}
 		tableID := tbInfo.ID
@@ -482,12 +482,11 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil
 		}
-		tbInfo := binlogInfo.TableInfo
-		if tbInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+		if binlogInfo.TableInfo == nil {
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil
 		}
 		err := s.inner.replaceTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
@@ -770,8 +769,8 @@ func (s *snapshot) doDropTable(tbInfo *model.TableInfo, currentTs uint64) {
 
 // truncateTable truncate the table with the given ID, and replace it with a new `tbInfo`.
 // NOTE: after a table is truncated:
-//   * physicalTableByID(id) will return nil;
-//   * IsTruncateTableID(id) should return true.
+//   - physicalTableByID(id) will return nil;
+//   - IsTruncateTableID(id) should return true.
 func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs uint64) (err error) {
 	old, ok := s.physicalTableByID(id)
 	if !ok {
@@ -914,7 +913,7 @@ func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 		if !ok {
 			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
-		newSchemaName := newSchema.Name.L
+		newSchemaName := newSchema.Name.O
 		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 		err = s.createTable(tbInfo, currentTs)
 		if err != nil {
@@ -937,7 +936,6 @@ func (s *snapshot) iterTables(includeIneligible bool, f func(i *model.TableInfo)
 		}
 		return true
 	})
-	return
 }
 
 func (s *snapshot) iterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {

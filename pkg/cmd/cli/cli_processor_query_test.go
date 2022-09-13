@@ -27,12 +27,15 @@ func TestProcessorQueryCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	f := newMockFactory(ctrl)
-
+	o := newQueryProcessorOptions()
+	o.complete(f)
 	cmd := newCmdQueryProcessor(f)
-	os.Args = []string{"query", "-c", "a", "-p", "b"}
+
 	f.processor.EXPECT().Get(gomock.Any(), "a", "b").
 		Return(nil, errors.New("test"))
-	require.NotNil(t, cmd.Execute())
+	o.changefeedID = "a"
+	o.captureID = "b"
+	require.NotNil(t, o.run(cmd))
 
 	cmd = newCmdQueryProcessor(f)
 	os.Args = []string{"query", "-c", "a", "-p", "b"}

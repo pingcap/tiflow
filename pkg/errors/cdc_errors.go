@@ -315,9 +315,9 @@ var (
 		"new s3 storage for redo log",
 		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
 	)
-	ErrMQCodecInvalidConfig = errors.Normalize(
-		"MQ Codec invalid config",
-		errors.RFCCodeText("CDC:ErrMQCodecInvalidConfig"),
+	ErrCodecInvalidConfig = errors.Normalize(
+		"Codec invalid config",
+		errors.RFCCodeText("CDC:ErrCodecInvalidConfig"),
 	)
 	ErrAsyncBroadcastNotSupport = errors.Normalize(
 		"Async broadcasts not supported",
@@ -327,9 +327,9 @@ var (
 		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
-	ErrMQSinkUnknownProtocol = errors.Normalize(
-		"unknown '%s' protocol for Message Queue sink",
-		errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"),
+	ErrSinkUnknownProtocol = errors.Normalize(
+		"unknown '%s' message protocol for sink",
+		errors.RFCCodeText("CDC:ErrSinkUnknownProtocol"),
 	)
 	ErrMySQLTxnError = errors.Normalize(
 		"MySQL txn error",
@@ -823,10 +823,10 @@ var (
 		errors.RFCCodeText("CDC:ErrMailboxFull"),
 	)
 
-	// leveldb sorter errors
-	ErrStartAStoppedLevelDBSystem = errors.Normalize(
-		"start a stopped leveldb system",
-		errors.RFCCodeText("CDC:ErrStartAStoppedLevelDBSystem"),
+	// db sorter errors
+	ErrStartAStoppedDBSystem = errors.Normalize(
+		"start a stopped db system",
+		errors.RFCCodeText("CDC:ErrStartAStoppedDBSystem"),
 	)
 	ErrUnexpectedSnapshot = errors.Normalize(
 		"unexpected snapshot, table %d",
@@ -898,9 +898,9 @@ var (
 		"error encountered when locking sort-dir",
 		errors.RFCCodeText("ErrSortDirLockError"),
 	)
-	ErrLevelDBSorterError = errors.Normalize(
-		"leveldb error: %s",
-		errors.RFCCodeText("CDC:ErrLevelDBSorterError"),
+	ErrDBSorterError = errors.Normalize(
+		"db error: %s",
+		errors.RFCCodeText("CDC:ErrDBSorterError"),
 	)
 	ErrSorterClosed = errors.Normalize(
 		"sorter is closed",
@@ -1078,7 +1078,10 @@ var (
 		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
 		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
 	)
-
+	ErrCliAborted = errors.Normalize(
+		"command '%s' is aborted by user",
+		errors.RFCCodeText("CDC:ErrCliAborted"),
+	)
 	// Filter error
 	ErrFailedToFilterDML = errors.Normalize(
 		"failed to filter dml event: %v, please report a bug",
@@ -1103,5 +1106,17 @@ var (
 	ErrConvertDDLToEventTypeFailed = errors.Normalize(
 		"failed to convert ddl '%s' to filter event type",
 		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
+	)
+	ErrSyncRenameTableFailed = errors.Normalize(
+		"table's old name is not in filter rule, and its new name in filter rule "+
+			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
+			"if you want to replicate this table, please add its old name to filter rule.",
+		errors.RFCCodeText("CDC:ErrSyncRenameTableFailed"),
+	)
+
+	// changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
 )

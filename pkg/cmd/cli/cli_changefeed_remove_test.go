@@ -30,7 +30,9 @@ func TestChangefeedRemoveCli(t *testing.T) {
 	defer ctrl.Finish()
 	cf := mock.NewMockChangefeedInterface(ctrl)
 	f := &mockFactory{changefeeds: cf}
+
 	cmd := newCmdRemoveChangefeed(f)
+
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{}, nil)
 	cf.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
@@ -41,7 +43,10 @@ func TestChangefeedRemoveCli(t *testing.T) {
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))
 	os.Args = []string{"remove", "--changefeed-id=abc"}
 	require.Nil(t, cmd.Execute())
+
+	o := newRemoveChangefeedOptions()
+	o.complete(f)
+	o.changefeedID = "abc"
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil, errors.New("abc"))
-	os.Args = []string{"remove", "--changefeed-id=abc"}
-	require.NotNil(t, cmd.Execute())
+	require.NotNil(t, o.run(cmd))
 }

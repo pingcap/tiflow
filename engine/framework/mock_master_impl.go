@@ -26,7 +26,6 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -237,6 +236,15 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// StopImpl implements MasterImpl.StopImpl
+func (m *MockMasterImpl) StopImpl(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 // MasterClient returns internal server master client
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
 	return m.serverMasterClient
@@ -298,12 +306,6 @@ func (m *MockWorkerHandler) ID() frameModel.WorkerID {
 func (m *MockWorkerHandler) IsTombStone() bool {
 	args := m.Called()
 	return args.Bool(0)
-}
-
-// ToPB implements WorkerHandle.CleanTombstone
-func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
-	args := m.Called()
-	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
 }
 
 // CleanTombstone implements TombstoneHandle.CleanTombstone

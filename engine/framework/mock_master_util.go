@@ -22,9 +22,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -32,6 +29,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -39,6 +37,8 @@ import (
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -66,14 +66,14 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	ctx.ProjectInfo = tenant.TestProjectInfo
 	epoch, err := cli.GenEpoch(ctx)
 	require.NoError(t, err)
-	masterMeta := &frameModel.MasterMetaKVData{
-		ProjectID:  tenant.TestProjectInfo.UniqueID(),
-		Addr:       ctx.Environ.Addr,
-		NodeID:     ctx.Environ.NodeID,
-		ID:         id,
-		Tp:         FakeJobMaster,
-		Epoch:      epoch,
-		StatusCode: frameModel.MasterStatusUninit,
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		Addr:      ctx.Environ.Addr,
+		NodeID:    ctx.Environ.NodeID,
+		ID:        id,
+		Type:      FakeJobMaster,
+		Epoch:     epoch,
+		State:     frameModel.MasterStateUninit,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
 	require.NoError(t, err)
@@ -134,12 +134,11 @@ func MockBaseMasterCreateWorker(
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
 			WorkerEpoch:  workerEpoch,
-		}), gomock.Any(), gomock.Any()).Do(
+		}), gomock.Any()).Do(
 		func(
 			ctx context.Context,
 			args *client.DispatchTaskArgs,
 			start client.StartWorkerCallback,
-			abort client.AbortWorkerCallback,
 		) {
 			start()
 		}).Times(1).Return(nil)
@@ -178,9 +177,11 @@ func MockBaseMasterWorkerHeartbeat(
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	executorID p2p.NodeID,
-) {
+) error {
 	worker, ok := master.workerManager.GetWorkers()[workerID]
-	require.True(t, ok)
+	if !ok {
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(workerID)
+	}
 	workerEpoch := worker.Status().Epoch
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
@@ -192,8 +193,7 @@ func MockBaseMasterWorkerHeartbeat(
 			Epoch:        master.currentEpoch.Load(),
 			WorkerEpoch:  workerEpoch,
 		})
-
-	require.NoError(t, err)
+	return err
 }
 
 // MockBaseMasterWorkerUpdateStatus mocks to store status in metastore and sends
@@ -207,7 +207,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *frameModel.WorkerStatus,
 ) {
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.frameMetaClient)
+	workerMetaClient := metadata.NewWorkerStatusClient(masterID, master.frameMetaClient)
 	err := workerMetaClient.Store(ctx, status)
 	require.NoError(t, err)
 

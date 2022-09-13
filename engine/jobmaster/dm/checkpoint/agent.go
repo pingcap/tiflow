@@ -17,13 +17,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"go.uber.org/zap"
@@ -59,32 +60,30 @@ var NewCheckpointAgent = NewAgentImpl
 
 // Agent defeins a checkpoint agent interface
 type Agent interface {
-	Create(ctx context.Context) error
-	Remove(ctx context.Context) error
-	Update(ctx context.Context, cfg *config.JobCfg) error
+	Create(ctx context.Context, cfg *config.JobCfg) error
+	Remove(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
+	Upgrade(ctx context.Context, preVer semver.Version) error
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	mu     sync.RWMutex
-	cfg    *config.JobCfg
+	*bootstrap.DefaultUpgrader
+
+	jobID  string
 	logger *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobCfg *config.JobCfg, pLogger *zap.Logger) Agent {
+func NewAgentImpl(jobID string, pLogger *zap.Logger) Agent {
+	logger := pLogger.With(zap.String("component", "checkpoint_agent"))
 	c := &AgentImpl{
-		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
-		cfg:    jobCfg,
+		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
+		jobID:           jobID,
+		logger:          logger,
 	}
+	c.DefaultUpgrader.Upgrader = c
 	return c
-}
-
-func (c *AgentImpl) getConfig() *config.JobCfg {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.cfg
 }
 
 // Create implements Agent.Create
@@ -93,9 +92,8 @@ func (c *AgentImpl) getConfig() *config.JobCfg {
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
-func (c *AgentImpl) Create(ctx context.Context) error {
+func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("create checkpoint")
-	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -107,41 +105,31 @@ func (c *AgentImpl) Create(ctx context.Context) error {
 	}
 
 	if cfg.TaskMode != dmconfig.ModeIncrement {
-		if err := createLoadCheckpointTable(ctx, cfg, db); err != nil {
+		if err := createLoadCheckpointTable(ctx, c.jobID, cfg, db); err != nil {
 			return err
 		}
 	}
 	if cfg.TaskMode != dmconfig.ModeFull {
-		if err := createSyncCheckpointTable(ctx, cfg, db); err != nil {
+		if err := createSyncCheckpointTable(ctx, c.jobID, cfg, db); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Update implements Agent.Update
-func (c *AgentImpl) Update(ctx context.Context, cfg *config.JobCfg) error {
-	c.logger.Info("update checkpoint")
-	c.mu.Lock()
-	c.cfg = cfg
-	c.mu.Unlock()
-	return c.Create(ctx)
-}
-
 // Remove implements Agent.Remove
-func (c *AgentImpl) Remove(ctx context.Context) error {
+func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("remove checkpoint")
-	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	if err := dropLoadCheckpointTable(ctx, cfg, db); err != nil {
+	if err := dropLoadCheckpointTable(ctx, c.jobID, cfg, db); err != nil {
 		return err
 	}
-	return dropSyncCheckpointTable(ctx, cfg, db)
+	return dropSyncCheckpointTable(ctx, c.jobID, cfg, db)
 }
 
 // IsFresh implements Agent.IsFresh
@@ -157,9 +145,14 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 	defer db.Close()
 
 	if workerType == framework.WorkerDMLoad {
-		return isLoadFresh(ctx, task.Cfg, db)
+		return isLoadFresh(ctx, c.jobID, task.Cfg, db)
 	}
-	return isSyncFresh(ctx, task.Cfg, db)
+	return isSyncFresh(ctx, c.jobID, task.Cfg, db)
+}
+
+// UpgradeFuncs implement the Upgrader interface.
+func (c *AgentImpl) UpgradeFuncs() []bootstrap.UpgradeFunc {
+	return nil
 }
 
 func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
@@ -168,58 +161,58 @@ func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB
 	return err
 }
 
-func createLoadCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(loadCheckpointTable, loadTableName(cfg)))
+func createLoadCheckpointTable(ctx context.Context, jobID string, cfg *config.JobCfg, db *conn.BaseDB) error {
+	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(loadCheckpointTable, loadTableName(jobID, cfg)))
 	return err
 }
 
-func createSyncCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(syncCheckpointTable, syncTableName(cfg)))
+func createSyncCheckpointTable(ctx context.Context, jobID string, cfg *config.JobCfg, db *conn.BaseDB) error {
+	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(syncCheckpointTable, syncTableName(jobID, cfg)))
 	return err
 }
 
-func dropLoadCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
+func dropLoadCheckpointTable(ctx context.Context, jobID string, cfg *config.JobCfg, db *conn.BaseDB) error {
 	dropTable := "DROP TABLE IF EXISTS %s"
-	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, loadTableName(cfg)))
+	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, loadTableName(jobID, cfg)))
 	return err
 }
 
-func dropSyncCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
+func dropSyncCheckpointTable(ctx context.Context, jobID string, cfg *config.JobCfg, db *conn.BaseDB) error {
 	dropTable := "DROP TABLE IF EXISTS %s"
-	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, syncTableName(cfg))); err != nil {
+	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, syncTableName(jobID, cfg))); err != nil {
 		return err
 	}
 	// The following two would be better removed in the worker when destroy.
-	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, shardMetaName(cfg))); err != nil {
+	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, shardMetaName(jobID, cfg))); err != nil {
 		return err
 	}
-	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, onlineDDLName(cfg))); err != nil {
+	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf(dropTable, onlineDDLName(jobID, cfg))); err != nil {
 		return err
 	}
 	return nil
 }
 
-func loadTableName(cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))
+func loadTableName(jobID string, cfg *config.JobCfg) string {
+	return dbutil.TableName(cfg.MetaSchema, cputil.LightningCheckpoint(jobID))
 }
 
-func syncTableName(cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name))
+func syncTableName(jobID string, cfg *config.JobCfg) string {
+	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(jobID))
 }
 
-func shardMetaName(cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerShardMeta(cfg.Name))
+func shardMetaName(jobID string, cfg *config.JobCfg) string {
+	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerShardMeta(jobID))
 }
 
-func onlineDDLName(cfg *config.JobCfg) string {
-	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name))
+func onlineDDLName(jobID string, cfg *config.JobCfg) string {
+	return dbutil.TableName(cfg.MetaSchema, cputil.SyncerOnlineDDL(jobID))
 }
 
-func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
+func isLoadFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
 	// nolint:gosec
-	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName((*config.JobCfg)(taskCfg)))
+	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName(jobID, (*config.JobCfg)(taskCfg)))
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, jobID, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return status == "init", nil
@@ -230,9 +223,9 @@ func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) 
 	}
 }
 
-func isSyncFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
+func isSyncFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
 	// nolint:gosec
-	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName((*config.JobCfg)(taskCfg)))
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName(jobID, (*config.JobCfg)(taskCfg)))
 	var status string
 	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {

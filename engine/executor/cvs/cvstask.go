@@ -100,7 +100,7 @@ type cvsTask struct {
 
 	statusCode struct {
 		sync.RWMutex
-		code frameModel.WorkerStatusCode
+		code frameModel.WorkerState
 	}
 	runError struct {
 		sync.RWMutex
@@ -130,7 +130,7 @@ func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID f
 // InitImpl implements WorkerImpl.InitImpl
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.Info("init the task  ", zap.Any("task id :", task.ID()))
-	task.setStatusCode(frameModel.WorkerStatusNormal)
+	task.setState(frameModel.WorkerStateNormal)
 	// Don't use the ctx from the caller. Caller may cancel the ctx after InitImpl returns.
 	ctx, task.cancelFn = context.WithCancel(context.Background())
 	go func() {
@@ -138,7 +138,7 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		if err != nil {
 			log.Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(frameModel.WorkerStatusError)
+			task.setState(frameModel.WorkerStateError)
 		}
 	}()
 	go func() {
@@ -146,9 +146,9 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		if err != nil {
 			log.Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(frameModel.WorkerStatusError)
+			task.setState(frameModel.WorkerStateError)
 		} else {
-			task.setStatusCode(frameModel.WorkerStatusFinished)
+			task.setState(frameModel.WorkerStateFinished)
 		}
 	}()
 
@@ -166,12 +166,23 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		}
 		return err
 	}
-	switch task.getStatusCode() {
-	case frameModel.WorkerStatusFinished, frameModel.WorkerStatusError, frameModel.WorkerStatusStopped:
-		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
+
+	exitReason := framework.ExitReasonUnknown
+	switch task.getState() {
+	case frameModel.WorkerStateFinished:
+		exitReason = framework.ExitReasonFinished
+	case frameModel.WorkerStateError:
+		exitReason = framework.ExitReasonFailed
+	case frameModel.WorkerStateStopped:
+		exitReason = framework.ExitReasonCanceled
 	default:
 	}
-	return nil
+
+	if exitReason == framework.ExitReasonUnknown {
+		return nil
+	}
+
+	return task.BaseWorker.Exit(ctx, exitReason, task.getRunError(), task.Status().ExtBytes)
 }
 
 // Status returns a short worker status to be periodically sent to the master.
@@ -186,7 +197,8 @@ func (task *cvsTask) Status() frameModel.WorkerStatus {
 		log.Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
-		Code: task.getStatusCode(), ErrorMessage: "",
+		State:    task.getState(),
+		ErrorMsg: "",
 		ExtBytes: statsBytes,
 	}
 }
@@ -196,12 +208,12 @@ func (task *cvsTask) Workload() model.RescUnit {
 	return 1
 }
 
-func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			task.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			task.setState(frameModel.WorkerStateStopped)
 		default:
 			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -297,13 +309,13 @@ func (task *cvsTask) send(ctx context.Context) error {
 	}
 }
 
-func (task *cvsTask) getStatusCode() frameModel.WorkerStatusCode {
+func (task *cvsTask) getState() frameModel.WorkerState {
 	task.statusCode.RLock()
 	defer task.statusCode.RUnlock()
 	return task.statusCode.code
 }
 
-func (task *cvsTask) setStatusCode(status frameModel.WorkerStatusCode) {
+func (task *cvsTask) setState(status frameModel.WorkerState) {
 	task.statusCode.Lock()
 	defer task.statusCode.Unlock()
 	task.statusCode.code = status

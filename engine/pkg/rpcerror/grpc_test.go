@@ -16,20 +16,20 @@ package rpcerror
 import (
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
+
+var testErrorPrototype = Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 
 func TestTryUnwrapNormalizedError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
 	errOut, ok := tryUnwrapNormalizedError(err)
 	require.True(t, ok)
 	require.IsType(t, &normalizedError[testError]{}, errOut)
@@ -38,31 +38,37 @@ func TestTryUnwrapNormalizedError(t *testing.T) {
 func TestToGRPCError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
-	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
+	err := testErrorPrototype.Gen(&testError{Val: "first test error"})
 	grpcErr := ToGRPCError(err)
 	st := status.Convert(grpcErr)
 	require.Equal(t, codes.Unavailable, st.Code())
 	require.Len(t, st.Details(), 1)
 
 	pbErr := st.Details()[0].(*pb.ErrorV2)
-	require.Equal(t, &pb.ErrorV2{
+	require.True(t, proto.Equal(pbErr, &pb.ErrorV2{
 		Name:    "ErrTestError",
 		Details: []byte(`{"val":"first test error"}`),
-	}, pbErr)
+	}))
 }
 
 func TestFromGRPCError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
 	grpcErr := ToGRPCError(err)
-
 	errOut := FromGRPCError(grpcErr)
 	require.True(t, testErrorPrototype.Is(errOut))
+	require.ErrorContains(t, errOut, "grpc_test.go:57")
+}
+
+func TestNoServerStack(t *testing.T) {
+	t.Parallel()
+
+	err := testErrorPrototype.Gen(&testError{Val: "first test error"})
+	grpcErr := ToGRPCError(err)
+	errOut := FromGRPCError(grpcErr)
+	require.True(t, testErrorPrototype.Is(errOut))
+	require.NotContains(t, errOut.Error(), "grpc_test.go:59")
 }
 
 type unretryableErr struct {

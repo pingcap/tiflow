@@ -1,4 +1,3 @@
-name: <placeholder>
 task-mode: all
 #is-sharding: true
 #shard-mode: pessimistic
@@ -8,7 +7,6 @@ task-mode: all
 #heartbeat-update-interval: 1
 #heartbeat-report-interval: 10
 #timezone: ""
-#case-sensitive: false
 #collation_compatible: loose
 target-database:
   host: host.docker.internal

@@ -16,9 +16,7 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
@@ -34,6 +32,12 @@ type DiscoveryClient interface {
 		ctx context.Context,
 		request *enginepb.RegisterExecutorRequest,
 	) (model.ExecutorID, error)
+
+	// ListExecutors lists all executors.
+	ListExecutors(ctx context.Context) ([]*enginepb.Executor, error)
+
+	// ListMasters lists all masters.
+	ListMasters(ctx context.Context) ([]*enginepb.Master, error)
 
 	// Heartbeat sends a heartbeat message to the server.
 	Heartbeat(
@@ -79,21 +83,35 @@ func (c *discoveryClient) RegisterExecutor(
 			// TODO review idempotency
 			// internal.WithForceNoRetry()
 		)
-		resp, err := call.Do(ctx)
+		executor, err := call.Do(ctx)
 		if err != nil {
 			return err
 		}
-		if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-			log.Info("RegisterExecutor", zap.Any("error", resp.Err))
-			return errors.New(resp.Err.String())
-		}
-		ret = model.ExecutorID(resp.ExecutorId)
+		ret = model.ExecutorID(executor.Id)
 		return nil
 	})
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	return ret, nil
+}
+
+func (c *discoveryClient) ListExecutors(ctx context.Context) ([]*enginepb.Executor, error) {
+	call := internal.NewCall(c.cli.ListExecutors, &enginepb.ListExecutorsRequest{})
+	resp, err := call.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Executors, nil
+}
+
+func (c *discoveryClient) ListMasters(ctx context.Context) ([]*enginepb.Master, error) {
+	call := internal.NewCall(c.cli.ListMasters, &enginepb.ListMastersRequest{})
+	resp, err := call.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Masters, nil
 }
 
 // Heartbeat sends a heartbeat to the DiscoveryService.
@@ -124,7 +142,7 @@ func (c *discoveryClient) RegisterMetaStore(
 		return err
 	}
 	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-		return errors.Errorf("RegisterMetaStore: %d", resp.Err.Size())
+		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Message)
 	}
 	return nil
 }

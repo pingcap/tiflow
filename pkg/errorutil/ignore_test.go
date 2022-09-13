@@ -60,6 +60,9 @@ func TestIsRetryableEtcdError(t *testing.T) {
 		{v3rpc.ErrTimeoutDueToLeaderFail, true},
 		{v3rpc.ErrNoSpace, true},
 		{raft.ErrStopped, true},
+		{errors.New("rpc error: code = Unavailable desc = closing transport due to: " +
+			"connection error: desc = \\\"error reading from server: EOF\\\", " +
+			"received prior goaway: code: NO_ERROR\""), true},
 	}
 
 	for _, item := range cases {

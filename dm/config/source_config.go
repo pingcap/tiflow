@@ -28,6 +28,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -49,6 +50,7 @@ var getAllServerIDFunc = utils.GetAllServerID
 // SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
 // can only match regular files in the current directory and subdirectories.
+//
 //go:embed source.yaml
 var SampleSourceConfig string
 
@@ -353,7 +355,8 @@ func (c *SourceConfig) AdjustServerID(ctx context.Context, db *sql.DB) error {
 		err = terror.Annotatef(err, "fail to get server-id info %v", ctx.Err())
 	}
 	if err != nil {
-		return terror.WithScope(err, terror.ScopeUpstream)
+		log.L().Error("failed to get server-id, will random choose a server-id for this source",
+			zap.Error(err))
 	}
 
 	rand.Seed(time.Now().UnixNano())
