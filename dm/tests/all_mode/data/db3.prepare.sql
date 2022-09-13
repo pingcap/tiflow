@@ -18,8 +18,8 @@ create table t_extract
     j8 json as (json_insert(b, '$.k', 'v')),
     j9 json as (json_replace(b, '$.k', 'v')),
     j10 json as (json_remove(b, '$.k')),
-    j11 json as (json_contains(b, '{"k": "v"}')),
-    j12 json as (json_contains_path(b, 'one', '$.k')),
+    j11 int as (json_contains(b, '{"k": "v"}')),
+    j12 int as (json_contains_path(b, 'one', '$.k')),
     j13 json as (json_array_append(b, '$.k', 'v')),
 
     j14 json as (json_array_insert(j3, '$.k', 'v'))
