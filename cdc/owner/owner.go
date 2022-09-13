@@ -148,7 +148,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	}
 
 	o.captures = state.Captures
-	o.updateMetrics(state)
+	o.updateMetrics()
 
 	// handleJobs() should be called before clusterVersionConsistent(), because
 	// when there are different versions of cdc nodes in the cluster,
@@ -341,7 +341,7 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	changefeedStatusGauge.Reset()
 }
 
-func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
+func (o *ownerImpl) updateMetrics() {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
@@ -610,33 +610,47 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy, err := o.isHealthy()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		query.Data = isHealthy
+		query.Data = o.isHealthy()
 	}
 	return nil
 }
 
-func (o *ownerImpl) isHealthy() (bool, error) {
+func (o *ownerImpl) isHealthy() bool {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
-		return false, nil
+		log.Warn("owner is not healthy since changefeeds are not ticked")
+		return false
 	}
 	if !o.clusterVersionConsistent(o.captures) {
-		return false, nil
+		return false
 	}
-	for _, cfReactor := range o.changefeeds {
-		provider := cfReactor.GetInfoProvider()
+	for _, changefeed := range o.changefeeds {
+		if changefeed.state == nil {
+			log.Warn("isHealthy: changefeed state is nil",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			continue
+		}
+		if changefeed.state.Info.State != model.StateNormal {
+			log.Warn("isHealthy: changefeed not normal",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID),
+				zap.Any("state", changefeed.state.Info.State))
+			continue
+		}
+
+		provider := changefeed.GetInfoProvider()
 		if provider == nil || !provider.IsInitialized() {
 			// The scheduler has not been initialized yet, it is considered
 			// unhealthy, because owner can not schedule tables for now.
-			return false, nil
+			log.Warn("isHealthy: changefeed is not initialized",
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			return false
 		}
 	}
-	return true, nil
+	return true
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
