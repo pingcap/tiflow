@@ -745,6 +745,8 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 
 	if err != nil {
 		m.masterMeta.ErrorMsg = err.Error()
+	} else {
+		m.masterMeta.ErrorMsg = ""
 	}
 	m.masterMeta.Detail = detail
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)

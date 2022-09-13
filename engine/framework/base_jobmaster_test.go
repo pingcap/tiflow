@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
@@ -508,4 +509,47 @@ func TestJobMasterPollReturnError(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, frameModel.MasterStateInit, meta.State)
 	require.Equal(t, pollError.Error(), meta.ErrorMsg)
+}
+
+func TestJobMasterExitClearOldError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// simulate job failed in last round, and failover again
+	err := jobMaster.base.master.frameMetaClient.UpdateJob(
+		ctx, jobMasterID, ormModel.KeyValueMap{
+			"state":         frameModel.MasterStateInit,
+			"error_message": "error in last period",
+		})
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.On("OnMasterRecovered", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Init(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "OnMasterRecovered", 1)
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.mu.Unlock()
+
+	status := jobMaster.Status()
+	jobMaster.base.Exit(ctx, ExitReasonFinished, nil, status.ExtBytes)
+	require.NoError(t, err)
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateFinished, meta.State)
+	require.Equal(t, status.ExtBytes, meta.Detail)
+	require.Empty(t, meta.ErrorMsg)
 }
