@@ -12,5 +12,10 @@ schema = "test_business"
 user = "root"
 password = ""
 
-[log] 
+[log]
 level = "debug"
+
+[job-backoff]
+reset-interval = "2s"
+initial-interval = "1s"
+max-interval = "15s"

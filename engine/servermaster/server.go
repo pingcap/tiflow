@@ -896,7 +896,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
 	if err != nil {
 		return
 	}
