@@ -1349,26 +1349,6 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			}
 		}
 
-		// set timezone
-		if ddlJob.timezone != "" {
-			s.timezoneLastTime = ddlJob.timezone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		} else if s.timezoneLastTime != "" {
-			// use last time's time zone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		}
-		// set timestamp
-		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
-		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
-		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
-		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
-
 		failpoint.Inject("ExecDDLError", func() {
 			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
 			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
@@ -1376,6 +1356,26 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		})
 
 		if !ignore {
+			// set timezone
+			if ddlJob.timezone != "" {
+				s.timezoneLastTime = ddlJob.timezone
+				setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
+				ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+				setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+				ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+			} else if s.timezoneLastTime != "" {
+				// use last time's time zone
+				setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
+				ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+				setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+				ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+			}
+			// set timestamp
+			setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
+			ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
+			setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
+			ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
+
 			var affected int
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
