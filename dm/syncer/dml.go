@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -43,14 +44,18 @@ type genDMLParam struct {
 	extendData      [][]interface{}  // all data include extend data
 }
 
+var latin1Decoder = charmap.ISO8859_1.NewDecoder()
+
 // extractValueFromData adjust the values obtained from go-mysql so that
 // - the values can be correctly converted to TiDB datum
 // - the values are in the correct type that go-sql-driver/mysql uses.
 func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourceTI *model.TableInfo) []interface{} {
 	value := make([]interface{}, 0, len(data))
+	var err error
 
 	for i, d := range data {
 		d = castUnsigned(d, &columns[i].FieldType)
+		isLatin1 := columns[i].GetCharset() == charset.CharsetLatin1 || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetLatin1
 
 		switch v := d.(type) {
 		case int8:
@@ -69,12 +74,33 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 			d = uint64(v)
 		case decimal.Decimal:
 			d = v.String()
+		case []byte:
+			if isLatin1 {
+				d, err = latin1Decoder.Bytes(v)
+				if err != nil {
+					log.L().DPanic("can't convert latin1 to utf8", zap.ByteString("value", v), zap.Error(err))
+				}
+			}
 		case string:
+<<<<<<< HEAD
 			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
 			if columns[i].Charset == charset.CharsetGBK {
 				d = []byte(v)
 			} else if columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK {
+=======
+			isGBK := columns[i].GetCharset() == charset.CharsetGBK || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK
+			switch {
+			case isGBK:
+				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
+>>>>>>> 81c8e09bd (syncer(dm): fix corrupt latin1 data when replicating (#7027))
 				d = []byte(v)
+			case isLatin1:
+				// TiDB has bug in latin1 so we must convert it to utf8 at DM's scope
+				// https://github.com/pingcap/tidb/issues/18955
+				d, err = latin1Decoder.String(v)
+				if err != nil {
+					log.L().DPanic("can't convert latin1 to utf8", zap.String("value", v), zap.Error(err))
+				}
 			}
 		}
 		value = append(value, d)
