@@ -356,8 +356,7 @@ function run() {
 cleanup_data safe_mode_target
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-# run $*
-safe_mode_duration
+run $*
 cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

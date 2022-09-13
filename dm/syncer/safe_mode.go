@@ -119,7 +119,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		}
 	}
 
-	if int64(duration) == 0 && !s.cfg.SafeMode {
+	if int64(duration) == 0 && !s.cfg.SafeMode && s.safeMode.Enable() {
 		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
 			seconds := val.(string)
 			if seconds == "0s" {
