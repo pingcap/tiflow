@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 )
 
@@ -32,6 +33,18 @@ type FileManager struct {
 	bucketSelector BucketSelector
 	options        *brStorage.S3BackendOptions
 	index          indexManager
+}
+
+func NewFileManager(
+	executorID model.ExecutorID,
+	bucketSelector BucketSelector,
+	s3Options *brStorage.S3BackendOptions,
+) *FileManager {
+	return &FileManager{
+		bucketSelector: bucketSelector,
+		options:        s3Options,
+		index:          newIndexManager(executorID, bucketSelector, s3Options),
+	}
 }
 
 func (m *FileManager) CreateResource(
@@ -90,53 +103,36 @@ func (m *FileManager) RemoveTemporaryFiles(
 		return err
 	}
 
-	bucket, err := m.bucketSelector.GetBucket(ctx, scope)
-	if err != nil {
-		return err
-	}
+	log.Info("Removing temporary resources",
+		zap.Any("scope", scope))
 
-	storage, err := newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
-	if err != nil {
-		return err
-	}
-
-	var toRemoveFiles map[string]struct{}
-	err = storage.WalkDir(ctx, &brStorage.WalkOption{}, func(path string, _ int64) error {
-		path = strings.TrimPrefix(path, "/")
+	err = m.removeFilesIf(ctx, scope, func(path string) bool {
 		resName, _, ok := strings.Cut(path, "/")
 		if !ok {
-			return nil
+			return false
 		}
-
-		if _, ok := persistedFiles[resName]; ok {
-			// Skip persisted files
-			return nil
-		}
-
-		toRemoveFiles[path] = struct{}{}
-		return nil
+		_, ok = persistedFiles[resName]
+		return !ok
 	})
-	if err != nil {
-		return errors.Annotate(err, "RemoveTemporaryFiles")
-	}
 
-	log.Info("Removing temporary resources",
-		zap.Any("scope", scope),
-		zap.Any("file-set", toRemoveFiles))
-
-	for name := range toRemoveFiles {
-		if err := storage.DeleteFile(ctx, name); err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 func (m *FileManager) RemoveResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	// TODO implement me
-	panic("implement me")
+	log.Info("Removing resource",
+		zap.Any("ident", ident))
+
+	err := m.removeFilesIf(ctx, ident.Scope(), func(path string) bool {
+		resName, _, ok := strings.Cut(path, "/")
+		if !ok {
+			return false
+		}
+		return resName == ident.Name
+	})
+
+	return err
 }
 
 func (m *FileManager) SetPersisted(
@@ -149,6 +145,47 @@ func (m *FileManager) SetPersisted(
 	if !ok {
 		log.Warn("resource is already persisted",
 			zap.Any("ident", ident))
+	}
+	return nil
+}
+
+func (m *FileManager) removeFilesIf(
+	ctx context.Context,
+	scope internal.ResourceScope,
+	pred func(path string) bool,
+) error {
+	bucket, err := m.bucketSelector.GetBucket(ctx, scope)
+	if err != nil {
+		return err
+	}
+
+	storage, err := newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
+	if err != nil {
+		return err
+	}
+
+	var toRemoveFiles []string
+	err = storage.WalkDir(ctx, &brStorage.WalkOption{}, func(path string, _ int64) error {
+		path = strings.TrimPrefix(path, "/")
+		if !pred(path) {
+			return nil
+		}
+
+		toRemoveFiles = append(toRemoveFiles, path)
+		return nil
+	})
+	if err != nil {
+		return errors.Annotate(err, "RemoveTemporaryFiles")
+	}
+
+	log.Info("Removing temporary resources",
+		zap.Any("scope", scope),
+		zap.Any("file-set", toRemoveFiles))
+
+	for _, path := range toRemoveFiles {
+		if err := storage.DeleteFile(ctx, path); err != nil {
+			return err
+		}
 	}
 	return nil
 }

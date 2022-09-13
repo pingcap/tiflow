@@ -101,7 +101,6 @@ func (f *indexFile) GetPersistedFileSet() map[model.ResourceName]struct{} {
 }
 
 type indexManagerImpl struct {
-	projectInfo    tenant.ProjectInfo
 	executorID     model.ExecutorID
 	bucketSelector BucketSelector
 	options        *brStorage.S3BackendOptions
@@ -112,6 +111,7 @@ type indexManagerImpl struct {
 
 	wg                 sync.WaitGroup
 	flushIndexNotifyCh chan struct {
+		project  tenant.ProjectInfo
 		workerID model.WorkerID
 		doneCh   chan error
 	}
@@ -120,13 +120,11 @@ type indexManagerImpl struct {
 }
 
 func newIndexManager(
-	projectInfo tenant.ProjectInfo,
 	executorID model.ExecutorID,
 	bucketSelector BucketSelector,
 	s3Options *brStorage.S3BackendOptions,
 ) *indexManagerImpl {
 	ret := &indexManagerImpl{
-		projectInfo:    projectInfo,
 		executorID:     executorID,
 		bucketSelector: bucketSelector,
 		options:        s3Options,
@@ -135,6 +133,7 @@ func newIndexManager(
 
 		// a maximum of one pending notification is enough.
 		flushIndexNotifyCh: make(chan struct {
+			project  tenant.ProjectInfo
 			workerID model.WorkerID
 			doneCh   chan error
 		}, 1),
@@ -182,7 +181,7 @@ func (m *indexManagerImpl) SetPersisted(ctx context.Context, ident internal.Reso
 func (m *indexManagerImpl) LoadPersistedFileSet(
 	ctx context.Context, scope internal.ResourceScope,
 ) (map[model.ResourceName]struct{}, error) {
-	uri, err := m.indexFilePathURI(ctx, scope.WorkerID)
+	uri, err := m.indexFilePathURI(ctx, scope.ProjectInfo, scope.WorkerID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +218,7 @@ func (m *indexManagerImpl) backgroundTask() {
 			return
 		case flushTask := <-m.flushIndexNotifyCh:
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			err := m.doFlush(ctx, flushTask.workerID)
+			err := m.doFlush(ctx, flushTask.project, flushTask.workerID)
 			cancel()
 			flushTask.doneCh <- err
 		}
@@ -229,6 +228,7 @@ func (m *indexManagerImpl) backgroundTask() {
 func (m *indexManagerImpl) triggerFlush(ctx context.Context, workerID model.WorkerID) error {
 	done := make(chan error, 1)
 	flushTask := struct {
+		project  tenant.ProjectInfo
 		workerID model.WorkerID
 		doneCh   chan error
 	}{
@@ -253,7 +253,11 @@ func (m *indexManagerImpl) triggerFlush(ctx context.Context, workerID model.Work
 	}
 }
 
-func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID) error {
+func (m *indexManagerImpl) doFlush(
+	ctx context.Context,
+	project tenant.ProjectInfo,
+	workerID model.WorkerID,
+) error {
 	m.indexMu.Lock()
 	index, ok := m.indexFiles[workerID]
 	if !ok {
@@ -269,7 +273,7 @@ func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID)
 		return err
 	}
 
-	uri, err := m.indexFilePathURI(ctx, workerID)
+	uri, err := m.indexFilePathURI(ctx, project, workerID)
 	if err != nil {
 		return err
 	}
@@ -287,9 +291,13 @@ func (m *indexManagerImpl) doFlush(ctx context.Context, workerID model.WorkerID)
 	return nil
 }
 
-func (m *indexManagerImpl) indexFilePathURI(ctx context.Context, workerID model.WorkerID) (string, error) {
+func (m *indexManagerImpl) indexFilePathURI(
+	ctx context.Context,
+	project tenant.ProjectInfo,
+	workerID model.WorkerID,
+) (string, error) {
 	bucket, err := m.bucketSelector.GetBucket(ctx, internal.ResourceScope{
-		ProjectInfo: m.projectInfo,
+		ProjectInfo: project,
 		Executor:    m.executorID,
 		WorkerID:    workerID,
 	})
