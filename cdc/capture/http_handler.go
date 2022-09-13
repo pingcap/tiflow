@@ -27,6 +27,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -223,15 +224,16 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
 	infoStr := info.String()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
 
 	err = h.capture.etcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
