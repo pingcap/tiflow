@@ -18,6 +18,7 @@ import (
 	libErrors "errors"
 	"fmt"
 	"reflect"
+	"regexp"
 
 	"github.com/pingcap/errors"
 
@@ -81,21 +82,39 @@ func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config.(C)), nil
 }
 
-// DeserializeConfigError is used in fake job and unit test only
-type DeserializeConfigError struct {
+// FakeJobUnRetryableError is used in fake job and unit test only
+type FakeJobUnRetryableError struct {
 	errIn error
 }
 
-// NewDeserializeConfigError creates a new DeserializeConfigError
-func NewDeserializeConfigError(errIn error) *DeserializeConfigError {
-	return &DeserializeConfigError{
+// NewFakeJobUnRetryableError creates a new FakeJobUnRetryableError
+func NewFakeJobUnRetryableError(errIn error) *FakeJobUnRetryableError {
+	return &FakeJobUnRetryableError{
 		errIn: errIn,
 	}
 }
 
+// Message returns raw error message of FakeJobUnRetryableError
+func (e *FakeJobUnRetryableError) Message() string {
+	return "fake job unretryable error"
+}
+
 // Error implements error interface
-func (e *DeserializeConfigError) Error() string {
-	return fmt.Sprintf("deserialize config failed: %s", e.errIn)
+func (e *FakeJobUnRetryableError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Message(), e.errIn)
+}
+
+const fakeJobErrorFormat = "fake job unretryable error: (.*)"
+
+var fakeJobErrorRegexp = regexp.MustCompile(fakeJobErrorFormat)
+
+// ToFakeJobError tries best to construct a fake job error from an error object
+func ToFakeJobError(err error) error {
+	subMatch := fakeJobErrorRegexp.FindStringSubmatch(err.Error())
+	if len(subMatch) > 1 {
+		return NewFakeJobUnRetryableError(errors.New(subMatch[1]))
+	}
+	return err
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
@@ -103,14 +122,14 @@ func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (Worke
 	var config C
 	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(NewDeserializeConfigError(err))
+		return nil, errors.Trace(NewFakeJobUnRetryableError(err))
 	}
 	return config, nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
 func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
-	var errOut *DeserializeConfigError
+	var errOut *FakeJobUnRetryableError
 	if libErrors.As(err, &errOut) {
 		return false
 	}

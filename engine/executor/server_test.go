@@ -24,23 +24,26 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -233,7 +236,7 @@ func TestConvertMakeTaskError(t *testing.T) {
 		err         error
 		isRetryable bool
 	}{
-		{registry.NewDeserializeConfigError(errors.New("inner err")), false},
+		{registry.NewFakeJobUnRetryableError(errors.New("inner err")), false},
 		{errors.New("normal error"), true},
 	}
 
@@ -247,4 +250,57 @@ func TestConvertMakeTaskError(t *testing.T) {
 			require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
 		}
 	}
+}
+
+func TestPrecheckMasterMeta(t *testing.T) {
+	t.Parallel()
+
+	register := registry.NewRegistry()
+	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
+		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	ormCli, err := pkgOrm.NewMockClient()
+	require.NoError(t, err)
+
+	masterID := "precheck-master-id"
+	dp := deps.NewDeps()
+	err = dp.Provide(func() pkgOrm.Client {
+		return ormCli
+	})
+	require.NoError(t, err)
+
+	ctx := dcontext.Background().WithDeps(dp)
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		ID:        masterID,
+		Type:      frameModel.FakeJobMaster,
+		State:     frameModel.MasterStateUninit,
+	}
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	// normal master meta, no error message
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.NoError(t, err)
+
+	// failover on retryable error
+	masterMeta.State = frameModel.MasterStateInit
+	masterMeta.ErrorMsg = "normal error"
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.NoError(t, err)
+
+	// no retry on unretryable error
+	fakeJobErr := registry.NewFakeJobUnRetryableError(errors.New("inner error"))
+	masterMeta.ErrorMsg = fakeJobErr.Error()
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.Error(t, err)
+	require.EqualError(t, err, fakeJobErr.Error())
+	err = convertMakeTaskErrorToRPCError(register, err, frameModel.FakeJobMaster)
+	errIn := rpcerror.FromGRPCError(err)
+	require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
 }
