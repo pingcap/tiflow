@@ -432,7 +432,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		return err
 	}
 
-	infoStr, err := info.Marshal()
+	infoStr := info.String()
 	if err != nil {
 		return err
 	}
