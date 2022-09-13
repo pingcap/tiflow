@@ -205,48 +205,6 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.run(ctx)
 }
 
-<<<<<<< HEAD
-=======
-// startStatusHTTP starts the HTTP server.
-// `lis` is a listener that gives us plain-text HTTP requests.
-// TODO: can we decouple the HTTP server from the capture server?
-func (s *Server) startStatusHTTP(lis net.Listener) error {
-	// LimitListener returns a Listener that accepts at most n simultaneous
-	// connections from the provided Listener. Connections that exceed the
-	// limit will wait in a queue and no new goroutines will be created until
-	// a connection is processed.
-	// We use it here to limit the max concurrent conections of statusServer.
-	lis = netutil.LimitListener(lis, maxHTTPConnection)
-	conf := config.GetGlobalServerConfig()
-
-	// discard gin log output
-	gin.DefaultWriter = io.Discard
-	router := gin.New()
-	// add gin.Recovery() to handle unexpected panic
-	router.Use(gin.Recovery())
-	// router.
-	// Register APIs.
-	RegisterRoutes(router, s.capture, registry)
-
-	// No need to configure TLS because it is already handled by `s.tcpServer`.
-	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
-	s.statusServer = &http.Server{
-		Handler:      router,
-		ReadTimeout:  httpConnectionTimeout,
-		WriteTimeout: httpConnectionTimeout,
-	}
-
-	go func() {
-		log.Info("http server is running", zap.String("addr", conf.Addr))
-		err := s.statusServer.Serve(lis)
-		if err != nil && err != http.ErrServerClosed {
-			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
-		}
-	}()
-	return nil
-}
-
->>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()

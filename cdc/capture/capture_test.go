@@ -55,15 +55,8 @@ func TestReset(t *testing.T) {
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond)
-	info, err := cp.Info()
-	require.Nil(t, err)
+	info := cp.Info()
 	require.NotNil(t, info)
 	cancel()
 	wg.Wait()
-}
-
-func TestInfo(t *testing.T) {
-	cp := NewCapture4Test(nil)
-	cp.info = nil
-	require.NotPanics(t, func() { cp.Info() })
 }

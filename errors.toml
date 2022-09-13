@@ -106,11 +106,6 @@ error = '''
 capture not exists, key: %s
 '''
 
-["CDC:ErrCaptureNotInitialized"]
-error = '''
-capture has not been initialized yet
-'''
-
 ["CDC:ErrCaptureRegister"]
 error = '''
 capture register to etcd failed

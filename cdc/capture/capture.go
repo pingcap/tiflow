@@ -53,16 +53,9 @@ type Capture struct {
 	captureMu sync.Mutex
 	info      *model.CaptureInfo
 
-<<<<<<< HEAD
 	ownerMu          sync.Mutex
 	owner            *owner.Owner
 	processorManager *processor.Manager
-=======
-	pdEndpoints     []string
-	UpstreamManager *upstream.Manager
-	ownerMu         sync.Mutex
-	owner           owner.Owner
->>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -103,7 +96,6 @@ type Capture struct {
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	conf := config.GetGlobalServerConfig()
 	return &Capture{
-<<<<<<< HEAD
 		pdClient:    pdClient,
 		kvStorage:   kvStorage,
 		etcdClient:  etcdClient,
@@ -111,12 +103,6 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 		cancel:      func() {},
 
 		enableNewScheduler:  conf.Debug.EnableNewScheduler,
-=======
-		EtcdClient:          etcdClient,
-		grpcService:         grpcService,
-		cancel:              func() {},
-		pdEndpoints:         pdEnpoints,
->>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -145,23 +131,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-<<<<<<< HEAD
 	c.processorManager = c.newProcessorManager()
-=======
-
-	if c.UpstreamManager != nil {
-		c.UpstreamManager.Close()
-	}
-	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
-	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"add default upstream failed")
-	}
-
-	c.processorManager = c.newProcessorManager(c.UpstreamManager)
->>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -385,14 +355,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() (model.CaptureInfo, error) {
+func (c *Capture) Info() model.CaptureInfo {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	// when c.reset has not been called yet, c.info is nil.
-	if c.info != nil {
-		return *c.info, nil
-	}
-	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
+	return *c.info
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
@@ -567,7 +533,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by deregister it from etcd
+// AsyncClose closes the capture by unregistering it from etcd
 // Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
