@@ -8,5 +8,5 @@ create table t2 (id int primary key,
     gen int as (id + 1)
 );
 
-create table t6 (id int, name varchar(20), primary key(`id`)) character set latin1;
-insert into t6 (id, name) values (0, 'Müller');
+create table t6 (id int, name varchar(20), msg text, primary key(`id`)) character set latin1;
+insert into t6 (id, name, msg) values (0, 'Müller', 'Müller');
