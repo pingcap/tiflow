@@ -136,10 +136,10 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 
 	done := cp.Drain()
 	select {
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
 	case <-done:
 		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
-	case <-time.After(time.Second):
-		require.Fail(t, "timeout")
 	}
 }
 
