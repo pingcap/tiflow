@@ -76,10 +76,11 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 		case string:
 			isGBK := columns[i].GetCharset() == charset.CharsetGBK || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK
 			isLatin1 := columns[i].GetCharset() == charset.CharsetLatin1 || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetLatin1
-			if isGBK {
+			switch {
+			case isGBK:
 				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
 				d = []byte(v)
-			} else if isLatin1 {
+			case isLatin1:
 				// TiDB has bug in latin1 so we must convert it to utf8 at DM's scope
 				// https://github.com/pingcap/tidb/issues/18955
 				d, err = latin1Decoder.String(v)
