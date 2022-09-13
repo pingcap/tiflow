@@ -167,6 +167,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 
 	id := "server-master-" + uuid.New().String()
 	info := &model.NodeInfo{
+		Name: cfg.Name,
 		ID:   model.DeployNodeID(id),
 		Addr: cfg.AdvertiseAddr,
 	}
@@ -583,24 +584,24 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) registerMetaStore(ctx context.Context) error {
 	// register metastore for framework
 	cfg := s.cfg
-	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
+	if err := s.metaStoreManager.Register(cfg.FrameworkMeta.StoreID, cfg.FrameworkMeta); err != nil {
 		return err
 	}
-	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeMySQL {
+	if cfg.FrameworkMeta.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for framework meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameMetaConf)); err != nil {
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameworkMeta)); err != nil {
 			log.Warn("create schema for framework metastore fail, but it can be ignored.",
-				zap.String("schema", s.cfg.FrameMetaConf.Schema),
+				zap.String("schema", s.cfg.FrameworkMeta.Schema),
 				zap.Error(err))
 		}
 	}
 	var err error
-	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
+	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameworkMeta)
 	if err != nil {
-		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
+		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameworkMeta), zap.Error(err))
 		return err
 	}
 	// some components depend on this framework meta client
@@ -609,30 +610,30 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("create framework meta client fail", zap.Error(err))
 		return err
 	}
-	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+	log.Info("register framework metastore successfully", zap.Any("config", cfg.FrameworkMeta))
 
 	// register metastore for business
-	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
+	err = s.metaStoreManager.Register(cfg.BusinessMeta.StoreID, cfg.BusinessMeta)
 	if err != nil {
 		return err
 	}
-	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
+	if cfg.BusinessMeta.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for business meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMetaConf)); err != nil {
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMeta)); err != nil {
 			log.Warn("create schema for business metastore fail, but it can be ignored.",
-				zap.String("schema", s.cfg.BusinessMetaConf.Schema),
+				zap.String("schema", s.cfg.BusinessMeta.Schema),
 				zap.Error(err))
 		}
 	}
-	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
+	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMeta)
 	if err != nil {
-		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
+		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMeta), zap.Error(err))
 		return err
 	}
-	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
+	log.Info("register business metastore successfully", zap.Any("config", cfg.BusinessMeta))
 
 	return nil
 }
@@ -799,7 +800,7 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
-	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
+	if s.cfg.BusinessMeta.StoreType == metaModel.StoreTypeMySQL {
 		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
 			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err
@@ -895,7 +896,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
 	if err != nil {
 		return
 	}

@@ -112,12 +112,16 @@ type changefeed struct {
 	// `ddlWg` is used to manage this backend goroutine.
 	ddlWg sync.WaitGroup
 
-	metricsChangefeedBarrierTsGauge       prometheus.Gauge
-	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
-	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
-	metricsChangefeedResolvedTsGauge      prometheus.Gauge
-	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
-	metricsChangefeedTickDuration         prometheus.Observer
+	metricsChangefeedCheckpointTsGauge     prometheus.Gauge
+	metricsChangefeedCheckpointTsLagGauge  prometheus.Gauge
+	metricsChangefeedCheckpointLagDuration prometheus.Observer
+
+	metricsChangefeedResolvedTsGauge       prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
+	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+
+	metricsChangefeedBarrierTsGauge prometheus.Gauge
+	metricsChangefeedTickDuration   prometheus.Observer
 
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
@@ -532,15 +536,21 @@ LOOP:
 }
 
 func (c *changefeed) initMetrics() {
-	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
-		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedCheckpointLagDuration = changefeedCheckpointLagDuration.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
+		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
@@ -597,13 +607,17 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 func (c *changefeed) cleanupMetrics() {
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
+	c.metricsChangefeedCheckpointLagDuration = nil
 
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
+	c.metricsChangefeedResolvedTsLagDuration = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -844,11 +858,17 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
 	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
+
+	checkpointLag := float64(currentTs-phyCkpTs) / 1e3
+	c.metricsChangefeedCheckpointTsLagGauge.Set(checkpointLag)
+	c.metricsChangefeedCheckpointLagDuration.Observe(checkpointLag)
 
 	phyRTs := oracle.ExtractPhysical(resolvedTs)
 	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
-	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+
+	resolvedLag := float64(currentTs-phyRTs) / 1e3
+	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
+	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {

@@ -49,10 +49,8 @@ In this case, we assume three node ips are ip0, ip1 and ip2. Replace them with r
 #### Start Master on Node (ip0)
 
 ```[shell]
-./bin/tiflow master --name=ip0 --config=./deployments/engine/docker-compose/config/master.toml --addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240 --peer-urls 0.0.0.0:8291 --advertise-peer-urls http://${ip0}:8291 --initial-cluster ip0=http://${ip0}:8291,ip1=http://${ip1}:8291,ip2=http://${ip2}:8291
+./bin/tiflow master --config=./deployments/engine/docker-compose/config/master.toml --addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240
 ```
-
-Note that --name can be any names, but has to be different from other two masters.
 
 Deploying masters for ip1 and ip2 are similar.
 

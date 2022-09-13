@@ -52,12 +52,12 @@ func prepareServerEnv(t *testing.T) *Config {
 	cfgTpl := `
 addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
-[framework-metastore-conf]
+[framework-meta]
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 schema = "test0"
-auth.user = "root"
-[business-metastore-conf]
+user = "root"
+[business-meta]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 schema = "test1"
@@ -302,8 +302,8 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		metric := string(body)
-		return strings.Contains(metric, "dataflow_server_master_job_num") &&
-			strings.Contains(metric, "dataflow_server_master_executor_num")
+		return strings.Contains(metric, "tiflow_server_master_job_num") &&
+			strings.Contains(metric, "tiflow_server_master_executor_num")
 	}, time.Second, time.Millisecond*20)
 }
 
