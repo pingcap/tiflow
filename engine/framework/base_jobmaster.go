@@ -201,6 +201,8 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 
 	if isFirstStartUp {
 		if err := d.impl.InitImpl(ctx); err != nil {
+			// Currently we only pass error to error center when calling busniess
+			// API returns error. Business API is also known as XxxImpl.
 			d.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
