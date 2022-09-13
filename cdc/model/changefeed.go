@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -145,18 +146,12 @@ func (info *ChangeFeedInfo) String() (str string) {
 		log.Error("failed to unmarshal changefeed info", zap.Error(err))
 		return
 	}
-	sinkURIParsed, err := url.Parse(clone.SinkURI)
+
+	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
 	if err != nil {
-		log.Error("failed to parse sink URI", zap.Error(err))
-		return
+		log.Error("failed to mask sink uri", zap.Error(err))
 	}
-	if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
-		sinkURIParsed.User = url.UserPassword("username", "password")
-	}
-	if sinkURIParsed.Host != "" {
-		sinkURIParsed.Host = "***"
-	}
-	clone.SinkURI = sinkURIParsed.String()
+
 	str, err = clone.Marshal()
 	if err != nil {
 		log.Error("failed to marshal changefeed info", zap.Error(err))
