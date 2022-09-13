@@ -46,20 +46,20 @@ func TestCheckSafetyOfStartTs(t *testing.T) {
 		"changefeed2", TTL, 65)
 	require.Nil(t, err)
 	require.Equal(t, pdCli.serviceSafePoint, map[string]uint64{
-		"service1":                           60,
-		"service2":                           80,
-		"service3":                           70,
-		"ticdc-creating-default_changefeed2": 65,
+		"service1":                   60,
+		"service2":                   80,
+		"service3":                   70,
+		"ticdc-creating-changefeed2": 65,
 	})
 	err = UndoEnsureChangefeedStartTsSafety(ctx, pdCli,
 		"ticdc-creating-",
 		"changefeed2")
 	require.Nil(t, err)
 	require.Equal(t, pdCli.serviceSafePoint, map[string]uint64{
-		"service1":                           60,
-		"service2":                           80,
-		"service3":                           70,
-		"ticdc-creating-default_changefeed2": math.MaxUint64,
+		"service1":                   60,
+		"service2":                   80,
+		"service3":                   70,
+		"ticdc-creating-changefeed2": math.MaxUint64,
 	})
 
 	pdCli.enableLeaderSwitch = true
