@@ -22,14 +22,14 @@ var (
 	serverFactory          = promutil.NewFactory4Framework()
 	serverExecutorNumGauge = serverFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "dataflow",
+			Namespace: "tiflow",
 			Subsystem: "server_master",
 			Name:      "executor_num",
 			Help:      "number of executor servers in this cluster",
 		}, []string{"status"})
 	serverJobNumGauge = serverFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "dataflow",
+			Namespace: "tiflow",
 			Subsystem: "server_master",
 			Name:      "job_num",
 			Help:      "number of jobs in this cluster",

@@ -182,8 +182,11 @@ type ManagerImpl struct {
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
 
-	writer        writer.RedoLogWriter
-	logBuffer     *chann.Chann[cacheEvents]
+	rwlock    sync.RWMutex
+	writer    writer.RedoLogWriter
+	logBuffer *chann.Chann[cacheEvents]
+	closed    int32
+
 	flushing      int64
 	lastFlushTime time.Time
 
@@ -333,16 +336,18 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case m.logBuffer.In() <- cacheEvents{
-		tableID:   tableID,
-		rows:      rows,
-		eventType: model.MessageTypeRow,
-	}:
-	}
-	return nil
+	return m.withLock(func(m *ManagerImpl) error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case m.logBuffer.In() <- cacheEvents{
+			tableID:   tableID,
+			rows:      rows,
+			eventType: model.MessageTypeRow,
+		}:
+		}
+		return nil
+	})
 }
 
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.
@@ -351,17 +356,18 @@ func (m *ManagerImpl) UpdateResolvedTs(
 	tableID model.TableID,
 	resolvedTs uint64,
 ) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case m.logBuffer.In() <- cacheEvents{
-		tableID:    tableID,
-		resolvedTs: resolvedTs,
-		eventType:  model.MessageTypeResolved,
-	}:
-	}
-
-	return nil
+	return m.withLock(func(m *ManagerImpl) error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case m.logBuffer.In() <- cacheEvents{
+			tableID:    tableID,
+			resolvedTs: resolvedTs,
+			eventType:  model.MessageTypeResolved,
+		}:
+		}
+		return nil
+	})
 }
 
 // UpdateCheckpointTs updates checkpoint to the manager.
@@ -376,7 +382,7 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return m.writer.SendDDL(ctx, DDLToRedo(ddl))
+	return m.withLock(func(m *ManagerImpl) error { return m.writer.SendDDL(ctx, DDLToRedo(ddl)) })
 }
 
 // GetResolvedTs returns the resolved ts of a table
@@ -456,7 +462,7 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	common.RedoFlushLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
-	return m.writer.DeleteAllLogs(ctx)
+	return m.withLock(func(m *ManagerImpl) error { return m.writer.DeleteAllLogs(ctx) })
 }
 
 func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
@@ -537,7 +543,9 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
 		metaCheckpoint, metaResolved := m.prepareForFlushMeta()
-		err := m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
+		err := m.withLock(func(m *ManagerImpl) error {
+			return m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
+		})
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
 			handleErr(err)
@@ -571,6 +579,10 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer func() {
 		ticker.Stop()
+
+		m.rwlock.Lock()
+		defer m.rwlock.Unlock()
+		atomic.StoreInt32(&m.closed, 1)
 
 		m.logBuffer.Close()
 		for range m.logBuffer.Out() {
@@ -659,4 +671,13 @@ func (m *ManagerImpl) bgGC(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (m *ManagerImpl) withLock(action func(m *ManagerImpl) error) error {
+	m.rwlock.RLock()
+	defer m.rwlock.RUnlock()
+	if atomic.LoadInt32(&m.closed) != 0 {
+		return cerror.ErrRedoWriterStopped.GenWithStack("redo manager is stopped")
+	}
+	return action(m)
 }

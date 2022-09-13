@@ -82,7 +82,7 @@ type TableMeta struct {
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline interface {
 	// ID returns the ID of source table and mark table
-	ID() (tableID, markTableID int64)
+	ID() (tableID int64)
 	// Name returns the quoted schema and table name
 	Name() string
 	// ResolvedTs returns the resolved ts in this table pipeline
@@ -107,6 +107,9 @@ type TablePipeline interface {
 	Wait()
 	// MemoryConsumption return the memory consumption in bytes
 	MemoryConsumption() uint64
+
+	// RemainEvents return the amount of kv events remain in sorter.
+	RemainEvents() int64
 }
 
 // TODO find a better name or avoid using an interface

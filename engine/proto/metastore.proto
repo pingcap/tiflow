@@ -2,7 +2,9 @@ syntax = "proto3";
 
 package enginepb;
 
-import "error.proto";
+import "engine/proto/error.proto";
+
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
 enum StoreType {
     ServiceDiscovery = 0;

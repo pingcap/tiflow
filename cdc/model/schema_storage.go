@@ -16,13 +16,11 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
-	"go.uber.org/zap"
 )
 
 const (
@@ -138,7 +136,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("wrapped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 

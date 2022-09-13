@@ -59,6 +59,10 @@ type pullerImpl struct {
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	initialized  int64
+
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
+	tableName  string
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -72,6 +76,8 @@ func New(ctx context.Context,
 	spans []regionspan.Span,
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -86,7 +92,7 @@ func New(ctx context.Context,
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
-		ctx, pdCli, grpcPool, regionCache, pdClock, changefeed, cfg)
+		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName)
 	p := &pullerImpl{
 		kvCli:        kvCli,
 		kvStorage:    tikvStorage,
@@ -96,6 +102,9 @@ func New(ctx context.Context,
 		tsTracker:    tsTracker,
 		resolvedTs:   checkpointTs,
 		initialized:  0,
+		changefeed:   changefeed,
+		tableID:      tableID,
+		tableName:    tableName,
 	}
 	return p
 }
@@ -108,36 +117,32 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
+		p.changefeed, contextutil.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, eventCh)
 		})
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	tableID, _ := contextutil.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricTxnCollectCounterKv := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		eventChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		memBufferSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	}()
 
 	lastResolvedTs := p.checkpointTs
@@ -152,12 +157,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
-					zap.Reflect("row", raw),
+					zap.String("namespace", p.changefeed.Namespace),
+					zap.String("changefeed", p.changefeed.ID),
+					zap.Int64("tableID", p.tableID),
+					zap.String("tableName", p.tableName),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
-					zap.Int64("tableID", tableID))
+					zap.Any("row", raw))
 				return nil
 			}
 			select {
@@ -195,11 +201,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Reflect("resolved", e.Resolved),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("spans", p.spans),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
+						zap.Int64("tableID", p.tableID),
+						zap.String("tableName", p.tableName),
+						zap.Any("resolved", e.Resolved),
+						zap.Any("spans", p.spans),
 					)
 				}
 				// Forward is called in a single thread
@@ -216,12 +223,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
+						zap.Int64("tableID", p.tableID),
+						zap.String("tableName", p.tableName),
+						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Duration("duration", time.Since(start)),
-						zap.Int64("tableID", tableID),
-						zap.Strings("spans", spans),
-						zap.Uint64("resolvedTs", resolvedTs))
+						zap.Strings("spans", spans))
 				}
 				if !initialized || resolvedTs == lastResolvedTs {
 					continue

@@ -307,6 +307,13 @@ func TestValidatorDoValidate(t *testing.T) {
 		tableNameInfo2  = filter.Table{Schema: schemaName, Name: tableName2}
 		tableNameInfo3  = filter.Table{Schema: schemaName, Name: tableName3}
 	)
+	createAST1, err := parseSQL(createTableSQL)
+	require.NoError(t, err)
+	createAST2, err := parseSQL(createTableSQL2)
+	require.NoError(t, err)
+	createAST3, err := parseSQL(createTableSQL3)
+	require.NoError(t, err)
+
 	cfg := genSubtaskConfig(t)
 	_, dbMock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
@@ -357,13 +364,13 @@ func TestValidatorDoValidate(t *testing.T) {
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn, log.L())
+	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, syncerObj.downstreamTrackConn, log.L())
 	defer syncerObj.schemaTracker.Close()
 	require.NoError(t, err)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL2))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL3))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createAST1))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createAST2))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createAST3))
 
 	generator := genEventGenerator(t)
 	rotateEvent, _, err := generator.Rotate("mysql-bin.000001", 0)
@@ -463,7 +470,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	allEvents = append(allEvents, updateEvents...)
 	allEvents = append(allEvents, deleteEvents...)
 	mockStreamerProducer := &MockStreamProducer{events: allEvents}
-	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 
 	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))

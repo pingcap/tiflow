@@ -1,0 +1,856 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "engine/proto/datarw.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "DataRWService"
+    },
+    {
+      "name": "ExecutorService"
+    },
+    {
+      "name": "BrokerService"
+    },
+    {
+      "name": "Discovery"
+    },
+    {
+      "name": "TaskScheduler"
+    },
+    {
+      "name": "JobManager"
+    },
+    {
+      "name": "ResourceManager"
+    },
+    {
+      "name": "TestService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/v1/executors": {
+      "get": {
+        "summary": "ListExecutors lists all executors.\nExecutors will use this API to discover other executors.\nCurrently, we assume that there aren't too many executors.\nIf the number of executors becomes very large in the future,\nwe can consider a mechanism to watch the changes of the executors.",
+        "operationId": "Discovery_ListExecutors",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListExecutorsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
+    "/api/v1/executors/register": {
+      "post": {
+        "operationId": "Discovery_RegisterExecutor",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbExecutor"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "executor",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/enginepbExecutor"
+            }
+          }
+        ],
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "JobManager_ListJobs",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListJobsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page_size",
+            "description": "The maximum number of jobs to return.\nIf it is unspecified or less than 1, currently server will return all jobs.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "description": "The page token, returned by a previous call, to request the next page of results.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "JobManager"
+        ]
+      },
+      "post": {
+        "operationId": "JobManager_CreateJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbJob"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/enginepbJob"
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "JobManager"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}": {
+      "get": {
+        "operationId": "JobManager_GetJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbJob"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "JobManager"
+        ]
+      },
+      "delete": {
+        "operationId": "JobManager_DeleteJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "JobManager"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}/cancel": {
+      "post": {
+        "summary": "NOTE: for the compability of existing openapi(ticdc) format, \nwe use `/cancel` but not `:cancel`(google api suggested) \nrefer to: https://cloud.google.com/apis/design/custom_methods",
+        "operationId": "JobManager_CancelJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbJob"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": "[^/]+"
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "JobManager"
+        ]
+      }
+    },
+    "/api/v1/leader": {
+      "get": {
+        "operationId": "Discovery_GetLeader",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbGetLeaderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
+    "/api/v1/leader/resign": {
+      "post": {
+        "operationId": "Discovery_ResignLeader",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
+    },
+    "/api/v1/masters": {
+      "get": {
+        "operationId": "Discovery_ListMasters",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/enginepbListMastersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Discovery"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "JobState": {
+      "type": "string",
+      "enum": [
+        "Created",
+        "Running",
+        "Failed",
+        "Finished",
+        "Canceling",
+        "Canceled"
+      ]
+    },
+    "RecordRecordType": {
+      "type": "string",
+      "enum": [
+        "DDL"
+      ]
+    },
+    "SelectorOp": {
+      "type": "string",
+      "enum": [
+        "Eq",
+        "Neq",
+        "Regex"
+      ]
+    },
+    "enginepbCheckDirResponse": {
+      "type": "object",
+      "properties": {
+        "err_msg": {
+          "type": "string"
+        },
+        "err_file_idx": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "enginepbConfirmDispatchTaskResponse": {
+      "type": "object"
+    },
+    "enginepbCreateResourceResponse": {
+      "type": "object"
+    },
+    "enginepbError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/enginepbErrorCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "not_leader": {
+          "$ref": "#/definitions/enginepbNotLeader"
+        }
+      }
+    },
+    "enginepbErrorCode": {
+      "type": "string",
+      "enum": [
+        "MasterNotLeader",
+        "UnknownExecutor",
+        "NotEnoughResource",
+        "SubJobSubmitFailed",
+        "TombstoneExecutor",
+        "SubJobBuildFailed",
+        "BuildGrpcConnFailed",
+        "InvalidMetaStoreType",
+        "MasterNotReady",
+        "UnKnownJob",
+        "MetaStoreNotExists",
+        "MetaStoreSerializeFail",
+        "UnexpectedJobStatus",
+        "UnknownError"
+      ],
+      "description": " - MasterNotLeader: This master is not leader right now.\n - UnknownExecutor: Executor has been removed so it can't be recognized.\n - NotEnoughResource: no enough resource can be used.\n - SubJobSubmitFailed: submit subjob failed\n - TombstoneExecutor: TombstoneExecutor\n - BuildGrpcConnFailed: create gRPC connection failed\n - InvalidMetaStoreType: unknown or upsupported metastore type\n - MasterNotReady: MasterNotReady means the master is staring up, and not ready to serve\n - MetaStoreNotExists: metastore not exists\n - MetaStoreSerializeFail: metastore serialize fail\n - UnexpectedJobStatus: job status is not expected for the operation."
+    },
+    "enginepbExecWorkload": {
+      "type": "object",
+      "properties": {
+        "tp": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "usage": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "enginepbExecWorkloadResponse": {
+      "type": "object",
+      "properties": {
+        "err": {
+          "$ref": "#/definitions/enginepbError"
+        }
+      }
+    },
+    "enginepbExecutor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string",
+          "description": "name is the readable name of the executor."
+        },
+        "address": {
+          "type": "string"
+        },
+        "capability": {
+          "type": "string",
+          "format": "int64"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "enginepbGenerateDataResponse": {
+      "type": "object",
+      "properties": {
+        "err_msg": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbGetLeaderResponse": {
+      "type": "object",
+      "properties": {
+        "advertise_addr": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbHeartbeatResponse": {
+      "type": "object",
+      "properties": {
+        "err": {
+          "$ref": "#/definitions/enginepbError"
+        },
+        "leader": {
+          "type": "string"
+        },
+        "addrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "enginepbIsReadyResponse": {
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        }
+      }
+    },
+    "enginepbJob": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/enginepbJobType"
+        },
+        "state": {
+          "$ref": "#/definitions/JobState"
+        },
+        "config": {
+          "type": "string",
+          "format": "byte"
+        },
+        "detail": {
+          "type": "string",
+          "format": "byte",
+          "readOnly": true
+        },
+        "error": {
+          "$ref": "#/definitions/enginepbError"
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbSelector"
+          }
+        }
+      }
+    },
+    "enginepbJobType": {
+      "type": "string",
+      "enum": [
+        "CVSDemo",
+        "DM",
+        "CDC",
+        "FakeJob"
+      ]
+    },
+    "enginepbListExecutorsResponse": {
+      "type": "object",
+      "properties": {
+        "executors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbExecutor"
+          }
+        }
+      }
+    },
+    "enginepbListFilesResponse": {
+      "type": "object",
+      "properties": {
+        "fileNum": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "enginepbListJobsResponse": {
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbJob"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "description": "A token to retrieve next page of results."
+        }
+      }
+    },
+    "enginepbListMastersResponse": {
+      "type": "object",
+      "properties": {
+        "masters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbMaster"
+          }
+        }
+      }
+    },
+    "enginepbMaster": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "description": "name is the readable name of the master."
+        },
+        "address": {
+          "type": "string"
+        },
+        "is_leader": {
+          "type": "boolean"
+        }
+      }
+    },
+    "enginepbNotLeader": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "string",
+          "title": "The requested server address"
+        },
+        "leader": {
+          "type": "string",
+          "title": "leader address"
+        }
+      }
+    },
+    "enginepbPreDispatchTaskResponse": {
+      "type": "object"
+    },
+    "enginepbProjectInfo": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbQueryMetaStoreResponse": {
+      "type": "object",
+      "properties": {
+        "err": {
+          "$ref": "#/definitions/enginepbError"
+        },
+        "address": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbQueryResourceResponse": {
+      "type": "object",
+      "properties": {
+        "creator_executor": {
+          "type": "string"
+        },
+        "job_id": {
+          "type": "string"
+        },
+        "creator_worker_id": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbReadLinesResponse": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "val": {
+          "type": "string",
+          "format": "byte"
+        },
+        "isEof": {
+          "type": "boolean"
+        },
+        "errMsg": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbRecord": {
+      "type": "object",
+      "properties": {
+        "tp": {
+          "$ref": "#/definitions/RecordRecordType"
+        },
+        "schema_ver": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tid": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "gtid": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "pk": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "time_tracer": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "int64"
+          },
+          "title": "for record time"
+        },
+        "err": {
+          "$ref": "#/definitions/enginepbError",
+          "title": "error"
+        }
+      }
+    },
+    "enginepbRegisterMetaStoreResponse": {
+      "type": "object",
+      "properties": {
+        "err": {
+          "$ref": "#/definitions/enginepbError"
+        }
+      }
+    },
+    "enginepbRemoveLocalResourceResponse": {
+      "type": "object"
+    },
+    "enginepbRemoveResourceResponse": {
+      "type": "object"
+    },
+    "enginepbResourceKey": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "resource_id": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbScheduleTaskResponse": {
+      "type": "object",
+      "properties": {
+        "executor_id": {
+          "type": "string"
+        },
+        "executor_addr": {
+          "type": "string"
+        }
+      }
+    },
+    "enginepbSelector": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/definitions/SelectorOp"
+        }
+      }
+    },
+    "enginepbStoreType": {
+      "type": "string",
+      "enum": [
+        "SystemMetaStore",
+        "AppMetaStore"
+      ]
+    },
+    "enginepbWriteLinesResponse": {
+      "type": "object",
+      "properties": {
+        "err_msg": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

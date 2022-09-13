@@ -27,16 +27,19 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var globalModels = []interface{}{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
-	&model.LogicEpoch{},
-	&frameModel.MasterMetaKVData{},
+	&frameModel.MasterMeta{},
 	&frameModel.WorkerStatus{},
 	&resModel.ResourceMeta{},
+	&model.LogicEpoch{},
+	&model.JobOp{},
+	&execModel.Executor{},
 }
 
 // TODO: retry and idempotent??
@@ -70,6 +73,8 @@ type Client interface {
 	WorkerClient
 	// resource meta
 	ResourceClient
+	// job ops
+	JobOpClient
 }
 
 // ProjectClient defines interface that manages project in metastore
@@ -91,14 +96,14 @@ type ProjectOperationClient interface {
 
 // JobClient defines interface that manages job in metastore
 type JobClient interface {
-	UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error
-	UpdateJob(ctx context.Context, job *frameModel.MasterMetaKVData) error
+	UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error
+	UpdateJob(ctx context.Context, job *frameModel.MasterMeta) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
 
-	GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMetaKVData, error)
-	QueryJobs(ctx context.Context) ([]*frameModel.MasterMetaKVData, error)
-	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMetaKVData, error)
-	QueryJobsByStatus(ctx context.Context, jobID string, status int) ([]*frameModel.MasterMetaKVData, error)
+	GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMeta, error)
+	QueryJobs(ctx context.Context) ([]*frameModel.MasterMeta, error)
+	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMeta, error)
+	QueryJobsByState(ctx context.Context, jobID string, state int) ([]*frameModel.MasterMeta, error)
 }
 
 // WorkerClient defines interface that manages worker in metastore
@@ -108,7 +113,7 @@ type WorkerClient interface {
 	DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error)
 	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*frameModel.WorkerStatus, error)
 	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*frameModel.WorkerStatus, error)
-	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*frameModel.WorkerStatus, error)
+	QueryWorkersByState(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error)
 }
 
 // ResourceClient defines interface that manages resource in metastore
@@ -128,6 +133,14 @@ type ResourceClient interface {
 	DeleteResource(ctx context.Context, resourceKey ResourceKey) (Result, error)
 	DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error)
 	DeleteResourcesByExecutorIDs(ctx context.Context, executorID []engineModel.ExecutorID) (Result, error)
+}
+
+// JobOpClient defines interface that operates job status (upper logic oriented)
+type JobOpClient interface {
+	SetJobNoop(ctx context.Context, jobID string) (Result, error)
+	SetJobCanceling(ctx context.Context, JobID string) (Result, error)
+	SetJobCanceled(ctx context.Context, jobID string) (Result, error)
+	QueryJobOpsByStatus(ctx context.Context, op model.JobOpStatus) ([]*model.JobOp, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -278,7 +291,7 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 
 // ///////////////////////////// Job Operation
 // UpsertJob upsert the jobInfo
-func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
+func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error {
 	if job == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
@@ -295,14 +308,14 @@ func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMet
 }
 
 // UpdateJob update the jobInfo
-func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
+func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMeta) error {
 	if job == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	// expected SQL: UPDATE xxx SET xxx='xxx', updated_at='2013-11-17 21:34:10' WHERE id=xxx;
 	if err := c.db.WithContext(ctx).
-		Model(&frameModel.MasterMetaKVData{}).
+		Model(&frameModel.MasterMeta{}).
 		Where("id = ?", job.ID).
 		Updates(job.Map()).Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
@@ -315,7 +328,7 @@ func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMet
 func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, error) {
 	result := c.db.WithContext(ctx).
 		Where("id = ?", jobID).
-		Delete(&frameModel.MasterMetaKVData{})
+		Delete(&frameModel.MasterMeta{})
 	if result.Error != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -324,8 +337,8 @@ func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, er
 }
 
 // GetJobByID query job by `jobID`
-func (c *metaOpsClient) GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMetaKVData, error) {
-	var job frameModel.MasterMetaKVData
+func (c *metaOpsClient) GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMeta, error) {
+	var job frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
 		Where("id = ?", jobID).
 		First(&job).Error; err != nil {
@@ -340,8 +353,8 @@ func (c *metaOpsClient) GetJobByID(ctx context.Context, jobID string) (*frameMod
 }
 
 // QueryJobsByProjectID query all jobs of projectID
-func (c *metaOpsClient) QueryJobs(ctx context.Context) ([]*frameModel.MasterMetaKVData, error) {
-	var jobs []*frameModel.MasterMetaKVData
+func (c *metaOpsClient) QueryJobs(ctx context.Context) ([]*frameModel.MasterMeta, error) {
+	var jobs []*frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
 		Find(&jobs).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
@@ -351,8 +364,8 @@ func (c *metaOpsClient) QueryJobs(ctx context.Context) ([]*frameModel.MasterMeta
 }
 
 // QueryJobsByProjectID query all jobs of projectID
-func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMetaKVData, error) {
-	var jobs []*frameModel.MasterMetaKVData
+func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMeta, error) {
+	var jobs []*frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
 		Where("project_id = ?", projectID).
 		Find(&jobs).Error; err != nil {
@@ -362,13 +375,13 @@ func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID stri
 	return jobs, nil
 }
 
-// QueryJobsByStatus query all jobs with `status` of the projectID
-func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
-	jobID string, status int,
-) ([]*frameModel.MasterMetaKVData, error) {
-	var jobs []*frameModel.MasterMetaKVData
+// QueryJobsByState query all jobs with `state` of the projectID
+func (c *metaOpsClient) QueryJobsByState(ctx context.Context,
+	jobID string, state int,
+) ([]*frameModel.MasterMeta, error) {
+	var jobs []*frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
-		Where("id = ? AND status = ?", jobID, status).
+		Where("project_id = ? AND state = ?", jobID, state).
 		Find(&jobs).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -449,11 +462,11 @@ func (c *metaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID str
 	return workers, nil
 }
 
-// QueryWorkersByStatus query all workers with specified status of masterID
-func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*frameModel.WorkerStatus, error) {
+// QueryWorkersByState query all workers with specified state of masterID
+func (c *metaOpsClient) QueryWorkersByState(ctx context.Context, masterID string, state int) ([]*frameModel.WorkerStatus, error) {
 	var workers []*frameModel.WorkerStatus
 	if err := c.db.WithContext(ctx).
-		Where("job_id = ? AND status = ?", masterID, status).
+		Where("job_id = ? AND state = ?", masterID, state).
 		Find(&workers).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -639,6 +652,100 @@ func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resModel.Reso
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 	return &ret, nil
+}
+
+// SetJobNoop sets a job noop status if a job op record exists and status is
+// canceling. This API is used when processing a job operation but the metadata
+// of this job is not found (or deleted manually by accident).
+func (c *metaOpsClient) SetJobNoop(ctx context.Context, jobID string) (Result, error) {
+	result := &ormResult{}
+	ops := &model.JobOp{
+		Op: model.JobOpStatusNoop,
+	}
+	exec := c.db.WithContext(ctx).
+		Model(&model.JobOp{}).
+		Where("job_id = ? AND op = ?", jobID, model.JobOpStatusCanceling).
+		Updates(ops.Map())
+	if err := exec.Error; err != nil {
+		return result, errors.WrapError(errors.ErrMetaOpFail, err)
+	}
+	result.rowsAffected = exec.RowsAffected
+	return result, nil
+}
+
+// SetJobCanceling sets a job cancelling status if this op record doesn't exist.
+// If a job cancelling op already exists, does nothing.
+// If the job is already cancelled, return ErrJobAlreadyCanceled error.
+func (c *metaOpsClient) SetJobCanceling(ctx context.Context, jobID string) (Result, error) {
+	result := &ormResult{}
+	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		var ops model.JobOp
+		query := tx.Model(&model.JobOp{}).Where("job_id = ?", jobID)
+		if err := query.Count(&count).Error; err != nil {
+			return errors.WrapError(errors.ErrMetaOpFail, err)
+		}
+		if count > 0 {
+			if err := query.First(&ops).Error; err != nil {
+				return errors.WrapError(errors.ErrMetaOpFail, err)
+			}
+			switch ops.Op {
+			case model.JobOpStatusCanceling:
+				return nil
+			case model.JobOpStatusCanceled:
+				return errors.ErrJobAlreadyCanceled.GenWithStackByArgs(jobID)
+			default:
+			}
+		}
+		ops = model.JobOp{
+			Op:    model.JobOpStatusCanceling,
+			JobID: jobID,
+		}
+		exec := tx.Clauses(
+			clause.OnConflict{
+				Columns:   []clause.Column{{Name: "job_id"}},
+				DoUpdates: clause.AssignmentColumns(model.JobOpUpdateColumns),
+			}).Create(&ops)
+		if err := exec.Error; err != nil {
+			return errors.WrapError(errors.ErrMetaOpFail, err)
+		}
+		result.rowsAffected = exec.RowsAffected
+		return nil
+	})
+	return result, errors.WrapError(errors.ErrMetaOpFail, err)
+}
+
+// SetJobCanceled sets a cancelled status if a cancelling op exists.
+// - If cancelling operation is not found, it can be triggered by unexpected
+//   SetJobCanceled don't make any change and return nil error.
+// - If a job is already cancelled, don't make any change and return nil error.
+func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Result, error) {
+	result := &ormResult{}
+	ops := &model.JobOp{
+		Op: model.JobOpStatusCanceled,
+	}
+	exec := c.db.WithContext(ctx).
+		Model(&model.JobOp{}).
+		Where("job_id = ? AND op = ?", jobID, model.JobOpStatusCanceling).
+		Updates(ops.Map())
+	if err := exec.Error; err != nil {
+		return result, errors.WrapError(errors.ErrMetaOpFail, err)
+	}
+	result.rowsAffected = exec.RowsAffected
+	return result, nil
+}
+
+// QueryJobOpsByStatus query all jobOps with given `op`
+func (c *metaOpsClient) QueryJobOpsByStatus(
+	ctx context.Context, op model.JobOpStatus,
+) ([]*model.JobOp, error) {
+	var ops []*model.JobOp
+	if err := c.db.WithContext(ctx).
+		Where("op = ?", op).
+		Find(&ops).Error; err != nil {
+		return nil, errors.ErrMetaOpFail.Wrap(err)
+	}
+	return ops, nil
 }
 
 // Result defines a query result interface

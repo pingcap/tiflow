@@ -50,9 +50,9 @@ type coordinator struct {
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
 	trans        transport.Transport
-	replicationM *replication.ReplicationManager
+	replicationM *replication.Manager
 	captureM     *member.CaptureManager
-	schedulerM   *scheduler.SchedulerManager
+	schedulerM   *scheduler.Manager
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID

@@ -79,7 +79,7 @@ func (t *tablePoint) writeString(buf io.Writer) {
 	}
 	fmt.Fprintf(buf, "location(%s)", t.location)
 	if t.ti != nil {
-		fmt.Fprintf(buf, ", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", t.ti.ID, t.ti.Name, len(t.ti.Columns), len(t.ti.Indices), t.ti.PKIsHandle)
+		fmt.Fprintf(buf, ", tableInfo(Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", t.ti.Name, len(t.ti.Columns), len(t.ti.Indices), t.ti.PKIsHandle)
 	}
 }
 
@@ -163,7 +163,6 @@ func (b *binlogPoint) rollback() {
 	if b.savedPoint.ti != b.flushedPoint.ti {
 		b.savedPoint.ti = b.flushedPoint.ti
 	}
-	return
 }
 
 func (b *binlogPoint) outOfDate() bool {
@@ -204,7 +203,7 @@ func (b *binlogPoint) String() string {
 
 	var buf strings.Builder
 	b.savedPoint.writeString(&buf)
-	buf.WriteString("(flushed ")
+	buf.WriteString(" (flushed ")
 	b.flushedPoint.writeString(&buf)
 	buf.WriteString(")")
 

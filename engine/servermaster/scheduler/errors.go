@@ -23,7 +23,7 @@ import (
 // ErrResourceNotFound indicates that a given resource requirement
 // (usually a local file requirement) cannot be satisfied because
 // the given resource could not be found.
-var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError]()
+var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError](rpcerror.WithName("RequiredResourceNotFoundError"))
 
 // ResourceNotFoundError provides the details of an ErrResourceNotFound.
 type ResourceNotFoundError struct {
@@ -54,7 +54,7 @@ var ErrSelectorUnsatisfied = rpcerror.Normalize[SelectorUnsatisfiedError]()
 type SelectorUnsatisfiedError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.ResourceExhausted]
 
-	Selector label.Selector
+	Selector *label.Selector
 }
 
 // ErrFilterNoResult indicates that a scheduler filter returns an

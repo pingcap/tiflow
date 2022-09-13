@@ -89,7 +89,7 @@ func newUpstream(pdEndpoints []string,
 	}
 }
 
-// NewUpstream4Test new a upstream for unit test.
+// NewUpstream4Test new an upstream for unit test.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(
@@ -112,7 +112,6 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 
 // init initializes the upstream
 func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
-	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	ctx, cancel := context.WithCancel(ctx)
 	up.cancel = cancel
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
@@ -123,6 +122,9 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 
 	up.PDClient, err = pd.NewClientWithContext(
 		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+		// the default `timeout` is 3s, maybe too small if the pd is busy,
+		// set to 10s to avoid frequent timeout.
+		pd.WithCustomTimeoutOption(10*time.Second),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -148,7 +150,6 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		return errors.Trace(err)
 	}
 	up.ID = clusterID
-	log.Info("upstream's PDClient created", zap.Uint64("upstreamID", up.ID))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -166,31 +167,33 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
-	log.Info("upstream's KVStorage created", zap.Uint64("upstreamID", up.ID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.SecurityConfig)
-	log.Info("upstream's GrpcPool created", zap.Uint64("upstreamID", up.ID))
 
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
-	log.Info("upstream's RegionCache created", zap.Uint64("upstreamID", up.ID))
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
 	if err != nil {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
-	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
 
 	up.GCManager = gc.NewManager(gcServiceID, up.PDClient, up.PDClock)
-	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
-	err = pdutil.UpdateMetaLabel(ctx, up.PDClient, up.SecurityConfig)
+	pc, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
+	if err != nil {
+		log.Error("create pd api client failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
+	err = pc.UpdateMetaLabel(ctx)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
 			zap.Uint64("upstreamID", up.ID),
-			zap.Strings("upstramEndpoints", up.PdEndpoints))
+			zap.Strings("upstreamEndpoints", up.PdEndpoints))
 	}
 
 	up.wg.Add(1)

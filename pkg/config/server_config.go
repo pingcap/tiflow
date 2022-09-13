@@ -43,7 +43,7 @@ const (
 	DebugConfigurationItem = "debug"
 
 	// DefaultTableMemoryQuota is the default memory quota for each table.
-	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
+	DefaultTableMemoryQuota = 64 * 1024 * 1024 // 64 MB
 )
 
 var (
@@ -146,6 +146,7 @@ var defaultServerConfig = &ServerConfig{
 
 		EnableSchedulerV3: true,
 		Scheduler:         NewDefaultSchedulerConfig(),
+		EnableNewSink:     true,
 	},
 	ClusterID: "default",
 }

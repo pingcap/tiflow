@@ -37,6 +37,7 @@ type UpstreamCfg struct {
 	ServerID               uint32             `yaml:"server-id" toml:"server-id" json:"server-id"`
 	Flavor                 string             `yaml:"flavor" toml:"flavor" json:"flavor"`
 	EnableGTID             bool               `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+	CaseSensitive          bool               `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
 }
 
 func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
@@ -44,6 +45,7 @@ func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
 	u.ServerID = from.ServerID
 	u.Flavor = from.Flavor
 	u.EnableGTID = from.EnableGTID
+	u.CaseSensitive = from.CaseSensitive
 }
 
 func (u *UpstreamCfg) toDMSourceConfig() *dmconfig.SourceConfig {
@@ -73,12 +75,10 @@ func (u *UpstreamCfg) adjust() error {
 // It represents a DM subtask with multiple source configs embedded as Upstreams.
 // DISCUSS: support command line args. e.g. --start-time.
 type JobCfg struct {
-	Name                string                                `yaml:"name" toml:"name" json:"name"`
 	TaskMode            string                                `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
 	ShardMode           string                                `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
 	IgnoreCheckingItems []string                              `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	Timezone            string                                `yaml:"timezone" toml:"timezone" json:"timezone"`
-	CaseSensitive       bool                                  `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
 	CollationCompatible string                                `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 	TargetDB            *dmconfig.DBConfig                    `yaml:"target-database" toml:"target-database" json:"target-database"`
 	ShadowTableRules    []string                              `yaml:"shadow-table-rules" toml:"shadow-table-rules" json:"shadow-table-rules"`
@@ -188,6 +188,9 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
 	dmTaskCfg := dmconfig.NewTaskConfig()
+	// set task name for verify
+	// we will replace task name with job-id when create dm-worker
+	dmTaskCfg.Name = "engine_task"
 
 	// Copy all the fields contained in dmTaskCfg.
 	content, err := c.Yaml()
@@ -251,15 +254,14 @@ type TaskCfg JobCfg
 
 // ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
-func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
+func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}
 	cfg.ShardMode = c.ShardMode
 	cfg.OnlineDDL = c.OnlineDDL
 	cfg.ShadowTableRules = c.ShadowTableRules
 	cfg.TrashTableRules = c.TrashTableRules
-	cfg.CaseSensitive = c.CaseSensitive
 	cfg.CollationCompatible = c.CollationCompatible
-	cfg.Name = c.Name
+	cfg.Name = jobID
 	cfg.Mode = c.TaskMode
 	cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 	cfg.MetaSchema = c.MetaSchema
@@ -274,6 +276,7 @@ func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg.From = *c.Upstreams[0].DBCfg
 	cfg.ServerID = c.Upstreams[0].ServerID
 	cfg.Flavor = c.Upstreams[0].Flavor
+	cfg.CaseSensitive = c.Upstreams[0].CaseSensitive
 
 	cfg.RouteRules = make([]*router.TableRule, len(c.Upstreams[0].RouteRules))
 	for j, name := range c.Upstreams[0].RouteRules {

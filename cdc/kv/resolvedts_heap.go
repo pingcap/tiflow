@@ -19,18 +19,13 @@ import (
 )
 
 type tsItem struct {
-	sortByEvTime bool
-	resolvedTs   uint64
-	eventTime    time.Time
-	penalty      int
+	resolvedTs uint64
+	eventTime  time.Time
+	penalty    int
 }
 
 func newResolvedTsItem(ts uint64) tsItem {
 	return tsItem{resolvedTs: ts, eventTime: time.Now()}
-}
-
-func newEventTimeItem() tsItem {
-	return tsItem{sortByEvTime: true, eventTime: time.Now()}
 }
 
 // regionTsInfo contains region resolvedTs information
@@ -45,9 +40,6 @@ type regionTsHeap []*regionTsInfo
 func (rh regionTsHeap) Len() int { return len(rh) }
 
 func (rh regionTsHeap) Less(i, j int) bool {
-	if rh[i].ts.sortByEvTime {
-		return rh[i].ts.eventTime.Before(rh[j].ts.eventTime)
-	}
 	return rh[i].ts.resolvedTs < rh[j].ts.resolvedTs
 }
 
@@ -92,23 +84,16 @@ func newRegionTsManager() *regionTsManager {
 func (rm *regionTsManager) Upsert(item *regionTsInfo) {
 	if old, ok := rm.m[item.regionID]; ok {
 		// in a single resolved ts manager, we should not expect a fallback resolved event
-		// but it's ok that we use fallback resolved event to increase penalty
-		if !item.ts.sortByEvTime {
-			if item.ts.resolvedTs <= old.ts.resolvedTs && item.ts.eventTime.After(old.ts.eventTime) {
-				old.ts.penalty++
-				old.ts.eventTime = item.ts.eventTime
-				heap.Fix(&rm.h, old.index)
-			} else if item.ts.resolvedTs > old.ts.resolvedTs {
-				old.ts.resolvedTs = item.ts.resolvedTs
-				old.ts.eventTime = item.ts.eventTime
-				old.ts.penalty = 0
-				heap.Fix(&rm.h, old.index)
-			}
-		} else {
-			if item.ts.eventTime.After(old.ts.eventTime) {
-				old.ts.eventTime = item.ts.eventTime
-				heap.Fix(&rm.h, old.index)
-			}
+		// but, it's ok that we use fallback resolved event to increase penalty
+		if item.ts.resolvedTs <= old.ts.resolvedTs && item.ts.eventTime.After(old.ts.eventTime) {
+			old.ts.penalty++
+			old.ts.eventTime = item.ts.eventTime
+			heap.Fix(&rm.h, old.index)
+		} else if item.ts.resolvedTs > old.ts.resolvedTs {
+			old.ts.resolvedTs = item.ts.resolvedTs
+			old.ts.eventTime = item.ts.eventTime
+			old.ts.penalty = 0
+			heap.Fix(&rm.h, old.index)
 		}
 	} else {
 		heap.Push(&rm.h, item)

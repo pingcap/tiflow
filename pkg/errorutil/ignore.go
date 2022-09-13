@@ -73,11 +73,15 @@ func IsRetryableEtcdError(err error) bool {
 		return true
 	default:
 	}
-	// when the PD instance was deleted from the PD cluster, it may meet error with `raft:stopped`,
+	// when the PD instance was deleted from the PD cluster, it may meet different errors.
 	// retry on such error make cdc robust to PD / ETCD cluster member removal.
 	// we should tolerant such case to make cdc robust to PD / ETCD cluster member change.
 	// see: https://github.com/etcd-io/etcd/blob/ae36a577d7be/raft/node.go#L35
 	if strings.Contains(etcdErr.Error(), "raft: stopped") {
+		return true
+	}
+	// see: https://github.com/pingcap/tiflow/issues/6720
+	if strings.Contains(etcdErr.Error(), "received prior goaway: code: NO_ERROR") {
 		return true
 	}
 	return false

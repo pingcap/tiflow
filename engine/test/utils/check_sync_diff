@@ -14,10 +14,10 @@ fi
 
 PWD=$(pwd)
 binary=$PWD/bin/sync_diff_inspector
-OUTPUT_DIR=/tmp/ticdc_dm_test/output/
+OUTPUT_DIR=/tmp/engine_test/output/
 STDOUT=$workdir/sync_diff_stdout.log
 
-mkdir -p /tmp/ticdc_dm_test
+mkdir -p /tmp/engine_test
 
 cd $workdir
 i=0

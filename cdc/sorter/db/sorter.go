@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
@@ -29,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -87,13 +85,12 @@ type Sorter struct {
 
 // NewSorter creates a new Sorter
 func NewSorter(
-	ctx context.Context, tableID int64, startTs uint64,
+	ctx context.Context, changefeedID model.ChangeFeedID, tableID int64, startTs uint64,
 	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
 	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
 		prometheus.Labels{
 			"namespace": changefeedID.Namespace,
@@ -105,7 +102,7 @@ func NewSorter(
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	metricOutputKV := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-	metricOutputResolved := sorter.InputEventCount.
+	metricOutputResolved := sorter.OutputEventCount.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
@@ -224,28 +221,6 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
 }
 
-// TryAddEntry tries to add an RawKVEntry to the EntryGroup
-func (ls *Sorter) TryAddEntry(
-	ctx context.Context, event *model.PolymorphicEvent,
-) (bool, error) {
-	if atomic.LoadInt32(&ls.closed) != 0 {
-		return false, nil
-	}
-	msg := actormsg.ValueMessage(message.Task{
-		UID:        ls.uid,
-		TableID:    ls.tableID,
-		InputEvent: event,
-	})
-	err := ls.writerRouter.Send(ls.writerActorID, msg)
-	if err != nil {
-		if cerror.ErrMailboxFull.Equal(err) {
-			return false, nil
-		}
-		return false, errors.Trace(err)
-	}
-	return true, nil
-}
-
 // Output returns the sorted raw kv output channel
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
@@ -286,7 +261,4 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
-	log.Info("db sorter: send start ts to reader",
-		zap.Uint64("tableID", ls.common.tableID),
-		zap.Uint64("ts", ts))
 }

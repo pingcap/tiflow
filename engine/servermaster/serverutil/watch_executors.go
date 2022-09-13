@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -37,7 +38,7 @@ type executorWatcher interface {
 }
 
 // executorInfoUser represents an object that uses the information provides
-// by executorWater.
+// by executorWatcher.
 type executorInfoUser interface {
 	UpdateExecutorList(executors map[model.ExecutorID]string) error
 	AddExecutor(executorID model.ExecutorID, addr string) error
@@ -53,7 +54,6 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 
 	watchStart := time.Now()
 	snap, updates, err := watcher.WatchExecutors(ctx)
-	defer updates.Close()
 
 	if duration := time.Since(watchStart); duration >= 100*time.Millisecond {
 		log.Warn("WatchExecutors took too long",
@@ -63,6 +63,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 	if err != nil {
 		return errors.Annotate(err, "watch executors")
 	}
+	defer updates.Close()
 
 	log.Info("update executor list", zap.Any("list", snap))
 	if err := user.UpdateExecutorList(snap); err != nil {
@@ -70,13 +71,19 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 	}
 
 	for {
-		var change model.ExecutorStatusChange
+		var (
+			change model.ExecutorStatusChange
+			ok     bool
+		)
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case change = <-updates.C:
+		case change, ok = <-updates.C:
 		}
 
+		if !ok {
+			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
+		}
 		if change.Tp == model.EventExecutorOnline {
 			err := user.AddExecutor(change.ID, change.Addr)
 			if err != nil {

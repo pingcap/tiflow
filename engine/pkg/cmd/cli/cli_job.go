@@ -110,7 +110,7 @@ func newCmdJob() *cobra.Command {
 	o.addFlags(cmds)
 	cmds.AddCommand(newCmdJobCreate(o))
 	cmds.AddCommand(newCmdJobQuery(o))
-	cmds.AddCommand(newCmdJobPause(o))
+	cmds.AddCommand(newCmdJobCancel(o))
 
 	return cmds
 }

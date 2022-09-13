@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // statusHandler handles process status.
@@ -33,7 +33,7 @@ type statusHandler struct{}
 
 func (h *statusHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	text := utils.GetRawInfo()
+	text := version.GetRawInfo()
 	if _, err := w.Write([]byte(text)); err != nil {
 		log.L().Error("write status response", log.ShortError(err))
 	}

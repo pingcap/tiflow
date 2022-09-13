@@ -17,22 +17,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
-	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/pingcap/tiflow/engine/enginepb"
+	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
 )
 
 func TestDispatchTaskNormal(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	var (
@@ -64,8 +65,6 @@ func TestDispatchTaskNormal(t *testing.T) {
 	err := serviceCli.DispatchTask(context.Background(), args, func() {
 		require.True(t, preDispatchComplete.Load())
 		require.False(t, cbCalled.Swap(true))
-	}, func(error) {
-		require.Fail(t, "not expected")
 	})
 	require.NoError(t, err)
 }
@@ -74,7 +73,7 @@ func TestPreDispatchAborted(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	args := &DispatchTaskArgs{
@@ -84,20 +83,15 @@ func TestPreDispatchAborted(t *testing.T) {
 		WorkerConfig: []byte("testtest"),
 	}
 
-	var abortCalled atomic.Bool
-
 	unknownRPCError := status.Error(codes.Unknown, "fake error")
 	client.EXPECT().PreDispatchTask(gomock.Any(), matchPreDispatchArgs(args)).
 		Return((*enginepb.PreDispatchTaskResponse)(nil), unknownRPCError).Times(1)
 
 	err := serviceCli.DispatchTask(context.Background(), args, func() {
 		t.Fatalf("unexpected callback")
-	}, func(err error) {
-		abortCalled.Swap(true)
 	})
 	require.Error(t, err)
 	require.Regexp(t, "fake error", err)
-	require.True(t, abortCalled.Load())
 }
 
 func TestConfirmDispatchErrorFailFast(t *testing.T) {
@@ -137,7 +131,7 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 	}
 
 	ctrl := gomock.NewController(t)
-	client := pbMock.NewMockExecutorClient(ctrl)
+	client := pbMock.NewMockExecutorServiceClient(ctrl)
 	serviceCli := NewExecutorServiceClient(client)
 
 	for _, tc := range testCases {
@@ -145,7 +139,6 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 			requestID           string
 			preDispatchComplete atomic.Bool
 			timerStarted        atomic.Bool
-			aborted             atomic.Bool
 		)
 
 		args := &DispatchTaskArgs{
@@ -171,16 +164,12 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 		err := serviceCli.DispatchTask(context.Background(), args, func() {
 			require.True(t, preDispatchComplete.Load())
 			require.False(t, timerStarted.Swap(true))
-		}, func(error) {
-			require.False(t, aborted.Swap(true))
 		})
 
 		if tc.isFailFast {
 			require.Error(t, err)
-			require.True(t, aborted.Load())
 		} else {
 			require.NoError(t, err)
-			require.False(t, aborted.Load())
 		}
 	}
 }
