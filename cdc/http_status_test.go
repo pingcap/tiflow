@@ -234,7 +234,9 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		c.Assert(err, check.IsNil)
-		c.Assert(captureInfo.ID, check.Equals, server.capture.Info().ID)
+		id, err := server.capture.Info()
+		c.Assert(err, check.IsNil)
+		c.Assert(captureInfo.ID, check.Equals, id)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -255,7 +257,9 @@ func (s *httpStatusSuite) TestServerTLSWithoutCommonName(c *check.C) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		c.Assert(err, check.IsNil)
-		c.Assert(captureInfo.ID, check.Equals, server.capture.Info().ID)
+		id, err := server.capture.Info()
+		c.Assert(err, check.IsNil)
+		c.Assert(captureInfo.ID, check.Equals, id)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -313,7 +317,9 @@ func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		c.Assert(err, check.IsNil)
-		c.Assert(captureInfo.ID, check.Equals, server.capture.Info().ID)
+		id, err := server.capture.Info()
+		c.Assert(err, check.IsNil)
+		c.Assert(captureInfo.ID, check.Equals, id)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -334,7 +340,9 @@ func (s *httpStatusSuite) TestServerTLSWithCommonName(c *check.C) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		c.Assert(err, check.IsNil)
-		c.Assert(captureInfo.ID, check.Equals, server.capture.Info().ID)
+		id, err := server.capture.Info()
+		c.Assert(err, check.IsNil)
+		c.Assert(captureInfo.ID, check.Equals, id)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
