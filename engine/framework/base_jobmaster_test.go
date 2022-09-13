@@ -35,6 +35,7 @@ import (
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 const (
@@ -192,9 +193,26 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 	require.NoError(t, err)
 
 	ctx := dcontext.Background()
-	ctx = ctx.WithDeps(dp)
-
 	epoch, err := params.FrameMetaClient.GenEpoch(ctx)
+	require.NoError(t, err)
+
+	ctx = ctx.WithDeps(dp)
+	ctx.Environ.NodeID = "test-node-id"
+	ctx.Environ.Addr = "127.0.0.1:10000"
+	ctx.ProjectInfo = tenant.TestProjectInfo
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		Addr:      ctx.Environ.Addr,
+		NodeID:    ctx.Environ.NodeID,
+		ID:        jobMasterID,
+		Type:      FakeJobMaster,
+		Epoch:     epoch,
+		State:     frameModel.MasterStateUninit,
+	}
+	masterMetaBytes, err := masterMeta.Marshal()
+	require.NoError(t, err)
+	ctx.Environ.MasterMetaBytes = masterMetaBytes
+	err = cli.UpsertJob(ctx, masterMeta)
 	require.NoError(t, err)
 
 	return NewBaseJobMaster(
@@ -398,4 +416,94 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
 		jobMaster.mu.Unlock()
 	}
+}
+
+func TestJobMasterInitImplReturnError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	initError := errors.New("init impl error")
+	jobMaster.mu.Lock()
+	jobMaster.On("InitImpl", mock.Anything).Return(initError)
+	jobMaster.mu.Unlock()
+
+	err := jobMaster.base.Init(ctx)
+	require.Error(t, err)
+	require.Equal(t, initError, err)
+
+	jobMaster.mu.Lock()
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Close(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.mu.Unlock()
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, initError.Error(), meta.ErrorMsg)
+}
+
+func TestJobMasterPollReturnError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	jobMaster.mu.Lock()
+	jobMaster.On("InitImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err := jobMaster.base.Init(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.mu.Unlock()
+
+	pollError := errors.New("master impl poll error")
+	jobMaster.mu.Lock()
+	jobMaster.On("Tick", mock.Anything).Return(pollError)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Poll(ctx)
+	require.Error(t, err)
+	require.Equal(t, pollError, err)
+
+	jobMaster.mu.Lock()
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Close(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.mu.Unlock()
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, pollError.Error(), meta.ErrorMsg)
 }
