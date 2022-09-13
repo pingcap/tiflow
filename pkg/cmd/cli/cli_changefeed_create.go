@@ -358,7 +358,6 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 		o.changefeedID,
 		ensureTTL,
 		o.startTs)
-
 }
 
 // validateTargetTs checks if targetTs is a valid value.
