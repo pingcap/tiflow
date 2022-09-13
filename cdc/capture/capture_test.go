@@ -109,7 +109,6 @@ func TestDrainCaptureBySignal(t *testing.T) {
 	case <-time.After(time.Second):
 		require.Fail(t, "timeout")
 	}
-
 }
 
 func TestDrainWaitsOwnerResign(t *testing.T) {
