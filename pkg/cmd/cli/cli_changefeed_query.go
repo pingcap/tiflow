@@ -125,21 +125,16 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-<<<<<<< HEAD
 
 	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
 	for captureID, status := range processorInfos {
 		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
 	}
-
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
-=======
 	info.SinkURI, err = ticdcutil.MaskSinkURI(info.SinkURI)
 	if err != nil {
 		cmd.PrintErr(err)
 	}
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: changefeedDetail.TaskStatus}
->>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815))
+	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 
 	return util.JSONPrint(cmd, meta)
 }
