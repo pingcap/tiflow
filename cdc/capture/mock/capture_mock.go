@@ -52,9 +52,11 @@ func (mr *MockCaptureMockRecorder) AsyncClose() *gomock.Call {
 }
 
 // Drain mocks base method.
-func (m *MockCapture) Drain() {
+func (m *MockCapture) Drain() <-chan struct{} {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Drain")
+	ret := m.ctrl.Call(m, "Drain")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
 }
 
 // Drain indicates an expected call of Drain.

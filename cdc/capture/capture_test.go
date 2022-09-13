@@ -102,8 +102,14 @@ func TestDrainCaptureBySignal(t *testing.T) {
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
-	cp.Drain()
-	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	done := cp.Drain()
+	select {
+	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	case <-time.After(time.Second):
+		require.Fail(t, "timeout")
+	}
+
 }
 
 func TestDrainWaitsOwnerResign(t *testing.T) {
@@ -128,8 +134,13 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 
 	mo.EXPECT().AsyncStop().Do(func() {}).AnyTimes()
 
-	cp.Drain()
-	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	done := cp.Drain()
+	select {
+	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	case <-time.After(time.Second):
+		require.Fail(t, "timeout")
+	}
 }
 
 type mockElection struct {
