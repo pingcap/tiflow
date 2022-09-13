@@ -19366,8 +19366,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
@@ -19552,8 +19552,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [],
@@ -19659,8 +19659,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
@@ -19781,8 +19781,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
