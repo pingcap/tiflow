@@ -2113,7 +2113,7 @@ tags = ["internal", "high"]
 [error.DM-sync-unit-36071]
 message = "your `safe-mode-duration` in task.yaml is set to 0s, the task can't be re-processed without safe mode currently"
 description = ""
-workaround = "Please stop and re-start this task. If you want to start task successfully, you need set `safe-mode-duration` > `0s`."
+workaround = "Please stop and re-start this task. If you want to start task successfully, you need set `safe-mode-duration` greater than `0s`."
 tags = ["internal", "medium"]
 
 [error.DM-dm-master-38001]
