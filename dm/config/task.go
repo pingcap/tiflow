@@ -803,7 +803,7 @@ func (c *TaskConfig) adjust() error {
 			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
 		}
 		if inst.Syncer.SafeModeDuration == "" {
-			inst.Syncer.SafeModeDuration = defaultSafeModeDuration
+			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
 		}
 		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
 			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
@@ -1140,7 +1140,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 // If any default value for new config item is not empty(0 or false or nil),
 // we should change it to empty.
 func (c *SyncerConfigForDowngrade) omitDefaultVals() {
-	if c.SafeModeDuration == DefaultSyncerConfig().SafeModeDuration {
+	if c.SafeModeDuration == strconv.Itoa(2*c.CheckpointFlushInterval)+"s" {
 		c.SafeModeDuration = ""
 	}
 }
@@ -1169,16 +1169,16 @@ type TaskConfigForDowngrade struct {
 	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
 	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
 	Loaders                 map[string]*LoaderConfigForDowngrade `yaml:"loaders"`
+	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers,omitempty"`
 	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
 	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
 	RemoveMeta              bool                                 `yaml:"remove-meta"`
 	// new config item
-	Syncers          map[string]*SyncerConfigForDowngrade `yaml:"syncers,omitempty"`
-	MySQLInstances   []*MySQLInstanceForDowngrade         `yaml:"mysql-instances"`
-	ExprFilter       map[string]*ExpressionFilter         `yaml:"expression-filter,omitempty"`
-	OnlineDDL        bool                                 `yaml:"online-ddl,omitempty"`
-	ShadowTableRules []string                             `yaml:"shadow-table-rules,omitempty"`
-	TrashTableRules  []string                             `yaml:"trash-table-rules,omitempty"`
+	MySQLInstances   []*MySQLInstanceForDowngrade `yaml:"mysql-instances"`
+	ExprFilter       map[string]*ExpressionFilter `yaml:"expression-filter,omitempty"`
+	OnlineDDL        bool                         `yaml:"online-ddl,omitempty"`
+	ShadowTableRules []string                     `yaml:"shadow-table-rules,omitempty"`
+	TrashTableRules  []string                     `yaml:"trash-table-rules,omitempty"`
 }
 
 // NewTaskConfigForDowngrade create new TaskConfigForDowngrade.
