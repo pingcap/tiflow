@@ -349,10 +349,12 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
+			m.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
 	} else {
 		if err := m.Impl.OnMasterRecovered(ctx); err != nil {
+			m.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
 	}
@@ -482,6 +484,7 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	}
 
 	if err := m.Impl.Tick(ctx); err != nil {
+		m.errCenter.OnError(err)
 		return errors.Trace(err)
 	}
 
