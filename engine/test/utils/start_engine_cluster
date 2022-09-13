@@ -12,6 +12,7 @@ while [ $i -le $retry_times ]; do
 	echo "The ${i} times to try to start engine cluster..."
 	run_engine.sh deploy "$@" && break
 	((i++)) || true
+	run_engine.sh stop "$@" || true
 	echo "start engine cluster failed"
 done
 
