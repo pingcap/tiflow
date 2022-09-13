@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"sync"
@@ -58,8 +59,9 @@ func init() {
 func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
-		config.User, config.Password, config.Host, config.Port)
+	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
+		config.User, config.Password, hostPort)
 
 	doFuncInClose := func() {}
 	if config.Security != nil {
