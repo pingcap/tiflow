@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"testing"
 
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/stretchr/testify/require"
 )
@@ -138,4 +139,39 @@ func TestMasterStateIsTerminated(t *testing.T) {
 	for _, tc := range testCases {
 		require.Equal(t, tc.isTerminated, tc.code.IsTerminatedState())
 	}
+}
+
+func TestOrmKeyValues(t *testing.T) {
+	t.Parallel()
+	meta := &MasterMeta{
+		ProjectID: "p-id",
+		ID:        "job-id",
+		Type:      1,
+		NodeID:    "node-id",
+		Epoch:     1,
+		State:     1,
+		Addr:      "127.0.0.1",
+		Config:    []byte{0x11, 0x22},
+		ErrorMsg:  "error message",
+		Detail:    []byte("job detail"),
+	}
+	require.Equal(t, ormModel.KeyValueMap{
+		"node_id": meta.NodeID,
+		"address": meta.Addr,
+		"epoch":   meta.Epoch,
+	}, meta.RefreshValues())
+
+	require.Equal(t, ormModel.KeyValueMap{
+		"state": meta.State,
+	}, meta.UpdateStateValues())
+
+	require.Equal(t, ormModel.KeyValueMap{
+		"error_message": meta.ErrorMsg,
+	}, meta.UpdateErrorValues())
+
+	require.Equal(t, ormModel.KeyValueMap{
+		"state":         meta.State,
+		"error_message": meta.ErrorMsg,
+		"detail":        meta.Detail,
+	}, meta.ExitValues())
 }
