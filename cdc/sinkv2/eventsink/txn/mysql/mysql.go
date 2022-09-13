@@ -35,12 +35,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
 	// Max interval for flushing transactions to the downstream.
-	maxFlushInterval = 100 * time.Millisecond
+	maxFlushInterval = 50 * time.Millisecond
 
 	defaultDMLMaxRetry uint64 = 8
 )
@@ -54,7 +55,9 @@ type mysqlBackend struct {
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
 
-	statistics *metrics.Statistics
+	statistics                          *metrics.Statistics
+	metricTxnSinkDMLBatchCommit prometheus.Observer
+	metricTxnSinkDMLBatchCallback prometheus.Observer
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -89,11 +92,13 @@ func NewMySQLBackends(
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
-			changefeed:  changefeed,
-			db:          db,
-			cfg:         cfg,
-			dmlMaxRetry: defaultDMLMaxRetry,
-			statistics:  statistics,
+			changefeed:                          changefeed,
+			db:                                  db,
+			cfg:                                 cfg,
+			dmlMaxRetry:                         defaultDMLMaxRetry,
+			statistics:                          statistics,
+			metricTxnSinkDMLBatchCommit: metrics.TxnSinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCallback:    metrics.TxnSinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		})
 	}
 
@@ -133,12 +138,19 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
+	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
 		if errors.Cause(err) != context.Canceled {
 			log.Error("execute DMLs failed", zap.Error(err))
 		}
 		return errors.Trace(err)
 	}
+	startCallback := time.Now()
+	for _, callback := range dmls.callbacks {
+		callback()
+	}
+	s.metricTxnSinkDMLBatchCommit.Observe(startCallback.Sub(start).Seconds())
+	s.metricTxnSinkDMLBatchCallback.Observe(time.Since(startCallback).Seconds())
 
 	// Be friently to GC.
 	for i := 0; i < len(s.events); i++ {
@@ -342,9 +354,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
 
-			for _, callback := range dmls.callbacks {
-				callback()
-			}
 			return dmls.rowCount, nil
 		})
 		if err != nil {

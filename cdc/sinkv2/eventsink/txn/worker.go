@@ -50,14 +50,17 @@ type worker struct {
 	metricConflictDetectDuration prometheus.Observer
 	metricTxnWorkerFlushDuration prometheus.Observer
 	metricTxnWorkerBusyRatio     prometheus.Counter
+	metricTxnWorkerHandledRows   prometheus.Counter
 
 	// Fields only used in the background loop.
 	flushInterval     time.Duration
 	timer             *time.Timer
+	hasPending        bool
 	wantMoreCallbacks []func()
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error, workerCount int) *worker {
+	wid := fmt.Sprintf("%d", ID)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
 		ctx:         ctx,
@@ -73,8 +76,11 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerHandledRows:   metrics.TxnWorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
-		flushInterval: backend.MaxFlushInterval(),
+		flushInterval:     backend.MaxFlushInterval(),
+		hasPending:        false,
+		wantMoreCallbacks: make([]func(), 0, 1024),
 	}
 }
 
@@ -117,10 +123,8 @@ func (w *worker) runBackgroundLoop() {
 			zap.Int("workerID", w.ID))
 
 		w.timer = time.NewTimer(w.flushInterval)
-		w.wantMoreCallbacks = make([]func(), 0, 1024)
-
 		var flushTimeSlice, totalTimeSlice time.Duration
-		overseerTimer := time.NewTicker(2 * time.Second)
+		overseerTimer := time.NewTicker(time.Second)
 		startToWork := time.Now()
 		defer overseerTimer.Stop()
 	LOOP:
@@ -137,11 +141,12 @@ func (w *worker) runBackgroundLoop() {
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
-				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
+				w.hasPending = true
+				if w.onEvent(txn) && w.doFlush(&flushTimeSlice, true) {
 					break LOOP
 				}
 			case <-w.timer.C:
-				if w.doFlush(&flushTimeSlice) {
+				if w.doFlush(&flushTimeSlice, false) {
 					break LOOP
 				}
 			case now := <-overseerTimer.C:
@@ -160,47 +165,51 @@ func (w *worker) runBackgroundLoop() {
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-		if !w.timer.Stop() {
-			<-w.timer.C
-		}
 		return true
 	}
 	return false
 }
 
 // doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
-	start := time.Now()
-	defer func() {
-		elapsed := time.Since(start)
-		*flushTimeSlice += elapsed
-		w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
-	}()
+func (w *worker) doFlush(flushTimeSlice *time.Duration, needStopTimer bool) bool {
+	if w.hasPending {
+		start := time.Now()
+		defer func() {
+			elapsed := time.Since(start)
+			*flushTimeSlice += elapsed
+			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+		}()
 
-	if err := w.backend.Flush(w.ctx); err != nil {
-		log.Warn("Transaction sink backend flush fail",
-			zap.String("changefeedID", w.changefeed),
-			zap.Int("workerID", w.ID),
-			zap.Error(err))
-		select {
-		case <-w.ctx.Done():
-		case w.errCh <- err:
+		if err := w.backend.Flush(w.ctx); err != nil {
+			log.Warn("Transaction sink backend flush fail",
+				zap.String("changefeedID", w.changefeed),
+				zap.Int("workerID", w.ID),
+				zap.Error(err))
+			select {
+			case <-w.ctx.Done():
+			case w.errCh <- err:
+			}
+			return true
 		}
-		return true
+		// Flush successfully, call callbacks to notify conflict detector.
+		for _, wantMore := range w.wantMoreCallbacks {
+			wantMore()
+		}
+		w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
+		if cap(w.wantMoreCallbacks) > 1024 {
+			// Resize the buffer if it's too big.
+			w.wantMoreCallbacks = make([]func(), 0, 1024)
+		}
 	}
 
-	// Flush successfully, call callbacks to notify conflict detector.
-	for _, wantMore := range w.wantMoreCallbacks {
-		wantMore()
-	}
-	w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
-	if cap(w.wantMoreCallbacks) > 1024 {
-		// Resize the buffer if it's too big.
-		w.wantMoreCallbacks = make([]func(), 0, 1024)
+	if needStopTimer && !w.timer.Stop() {
+		<-w.timer.C
 	}
 
 	w.timer.Reset(w.flushInterval)
+	w.hasPending = false
 	return false
 }

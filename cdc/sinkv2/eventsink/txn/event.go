@@ -16,6 +16,7 @@ package txn
 import (
 	"encoding/binary"
 	"hash/crc64"
+	"math"
 	"time"
 
 	"github.com/pingcap/log"
@@ -41,33 +42,29 @@ func (e *txnEvent) ConflictKeys() []int64 {
 	if len(e.conflictKeys) > 0 {
 		return e.conflictKeys
 	}
-
-	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
-	e.conflictKeys = make([]int64, 0, len(keys))
-	for _, key := range keys {
-		hasher := crc64.New(crcTable)
-		if _, err := hasher.Write(key); err != nil {
-			log.Panic("crc64 hasher fail")
-		}
-		e.conflictKeys = append(e.conflictKeys, int64(hasher.Sum64()))
-	}
+	e.conflictKeys = genTxnKeys(e.TxnCallbackableEvent.Event, math.MaxInt64)
 	return e.conflictKeys
 }
 
-func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
+// genTxnKeys returns hash keys for `txn`. All keys are in [0, numSlots).
+func genTxnKeys(txn *model.SingleTableTxn, numSlots int64) []int64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
-	keysSet := make(map[string]struct{}, len(txn.Rows))
+	hashRes := make(map[int64]struct{}, len(txn.Rows))
 	for _, row := range txn.Rows {
-		rowKeys := genRowKeys(row)
-		for _, key := range rowKeys {
-			keysSet[string(key)] = struct{}{}
+		hasher := crc64.New(crcTable)
+		for _, key := range genRowKeys(row) {
+			if _, err := hasher.Write(key); err != nil {
+				log.Panic("crc64 hasher fail")
+			}
 		}
+		hash := hasher.Sum64() % uint64(numSlots)
+		hashRes[int64(hash)] = struct{}{}
 	}
-	keys := make([][]byte, 0, len(keysSet))
-	for key := range keysSet {
-		keys = append(keys, []byte(key))
+	keys := make([]int64, 0, len(hashRes))
+	for key := range hashRes {
+		keys = append(keys, key)
 	}
 	return keys
 }
