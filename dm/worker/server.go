@@ -461,8 +461,6 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	s.closeMu.Lock()
-	defer s.closeMu.Unlock()
 
 	if s.closed.Load() {
 		return
@@ -491,6 +489,8 @@ func (s *Server) doClose() {
 
 // Close closes the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
 	if s.etcdClient != nil {
