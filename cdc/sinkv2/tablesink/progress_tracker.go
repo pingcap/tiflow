@@ -33,7 +33,6 @@ const (
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
-
 	// A progressTracker contains several internal fixed-length buffers.
 	defaultBufferSize uint64 = 1024 * 1024
 )
@@ -60,7 +59,7 @@ type progressTracker struct {
 	// tableID is the table ID of the table sink.
 	tableID model.TableID
 
-	// Internal Buffer size.
+	// Internal Buffer size. Modified in tests only.
 	bufferSize uint64
 
 	// closed is used to indicate the progress tracker is closed.
@@ -69,7 +68,7 @@ type progressTracker struct {
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
 
-	// Used to generated the next eventID.
+	// Used to generate the next eventID.
 	nextEventID uint64
 
 	// Every received event is a bit in `pendingEvents`.
@@ -116,16 +115,23 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 
 	bufferCount := len(r.pendingEvents)
 	if bufferCount == 0 || (uint64(len(r.pendingEvents[bufferCount-1])) == r.bufferSize && bit == 0) {
+		// If there is no buffer or the last one is full, we need to allocate a new one.
 		buffer := make([]uint64, 0, r.bufferSize)
 		r.pendingEvents = append(r.pendingEvents, buffer)
 		bufferCount += 1
 	}
 
 	if bit == 0 {
+		// If bit is 0 it means we need to append a new uint64 word for the event.
 		r.pendingEvents[bufferCount-1] = append(r.pendingEvents[bufferCount-1], 0)
 	}
 	lastBuffer := r.pendingEvents[bufferCount-1]
 
+	// Set the corresponding bit to 1.
+	// For example, if the eventID is 3, the bit is 3 % 64 = 3.
+	// 0000000000000000000000000000000000000000000000000000000000000000 ->
+	// 0000000000000000000000000000000000000000000000000000000000001000
+	// When we advance the progress, we can try to find the first 0 bit to indicate the progress.
 	postEventFlush = func() { stdatomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
 	return
 }
@@ -153,6 +159,9 @@ func (r *progressTracker) advance() model.ResolvedTs {
 
 	// `pendingEvents` is like a 3-dimo bit array. To access a given bit in the array,
 	// use `pendingEvents[idx1][idx2][idx3]`.
+	// The first index is used to access the buffer.
+	// The second index is used to access the uint64 in the buffer.
+	// The third index is used to access the bit in the uint64.
 	offset := r.nextToResolvePos - r.nextToReleasePos
 	idx1 := offset / (r.bufferSize * 64)
 	idx2 := offset % (r.bufferSize * 64) / 64
@@ -166,6 +175,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 
 		currBitMap := stdatomic.LoadUint64(&r.pendingEvents[idx1][idx2])
 		if currBitMap == math.MaxUint64 {
+			// Move to the next uint64 word (maybe in the next buffer).
 			idx2 += 1
 			if idx2 >= r.bufferSize {
 				idx2 = 0
@@ -174,6 +184,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 			r.nextToResolvePos += 64 - idx3
 			idx3 = 0
 		} else {
+			// Try to find the first 0 bit in the word.
 			for i := idx3; i < 64; i++ {
 				if currBitMap&uint64(1<<i) == 0 {
 					r.nextToResolvePos += i - idx3
@@ -184,6 +195,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		}
 	}
 
+	// Try to advance resolved timestamp based on `nextToResolvePos`.
 	if r.nextToResolvePos > 0 {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
@@ -199,6 +211,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		}
 	}
 
+	// If a buffer is finished, release it.
 	for r.nextToResolvePos-r.nextToReleasePos >= r.bufferSize*64 {
 		r.nextToReleasePos += r.bufferSize * 64
 		r.pendingEvents = r.pendingEvents[1:]
