@@ -189,7 +189,6 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeDurationSetBeginLoc=return()"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# worker1 -> source1
@@ -357,7 +356,8 @@ function run() {
 cleanup_data safe_mode_target
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-run $*
+# run $*
+safe_mode_duration
 cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

@@ -16,7 +16,6 @@ package syncer
 import (
 	"time"
 
-	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
@@ -78,9 +77,6 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	}
 	exitPoint := s.checkpoint.SafeModeExitPoint()
 	beginLocation := s.checkpoint.GlobalPoint()
-	failpoint.Inject("SafeModeDurationSetBeginLoc", func() {
-		beginLocation = binlog.MustZeroLocation(mysql.MySQLFlavor)
-	})
 	if exitPoint != nil {
 		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exitPoint", exitPoint), zap.Stringer("beginLocation", beginLocation))
 		if binlog.CompareLocation(*exitPoint, beginLocation, s.cfg.EnableGTID) == 0 {
