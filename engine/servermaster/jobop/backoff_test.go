@@ -26,14 +26,13 @@ func TestJobBackoff(t *testing.T) {
 
 	clocker := clock.NewMock()
 	resetInterval := 20 * time.Second
-	opts := []BackoffOption{
-		WithResetInterval(resetInterval),
-		WithInitialInterval(time.Second),
-		WithMaxInterval(time.Second * 10),
-		WithMultiplier(2.0),
-		WithClocker(clocker),
+	config := &BackoffConfig{
+		ResetInterval:   resetInterval,
+		InitialInterval: time.Second,
+		MaxInterval:     time.Second * 10,
+		Multiplier:      2.0,
 	}
-	bkf := NewJobBackoff("test-job-id", opts...)
+	bkf := NewJobBackoff("test-job-id", clocker, config)
 
 	// allow is true on fresh backoff
 	require.True(t, bkf.Allow())
