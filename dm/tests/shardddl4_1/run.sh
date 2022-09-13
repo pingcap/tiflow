@@ -361,50 +361,6 @@ function DM_139 {
 		"clean_table" "optimistic"
 }
 
-function DM_140_CASE {
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10),(11),(12),(13),(14),(15);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20),(21),(22),(23),(24),(25);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30),(31),(32),(33),(34),(35);"
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} partition by range(id)(partition p0 values less than (106));"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"ALTER TABLE \`${shardddl1}\`.\`${tb1}\` PARTITION BY RANGE (\`id\`) (PARTITION \`p0\` VALUES LESS THAN (106))" 1 \
-		"alter table partition is unsupported" 1
-}
-
-# Add partitioning
-function DM_140 {
-	run_case 140 "double-source-pessimistic" "init_table 111 211 212" "clean_table" "pessimistic"
-	run_case 140 "double-source-optimistic" "init_table 111 211 212" "clean_table" "optimistic"
-}
-
-function DM_141_CASE {
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10),(11),(12),(13),(14),(15);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20),(21),(22),(23),(24),(25);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30),(31),(32),(33),(34),(35);"
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} remove partitioning"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"ALTER TABLE \`${shardddl1}\`.\`${tb1}\` REMOVE PARTITIONING" 1 \
-		"Unsupported remove partitioning" 1
-}
-
-# Remove partitioning.
-function DM_141 {
-	run_case 141 "double-source-pessimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
-		"clean_table" "pessimistic"
-	run_case 141 "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id)(partition p0 values less than (100));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id)(partition p0 values less than (100));\"" \
-		"clean_table" "optimistic"
-}
-
 function DM_142_CASE {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10),(11),(12),(13),(14),(15);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20),(21),(22),(23),(24),(25);"
@@ -470,38 +426,6 @@ function DM_143 {
 	#      run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id) \
 	#      (partition p0 values less than (100), partition p1 values less than (200));\"" \
 	# 	"clean_table" "optimistic"
-}
-
-function DM_144_CASE {
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10),(11),(12),(13),(14),(15),(110),(111),(112),(113),(114),(115);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20),(21),(22),(23),(24),(25),(120),(121),(122),(123),(124),(125);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30),(31),(32),(33),(34),(35),(130),(131),(132),(133),(134),(135);"
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} reorganize partition p0,p1 into (partition p0 values less than (200))"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"ALTER TABLE \`${shardddl1}\`.\`${tb1}\` REORGANIZE PARTITION \`p0\`,\`p1\` INTO (PARTITION \`p0\` VALUES LESS THAN (200))" 1 \
-		"Unsupported reorganize partition" 1
-}
-
-# Reorganize partition.
-function DM_144 {
-	run_case 144 "double-source-pessimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id) \
-        (partition p0 values less than (100), partition p1 values less than (200));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id) \
-         (partition p0 values less than (100), partition p1 values less than (200));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id) \
-         (partition p0 values less than (100), partition p1 values less than (200));\"" \
-		"clean_table" "pessimistic"
-	run_case 144 "double-source-optimistic" \
-		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id) \
-        (partition p0 values less than (100), partition p1 values less than (200));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key) partition by range(id) \
-         (partition p0 values less than (100), partition p1 values less than (200));\"; \
-         run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key) partition by range(id) \
-         (partition p0 values less than (100), partition p1 values less than (200));\"" \
-		"clean_table" "optimistic"
 }
 
 function DM_145_CASE {
@@ -1174,6 +1098,19 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 		sleep 1
 	done
 
+	check_log_contain_with_retry "receive redirection operation from master" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "receive redirection operation from master" $WORK_DIR/worker2/log/dm-worker.log
+	for ((k = 140; k < 160; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k});"
+		sleep 1
+	done
+
 	# lock finished at first time, both workers should exit
 	check_process_exit worker1 20
 	check_process_exit worker2 20
@@ -1189,7 +1126,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);"
 
-	for ((k = 200; k < 240; k++)); do
+	for ((k = 200; k < 280; k++)); do
 		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
 		k=$((k + 1))
 		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
@@ -1284,7 +1221,11 @@ function run() {
 	DM_RESYNC_TXN_INTERRUPT
 	start=131
 	end=155
+	except=(140 141 144)
 	for i in $(seq -f "%03g" ${start} ${end}); do
+		if [[ ${except[@]} =~ $i ]]; then
+			continue
+		fi
 		DM_${i}
 		sleep 1
 	done

@@ -27,8 +27,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
-
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -45,7 +47,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
-	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
@@ -55,9 +56,9 @@ const (
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
-	// maxHTTPConnection is used to limits the max concurrent connections of http server.
+	// maxHTTPConnection is used to limit the max concurrent connections of http server.
 	maxHTTPConnection = 1000
-	// httpConnectionTimeout is used to limits a connection max alive time of http server.
+	// httpConnectionTimeout is used to limit a connection max alive time of http server.
 	httpConnectionTimeout = 10 * time.Minute
 )
 
@@ -80,24 +81,22 @@ type server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	etcdClient   *etcd.CDCEtcdClient
+	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
+
+	sorterSystem     *ssystem.System
+	tableActorSystem *system.System
 }
 
 // New creates a server instance.
 func New(pdEndpoints []string) (*server, error) {
 	conf := config.GetGlobalServerConfig()
-	log.Info("creating CDC server",
-		zap.Strings("pd", pdEndpoints),
-		zap.Stringer("config", conf),
-	)
 
 	// This is to make communication between nodes possible.
 	// In other words, the nodes have to trust each other.
 	if len(conf.Security.CertAllowedCN) != 0 {
 		err := conf.Security.AddSelfCommonName()
 		if err != nil {
-			log.Error("status server set tls config failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 	}
@@ -117,11 +116,13 @@ func New(pdEndpoints []string) (*server, error) {
 		tcpServer:   tcpServer,
 	}
 
+	log.Info("CDC server created",
+		zap.Strings("pd", pdEndpoints), zap.Stringer("config", conf))
+
 	return s, nil
 }
 
-// Run runs the server.
-func (s *server) Run(ctx context.Context) error {
+func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
@@ -137,7 +138,7 @@ func (s *server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	// we does not pass a `context` to the etcd client,
+	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
 	// it would resign the campaign key which was put by call `campaign`,
@@ -165,24 +166,64 @@ func (s *server) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
+
 	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"wrapper etcd client")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
-	s.etcdClient = &cdcEtcdClient
+	s.etcdClient = cdcEtcdClient
+
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	kv.InitWorkerPool()
+	if err := s.startActorSystems(ctx); err != nil {
+		return errors.Trace(err)
+	}
 
-	s.capture = capture.NewCapture(s.pdEndpoints, s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sorterSystem, s.tableActorSystem)
 
-	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	return nil
+}
+
+func (s *server) startActorSystems(ctx context.Context) error {
+	if s.tableActorSystem != nil {
+		s.tableActorSystem.Stop()
+	}
+	s.tableActorSystem = system.NewSystem()
+	s.tableActorSystem.Start(ctx)
+
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableDBSorter {
+		return nil
+	}
+
+	if s.sorterSystem != nil {
+		s.sorterSystem.Stop()
+	}
+	// Sorter dir has been set and checked when server starts.
+	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
+	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
+	s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
+	err := s.sorterSystem.Start(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// Run runs the server.
+func (s *server) Run(ctx context.Context) error {
+	if err := s.prepare(ctx); err != nil {
+		return err
+	}
+
+	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
@@ -198,7 +239,7 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
 	// a connection is processed.
-	// We use it here to limit the max concurrent conections of statusServer.
+	// We use it here to limit the max concurrent connections of statusServer.
 	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
@@ -232,34 +273,37 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 func (s *server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
-	conf := config.GetGlobalServerConfig()
 
-	httpCli, err := httputil.NewClient(conf.Security)
+	conf := config.GetGlobalServerConfig()
+	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
-	defer httpCli.CloseIdleConnections()
-	metrics := make(map[string]prometheus.Observer)
-	for _, pdEndpoint := range s.pdEndpoints {
-		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
+	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
+	if err != nil {
+		return errors.Trace(err)
 	}
+	defer pc.Close()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			for _, pdEndpoint := range s.pdEndpoints {
+			endpoints, err := pc.CollectMemberEndpoints(ctx)
+			if err != nil {
+				log.Warn("etcd health check: cannot collect all members", zap.Error(err))
+				continue
+			}
+			for _, endpoint := range endpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				resp, err := httpCli.Get(ctx, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint))
-				if err != nil {
-					log.Warn("etcd health check error", zap.Error(err))
-				} else {
-					_, _ = io.Copy(io.Discard, resp.Body)
-					_ = resp.Body.Close()
-					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				if err := pc.Healthy(ctx, endpoint); err != nil {
+					log.Warn("etcd health check error",
+						zap.String("endpoint", endpoint), zap.Error(err))
 				}
+				etcdHealthCheckDuration.WithLabelValues(endpoint).
+					Observe(time.Since(start).Seconds())
 				cancel()
 			}
 		}
@@ -281,10 +325,6 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return unified.RunWorkerPool(cctx)
-	})
-
-	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
 	})
 
@@ -293,6 +333,13 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	conf := config.GetGlobalServerConfig()
+
+	if !conf.Debug.EnableDBSorter {
+		wg.Go(func() error {
+			return unified.RunWorkerPool(cctx)
+		})
+	}
+
 	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
@@ -318,6 +365,8 @@ func (s *server) Drain(ctx context.Context) <-chan struct{} {
 
 // Close closes the server.
 func (s *server) Close() {
+	s.stopActorSystems()
+
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
@@ -335,6 +384,22 @@ func (s *server) Close() {
 		}
 		s.tcpServer = nil
 	}
+}
+
+func (s *server) stopActorSystems() {
+	start := time.Now()
+	if s.tableActorSystem != nil {
+		s.tableActorSystem.Stop()
+		s.tableActorSystem = nil
+	}
+	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
+
+	start = time.Now()
+	if s.sorterSystem != nil {
+		s.sorterSystem.Stop()
+		s.sorterSystem = nil
+	}
+	log.Info("sorter actor system closed", zap.Duration("duration", time.Since(start)))
 }
 
 func (s *server) initDir(ctx context.Context) error {

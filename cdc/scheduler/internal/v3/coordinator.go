@@ -22,7 +22,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -45,10 +49,10 @@ type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
-	trans        transport
-	replicationM *replicationManager
-	captureM     *captureManager
-	schedulerM   *schedulerManager
+	trans        transport.Transport
+	replicationM *replication.Manager
+	captureM     *member.CaptureManager
+	schedulerM   *scheduler.Manager
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -65,7 +69,8 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changefeedID, schedulerRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(
+		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -83,12 +88,14 @@ func newCoordinator(
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 
 	return &coordinator{
-		version:      version.ReleaseSemver(),
-		revision:     revision,
-		captureID:    captureID,
-		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     newCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   newSchedulerManager(changefeedID, cfg),
+		version:   version.ReleaseSemver(),
+		revision:  revision,
+		captureID: captureID,
+		replicationM: replication.NewReplicationManager(
+			cfg.MaxTaskConcurrency, changefeedID),
+		captureM: member.NewCaptureManager(
+			captureID, changefeedID, revision, cfg.HeartbeatTick),
+		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
 }
@@ -232,6 +239,8 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.maybeCollectMetrics()
+
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
@@ -243,20 +252,6 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
-	if !c.captureM.CheckAllCaptureInitialized() {
-		// Skip handling messages and tasks for replication manager,
-		// as not all capture are initialized.
-		return checkpointCannotProceed, checkpointCannotProceed, c.sendMsgs(ctx, msgBuf)
-	}
-
-	// Handle capture membership changes.
-	if changes := c.captureM.TakeChanges(); changes != nil {
-		msgs, err = c.replicationM.HandleCaptureChanges(changes, checkpointTs)
-		if err != nil {
-			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
-		}
-		msgBuf = append(msgBuf, msgs...)
-	}
 
 	// Handle received messages to advance replication set.
 	msgs, err = c.replicationM.HandleMessage(recvMsgs)
@@ -264,6 +259,23 @@ func (c *coordinator) poll(
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
+
+	if !c.captureM.CheckAllCaptureInitialized() {
+		// Skip generating schedule tasks for replication manager,
+		// as not all capture are initialized.
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
+	}
+
+	// Handle capture membership changes.
+	if changes := c.captureM.TakeChanges(); changes != nil {
+		msgs, err = c.replicationM.HandleCaptureChanges(
+			changes.Init, changes.Removed, checkpointTs)
+		if err != nil {
+			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
+		}
+		msgBuf = append(msgBuf, msgs...)
+	}
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
@@ -283,8 +295,6 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
-
-	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)

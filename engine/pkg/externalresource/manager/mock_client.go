@@ -16,39 +16,37 @@ package manager
 import (
 	"context"
 
-	"github.com/stretchr/testify/mock"
-	"google.golang.org/grpc"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/stretchr/testify/mock"
 )
 
-var _ pb.ResourceManagerClient = &MockClient{}
+var _ client.ResourceManagerClient = &MockClient{}
 
 // MockClient is a mock implementation of ResourceManagerClient interface
 type MockClient struct {
 	mock.Mock
 }
 
-// NewWrappedMockClient creates a FailoverRPCClients with MockClient underlying
-func NewWrappedMockClient() *rpcutil.FailoverRPCClients[pb.ResourceManagerClient] {
-	return rpcutil.NewFailoverRPCClientsForTest[pb.ResourceManagerClient](&MockClient{})
+// NewMockClient creates a MockClient
+func NewMockClient() *MockClient {
+	return &MockClient{}
 }
 
 // CreateResource implements ResourceManagerClient.CreateResource
-func (m *MockClient) CreateResource(ctx context.Context, in *pb.CreateResourceRequest, opts ...grpc.CallOption) (*pb.CreateResourceResponse, error) {
-	args := m.Called(ctx, in, opts)
-	return args.Get(0).(*pb.CreateResourceResponse), args.Error(1)
+func (m *MockClient) CreateResource(ctx context.Context, req *pb.CreateResourceRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
 }
 
 // QueryResource implements ResourceManagerClient.QueryResource
-func (m *MockClient) QueryResource(ctx context.Context, in *pb.QueryResourceRequest, opts ...grpc.CallOption) (*pb.QueryResourceResponse, error) {
-	args := m.Called(ctx, in, opts)
+func (m *MockClient) QueryResource(ctx context.Context, req *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
+	args := m.Called(ctx, req)
 	return args.Get(0).(*pb.QueryResourceResponse), args.Error(1)
 }
 
 // RemoveResource implements ResourceManagerClient.RemoveResource
-func (m *MockClient) RemoveResource(ctx context.Context, in *pb.RemoveResourceRequest, opts ...grpc.CallOption) (*pb.RemoveResourceResponse, error) {
-	args := m.Called(ctx, in, opts)
-	return args.Get(0).(*pb.RemoveResourceResponse), args.Error(1)
+func (m *MockClient) RemoveResource(ctx context.Context, req *pb.RemoveResourceRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
 }

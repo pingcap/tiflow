@@ -20,11 +20,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -34,7 +33,7 @@ import (
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
-	EtcdClient       *etcd.CDCEtcdClient
+	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -187,11 +186,12 @@ func (ctx *throwContext) Throw(err error) {
 func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-test",
+			ID:            "capture-test",
 			AdvertiseAddr: "127.0.0.1:0000",
-			Version:       version.ReleaseVersion,
+			// suppose the current version is `v6.3.0`
+			Version: "v6.3.0",
 		},
-		EtcdClient: &etcd.CDCEtcdClient{
+		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
 	})
@@ -211,14 +211,4 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 // context.Background() as ethe parent context
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
-}
-
-// ZapFieldCapture returns a zap field containing capture address
-func ZapFieldCapture(ctx Context) zap.Field {
-	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-}
-
-// ZapFieldChangefeed returns a zap field containing changefeed id
-func ZapFieldChangefeed(ctx Context) zap.Field {
-	return zap.String("changefeed", ctx.ChangefeedVars().ID.ID)
 }

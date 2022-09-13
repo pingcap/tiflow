@@ -260,7 +260,7 @@ const (
 type LoaderConfig struct {
 	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
 	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 }
@@ -268,9 +268,10 @@ type LoaderConfig struct {
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize:   defaultPoolSize,
-		Dir:        defaultDir,
-		ImportMode: LoadModeSQL,
+		PoolSize:    defaultPoolSize,
+		Dir:         defaultDir,
+		ImportMode:  LoadModeSQL,
+		OnDuplicate: OnDuplicateReplace,
 	}
 }
 
@@ -588,6 +589,9 @@ func (c *TaskConfig) adjust() error {
 	}
 	if c.TaskMode != ModeFull && c.TaskMode != ModeIncrement && c.TaskMode != ModeAll {
 		return terror.ErrConfigInvalidTaskMode.Generate()
+	}
+	if c.MetaSchema == "" {
+		c.MetaSchema = defaultMetaSchema
 	}
 
 	if c.ShardMode != "" && c.ShardMode != ShardPessimistic && c.ShardMode != ShardOptimistic {

@@ -1,0 +1,27 @@
+version: '2.3'
+
+services:
+  etcd-standalone:
+    image: quay.io/coreos/etcd
+    container_name: etcd-standalone
+    command:
+      - "etcd"
+      - "--listen-client-urls=http://0.0.0.0:2379"
+      - "--advertise-client-urls=http://etcd-standalone:2379"
+    ports:
+      - "12479:2379"
+  mysql-standalone:
+    image: mysql:8.0
+    container_name: mysql-standalone
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    volumes:
+      - './config/mysql_meta.cnf:/etc/my.cnf'
+    ports:
+      - "3336:3306"
+    healthcheck:
+      test: mysql -h127.0.0.1 -P3306 -e "show databases"
+      interval: 10s
+      timeout: 600s
+      retries: 60

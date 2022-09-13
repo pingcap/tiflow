@@ -50,15 +50,15 @@ var (
 
 // procState is the state of a proc.
 //
-//   ┌---------┐  Actor.Close()
-//   | Running |-----------------┐
-//   └--+------┘                 v
-//      |                    ┌--------┐
-//      | System.Close()     | Closed |
-//      v                    └--------┘
-//   ┌---------------┐           ^
-//   | MailboxClosed |-----------┘
-//   └---------------┘ Mailbox Empty
+//	┌---------┐  Actor.Close()
+//	| Running |-----------------┐
+//	└--+------┘                 v
+//	   |                    ┌--------┐
+//	   | System.Close()     | Closed |
+//	   v                    └--------┘
+//	┌---------------┐           ^
+//	| MailboxClosed |-----------┘
+//	└---------------┘ Mailbox Empty
 type procState uint64
 
 const (
@@ -93,7 +93,7 @@ func (p *proc[T]) batchReceiveMsgs(batchMsg []message.Message[T]) int {
 	return n
 }
 
-// isClosed returns ture, means its mailbox and actor are closed.
+// isClosed returns true, means its mailbox and actor are closed.
 // isClosed is thread-safe.
 func (p *proc[T]) isClosed() bool {
 	return atomic.LoadUint64(&p.state) == uint64(procStateClosed)

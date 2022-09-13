@@ -48,6 +48,13 @@ func newMasterClientTestHelper(
 		panic(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	epoch, err := meta.GenEpoch(ctx)
+	if err != nil {
+		panic(err)
+	}
+
 	initTime := time.Now()
 	msgSender := p2p.NewMockMessageSender()
 	clk := clock.NewMock()
@@ -57,7 +64,9 @@ func newMasterClientTestHelper(
 		msgSender,
 		meta,
 		clock.ToMono(initTime),
-		clk)
+		clk,
+		epoch,
+	)
 
 	return &masterClientTestHelper{
 		Client:        masterCli,
@@ -111,12 +120,12 @@ func (h *masterClientTestHelper) WaitWorkerClosed(t *testing.T) error {
 func TestMasterClientRefreshInfo(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -126,12 +135,12 @@ func TestMasterClientRefreshInfo(t *testing.T) {
 	require.Equal(t, "executor-1", helper.Client.MasterNode())
 	require.Equal(t, frameModel.Epoch(1), helper.Client.Epoch())
 
-	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-2",
-		Addr:       "192.168.0.2:1234",
-		Epoch:      2,
+	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-2",
+		Addr:   "192.168.0.2:1234",
+		Epoch:  2,
 	})
 	require.NoError(t, err)
 
@@ -146,12 +155,12 @@ func TestMasterClientRefreshInfo(t *testing.T) {
 func TestMasterClientHeartbeat(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -169,6 +178,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
@@ -196,6 +206,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime2),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   true,
 	}, ping)
 	// The pong has IsFinished == false.
@@ -223,12 +234,12 @@ func TestMasterClientHeartbeat(t *testing.T) {
 func TestMasterClientHeartbeatMismatch(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      2,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  2,
 	})
 	require.NoError(t, err)
 
@@ -246,6 +257,7 @@ func TestMasterClientHeartbeatMismatch(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        2,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 
@@ -277,12 +289,12 @@ func TestMasterClientHeartbeatLargerEpoch(t *testing.T) {
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -312,12 +324,12 @@ func TestMasterClientHeartbeatLargerEpoch(t *testing.T) {
 func TestMasterClientTimeoutFromInit(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -341,12 +353,12 @@ func TestMasterClientCheckTimeoutRefreshMaster(t *testing.T) {
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -359,12 +371,12 @@ func TestMasterClientCheckTimeoutRefreshMaster(t *testing.T) {
 	helper.Clk.Set(currentTime)
 
 	// Simulates a master failover
-	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-2",
-		Addr:       "192.168.0.2:1234",
-		Epoch:      2,
+	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-2",
+		Addr:   "192.168.0.2:1234",
+		Epoch:  2,
 	})
 	require.NoError(t, err)
 
@@ -390,12 +402,12 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -403,12 +415,12 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 	require.NoError(t, err)
 
 	helper.MessageSender.MarkNodeOffline("executor-1")
-	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-2",
-		Addr:       "192.168.0.2:1234",
-		Epoch:      2,
+	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-2",
+		Addr:   "192.168.0.2:1234",
+		Epoch:  2,
 	})
 	require.NoError(t, err)
 
@@ -430,12 +442,12 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 func TestMasterClientHeartbeatStalePong(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
 	defer helper.Meta.Close()
-	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
-		ID:         "master-1",
-		StatusCode: frameModel.MasterStatusInit,
-		NodeID:     "executor-1",
-		Addr:       "192.168.0.1:1234",
-		Epoch:      1,
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
+		ID:     "master-1",
+		State:  frameModel.MasterStateInit,
+		NodeID: "executor-1",
+		Addr:   "192.168.0.1:1234",
+		Epoch:  1,
 	})
 	require.NoError(t, err)
 
@@ -454,6 +466,7 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 

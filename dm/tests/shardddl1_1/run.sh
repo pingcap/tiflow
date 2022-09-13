@@ -299,8 +299,8 @@ function DM_031_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` VARCHAR(10)' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1`' 1 \
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -368,9 +368,17 @@ function DM_034_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(4,0);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(5);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add new_col1 int unique auto_increment;"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'new_col1' constraint UNIQUE KEY when altering" 2
+
+	if [[ "$1" = "pessimistic" ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"unsupported add column 'new_col1' constraint UNIQUE KEY when altering" 1
+	else
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"there will be conflicts" 2
+	fi
+
 }
 
 function DM_034() {

@@ -31,9 +31,8 @@ import (
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 const (
@@ -43,7 +42,8 @@ const (
 )
 
 var (
-	taskState = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
+	f         = &promutil.PromFactory{}
+	taskState = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "worker",
@@ -52,7 +52,7 @@ var (
 		}, []string{"task", "source_id", "worker"})
 
 	// opErrCounter cleans on worker close, which is the same time dm-worker exits, so no explicit clean.
-	opErrCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
+	opErrCounter = f.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "worker",
@@ -73,7 +73,7 @@ type statusHandler struct{}
 
 func (h *statusHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	text := utils.GetRawInfo()
+	text := version.GetRawInfo()
 	_, err := w.Write([]byte(text))
 	if err != nil && !common.IsErrNetClosing(err) {
 		log.L().Error("fail to write status response", log.ShortError(err))

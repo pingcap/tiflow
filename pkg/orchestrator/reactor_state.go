@@ -69,9 +69,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline",
-				zap.String("captureID", k.CaptureID),
-				zap.Any("info", s.Captures[k.CaptureID]))
+			log.Info("remote capture offline", zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
 			if s.onCaptureRemoved != nil {
 				s.onCaptureRemoved(k.CaptureID)
@@ -85,8 +83,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
-		log.Info("remote capture online",
-			zap.String("captureID", k.CaptureID), zap.Any("info", newCaptureInfo))
+		log.Info("remote capture online", zap.Any("info", newCaptureInfo))
 		if s.onCaptureAdded != nil {
 			s.onCaptureAdded(k.CaptureID, newCaptureInfo.AdvertiseAddr)
 		}
@@ -284,9 +281,9 @@ func (s *ChangefeedReactorState) CheckCaptureAlive(captureID model.CaptureID) {
 	s.pendingPatches = append(s.pendingPatches, patch)
 }
 
-// CheckChangefeedNormal checks if the changefeed state is runable,
-// if the changefeed status is not runable, the etcd worker will skip all patch of this tick
-// the processor should call this function every tick to make sure the changefeed is runable
+// CheckChangefeedNormal checks if the changefeed state is runnable,
+// if the changefeed status is not runnable, the etcd worker will skip all patch of this tick
+// the processor should call this function every tick to make sure the changefeed is runnable
 func (s *ChangefeedReactorState) CheckChangefeedNormal() {
 	s.skipPatchesInThisTick = false
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

@@ -19,12 +19,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
@@ -44,25 +49,27 @@ func TestDMOpenAPISuite(t *testing.T) {
 
 type testDMOpenAPISuite struct {
 	suite.Suite
-	jm           *JobMaster
-	engine       *gin.Engine
-	messageAgent *dmpkg.MockMessageAgent
-	funcBackup   func(ctx context.Context, cfg *dmconfig.SourceConfig) error
+	jm              *JobMaster
+	engine          *gin.Engine
+	messageAgent    *dmpkg.MockMessageAgent
+	checkpointAnget *MockCheckpointAgent
+	funcBackup      func(ctx context.Context, cfg *dmconfig.SourceConfig) error
 }
 
 func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
-		mockBaseJobmaster = &MockBaseJobmaster{}
-		mockMessageAgent  = &dmpkg.MockMessageAgent{}
-		jm                = &JobMaster{
-			workerID:      "jobmaster-worker-id",
-			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.JobMasterID(), mock.NewMetaMock()),
-			messageAgent:  mockMessageAgent,
+		mockBaseJobmaster   = &MockBaseJobmaster{}
+		mockMessageAgent    = &dmpkg.MockMessageAgent{}
+		mockCheckpointAgent = &MockCheckpointAgent{}
+		jm                  = &JobMaster{
+			BaseJobMaster:   mockBaseJobmaster,
+			metadata:        metadata.NewMetaData(mock.NewMetaMock(), log.L()),
+			messageAgent:    mockMessageAgent,
+			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent)
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil)
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)
@@ -72,6 +79,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 	t.jm = jm
 	t.engine = engine
 	t.messageAgent = mockMessageAgent
+	t.checkpointAnget = mockCheckpointAgent
 	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 }
 
@@ -108,6 +116,47 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobConfig() {
 	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
 }
 
+func (t *testDMOpenAPISuite) TestDMAPIUpdateJobCfg() {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PUT", "/api/v1/jobs/job-not-exist/config", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
+
+	req := openapi.UpdateJobConfigRequest{}
+	bs, err := json.Marshal(req)
+	require.NoError(t.T(), err)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("PUT", baseURL+"config", bytes.NewReader(bs))
+	r.Header.Set("Content-Type", "application/json")
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
+
+	cfgBytes, err := os.ReadFile(jobTemplatePath)
+	require.NoError(t.T(), err)
+	req = openapi.UpdateJobConfigRequest{Config: string(cfgBytes)}
+	bs, err = json.Marshal(req)
+	require.NoError(t.T(), err)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("PUT", baseURL+"config", bytes.NewReader(bs))
+	r.Header.Set("Content-Type", "application/json")
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
+
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
+	t.checkpointAnget.On("Update").Return(nil)
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("PUT", baseURL+"config", bytes.NewReader(bs))
+	r.Header.Set("Content-Type", "application/json")
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+}
+
 func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/jobs/job-not-exist/status", nil)
@@ -133,9 +182,8 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	require.Equal(t.T(), http.StatusOK, w.Code)
 
 	jobStatus := JobStatus{
-		JobMasterID: "dm-jobmaster-id",
-		WorkerID:    "jobmaster-worker-id",
-		TaskStatus:  map[string]TaskStatus{},
+		JobID:      "dm-jobmaster-id",
+		TaskStatus: map[string]TaskStatus{},
 	}
 	var jobStatus2 JobStatus
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))

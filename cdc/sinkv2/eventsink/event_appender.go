@@ -69,26 +69,22 @@ func (t *TxnEventAppender) Append(
 		}
 
 		lastTxn := buffer[len(buffer)-1]
-		// Normally, this means the commitTs grows.
-		if lastTxn.GetCommitTs() != row.CommitTs ||
-			// Normally, this means we meet a new big txn batch.
-			row.SplitTxn ||
-			// Normally, this means we meet a new txn.
-			lastTxn.StartTs < row.StartTs {
-			// Fail-fast check
-			commitTsDecreased := lastTxn.GetCommitTs() > row.CommitTs
-			if commitTsDecreased {
-				log.Panic("The commitTs of the emit row is less than the received row",
-					zap.Uint64("lastReceivedCommitTs", buffer[len(buffer)-1].GetCommitTs()),
-					zap.Any("row", row))
-			}
-			startTsDecreased := lastTxn.StartTs > row.StartTs
-			if startTsDecreased {
-				log.Panic("The startTs of the emit row is less than the received row",
-					zap.Any("lastReceivedStartTs", buffer[len(buffer)-1].GetCommitTs()),
-					zap.Any("row", row))
-			}
 
+		lastCommitTs := lastTxn.GetCommitTs()
+		if lastCommitTs > row.CommitTs {
+			log.Panic("The commitTs of the emit row is less than the received row",
+				zap.Uint64("lastReceivedCommitTs", lastCommitTs),
+				zap.Any("row", row))
+		} else if lastCommitTs == row.CommitTs && lastTxn.StartTs > row.StartTs {
+			log.Panic("The startTs of the emit row is less than the received row with same CommitTs",
+				zap.Uint64("lastReceivedCommitTs", lastCommitTs),
+				zap.Uint64("lastReceivedStartTs", lastTxn.StartTs),
+				zap.Any("row", row))
+		}
+
+		// Split on big transactions or a new one. For 2 transactions,
+		// their commitTs can be same but startTs will be never same.
+		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
 			buffer = append(buffer, &model.SingleTableTxn{
 				StartTs:  row.StartTs,
 				CommitTs: row.CommitTs,

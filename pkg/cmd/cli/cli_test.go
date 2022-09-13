@@ -17,6 +17,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,10 @@ func TestCliCmdNoArgs(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCmdCli()
+	// Only for test.
+	cmd.RunE = func(_ *cobra.Command, _ []string) error {
+		return nil
+	}
 	// There is a DBC space before the flag pd.
 	flags := []string{"--log-level=info", "　--pd="}
 	os.Args = flags

@@ -19,25 +19,29 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestWorker(t *testing.T) (*worker, producer.Producer) {
+func newTestWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	encoder := builder.Build()
 	require.Nil(t, err)
-	p := producer.NewMockProducer()
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
+	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, encoder, p), p
+	return newWorker(id, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
 }
 
 func TestBatch(t *testing.T) {
@@ -45,13 +49,13 @@ func TestBatch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(t)
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 	key := mqv1.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	tableStatus := pipeline.TableStateReplicating
+	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -63,9 +67,9 @@ func TestBatch(t *testing.T) {
 		events = append(events, mqEvent{
 			key: key,
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event:       row,
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Event:     row,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 		})
 	}
@@ -105,10 +109,12 @@ func TestGroup(t *testing.T) {
 		Topic:     "test1",
 		Partition: 2,
 	}
-	worker, _ := newTestWorker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 
-	tableStatus := pipeline.TableStateReplicating
+	tableStatus := state.TableSinkSinking
 
 	events := []mqEvent{
 		{
@@ -118,8 +124,8 @@ func TestGroup(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -130,8 +136,8 @@ func TestGroup(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -142,8 +148,8 @@ func TestGroup(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -154,8 +160,8 @@ func TestGroup(t *testing.T) {
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key2,
 		},
@@ -166,8 +172,8 @@ func TestGroup(t *testing.T) {
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key3,
 		},
@@ -202,9 +208,10 @@ func TestAsyncSend(t *testing.T) {
 		Partition: 2,
 	}
 
-	tableStatus := pipeline.TableStateReplicating
-
-	worker, p := newTestWorker(t)
+	tableStatus := state.TableSinkSinking
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, p := newTestWorker(ctx, t)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -214,8 +221,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -226,8 +233,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -238,8 +245,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key1,
 		},
@@ -250,8 +257,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key2,
 		},
@@ -262,8 +269,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key3,
 		},
@@ -274,8 +281,8 @@ func TestAsyncSend(t *testing.T) {
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &tableStatus,
+				Callback:  func() {},
+				SinkState: &tableStatus,
 			},
 			key: key3,
 		},
@@ -284,11 +291,11 @@ func TestAsyncSend(t *testing.T) {
 	paritionedRows := worker.group(events)
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
-	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 6)
-	require.Len(t, mp.GetEvent(key1), 3)
-	require.Len(t, mp.GetEvent(key2), 1)
-	require.Len(t, mp.GetEvent(key3), 2)
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Len(t, mp.GetAllEvents(), 6)
+	require.Len(t, mp.GetEvents(key1), 3)
+	require.Len(t, mp.GetEvents(key2), 1)
+	require.Len(t, mp.GetEvents(key3), 2)
 }
 
 func TestAsyncSendWhenTableStopping(t *testing.T) {
@@ -298,10 +305,12 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 		Topic:     "test",
 		Partition: 1,
 	}
-	worker, p := newTestWorker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, p := newTestWorker(ctx, t)
 	defer worker.close()
-	replicatingStatus := pipeline.TableStateReplicating
-	stoopedStatus := pipeline.TableStateStopping
+	replicatingStatus := state.TableSinkSinking
+	stoopedStatus := state.TableSinkStopping
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
@@ -310,8 +319,8 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 				},
-				Callback:    func() {},
-				TableStatus: &replicatingStatus,
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
 			},
 			key: key1,
 		},
@@ -322,8 +331,8 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
-				Callback:    func() {},
-				TableStatus: &replicatingStatus,
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
 			},
 			key: key1,
 		},
@@ -334,8 +343,8 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
-				Callback:    func() {},
-				TableStatus: &stoopedStatus,
+				Callback:  func() {},
+				SinkState: &stoopedStatus,
 			},
 			key: key1,
 		},
@@ -344,15 +353,15 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 	paritionedRows := worker.group(events)
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
-	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 2)
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Len(t, mp.GetAllEvents(), 2)
 }
 
 func TestAbort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newTestWorker(t)
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 
 	var wg sync.WaitGroup

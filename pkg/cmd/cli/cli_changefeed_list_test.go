@@ -34,11 +34,12 @@ func TestChangefeedListCli(t *testing.T) {
 	cmd := newCmdListChangefeed(f)
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
+
 	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "c1",
+			ID:             "error-1",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
 			FeedState:      model.StateError,
@@ -46,7 +47,7 @@ func TestChangefeedListCli(t *testing.T) {
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "c2",
+			ID:             "normal-2",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
 			FeedState:      model.StateNormal,
@@ -54,21 +55,60 @@ func TestChangefeedListCli(t *testing.T) {
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "c3",
+			ID:             "failed-3",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
 			FeedState:      model.StateFailed,
 		},
-	}, nil)
-	os.Args = []string{"list", "--all=true"}
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "removed-4",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateRemoved,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "finished-5",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateFinished,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "stopped-6",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateStopped,
+		},
+	}, nil).Times(2)
+	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
+	os.Args = []string{"list", "--all=false"}
 	require.Nil(t, cmd.Execute())
 	out, err := ioutil.ReadAll(b)
 	require.Nil(t, err)
-	// make sure the output contains error state changefeed.
-	require.Contains(t, string(out), "c1")
-	require.Contains(t, string(out), "c2")
+	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "normal-2")
+	require.Contains(t, string(out), "stopped-6")
+	require.Contains(t, string(out), "failed-3")
 
-	os.Args = []string{"list", "--all=false"}
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
-	require.NotNil(t, cmd.Execute())
+	// when --all=true, should contains all changefeed
+	os.Args = []string{"list", "--all=true"}
+	require.Nil(t, cmd.Execute())
+	out, err = ioutil.ReadAll(b)
+	require.Nil(t, err)
+	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "normal-2")
+	require.Contains(t, string(out), "failed-3")
+	require.Contains(t, string(out), "removed-4")
+	require.Contains(t, string(out), "finished-5")
+	require.Contains(t, string(out), "stopped-6")
+
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("changefeed list test error"))
+	o := newListChangefeedOptions()
+	require.NoError(t, o.complete(f))
+	require.Contains(t, o.run(cmd).Error(), "changefeed list test error")
 }

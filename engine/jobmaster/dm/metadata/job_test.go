@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
@@ -50,14 +51,16 @@ func TestJobStore(t *testing.T) {
 	)
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", mock.NewMetaMock())
+	jobStore := NewJobStore(mock.NewMetaMock(), log.L())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
-	require.Equal(t, keys[0], "job_test")
+	require.Equal(t, keys[0], "")
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{}, StageRunning))
+	require.Error(t, jobStore.UpdateConfig(context.Background(), nil))
+	require.Error(t, jobStore.MarkDeleting(context.Background()))
 
 	state := jobStore.CreateState()
 	require.IsType(t, &Job{}, state)
@@ -78,6 +81,8 @@ func TestJobStore(t *testing.T) {
 	require.Contains(t, job.Tasks, source1)
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source1].Cfg.ModRevision, uint64(0))
+	require.Equal(t, job.Tasks[source2].Cfg.ModRevision, uint64(0))
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{"task-not-exist"}, StageRunning))
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{source1, "task-not-exist"}, StageRunning))
@@ -99,4 +104,25 @@ func TestJobStore(t *testing.T) {
 	job = state.(*Job)
 	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+
+	require.NoError(t, jobStore.UpdateConfig(context.Background(), jobCfg))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t, err)
+	job = state.(*Job)
+	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source1].Cfg.ModRevision, uint64(1))
+	require.Equal(t, job.Tasks[source2].Cfg.ModRevision, uint64(1))
+	require.False(t, job.Deleting)
+
+	require.NoError(t, jobStore.MarkDeleting(context.Background()))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t, err)
+	job = state.(*Job)
+	require.True(t, job.Deleting)
+
+	require.EqualError(t, jobStore.UpdateStages(context.Background(), []string{source2}, StagePaused), "failed to update stages because job is being deleted")
+	require.EqualError(t, jobStore.UpdateConfig(context.Background(), jobCfg), "failed to update config because job is being deleted")
+
+	require.Len(t, jobStore.UpgradeFuncs(), 0)
 }

@@ -251,14 +251,13 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	}
 	regionID := state.sri.verID.GetID()
 	log.Info("single region event feed disconnected",
-		zap.String("namesapce", w.session.client.changefeed.Namespace),
+		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", state.sri.ts),
-		zap.String("error", err.Error()),
-		zap.Any("sri", state.sri))
+		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
 		return w.checkShouldExit()
@@ -314,9 +313,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case <-advanceCheckTicker.C:
 			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
-				log.Warn("failed to get current version from PD",
+				log.Warn("failed to get current time from PD",
 					zap.Error(err),
-					zap.String("namesapce", w.session.client.changefeed.Namespace),
+					zap.String("namespace", w.session.client.changefeed.Namespace),
 					zap.String("changefeed", w.session.client.changefeed.ID))
 				continue
 			}
@@ -352,7 +351,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					sinceLastEvent := time.Since(rts.ts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
 						log.Warn("kv client reconnect triggered",
-							zap.String("namesapce", w.session.client.changefeed.Namespace),
+							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
@@ -369,7 +368,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.String("namesapce", w.session.client.changefeed.Namespace),
+						zap.String("namespace", w.session.client.changefeed.Namespace),
 						zap.String("changefeed", w.session.client.changefeed.ID),
 						zap.String("addr", w.storeAddr),
 						zap.Uint64("regionID", rts.regionID),
@@ -382,7 +381,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					if err != nil {
 						log.Warn("failed to resolve lock",
 							zap.Uint64("regionID", rts.regionID), zap.Error(err),
-							zap.String("namesapce", w.session.client.changefeed.Namespace),
+							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID))
 						continue
 					}
@@ -413,7 +412,7 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event",
 				zap.Stringer("event", event.changeEvent),
-				zap.String("namesapce", w.session.client.changefeed.Namespace),
+				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID))
 		case *cdcpb.Event_Error:
 			err = w.handleSingleRegionError(
@@ -466,7 +465,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		// all existing regions.
 		if !ok || event == nil {
 			log.Info("region worker closed by error",
-				zap.String("namesapce", w.session.client.changefeed.Namespace),
+				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID))
 			exitEventHandler = true
 			return
@@ -604,7 +603,7 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	} else {
 		log.Warn("gRPC stream cancel func not found",
 			zap.String("addr", w.storeAddr),
-			zap.String("namesapce", w.session.client.changefeed.Namespace),
+			zap.String("namespace", w.session.client.changefeed.Namespace),
 			zap.String("changefeed", w.session.client.changefeed.ID))
 	}
 }
@@ -668,7 +667,7 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.String("namesapce", w.session.client.changefeed.Namespace),
+					zap.String("namespace", w.session.client.changefeed.Namespace),
 					zap.String("changefeed", w.session.client.changefeed.ID),
 					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
@@ -781,7 +780,7 @@ func (w *regionWorker) handleResolvedTs(
 
 	if resolvedTs < state.lastResolvedTs {
 		log.Debug("The resolvedTs is fallen back in kvclient",
-			zap.String("namesapce", w.session.client.changefeed.Namespace),
+			zap.String("namespace", w.session.client.changefeed.Namespace),
 			zap.String("changefeed", w.session.client.changefeed.ID),
 			zap.String("EventType", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),

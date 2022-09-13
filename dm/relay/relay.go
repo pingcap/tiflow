@@ -429,8 +429,10 @@ type recoverResult struct {
 // doRecovering tries to recover the current binlog file.
 // 1. read events from the file
 // 2.
-//    a. update the position with the event's position if the transaction finished
-//    b. update the GTID set with the event's GTID if the transaction finished
+//
+//	a. update the position with the event's position if the transaction finished
+//	b. update the GTID set with the event's GTID if the transaction finished
+//
 // 3. truncate any incomplete events/transactions
 // now, we think a transaction finished if we received a XIDEvent or DDL in QueryEvent
 // NOTE: handle cases when file size > 4GB.
@@ -546,10 +548,10 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 }
 
 // handleEvents handles binlog events, including:
-//   1. read events from upstream
-//   2. transform events
-//   3. write events into relay log files
-//   4. update metadata if needed.
+//  1. read events from upstream
+//  2. transform events
+//  3. write events into relay log files
+//  4. update metadata if needed.
 func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
@@ -572,7 +574,11 @@ func (r *Relay) handleEvents(
 		// 1. read events from upstream server
 		readTimer := time.Now()
 		rResult, err := reader2.GetEvent(ctx)
-		failpoint.Inject("RelayGetEventFailed", func(v failpoint.Value) {
+
+		failpoint.Inject("RelayGetEventFailed", func() {
+			err = errors.New("RelayGetEventFailed")
+		})
+		failpoint.Inject("RelayGetEventFailedAt", func(v failpoint.Value) {
 			if intVal, ok := v.(int); ok && intVal == eventIndex {
 				err = errors.New("fail point triggered")
 				_, gtid := r.meta.GTID()

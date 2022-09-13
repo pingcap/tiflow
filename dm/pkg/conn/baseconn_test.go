@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -37,7 +36,9 @@ var _ = Suite(&testBaseConnSuite{})
 
 type testBaseConnSuite struct{}
 
-var testStmtHistogram = metricsproxy.NewHistogramVec(&promutil.PromFactory{},
+var f = &promutil.PromFactory{}
+
+var testStmtHistogram = f.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "dm",
 		Subsystem: "conn",

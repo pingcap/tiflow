@@ -36,6 +36,9 @@ type Task interface {
 	// TODO `ctx` is for compatibility, remove it.
 	Close(ctx context.Context) error
 
+	// Stop is called when a task is canceled
+	Stop(ctx context.Context) error
+
 	// ID returns an identifier for the Task.
 	ID() string
 }

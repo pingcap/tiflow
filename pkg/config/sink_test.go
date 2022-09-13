@@ -109,7 +109,15 @@ func TestValidateApplyParameter(t *testing.T) {
 		},
 		{
 			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
-			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
+			expectedErr: ".*protocol canal is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=default",
+			expectedErr: ".*protocol default is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=random",
+			expectedErr: ".*protocol .* is incompatible with tidb scheme.*",
 		},
 		{
 			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
@@ -135,7 +143,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		},
 		{
 			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
-			expectedErr: ".*unknown .* protocol for Message Queue sink.*",
+			expectedErr: ".*unknown .* message protocol for sink.*",
 		},
 	}
 

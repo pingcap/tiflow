@@ -22,7 +22,8 @@ import (
 type ExecutorNotFoundErrInfo struct {
 	rpcerror.Error[rpcerror.Retryable, rpcerror.NotFound]
 
-	ExecutorID model.ExecutorID
+	ExecutorID  model.ExecutorID
+	IsTombstone bool
 }
 
 // ErrExecutorNotFound is used when an executor ID is not found for
@@ -39,3 +40,27 @@ type ExecutorAlreadyExistsErrInfo struct {
 // ErrExecutorAlreadyExists is used when an executor ID already exists and causes
 // a conflict with a method call.
 var ErrExecutorAlreadyExists = rpcerror.Normalize[ExecutorAlreadyExistsErrInfo]()
+
+// CreateWorkerNonTerminateError provides details of ErrCreateWorkerNonTerminate, which
+// contains original error returned from CreateWorker
+// It means when job master meets this error, the worker should be failovered.
+type CreateWorkerNonTerminateError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.Aborted]
+	Details string
+}
+
+// ErrCreateWorkerNonTerminate indicates the job can be re-created
+var ErrCreateWorkerNonTerminate = rpcerror.Normalize[CreateWorkerNonTerminateError]()
+
+// CreateWorkerTerminateError provides details of ErrCreateWorkerTerminate, which
+// contains original error returned from CreateWorker
+// It means when job master meets this error, the worker should be terminated and
+// job master doesn't need to re-create worker.
+type CreateWorkerTerminateError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.Aborted]
+	Details string
+}
+
+// ErrCreateWorkerTerminate indicates the job should be terminated permanently
+// from the perspective of business logic.
+var ErrCreateWorkerTerminate = rpcerror.Normalize[CreateWorkerTerminateError]()

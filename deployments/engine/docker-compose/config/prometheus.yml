@@ -1,0 +1,54 @@
+global:
+  scrape_interval: 3s
+
+scrape_configs:
+  - job_name: "metric"
+    scrape_interval: 3s
+    metrics_path: /metrics
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric1"
+    scrape_interval: 3s
+    metrics_path: /metric1
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric2"
+    scrape_interval: 3s
+    metrics_path: /metric2
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric3"
+    scrape_interval: 3s
+    metrics_path: /metric3
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric4"
+    scrape_interval: 3s
+    metrics_path: /metric4
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric5"
+    scrape_interval: 3s
+    metrics_path: /metric5
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric6"
+    scrape_interval: 3s
+    metrics_path: /metric6
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric7"
+    scrape_interval: 3s
+    metrics_path: /metric7
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric8"
+    scrape_interval: 3s
+    metrics_path: /metric8
+    static_configs:
+    - targets: ["host.docker.internal:10240"]
+  - job_name: "metric9"
+    scrape_interval: 3s
+    metrics_path: /metric9
+    static_configs:
+    - targets: ["host.docker.internal:10240"]

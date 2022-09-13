@@ -18,12 +18,10 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -117,109 +115,6 @@ func TestEntrySorter(t *testing.T) {
 			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 		}
 		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		for i := 0; i < len(tc.expect); i++ {
-			e := <-es.Output()
-			require.Equal(t, tc.expect[i], e.RawKV)
-		}
-	}
-	cancel()
-	wg.Wait()
-}
-
-func TestEntrySorterNonBlocking(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		input      []*model.RawKVEntry
-		resolvedTs uint64
-		expect     []*model.RawKVEntry
-	}{
-		{
-			input: []*model.RawKVEntry{
-				{CRTs: 1, OpType: model.OpTypePut},
-				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 4, OpType: model.OpTypeDelete},
-				{CRTs: 2, OpType: model.OpTypeDelete},
-			},
-			resolvedTs: 0,
-			expect: []*model.RawKVEntry{
-				{CRTs: 0, OpType: model.OpTypeResolved},
-			},
-		},
-		{
-			input: []*model.RawKVEntry{
-				{CRTs: 3, OpType: model.OpTypePut},
-				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 5, OpType: model.OpTypePut},
-			},
-			resolvedTs: 3,
-			expect: []*model.RawKVEntry{
-				{CRTs: 1, OpType: model.OpTypePut},
-				{CRTs: 2, OpType: model.OpTypeDelete},
-				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 3, OpType: model.OpTypePut},
-				{CRTs: 3, OpType: model.OpTypeResolved},
-			},
-		},
-		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 3,
-			expect:     []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeResolved}},
-		},
-		{
-			input: []*model.RawKVEntry{
-				{CRTs: 7, OpType: model.OpTypePut},
-			},
-			resolvedTs: 6,
-			expect: []*model.RawKVEntry{
-				{CRTs: 4, OpType: model.OpTypeDelete},
-				{CRTs: 5, OpType: model.OpTypePut},
-				{CRTs: 6, OpType: model.OpTypeResolved},
-			},
-		},
-		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 6,
-			expect: []*model.RawKVEntry{
-				{CRTs: 6, OpType: model.OpTypeResolved},
-			},
-		},
-		{
-			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
-			resolvedTs: 8,
-			expect: []*model.RawKVEntry{
-				{CRTs: 7, OpType: model.OpTypeDelete},
-				{CRTs: 7, OpType: model.OpTypeDelete},
-				{CRTs: 7, OpType: model.OpTypePut},
-				{CRTs: 8, OpType: model.OpTypeResolved},
-			},
-		},
-		{
-			input:      []*model.RawKVEntry{},
-			resolvedTs: 15,
-			expect: []*model.RawKVEntry{
-				{CRTs: 15, OpType: model.OpTypeResolved},
-			},
-		},
-	}
-	es := NewEntrySorter()
-	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := es.Run(ctx)
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
-	for _, tc := range testCases {
-		for _, entry := range tc.input {
-			added, err := es.TryAddEntry(ctx, model.NewPolymorphicEvent(entry))
-			require.True(t, added)
-			require.Nil(t, err)
-		}
-		added, err := es.TryAddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		require.True(t, added)
-		require.Nil(t, err)
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			require.Equal(t, tc.expect[i], e.RawKV)
@@ -460,15 +355,6 @@ func TestMergeEvents(t *testing.T) {
 
 	mergeEvents(events1, events2, output)
 	require.Equal(t, expectedResults, outputResults)
-}
-
-func TestEntrySorterClosed(t *testing.T) {
-	t.Parallel()
-	es := NewEntrySorter()
-	atomic.StoreInt32(&es.closed, 1)
-	added, err := es.TryAddEntry(context.TODO(), model.NewResolvedPolymorphicEvent(0, 1))
-	require.False(t, added)
-	require.True(t, cerror.ErrSorterClosed.Equal(err))
 }
 
 func BenchmarkSorter(b *testing.B) {

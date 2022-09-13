@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/pingcap/errors"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -39,15 +39,13 @@ import (
 
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
-	noConfirm         bool
-	targetTs          uint64
-	sinkURI           string
-	schemaRegistry    string
-	configFile        string
-	sortEngine        string
-	sortDir           string
-	syncPointEnabled  bool
-	syncPointInterval time.Duration
+	noConfirm      bool
+	targetTs       uint64
+	sinkURI        string
+	schemaRegistry string
+	configFile     string
+	sortEngine     string
+	sortDir        string
 
 	upstreamPDAddrs  string
 	upstreamCaPath   string
@@ -69,8 +67,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&o.configFile, "config", "", "Path of the configuration file")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
-	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "",
 		"Avro Schema Registry URI")
 	cmd.PersistentFlags().StringVar(&o.upstreamPDAddrs, "upstream-pd", "",
@@ -216,15 +212,25 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
+	sinkURI, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	if sink.IsPulsarScheme(sinkURI.Scheme) {
+		cmd.Printf(color.HiYellowString("[WARN] Pulsar Sink is " +
+			"not recommended for production use.\n"))
+	}
+
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
+
 	// user is not allowed to set sort-dir at changefeed level
 	if o.commonChangefeedOptions.sortDir != "" {
 		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in changefeed settings. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible, sort-dir will be set automatically. " +
 			"The --sort-dir here will be no-op\n"))
-		return errors.New("Creating changefeed with `--sort-dir`, it's invalid")
+		return errors.New("creating changefeed with `--sort-dir`, it's invalid")
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {
@@ -240,19 +246,17 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	return nil
 }
 
-func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.ChangefeedConfig {
+func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(o.cfg)
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
-		ID:                o.changefeedID,
-		StartTs:           o.startTs,
-		TargetTs:          o.commonChangefeedOptions.targetTs,
-		SinkURI:           o.commonChangefeedOptions.sinkURI,
-		Engine:            o.commonChangefeedOptions.sortEngine,
-		ReplicaConfig:     replicaConfig,
-		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
-		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDConfig:          upstreamConfig.PDConfig,
+		ID:            o.changefeedID,
+		StartTs:       o.startTs,
+		TargetTs:      o.commonChangefeedOptions.targetTs,
+		SinkURI:       o.commonChangefeedOptions.sinkURI,
+		Engine:        o.commonChangefeedOptions.sortEngine,
+		ReplicaConfig: replicaConfig,
+		PDConfig:      upstreamConfig.PDConfig,
 	}
 }
 
@@ -292,12 +296,12 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	if !o.commonChangefeedOptions.noConfirm {
-		if err = confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
+		if err = confirmLargeDataGap(cmd, tso.Timestamp, o.startTs, "create"); err != nil {
 			return err
 		}
 	}
 
-	createChangefeedCfg := o.getChangefeedConfig(cmd)
+	createChangefeedCfg := o.getChangefeedConfig()
 
 	verifyTableConfig := &v2.VerifyTableConfig{
 		PDConfig: v2.PDConfig{
@@ -379,20 +383,12 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		Use:   "create",
 		Short: "Create a new replication task (changefeed)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			ctx := cmdcontext.GetDefaultContext()
 
-			err := o.complete(ctx, f, cmd)
-			if err != nil {
-				return err
-			}
-
-			err = o.validate(cmd)
-			if err != nil {
-				return err
-			}
-
-			return o.run(ctx, cmd)
+			util.CheckErr(o.complete(ctx, f, cmd))
+			util.CheckErr(o.validate(cmd))
+			util.CheckErr(o.run(ctx, cmd))
 		},
 	}
 

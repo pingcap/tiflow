@@ -75,7 +75,7 @@ func TestGetChangeFeeds(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Client.Put(context.Background(),
+			_, err := s.client.GetEtcdClient().Put(context.Background(),
 				GetEtcdKeyChangeFeedInfo(DefaultCDCClusterID,
 					model.DefaultChangeFeedID(tc.ids[i])),
 				tc.details[i])
@@ -182,7 +182,7 @@ func putChangeFeedStatus(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = c.Client.Put(ctx, key, value)
+	_, err = c.GetEtcdClient().Put(ctx, key, value)
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
@@ -216,7 +216,7 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 	defer s.TearDownTest(t)
 
 	ctx := context.Background()
-	rawEtcdClient := s.client.Client.cli
+	rawEtcdClient := s.client.GetEtcdClient().cli
 	defaultClusterKey := DefaultClusterAndNamespacePrefix + "/test-key"
 	_, err := rawEtcdClient.Put(ctx, defaultClusterKey, "test-value")
 	require.NoError(t, err)
@@ -318,7 +318,7 @@ func TestGetAllCaptureLeases(t *testing.T) {
 	leases := make(map[string]int64)
 
 	for _, cinfo := range testCases {
-		sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		sess, err := concurrency.NewSession(s.client.GetEtcdClient().Unwrap(),
 			concurrency.WithTTL(10), concurrency.WithContext(ctx))
 		require.NoError(t, err)
 		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
@@ -377,7 +377,7 @@ func TestGetOwnerRevision(t *testing.T) {
 		i := i
 		go func() {
 			defer wg.Done()
-			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
+			sess, err := concurrency.NewSession(s.client.GetEtcdClient().Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
 			require.Nil(t, err)
 			election := concurrency.NewElection(sess,

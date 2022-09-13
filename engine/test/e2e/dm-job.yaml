@@ -1,54 +1,54 @@
-name: <placeholder>
 task-mode: all
 #is-sharding: true
 #shard-mode: pessimistic
-ignore-checking-items: []
-meta-schema: dm_meta
+#ignore-checking-items: []
+#meta-schema: dm_meta
 #enable-heartbeat: false
 #heartbeat-update-interval: 1
 #heartbeat-report-interval: 10
-timezone: ""
-case-sensitive: false
-collation_compatible: loose
+#timezone: ""
+#collation_compatible: loose
 target-database:
   host: host.docker.internal
   port: 4000
   user: root
-  password: ''
-  max-allowed-packet: null
-  session:
-    tidb_txn_mode: optimistic
-  security: null
+  password: ""
+#  max-allowed-packet: null
+#  session:
+#    tidb_txn_mode: optimistic
+#  security: null
 #mysql-instances:
 upstreams:
-- db-config:
-    host: host.docker.internal
-    port: 3306
-    user: root
-    password: '123456'
-    session: {}
-  source-id: mysql-replica-01
-  meta: null
-  #filter-rules:
-  #- filter-01
-  #column-mapping-rules:
-  #- cm-01
-  #route-rules:
-  #- route-01
-  #- route-02
-  #expression-filters: []
-  #black-white-list: ""
-  block-allow-list: balist-01
-  mydumper-config-name: dump-01
-  mydumper: null
-  mydumper-thread: 0
-  loader-config-name: load-01
-  loader: null
-  loader-thread: 0
-  syncer-config-name: sync-01
-  syncer: null
-  syncer-thread: 0
-  #validator-config-name: validator-01
+  - db-config:
+      host: host.docker.internal
+      port: 3306
+      user: root
+      password: ""
+#      session: {}
+    source-id: mysql-replica-01
+    meta:
+      binlog-name: ON.000001
+      binlog-pos: 4
+    #filter-rules:
+    #- filter-01
+    #column-mapping-rules:
+    #- cm-01
+    #route-rules:
+    #- route-01
+    #- route-02
+    #expression-filters: []
+    #black-white-list: ""
+    block-allow-list: balist-01
+    mydumper-config-name: dump-01
+#    mydumper: null
+#    mydumper-thread: 0
+    loader-config-name: load-01
+#    loader: null
+#    loader-thread: 0
+    syncer-config-name: sync-01
+#    syncer: null
+#    syncer-thread: 0
+    #validator-config-name: validator-01
 #- db-config:
 #    host: host.docker.internal
 #    port: 3307
@@ -76,10 +76,10 @@ upstreams:
 #  syncer-config-name: sync-01
 #  syncer: null
 #  syncer-thread: 0
-  #validator-config-name: validator-01
-online-ddl: true
-shadow-table-rules: []
-trash-table-rules: []
+#validator-config-name: validator-01
+#online-ddl: true
+#shadow-table-rules: []
+#trash-table-rules: []
 #online-ddl-scheme: ""
 #routes:
 #  route-01:
@@ -143,43 +143,42 @@ block-allow-list:
     #- dmctl
     #ignore-tables: []
     #ignore-dbs: []
-    do-dbs:
-    - <placeholder>
+    do-dbs: ["<placeholder>"]
 mydumpers:
   dump-01:
-    mydumper-path: ./bin/mydumper
+#    mydumper-path: ./bin/mydumper
     threads: 4
-    chunk-filesize: "64"
-    statement-size: 0
-    rows: 0
-    where: ""
-    skip-tz-utc: true
-    extra-args: ""
+#    chunk-filesize: "64"
+#    statement-size: 0
+#    rows: 0
+#    where: ""
+#    skip-tz-utc: true
+#    extra-args: ""
 loaders:
   load-01:
     pool-size: 16
-    dir: ./dumped_data
-    import-mode: sql
-    on-duplicate: replace
+#    dir: ./dumped_data
+#    import-mode: sql
+#    on-duplicate: replace
 syncers:
   sync-01:
-    meta-file: ""
+#    meta-file: ""
     worker-count: 16
     batch: 100
-    queue-size: 1024
+#    queue-size: 1024
     checkpoint-flush-interval: 1
     compact: true
     multiple-rows: true
-    max-retry: 0
-    auto-fix-gtid: false
-    enable-gtid: false
-    disable-detect: false
-    safe-mode: false
-    enable-ansi-quotes: false
+#    max-retry: 0
+#    auto-fix-gtid: false
+#    enable-gtid: false
+#    disable-detect: false
+#    safe-mode: false
+#    enable-ansi-quotes: false
 #validators:
 #  validator-01:
 #    mode: none
 #    worker-count: 4
 #clean-dump-file: true
-experimental:
-  async-checkpoint-flush: false
+#experimental:
+#  async-checkpoint-flush: false

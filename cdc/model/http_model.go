@@ -61,6 +61,7 @@ func NewHTTPError(err error) HTTPError {
 }
 
 // Liveness is the liveness status of a capture.
+// Liveness can only be changed from alive to stopping, and no way back.
 type Liveness int32
 
 const (
@@ -70,9 +71,10 @@ const (
 	LivenessCaptureStopping Liveness = 1
 )
 
-// Store the given liveness.
-func (l *Liveness) Store(v Liveness) {
-	atomic.StoreInt32((*int32)(l), int32(v))
+// Store the given liveness. Returns true if it success.
+func (l *Liveness) Store(v Liveness) bool {
+	return atomic.CompareAndSwapInt32(
+		(*int32)(l), int32(LivenessCaptureAlive), int32(v))
 }
 
 // Load the liveness.
@@ -93,12 +95,13 @@ func (l *Liveness) String() string {
 
 // ServerStatus holds some common information of a server
 type ServerStatus struct {
-	Version  string   `json:"version"`
-	GitHash  string   `json:"git_hash"`
-	ID       string   `json:"id"`
-	Pid      int      `json:"pid"`
-	IsOwner  bool     `json:"is_owner"`
-	Liveness Liveness `json:"liveness"`
+	Version   string   `json:"version"`
+	GitHash   string   `json:"git_hash"`
+	ID        string   `json:"id"`
+	ClusterID string   `json:"cluster_id"`
+	Pid       int      `json:"pid"`
+	IsOwner   bool     `json:"is_owner"`
+	Liveness  Liveness `json:"liveness"`
 }
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed

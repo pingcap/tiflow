@@ -20,11 +20,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -52,10 +52,10 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 		log.Panic("failed to make tempdir")
 	}
 	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
-	client := manager.NewWrappedMockClient()
+	client := manager.NewMockClient()
 	return &LocalBroker{
 		DefaultBroker: NewBroker(cfg, executorID, client),
-		client:        client.GetLeaderClient().(*manager.MockClient),
+		client:        client,
 	}
 }
 

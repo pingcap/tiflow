@@ -104,8 +104,7 @@ func TestDiscoveryKeepalive(t *testing.T) {
 
 	router := &mockMessageRouter{peers: map[p2pImpl.NodeID]string{}}
 	info := &model.NodeInfo{
-		Type: model.NodeTypeExecutor,
-		ID:   "uuid-1",
+		ID: "uuid-1",
 	}
 	keeper := NewDiscoveryKeepaliver(info, nil, 10, time.Millisecond*10, router)
 	keeper.initDiscoveryRunner = func() error {

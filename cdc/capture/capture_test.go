@@ -26,10 +26,13 @@ import (
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -58,7 +61,7 @@ func TestReset(t *testing.T) {
 	defer client.Close()
 
 	cp := NewCapture4Test(nil)
-	cp.EtcdClient = &client
+	cp.EtcdClient = client
 
 	// simulate network isolation scenarios
 	etcdServer.Close()
@@ -89,6 +92,7 @@ func TestDrainImmediately(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
 	cp := &captureImpl{
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
@@ -96,12 +100,14 @@ func TestDrainImmediately(t *testing.T) {
 		},
 		processorManager: mm,
 		config:           config.GetDefaultServerConfig(),
+		EtcdClient:       me,
 	}
 
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	// Drain completes immediately.
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
 	mm.EXPECT().
 		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
@@ -123,7 +129,9 @@ func TestDrainWaitsTables(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
 	cp := &captureImpl{
+		EtcdClient: me,
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
 			AdvertiseAddr: "127.0.0.1", Version: "test",
@@ -135,6 +143,7 @@ func TestDrainWaitsTables(t *testing.T) {
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	// Drain waits for moving out all tables.
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
 	calls := 0
 	t2 := mm.EXPECT().
 		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -174,7 +183,9 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
 	cp := &captureImpl{
+		EtcdClient: me,
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
 			AdvertiseAddr: "127.0.0.1", Version: "test",
@@ -200,6 +211,7 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 		default:
 		}
 	}).AnyTimes()
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
 	mm.EXPECT().
 		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
@@ -236,7 +248,9 @@ func TestDrainOneCapture(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
 	cp := &captureImpl{
+		EtcdClient: me,
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
 			AdvertiseAddr: "127.0.0.1", Version: "test",
@@ -273,7 +287,9 @@ func TestDrainErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
 	cp := &captureImpl{
+		EtcdClient: me,
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
 			AdvertiseAddr: "127.0.0.1", Version: "test",
@@ -307,6 +323,7 @@ func TestDrainErrors(t *testing.T) {
 		}
 	}).AnyTimes().After(okQueryCall)
 
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
 	errTableCall := mm.EXPECT().
 		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
@@ -340,4 +357,108 @@ func TestDrainErrors(t *testing.T) {
 	case <-done:
 		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	}
+}
+
+func TestDrainSkipNoOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	cp := &captureImpl{
+		EtcdClient: me,
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+	}
+
+	cp.config.Debug.EnableSchedulerV3 = true
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	hasOwnerCall := me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
+	oneTableCall := mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 1
+			close(done)
+		}).After(hasOwnerCall).Times(1)
+
+	// Retry if GetOwnerID returns error.
+	errOwnerCall := me.EXPECT().GetOwnerID(gomock.Any()).
+		Return("", fmt.Errorf("error retry")).Times(1).After(oneTableCall)
+	// Skip drain when there is no owner.
+	me.EXPECT().GetOwnerID(gomock.Any()).
+		Return("", concurrency.ErrElectionNoLeader).Times(1).After(errOwnerCall)
+
+	done := cp.Drain(ctx)
+
+	select {
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	}
+}
+
+type mockElection struct {
+	election
+	campaignRequestCh chan struct{}
+	campaignGrantCh   chan struct{}
+
+	campaignFlag, resignFlag bool
+}
+
+func (e *mockElection) campaign(ctx context.Context, key string) error {
+	e.campaignRequestCh <- struct{}{}
+	<-e.campaignGrantCh
+	e.campaignFlag = true
+	return nil
+}
+
+func (e *mockElection) resign(ctx context.Context) error {
+	e.resignFlag = true
+	return nil
+}
+
+func TestCampaignLiveness(t *testing.T) {
+	t.Parallel()
+
+	me := &mockElection{
+		campaignRequestCh: make(chan struct{}, 1),
+		campaignGrantCh:   make(chan struct{}, 1),
+	}
+	cp := &captureImpl{
+		config:   config.GetDefaultServerConfig(),
+		info:     &model.CaptureInfo{ID: "test"},
+		election: me,
+	}
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+
+	cp.liveness.Store(model.LivenessCaptureStopping)
+	err := cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.False(t, me.campaignFlag)
+
+	// Force set alive.
+	cp.liveness = model.LivenessCaptureAlive
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Grant campaign
+		g := <-me.campaignRequestCh
+		// Set liveness to stopping
+		cp.liveness.Store(model.LivenessCaptureStopping)
+		me.campaignGrantCh <- g
+	}()
+	err = cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.True(t, me.campaignFlag)
+	require.True(t, me.resignFlag)
+
+	wg.Wait()
 }

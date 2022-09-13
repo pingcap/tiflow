@@ -68,7 +68,7 @@ func newDDLSink4Test() (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink()
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
-		a.sink = mockSink
+		a.sinkV1 = mockSink
 		return nil
 	}
 	return ddlSink, mockSink

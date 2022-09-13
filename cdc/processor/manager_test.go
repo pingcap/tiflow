@@ -46,11 +46,16 @@ func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *managerImpl {
-	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
+	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
-		ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+		state *orchestrator.ChangefeedReactorState,
+		captureInfo *model.CaptureInfo,
+		changefeedID model.ChangeFeedID,
+		up *upstream.Upstream,
+		liveness *model.Liveness,
 	) *processor {
-		return newProcessor4Test(ctx, t, createTablePipeline, m.liveness)
+		return newProcessor4Test(t, state, captureInfo, createTablePipeline, m.liveness)
 	}
 	return m
 }
@@ -226,7 +231,7 @@ func TestClose(t *testing.T) {
 
 func TestSendCommandError(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(nil, &liveness).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -288,7 +293,7 @@ func TestManagerLiveness(t *testing.T) {
 
 func TestQueryTableCount(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(nil, &liveness).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
 	ctx := context.TODO()
 	// Add some tables to processor.
 	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{

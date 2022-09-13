@@ -16,15 +16,14 @@ package broker
 import (
 	"context"
 
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 )
 
 // Handle defines an interface for interact with framework
@@ -46,7 +45,7 @@ type LocalResourceHandle struct {
 	desc        *LocalFileResourceDescriptor
 
 	inner  brStorage.ExternalStorage
-	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+	client client.ResourceManagerClient
 
 	fileManager FileManager
 
@@ -101,18 +100,13 @@ func (h *LocalResourceHandle) Persist(ctx context.Context) error {
 		return derrors.ErrInvalidResourceHandle.FastGenByArgs()
 	}
 
-	_, err := rpcutil.DoFailoverRPC(
-		ctx,
-		h.client,
-		&pb.CreateResourceRequest{
-			ProjectInfo:     &pb.ProjectInfo{TenantId: h.projectInfo.TenantID(), ProjectId: h.projectInfo.ProjectID()},
-			ResourceId:      h.id,
-			CreatorExecutor: string(h.executorID),
-			JobId:           h.jobID,
-			CreatorWorkerId: h.desc.Creator,
-		},
-		pb.ResourceManagerClient.CreateResource,
-	)
+	err := h.client.CreateResource(ctx, &pb.CreateResourceRequest{
+		ProjectInfo:     &pb.ProjectInfo{TenantId: h.projectInfo.TenantID(), ProjectId: h.projectInfo.ProjectID()},
+		ResourceId:      h.id,
+		CreatorExecutor: string(h.executorID),
+		JobId:           h.jobID,
+		CreatorWorkerId: h.desc.Creator,
+	})
 	if err != nil {
 		// The RPC could have succeeded on server's side.
 		// We do not need to handle it for now, as the
@@ -140,15 +134,12 @@ func (h *LocalResourceHandle) Discard(ctx context.Context) error {
 	}
 
 	if h.isPersisted.Load() {
-		_, err := rpcutil.DoFailoverRPC(ctx,
-			h.client,
-			&pb.RemoveResourceRequest{
-				ResourceKey: &pb.ResourceKey{
-					JobId:      h.jobID,
-					ResourceId: h.id,
-				},
+		err := h.client.RemoveResource(ctx, &pb.RemoveResourceRequest{
+			ResourceKey: &pb.ResourceKey{
+				JobId:      h.jobID,
+				ResourceId: h.id,
 			},
-			pb.ResourceManagerClient.RemoveResource)
+		})
 		if err != nil {
 			// TODO proper retrying.
 			return errors.Trace(err)

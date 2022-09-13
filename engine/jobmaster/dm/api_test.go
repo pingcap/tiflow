@@ -22,9 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -39,24 +44,19 @@ func TestQueryStatusAPI(t *testing.T) {
 		metaKVClient      = kvmock.NewMetaMock()
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
-			workerID:      "jobmaster-worker-id",
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.JobMasterID(), metaKVClient),
+			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
-				"task1": {Stage: metadata.StagePaused},
-				"task2": {Stage: metadata.StageFinished},
-				"task3": {Stage: metadata.StageFinished},
-				"task4": {Stage: metadata.StageRunning},
-				"task5": {Stage: metadata.StageRunning},
-				"task6": {Stage: metadata.StageRunning},
+				"task1": {Stage: metadata.StagePaused, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task2": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task3": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task4": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task5": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task6": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task7": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
 			},
-		}
-		finishedTaskStatus = runtime.TaskStatus{
-			Unit:  framework.WorkerDMLoad,
-			Task:  "task2",
-			Stage: metadata.StageFinished,
 		}
 		dumpStatus = &pb.DumpStatus{
 			TotalTables:       10,
@@ -87,7 +87,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
-		processError = &pb.ProcessError{
+		processError = &dmpkg.ProcessError{
 			ErrCode:    1,
 			ErrClass:   "class",
 			ErrScope:   "scope",
@@ -100,19 +100,32 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
+		finishedTaskStatus = runtime.FinishedTaskStatus{
+			TaskStatus: runtime.TaskStatus{
+				Unit:           framework.WorkerDMLoad,
+				Task:           "task2",
+				Stage:          metadata.StageFinished,
+				CfgModRevision: 3,
+			},
+			Result: &pb.ProcessResult{
+				IsCanceled: false,
+			},
+			Status: loadStatusBytes,
+		}
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil)
-	jm.taskManager = NewTaskManager(nil, nil, nil)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline))
-	jm.taskManager.UpdateTaskStatus(finishedTaskStatus)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", framework.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
+	jm.finishedStatus.Store("task7", finishedTaskStatus)
 
 	// no job
 	jobStatus, err := jm.QueryJobStatus(context.Background(), nil)
@@ -128,81 +141,67 @@ func TestQueryStatusAPI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	jobStatus, err = jm.QueryJobStatus(ctx, []string{"task7"})
+	jobStatus, err = jm.QueryJobStatus(ctx, []string{"task8"})
 	require.NoError(t, err)
-	taskStatus := jobStatus.TaskStatus["task7"]
+	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
-	require.Equal(t, 0, int(taskStatus.ExpectedStage))
-	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task7 for job not found"}, taskStatus.Status)
+	require.Equal(t, "", string(taskStatus.ExpectedStage))
+	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
 
 	expectedStatus := `{
-	"JobMasterID": "dm-jobmaster-id",
-	"WorkerID": "jobmaster-worker-id",
-	"TaskStatus": {
+	"job_id": "dm-jobmaster-id",
+	"task_status": {
 		"task1": {
-			"ExpectedStage": 3,
-			"WorkerID": "",
-			"Status": {
-				"ErrorMsg": "worker for task task1 not found",
-				"Unit": 0,
-				"Stage": 0,
-				"Result": null,
-				"Status": null
+			"expected_stage": "paused",
+			"worker_id": "",
+			"config_outdated": true,
+			"status": {
+				"error_message": "worker for task task1 not found",
+				"unit": 0,
+				"stage": "",
+				"result": null,
+				"status": null
 			}
 		},
 		"task2": {
-			"ExpectedStage": 4,
-			"WorkerID": "worker2",
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 11,
-				"Stage": 4,
-				"Result": null,
-				"Status": null
+			"expected_stage": "finished",
+			"worker_id": "worker2",
+			"config_outdated": true,
+			"status": {
+				"error_message": "task task2 is finished and status has been deleted",
+				"unit": 11,
+				"stage": "finished",
+				"result": null,
+				"status": null
 			}
 		},
 		"task3": {
-			"ExpectedStage": 4,
-			"WorkerID": "worker3",
-			"Status": {
-				"ErrorMsg": "context deadline exceeded",
-				"Unit": 0,
-				"Stage": 0,
-				"Result": null,
-				"Status": null
+			"expected_stage": "finished",
+			"worker_id": "worker3",
+			"config_outdated": false,
+			"status": {
+				"error_message": "context deadline exceeded",
+				"unit": 0,
+				"stage": "",
+				"result": null,
+				"status": null
 			}
 		},
 		"task4": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker4",
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 10,
-				"Stage": 2,
-				"Result": null,
-				"Status": {
-					"totalTables": 10,
-					"completedTables": 1,
-					"finishedBytes": 100,
-					"finishedRows": 10,
-					"estimateTotalRows": 1000
-				}
-			}
-		},
-		"task5": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker5",
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 11,
-				"Stage": 3,
-				"Result": {
-					"isCanceled": true
+			"expected_stage": "running",
+			"worker_id": "worker4",
+			"config_outdated": true,
+			"status": {
+				"error_message": "",
+				"unit": 11,
+				"stage": "paused",
+				"result": {
+					"is_canceled": true
 				},
-				"Status": {
+				"status": {
 					"finishedBytes": 4,
 					"totalBytes": 100,
 					"progress": "4%",
@@ -211,27 +210,28 @@ func TestQueryStatusAPI(t *testing.T) {
 				}
 			}
 		},
-		"task6": {
-			"ExpectedStage": 2,
-			"WorkerID": "worker6",
-			"Status": {
-				"ErrorMsg": "",
-				"Unit": 12,
-				"Stage": 5,
-				"Result": {
+		"task5": {
+			"expected_stage": "running",
+			"worker_id": "worker5",
+			"config_outdated": false,
+			"status": {
+				"error_message": "",
+				"unit": 12,
+				"stage": "error",
+				"result": {
 					"errors": [
 						{
-							"ErrCode": 1,
-							"ErrClass": "class",
-							"ErrScope": "scope",
-							"ErrLevel": "low",
-							"Message": "msg",
-							"RawCause": "raw cause",
-							"Workaround": "workaround"
+							"error_code": 1,
+							"error_class": "class",
+							"error_scope": "scope",
+							"error_level": "low",
+							"message": "msg",
+							"raw_cause": "raw cause",
+							"workaround": "workaround"
 						}
 					]
 				},
-				"Status": {
+				"status": {
 					"totalEvents": 10,
 					"totalTps": 10,
 					"recentTps": 10,
@@ -246,6 +246,42 @@ func TestQueryStatusAPI(t *testing.T) {
 					"secondsBehindMaster": 10
 				}
 			}
+		},
+		"task6": {
+			"expected_stage": "running",
+			"worker_id": "worker6",
+			"config_outdated": true,
+			"status": {
+				"error_message": "",
+				"unit": 10,
+				"stage": "running",
+				"result": null,
+				"status": {
+					"totalTables": 10,
+					"completedTables": 1,
+					"finishedBytes": 100,
+					"finishedRows": 10,
+					"estimateTotalRows": 1000
+				}
+			}
+		},
+		"task7": {
+			"expected_stage": "finished",
+			"worker_id": "worker7",
+			"config_outdated": false,
+			"status": {
+				"error_message": "",
+				"unit": 11,
+				"stage": "finished",
+				"result": {},
+				"status": {
+					"finishedBytes": 4,
+					"totalBytes": 100,
+					"progress": "4%",
+					"metaBinlog": "mysql-bin.000002, 8",
+					"metaBinlogGTID": "1-2-3"
+				}
+			}
 		}
 	}
 }`
@@ -256,35 +292,90 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
 	}
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
 }
 
 func TestGetJobCfg(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	jm := &JobMaster{
-		metadata: metadata.NewMetaData("master-id", kvClient),
+		metadata: metadata.NewMetaData(kvClient, log.L()),
 	}
 	jobCfg, err := jm.GetJobCfg(context.Background())
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, jobCfg)
 
-	jobCfg = &config.JobCfg{Name: "job-id", Upstreams: []*config.UpstreamCfg{{}}}
+	jobCfg = &config.JobCfg{TaskMode: dmconfig.ModeFull, Upstreams: []*config.UpstreamCfg{{}}}
 	job := metadata.NewJob(jobCfg)
 	jm.metadata.JobStore().Put(context.Background(), job)
 
 	jobCfg, err = jm.GetJobCfg(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "job-id", jobCfg.Name)
+	require.Equal(t, dmconfig.ModeFull, jobCfg.TaskMode)
+}
+
+func TestUpdateJobCfg(t *testing.T) {
+	var (
+		mockBaseJobmaster   = &MockBaseJobmaster{}
+		metaKVClient        = kvmock.NewMetaMock()
+		mockCheckpointAgent = &MockCheckpointAgent{}
+		messageAgent        = &dmpkg.MockMessageAgent{}
+		jobCfg              = &config.JobCfg{}
+		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
+		jm                  = &JobMaster{
+			BaseJobMaster:   mockBaseJobmaster,
+			checkpointAgent: mockCheckpointAgent,
+		}
+	)
+	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	funcBackup := master.CheckAndAdjustSourceConfigFunc
+	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
+	defer func() {
+		master.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
+	precheckError := errors.New("precheck error")
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "", precheckError
+	}
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnError(errors.New("database error"))
+	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "database error")
+
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
+	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "state not found")
+
+	jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil)
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
+	jm.finishedStatus.Store("key", "val")
+	mockCheckpointAgent.On("Update").Return(nil)
+	require.NoError(t, jm.UpdateJobCfg(context.Background(), jobCfg))
+	// finished status should be reset.
+	jm.finishedStatus.Range(func(k, v interface{}) bool {
+		require.FailNow(t, "finished status should be reset")
+		return true
+	})
 }
 
 func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm := &JobMaster{
-		metadata:     metadata.NewMetaData("master-id", kvClient),
+		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
 	}
 	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})

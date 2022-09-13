@@ -3133,7 +3133,7 @@ tags = ["internal", "high"]
 [error.DM-schema-tracker-44006]
 message = "cannot track DDL: %s"
 description = ""
-workaround = ""
+workaround = "You can use handle-error to replace or skip this DDL."
 tags = ["internal", "high"]
 
 [error.DM-schema-tracker-44007]

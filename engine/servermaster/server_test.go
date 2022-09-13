@@ -17,24 +17,26 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/pkg/logutil"
-
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func init() {
@@ -44,98 +46,67 @@ func init() {
 	}
 }
 
-func prepareServerEnv(t *testing.T, name string) (string, *Config) {
-	dir := t.TempDir()
-
-	ports, err := freeport.GetFreePorts(2)
-	require.Nil(t, err)
+func prepareServerEnv(t *testing.T) *Config {
+	ports, err := freeport.GetFreePorts(1)
+	require.NoError(t, err)
 	cfgTpl := `
 addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
-[frame-metastore-conf]
+[framework-meta]
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
-[frame-metastore-conf.auth]
+schema = "test0"
 user = "root"
-[business-metastore-conf]
+[business-meta]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
-[etcd]
-name = "%s"
-data-dir = "%s"
-peer-urls = "http://127.0.0.1:%d"
-initial-cluster = "%s=http://127.0.0.1:%d"`
-	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], name, dir, ports[1], name, ports[1])
+schema = "test1"
+`
+	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0])
 	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
-	err = cfg.Adjust()
+	err = cfg.AdjustAndValidate()
 	require.Nil(t, err)
 
-	masterAddr := fmt.Sprintf("127.0.0.1:%d", ports[0])
+	cfg.Addr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 
-	return masterAddr, cfg
+	return cfg
 }
 
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
-func TestStartGrpcSrv(t *testing.T) {
-	masterAddr, cfg := prepareServerEnv(t, "test-start-grpc-srv")
+func TestServe(t *testing.T) {
+	cfg := prepareServerEnv(t)
+	s := &Server{
+		cfg:        cfg,
+		msgService: p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+	}
 
-	s := &Server{cfg: cfg}
-	ctx := context.Background()
-	err := s.startGrpcSrv(ctx)
-	require.Nil(t, err)
-
-	apiURL := fmt.Sprintf("http://%s", masterAddr)
-	testPprof(t, apiURL)
-
-	testPrometheusMetrics(t, apiURL)
-	s.Stop()
-}
-
-func TestStartGrpcSrvCancelable(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	ports, err := freeport.GetFreePorts(3)
-	require.Nil(t, err)
-	cfgTpl := `
-addr = "127.0.0.1:%d"
-advertise-addr = "127.0.0.1:%d"
-[frame-metastore-conf]
-store-id = "root"
-endpoints = ["127.0.0.1:%d"]
-[frame-metastore-conf.auth]
-user = "root"
-[business-metastore-conf]
-store-id = "default"
-endpoints = ["127.0.0.1:%d"]
-[etcd]
-name = "server-master-1"
-data-dir = "%s"
-peer-urls = "http://127.0.0.1:%d"
-initial-cluster = "server-master-1=http://127.0.0.1:%d,server-master-2=http://127.0.0.1:%d"`
-	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], dir, ports[1], ports[1], ports[2])
-	cfg := GetDefaultMasterConfig()
-	err = cfg.configFromString(cfgStr)
-	require.Nil(t, err)
-	err = cfg.Adjust()
-	require.Nil(t, err)
-
-	s := &Server{cfg: cfg}
 	ctx, cancel := context.WithCancel(context.Background())
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = s.startGrpcSrv(ctx)
+		_ = s.serve(ctx)
 	}()
-	// sleep a short time to ensure embed etcd is being started
-	time.Sleep(time.Millisecond * 100)
+
+	require.Eventually(t, func() bool {
+		conn, err := net.Dial("tcp", cfg.Addr)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	}, time.Second*5, time.Millisecond*100, "wait for server to start")
+
+	apiURL := "http://" + cfg.Addr
+	testPprof(t, apiURL)
+	testPrometheusMetrics(t, apiURL)
+
 	cancel()
 	wg.Wait()
-	require.EqualError(t, err, context.Canceled.Error())
 }
 
 func testPprof(t *testing.T, addr string) {
@@ -154,55 +125,60 @@ func testPprof(t *testing.T, addr string) {
 	}
 	for _, uri := range urls {
 		resp, err := http.Get(addr + uri)
-		require.Nil(t, err)
-		defer resp.Body.Close()
+		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		_, err = io.ReadAll(resp.Body)
-		require.Nil(t, err)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 	}
 }
 
 func testPrometheusMetrics(t *testing.T, addr string) {
 	resp, err := http.Get(addr + "/metrics")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	_, err = io.ReadAll(resp.Body)
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Server master requires etcd/gRPC service as the minimum running environment,
 // this case
-// - starts an embed etcd with gRPC service, including message service and
-//   server master pb service.
-// - campaigns to be leader and then runs leader service.
+//   - starts an embed etcd with gRPC service, including message service and
+//     server master pb service.
+//   - campaigns to be leader and then runs leader service.
+//
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 // FIXME: disable this test temporary for no proper mock of frame metastore
 // nolint: deadcode
 func testRunLeaderService(t *testing.T) {
-	_, cfg := prepareServerEnv(t, "test-run-leader-service")
+	cfg := prepareServerEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s, err := NewServer(cfg, nil)
-	require.Nil(t, err)
-
-	// meta operation fail:context deadline exceeded
-	_ = s.registerMetaStore()
-
-	err = s.startResourceManager()
 	require.NoError(t, err)
 
-	err = s.startGrpcSrv(ctx)
-	require.Nil(t, err)
+	_ = s.registerMetaStore(ctx)
 
-	sessionCfg, err := s.generateSessionConfig()
-	require.Nil(t, err)
-	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
-	require.Nil(t, err)
+	s.initResourceManagerService()
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.serve(ctx)
+	}()
+
+	sessionCfg, err := s.generateSessionConfig()
+	require.NoError(t, err)
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
+	require.NoError(t, err)
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -210,7 +186,7 @@ func testRunLeaderService(t *testing.T) {
 	}()
 
 	_, _, err = session.Campaign(ctx, time.Second)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	ctx1, cancel1 := context.WithTimeout(ctx, time.Second)
 	defer cancel1()
@@ -219,7 +195,7 @@ func testRunLeaderService(t *testing.T) {
 
 	// runLeaderService exits, try to campaign to be leader and run leader servcie again
 	_, _, err = session.Campaign(ctx, time.Second)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
 	defer cancel2()
 	err = s.runLeaderService(ctx2)
@@ -230,88 +206,35 @@ func testRunLeaderService(t *testing.T) {
 }
 
 type mockJobManager struct {
-	framework.BaseMaster
+	JobManager
 	jobMu sync.RWMutex
-	jobs  map[pb.QueryJobResponse_JobStatus]int
+	jobs  map[pb.Job_State][]*pb.Job
 }
 
-func (m *mockJobManager) JobCount(status pb.QueryJobResponse_JobStatus) int {
+func (m *mockJobManager) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
+	for _, jobs := range m.jobs {
+		for _, job := range jobs {
+			if job.GetId() == req.GetId() {
+				return job, nil
+			}
+		}
+	}
+	return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+}
+
+func (m *mockJobManager) JobCount(status pb.Job_State) int {
 	m.jobMu.RLock()
 	defer m.jobMu.RUnlock()
-	return m.jobs[status]
-}
-
-func (m *mockJobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
-	panic("not implemented")
-}
-
-func (m *mockJobManager) WatchJobStatuses(
-	ctx context.Context,
-) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
-	// TODO implement me
-	panic("implement me")
+	return len(m.jobs[status])
 }
 
 type mockExecutorManager struct {
+	ExecutorManager
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
 }
 
-func (m *mockExecutorManager) WatchExecutors(
-	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
-	panic("implement me")
-}
-
-func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
-	panic("implement me")
-}
-
-func (m *mockExecutorManager) CapacityProvider() scheduler.CapacityProvider {
-	panic("implement me")
-}
-
-func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) RegisterExec(info *model.NodeInfo) {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) Start(ctx context.Context) {
-	panic("not implemented")
-}
-
 func (m *mockExecutorManager) Stop() {
-}
-
-func (m *mockExecutorManager) HasExecutor(executorID string) bool {
-	panic("not implemented")
-}
-
-func (m *mockExecutorManager) ListExecutors() []string {
-	panic("not implemented")
 }
 
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
@@ -321,19 +244,35 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 }
 
 func TestCollectMetric(t *testing.T) {
-	masterAddr, cfg := prepareServerEnv(t, "test-collect-metric")
+	cfg := prepareServerEnv(t)
 
 	s := &Server{
-		cfg:     cfg,
-		metrics: newServerMasterMetric(),
+		cfg:        cfg,
+		metrics:    newServerMasterMetric(),
+		msgService: p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	err := s.startGrpcSrv(ctx)
-	require.Nil(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.serve(ctx)
+	}()
 
 	jobManager := &mockJobManager{
-		jobs: map[pb.QueryJobResponse_JobStatus]int{
-			pb.QueryJobResponse_online: 3,
+		jobs: map[pb.Job_State][]*pb.Job{
+			pb.Job_Running: {
+				&pb.Job{
+					Id: "job-1",
+				},
+				&pb.Job{
+					Id: "job-2",
+				},
+				&pb.Job{
+					Id: "job-3",
+				},
+			},
 		},
 	}
 	executorManager := &mockExecutorManager{
@@ -346,22 +285,92 @@ func TestCollectMetric(t *testing.T) {
 	s.executorManager = executorManager
 
 	s.collectLeaderMetric()
-	apiURL := fmt.Sprintf("http://%s", masterAddr)
+	apiURL := fmt.Sprintf("http://%s", cfg.Addr)
 	testCustomedPrometheusMetrics(t, apiURL)
-	s.Stop()
+
 	cancel()
+	wg.Wait()
+	s.Stop()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 	require.Eventually(t, func() bool {
 		resp, err := http.Get(addr + "/metrics")
-		require.Nil(t, err)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		metric := string(body)
-		return strings.Contains(metric, "dataflow_server_master_job_num") &&
-			strings.Contains(metric, "dataflow_server_master_executor_num")
+		return strings.Contains(metric, "tiflow_server_master_job_num") &&
+			strings.Contains(metric, "tiflow_server_master_executor_num")
 	}, time.Second, time.Millisecond*20)
+}
+
+type mockPreRPCHook struct {
+	rpcutil.PreRPCHook
+}
+
+func (mockPreRPCHook) PreRPC(_ context.Context, _ interface{}, _ interface{}) (shouldRet bool, err error) {
+	return false, nil
+}
+
+func TestHTTPErrorHandler(t *testing.T) {
+	cfg := prepareServerEnv(t)
+
+	s := &Server{
+		cfg:           cfg,
+		msgService:    p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		masterRPCHook: mockPreRPCHook{},
+		jobManager: &mockJobManager{
+			jobs: map[pb.Job_State][]*pb.Job{
+				pb.Job_Running: {
+					&pb.Job{
+						Id: "job-1",
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.serve(ctx)
+	}()
+
+	require.Eventually(t, func() bool {
+		conn, err := net.Dial("tcp", cfg.Addr)
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, time.Millisecond*100, "wait for server start")
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var pbStatus spb.Status
+	err = protojson.Unmarshal(body, &pbStatus)
+	require.NoError(t, err)
+
+	rpcErr := rpcerror.FromGRPCError(status.FromProto(&pbStatus).Err())
+	require.True(t, ErrJobNotFound.Is(rpcErr))
+
+	cancel()
+	wg.Wait()
+	s.Stop()
 }

@@ -20,11 +20,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -36,7 +37,7 @@ type mqEvent struct {
 	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
-// worker will send messages to the Kafka producer on a batch basis.
+// worker will send messages to the DML producer on a batch basis.
 type worker struct {
 	// changeFeedID indicates this sink belongs to which processor(changefeed).
 	changeFeedID model.ChangeFeedID
@@ -48,12 +49,17 @@ type worker struct {
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka/Pulsar broker.
-	producer producer.Producer
+	producer dmlproducer.DMLProducer
+	// statistics is used to record DML metrics.
+	statistics *metrics.Statistics
 }
 
 // newWorker creates a new flush worker.
-func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
-	producer producer.Producer,
+func newWorker(
+	id model.ChangeFeedID,
+	encoder codec.EventBatchEncoder,
+	producer dmlproducer.DMLProducer,
+	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID: id,
@@ -61,6 +67,7 @@ func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 		ticker:       time.NewTicker(mqv1.FlushInterval),
 		encoder:      encoder,
 		producer:     producer,
+		statistics:   statistics,
 	}
 
 	return w
@@ -71,10 +78,12 @@ func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 func (w *worker) run(ctx context.Context) (retErr error) {
 	defer func() {
 		w.ticker.Stop()
-		log.Info("flushWorker exited", zap.Error(retErr),
+		log.Info("FlushWorker exited", zap.Error(retErr),
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
+	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {
@@ -97,7 +106,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	}
 }
 
-// batch collects a batch of messages to be sent to the Kafka producer.
+// batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
 	ctx context.Context, events []mqEvent,
 ) (int, error) {
@@ -159,34 +168,40 @@ func (w *worker) group(
 	return partitionedRows
 }
 
-// asyncSend is responsible for sending messages to the Kafka producer.
+// asyncSend is responsible for sending messages to the DML producer.
 func (w *worker) asyncSend(
 	ctx context.Context,
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
 ) error {
 	for key, events := range partitionedRows {
+		rowsCount := 0
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.TableStatus.Load() == pipeline.TableStateStopping {
+			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
-				log.Debug("skip event of stopped table", zap.Any("event", event))
+				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
 			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
 			if err != nil {
 				return err
 			}
+			rowsCount++
+			w.statistics.ObserveRows(event.Event)
 		}
 
-		thisBatchSize := 0
 		for _, message := range w.encoder.Build() {
-			err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
+			err := w.statistics.RecordBatchExecution(func() (int, error) {
+				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
+				if err != nil {
+					return 0, err
+				}
+				return message.GetRowsCount(), nil
+			})
 			if err != nil {
 				return err
 			}
-			thisBatchSize += message.GetRowsCount()
 		}
-		log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
 	}
 
 	return nil
@@ -199,12 +214,5 @@ func (w *worker) close() {
 	for range w.msgChan.Out() {
 		// Do nothing. We do not care about the data.
 	}
-	// We need to close it asynchronously.
-	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
-	go func() {
-		err := w.producer.Close()
-		if err != nil {
-			log.Error("failed to close Kafka producer", zap.Error(err))
-		}
-	}()
+	w.producer.Close()
 }

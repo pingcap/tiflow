@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -59,17 +60,19 @@ func TestMessageMatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	clientCtx := context.Background()
+
 	messageErr := errors.New("message error")
 	// synchronous send
 	mockClient.On("SendMessage").Return(messageErr).Once()
-	resp, err := messageMatcher.sendRequest(ctx, "topic", "command", "request", mockClient)
+	resp, err := messageMatcher.sendRequest(ctx, clientCtx, "topic", "command", "request", mockClient)
 	require.EqualError(t, err, messageErr.Error())
 	require.Nil(t, resp)
 	// deadline exceeded
 	mockClient.On("SendMessage").Return(nil).Once()
 	ctx2, cancel2 := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel2()
-	resp, err = messageMatcher.sendRequest(ctx2, "topic", "command", "request", mockClient)
+	resp, err = messageMatcher.sendRequest(ctx2, clientCtx, "topic", "command", "request", mockClient)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 	require.Nil(t, resp)
 	// late response
@@ -80,7 +83,7 @@ func TestMessageMatcher(t *testing.T) {
 		mockClient.On("SendMessage").Return(nil).Once()
 		ctx3, cancel3 := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel3()
-		resp3, err := messageMatcher.sendRequest(ctx3, "request-topic", "command", "request", mockClient)
+		resp3, err := messageMatcher.sendRequest(ctx3, clientCtx, "request-topic", "command", "request", mockClient)
 		require.NoError(t, err)
 		require.Equal(t, "response", resp3)
 	}()
@@ -99,48 +102,46 @@ func TestMessageMatcher(t *testing.T) {
 }
 
 func TestUpdateClient(t *testing.T) {
-	messageAgent := NewMessageAgentImpl("", nil, p2p.NewMockMessageHandlerManager())
-	require.NoError(t, messageAgent.Init(context.Background()))
+	messageAgent := NewMessageAgentImpl("", nil, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
 	workerHandle1 := &framework.MockHandle{WorkerID: "worker1"}
 	workerHandle2 := &framework.MockHandle{WorkerID: "worker2"}
 
 	// add client
-	messageAgent.UpdateClient("task1", workerHandle1)
-	require.Len(t, messageAgent.clients, 1)
+	messageAgent.UpdateClient("task1", workerHandle1.Unwrap())
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err := messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.EqualError(t, err, "client task2 not found")
 	require.Equal(t, client, nil)
-	messageAgent.UpdateClient("task2", workerHandle2)
-	require.Len(t, messageAgent.clients, 2)
+	messageAgent.UpdateClient("task2", workerHandle2.Unwrap())
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle2)
+	require.Equal(t, client, workerHandle2.Unwrap())
 
 	// remove client
 	messageAgent.UpdateClient("task3", nil)
-	require.Len(t, messageAgent.clients, 2)
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle2)
-	messageAgent.UpdateClient("task2", nil)
-	require.Len(t, messageAgent.clients, 1)
+	require.Equal(t, client, workerHandle2.Unwrap())
+	messageAgent.RemoveClient("task2")
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 }
 
 func TestMessageAgent(t *testing.T) {
-	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager())
-	require.NoError(t, messageAgent.Init(context.Background()))
+	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
 	clientID := "client-id"
 	mockClient := &MockClient{}
 	messageAgent.UpdateClient(clientID, mockClient)
@@ -198,16 +199,14 @@ func TestMessageHandler(t *testing.T) {
 	serialize(t, wrongResp, serializeWrongResp)
 
 	// mock no handler
-	messageAgent := NewMessageAgentImpl("id", &MockNothing{}, p2p.NewMockMessageHandlerManager())
-	require.NoError(t, messageAgent.Init(context.Background()))
+	messageAgent := NewMessageAgentImpl("id", &MockNothing{}, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
 	require.EqualError(t, messageAgent.onMessage(topic, serializeMsg), "message handler for command MessageAPI not found")
 	require.EqualError(t, messageAgent.onMessage(topic, serializeReq), "request handler for command RequestAPI not found")
 	require.EqualError(t, messageAgent.onMessage(topic, serializeResp), "response handler for command RequestAPI not found")
 
 	// mock has handler
 	mockHandler := &MockHanlder{}
-	messageAgent = NewMessageAgentImpl("id", mockHandler, p2p.NewMockMessageHandlerManager())
-	require.NoError(t, messageAgent.Init(context.Background()))
+	messageAgent = NewMessageAgentImpl("id", mockHandler, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
 	mockClient := &MockClient{}
 	messageAgent.UpdateClient(clientID, mockClient)
 	mockClient.On("SendMessage").Return(nil).Once()
@@ -231,8 +230,7 @@ func TestMessageHandler(t *testing.T) {
 }
 
 func TestMessageHandlerLifeCycle(t *testing.T) {
-	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager())
-	messageAgent.Init(context.Background())
+	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager(), log.L())
 	messageAgent.Tick(context.Background())
 	messageAgent.UpdateClient("client-id", &framework.MockWorkerHandler{})
 	messageAgent.UpdateClient("client-id", nil)

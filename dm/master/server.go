@@ -213,8 +213,17 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
+
+		const dashboardPrefix = "/dashboard/"
+		scheme := "http://"
+		if tls3.TLSConfig() != nil {
+			scheme = "https://"
+		}
+		log.L().Info("Web UI enabled", zap.String("dashboard", scheme+s.cfg.AdvertiseAddr+dashboardPrefix))
+
+		// Register handlers for OpenAPI and dashboard.
 		userHandles["/api/v1/"] = s.openapiHandles
-		userHandles["/dashboard/"] = ui.InitWebUIRouter()
+		userHandles[dashboardPrefix] = ui.InitWebUIRouter()
 	}
 
 	// gRPC API server
@@ -1376,7 +1385,7 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 	return cfgs, nil
 }
 
-func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
+func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1615,7 +1624,7 @@ func (s *Server) generateSubTask(
 		}
 	}
 
-	err = adjustTargetDB(ctx, cfg.TargetDB)
+	err = AdjustTargetDB(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
@@ -1738,23 +1747,31 @@ func extractWorkerError(result *pb.ProcessResult) error {
 }
 
 // waitOperationOk calls QueryStatus internally to implement a declarative API. It will determine operation is OK by
+//
 // Source:
-//   OperateSource:
-//     * StartSource, UpdateSource: sourceID = Source
-//     * StopSource: return resp.Result = false && resp.Msg = “worker has not started”.
+//
+//	OperateSource:
+//	  - StartSource, UpdateSource: sourceID = Source
+//	  - StopSource: return resp.Result = false && resp.Msg = “worker has not started”.
+//
 // Task:
-//   StartTask, UpdateTask: query status and related subTask stage is running
-//   OperateTask:
-//     * pause: related task status is paused
-//     * resume: related task status is running
-//     * stop: related task can't be found in worker's result
+//
+//	StartTask, UpdateTask: query status and related subTask stage is running
+
+//	OperateTask:
+//	  - pause: related task status is paused
+//	  - resume: related task status is running
+//	  - stop: related task can't be found in worker's result
+//
 // Relay:
-//   OperateRelay:
-//     * start: related relay status is running
-//     * stop: related relay status can't be found in worker's result
-//   OperateWorkerRelay:
-//     * pause: related relay status is paused
-//     * resume: related relay status is running
+//
+//	OperateRelay:
+//	  - start: related relay status is running
+//	  - stop: related relay status can't be found in worker's result
+//	OperateWorkerRelay:
+//	  - pause: related relay status is paused
+//	  - resume: related relay status is running
+//
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
 func (s *Server) waitOperationOk(
 	ctx context.Context,
@@ -2355,7 +2372,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 			return resp2, nil
 		}
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+		if adjustDBErr := AdjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
 			if adjustDBErr != nil {
 				resp2.Msg = adjustDBErr.Error()
 				// nolint:nilerr

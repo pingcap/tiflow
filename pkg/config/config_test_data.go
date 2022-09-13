@@ -19,12 +19,14 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null,
-    "ddl-allow-list": null
+    "ignore-txn-start-ts": null
   },
   "mounter": {
     "worker-num": 3
@@ -90,7 +92,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 10485760,
+  "per-table-memory-quota": 67108864,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
@@ -107,11 +109,8 @@ const (
       "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
-      "block-cache-size": 4294967296,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
-      "target-file-size-base": 8388608,
-      "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
       "compaction-deletion-threshold": 10485760,
@@ -133,8 +132,10 @@ const (
     "scheduler": {
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,
-      "check-balance-interval": 60000000000
-    }
+      "check-balance-interval": 60000000000,
+      "add-table-batch-size": 50
+    },
+    "enable-new-sink": true
   },
   "cluster-id": "default"
 }`
@@ -144,6 +145,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -184,6 +188,9 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+  "enable-sync-point": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
   "filter": {
     "rules": [
       "1.1"

@@ -26,7 +26,6 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
@@ -44,24 +43,14 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client) {
-	masterInfo := &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		StatusCode: frameModel.MasterStatusUninit,
-	}
-	err := metaclient.UpsertJob(ctx, masterInfo)
-	require.NoError(t, err)
-}
-
 func TestMasterInit(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("", masterName)
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	master := NewMockMasterImpl(t, "", masterName)
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -69,7 +58,7 @@ func TestMasterInit(t *testing.T) {
 
 	resp, err := master.GetFrameMetaClient().GetJobByID(ctx, masterName)
 	require.NoError(t, err)
-	require.Equal(t, frameModel.MasterStatusInit, resp.StatusCode)
+	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -97,8 +86,8 @@ func TestMasterPollAndClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("", masterName)
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	master := NewMockMasterImpl(t, "", masterName)
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -138,14 +127,18 @@ func TestMasterCreateWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("", masterName)
+	master := NewMockMasterImpl(t, "", masterName)
 	master.timeoutConfig.WorkerTimeoutDuration = time.Second * 1000
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
+
+	// get current epoch
+	epoch, err := master.MetaKVClient().GenEpoch(ctx)
+	require.NoError(t, err)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
-	err := master.Init(ctx)
+	err = master.Init(ctx)
 	require.NoError(t, err)
 
 	MockBaseMasterCreateWorker(
@@ -157,7 +150,11 @@ func TestMasterCreateWorker(t *testing.T) {
 		masterName,
 		workerID1,
 		executorNodeID1,
-		[]resourcemeta.ResourceID{"resource-1", "resource-2"})
+		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		// call GenEpoch three times, including create master meta, master init
+		// refresh meta, create worker.
+		epoch+3,
+	)
 
 	workerID, err := master.CreateWorker(
 		workerTypePlaceholder,
@@ -172,7 +169,13 @@ func TestMasterCreateWorker(t *testing.T) {
 	master.On("OnWorkerOnline", mock.AnythingOfType("*master.runningHandleImpl")).Return(nil)
 
 	require.Eventuallyf(t, func() bool {
-		MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
+		// master creates worker asynchronously, the worker may be not available
+		// so add some retry for mock heartbeat.
+		if err = MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster,
+			masterName, workerID1, executorNodeID1); err != nil {
+			t.Logf("mock worker heartbeat failed: %s", err)
+			return false
+		}
 		master.On("Tick", mock.Anything).Return(nil)
 		err = master.Poll(ctx)
 		require.NoError(t, err)
@@ -183,18 +186,18 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.GetFrameMetaClient())
+	workerMetaClient := metadata.NewWorkerStatusClient(masterName, master.GetFrameMetaClient())
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
 	err = workerMetaClient.Store(ctx, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	})
 	require.NoError(t, err)
 
 	master.On("OnWorkerStatusUpdated", mock.Anything, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	}).Return(nil)
 
@@ -206,7 +209,7 @@ func TestMasterCreateWorker(t *testing.T) {
 			Worker:      workerID1,
 			MasterEpoch: master.currentEpoch.Load(),
 			Status: &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			},
 		})
@@ -219,7 +222,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		select {
 		case updatedStatus := <-master.updatedStatuses:
 			require.Equal(t, &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			}, updatedStatus)
 		default:
@@ -227,7 +230,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		}
 
 		status := master.GetWorkers()[workerID1].Status()
-		return status.Code == frameModel.WorkerStatusNormal
+		return status.State == frameModel.WorkerStateNormal
 	}, 1*time.Second, 10*time.Millisecond)
 }
 
@@ -237,10 +240,10 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("", masterName)
+	master := NewMockMasterImpl(t, "", masterName)
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -256,15 +259,27 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 		workerID1,
 		executorNodeID1)
 
+	done := make(chan struct{})
+	master.On("Tick", mock.Anything).Return(nil)
 	master.On("OnWorkerDispatched", mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(args mock.Arguments) {
 			err := args.Error(1)
 			require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+			close(done)
 		})
 
 	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
 	require.NoError(t, err)
+
+	for {
+		require.NoError(t, master.Poll(ctx))
+		select {
+		case <-done:
+			return
+		default:
+		}
+	}
 }
 
 func TestPrepareWorkerConfig(t *testing.T) {
@@ -290,7 +305,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &frameModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
@@ -299,7 +314,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		rawConfig, workerID, err := master.PrepareWorkerConfig(tc.workerType, tc.config)
 		require.NoError(t, err)
 		require.Equal(t, tc.rawConfig, rawConfig)
 		require.Equal(t, tc.workerID, workerID)

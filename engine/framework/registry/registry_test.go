@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	frame "github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
@@ -42,12 +43,16 @@ func TestGlobalRegistry(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer metaCli.(pkgOrm.Client).Close()
+	epoch, err := metaCli.(pkgOrm.Client).GenEpoch(ctx)
+	require.NoError(t, err)
 	worker, err := GlobalWorkerRegistry().CreateWorker(
 		ctx,
 		fakeWorkerType,
 		"worker-1",
 		"master-1",
-		[]byte(`{"target-tick":10}`))
+		[]byte(`{"target-tick":10}`),
+		epoch,
+	)
 	require.NoError(t, err)
 	require.IsType(t, &framework.DefaultBaseWorker{}, worker)
 	impl := worker.(*framework.DefaultBaseWorker).Impl
@@ -72,7 +77,8 @@ func TestRegistryDuplicateType(t *testing.T) {
 func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	registry := NewRegistry()
 	ctx := dcontext.Background()
-	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val"":0}`))
+	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1",
+		[]byte(`{"Val"":0}`), int64(2))
 	require.Error(t, err)
 }
 
@@ -123,4 +129,26 @@ func TestSetImplMember(t *testing.T) {
 
 	setImplMember(iface, "MyBase", 2)
 	require.Equal(t, 2, iface.(*myImpl).MyBase.(int))
+}
+
+func TestIsRetryableError(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry()
+	ok := registry.RegisterWorkerType(framework.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	testCases := []struct {
+		err         error
+		isRetryable bool
+	}{
+		{NewDeserializeConfigError(errors.New("inner err")), false},
+		{errors.New("normal error"), true},
+	}
+
+	for _, tc := range testCases {
+		retryable, err := registry.IsRetryableError(tc.err, framework.FakeJobMaster)
+		require.NoError(t, err)
+		require.Equal(t, tc.isRetryable, retryable)
+	}
 }

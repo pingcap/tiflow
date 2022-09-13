@@ -1,0 +1,37 @@
+{{- if .Values.cases.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-chaos-test-case
+  namespace: {{ .Release.Namespace }}
+spec:
+  template:
+    spec:
+{{- if .Values.cases.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.cases.imagePullSecrets | indent 6 }}
+{{- end }}
+      initContainers:
+        - name: wait-tiflow-cluster
+          image: busybox
+          command: ['sh', '-c', 'sleep 60']
+      containers:
+        - name: chaos-test-case
+          image: {{ .Values.cases.repository }}:{{ .Values.cases.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          command:
+            - "/tiflow-chaos-case"
+            - "--duration=20m"
+            - "--etcd-addr={{ include "tiflow.name" . }}-metastore-etcd:12479"
+            - "--business-meta-addr={{ include "tiflow.name" . }}-metastore-mysql:3306"
+            - "--addr={{ include "tiflow.name" . }}-server-master:10240"
+            - "--master-count={{ .Values.master.replicas }}"
+            - "--worker-count={{ .Values.executor.replicas }}"
+      restartPolicy: Never
+  backoffLimit: 0 # fail immediately
+{{- end -}}

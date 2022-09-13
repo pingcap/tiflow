@@ -16,12 +16,13 @@ package integration
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
 type resourceClientStub struct {
@@ -31,37 +32,43 @@ type resourceClientStub struct {
 func (c *resourceClientStub) CreateResource(
 	ctx context.Context,
 	req *pb.CreateResourceRequest,
-	_ ...grpc.CallOption,
-) (*pb.CreateResourceResponse, error) {
-	return c.service.CreateResource(ctx, req)
+) error {
+	_, err := c.service.CreateResource(ctx, req)
+	return rpcerror.ToGRPCError(err)
 }
 
 func (c *resourceClientStub) QueryResource(
 	ctx context.Context,
 	req *pb.QueryResourceRequest,
-	_ ...grpc.CallOption,
 ) (*pb.QueryResourceResponse, error) {
-	return c.service.QueryResource(ctx, req)
+	resp, err := c.service.QueryResource(ctx, req)
+	if err != nil {
+		return nil, rpcerror.ToGRPCError(err)
+	}
+	return resp, nil
 }
 
 func (c *resourceClientStub) RemoveResource(
 	ctx context.Context,
 	req *pb.RemoveResourceRequest,
-	_ ...grpc.CallOption,
-) (*pb.RemoveResourceResponse, error) {
-	return c.service.RemoveResource(ctx, req)
+) error {
+	_, err := c.service.RemoveResource(ctx, req)
+	return rpcerror.ToGRPCError(err)
 }
 
 type executorClientStub struct {
-	// embedded for providing a panicking implementation for DispatchTask
-	// TODO make a generic ExecutorClientManager[T],
-	// where T can be a client to any service provided by the executor.
-	*client.TaskDispatcher
-
+	client.ExecutorClient
 	brk broker.Broker
 }
 
-func (c *executorClientStub) RemoveLocalResource(ctx context.Context, req *pb.RemoveLocalResourceRequest) error {
-	_, err := c.brk.RemoveResource(ctx, req)
-	return err
+func (c *executorClientStub) RemoveResource(
+	ctx context.Context,
+	creatorID model.WorkerID,
+	resourceID resModel.ResourceID,
+) error {
+	_, err := c.brk.RemoveResource(ctx, &pb.RemoveLocalResourceRequest{
+		ResourceId: resourceID,
+		CreatorId:  creatorID,
+	})
+	return rpcerror.ToGRPCError(err)
 }

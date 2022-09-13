@@ -24,14 +24,16 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/cdc/sink"
+	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
 type sinkNode struct {
-	sink    sink.Sink
+	sinkV1  sinkv1.Sink
+	sinkV2  sinkv2.TableSink
 	state   *TableState
 	tableID model.TableID
 
@@ -51,7 +53,9 @@ type sinkNode struct {
 }
 
 func newSinkNode(
-	tableID model.TableID, sink sink.Sink,
+	tableID model.TableID,
+	sinkV1 sinkv1.Sink,
+	sinkV2 sinkv2.TableSink,
 	startTs model.Ts, targetTs model.Ts,
 	flowController tableFlowController,
 	redoManager redo.LogManager,
@@ -61,8 +65,9 @@ func newSinkNode(
 	splitTxn bool,
 ) *sinkNode {
 	sn := &sinkNode{
+		sinkV1:         sinkV1,
+		sinkV2:         sinkV2,
 		tableID:        tableID,
-		sink:           sink,
 		state:          state,
 		targetTs:       targetTs,
 		barrierTs:      startTs,
@@ -77,10 +82,13 @@ func newSinkNode(
 	return sn
 }
 
-func (n *sinkNode) ResolvedTs() model.Ts   { return n.getResolvedTs().ResolvedMark() }
 func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().ResolvedMark() }
-func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
-func (n *sinkNode) State() TableState      { return n.state.Load() }
+
+// BarrierTs returns the latest barrierTs.
+// Only for test.
+func (n *sinkNode) BarrierTs() model.Ts { return atomic.LoadUint64(&n.barrierTs) }
+
+func (n *sinkNode) State() TableState { return n.state.Load() }
 
 func (n *sinkNode) getResolvedTs() model.ResolvedTs {
 	return n.resolvedTs.Load().(model.ResolvedTs)
@@ -96,11 +104,23 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped state must be set after underlying sink is closed
 	defer n.state.Store(TableStateStopped)
-	err = n.sink.Close(ctx)
+	if n.sinkV1 != nil {
+		err = n.sinkV1.Close(ctx)
+		if err != nil {
+			return
+		}
+		log.Info("sinkV1 is closed",
+			zap.Int64("tableID", n.tableID),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
+		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		return
+	}
+	err = n.sinkV2.Close(ctx)
 	if err != nil {
 		return
 	}
-	log.Info("sink is closed",
+	log.Info("sinkV2 is closed",
 		zap.Int64("tableID", n.tableID),
 		zap.String("namespace", n.changefeed.Namespace),
 		zap.String("changefeed", n.changefeed.ID))
@@ -125,32 +145,34 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
-
-		// fail fast check, the happens before relationship is:
-		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
-		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
-		redoTs := n.redoManager.GetMinResolvedTs()
-		if redoTs < currentBarrierTs {
-			log.Warn("redoTs should not less than current barrierTs",
-				zap.Int64("tableID", n.tableID),
-				zap.Uint64("redoTs", redoTs),
-				zap.Uint64("barrierTs", currentBarrierTs))
-		}
-
-		// TODO: remove this check after SchedulerV3 become the first choice.
-		if resolved.Ts > redoTs {
-			resolved = model.NewResolvedTs(redoTs)
-		}
 	}
 
+	// Flush sink with barrierTs, which is broadcasted by owner.
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > currentBarrierTs {
 		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+		if currentBarrierTs > redoFlushed {
+			// NOTE: How can barrierTs be greater than rodoTs?
+			// When scheduler moves a table from one place to another place, the table
+			// start position will be checkpointTs instead of resolvedTs, which means
+			// redoTs can be less than barrierTs.
+			log.Info("redo flushedTs is less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("barrierTs", currentBarrierTs),
+				zap.Uint64("tableRedoFlushed", redoFlushed))
+
+			// The latest above comment shows why barrierTs can be greater than redoTs.
+			// So here the aim is to avoid slow tables holding back the whole processor.
+			resolved = model.NewResolvedTs(redoFlushed)
+		}
 	}
 
 	currentCheckpointTs := n.getCheckpointTs()
@@ -158,9 +180,18 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		return nil
 	}
 
-	checkpoint, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
-	if err != nil {
-		return errors.Trace(err)
+	var checkpoint model.ResolvedTs
+	if n.sinkV1 != nil {
+		checkpoint, err = n.sinkV1.FlushRowChangedEvents(ctx, n.tableID, resolved)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		err = n.sinkV2.UpdateResolvedTs(resolved)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		checkpoint = n.sinkV2.GetCheckpointTs()
 	}
 
 	// we must call flowController.Release immediately after we call
@@ -195,7 +226,11 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 				return err
 			}
 		}
-		return n.sink.EmitRowChangedEvents(ctx, rows...)
+		if n.sinkV1 != nil {
+			return n.sinkV1.EmitRowChangedEvents(ctx, rows...)
+		}
+		n.sinkV2.AppendRowChangedEvents(rows...)
+		return nil
 	}
 
 	if event == nil || event.Row == nil {
@@ -365,7 +400,10 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.state.Store(TableStateStopped)
 	n.flowController.Abort()
-	return n.sink.Close(ctx)
+	if n.sinkV1 != nil {
+		return n.sinkV1.Close(ctx)
+	}
+	return n.sinkV2.Close(ctx)
 }
 
 // Verify that TxnAtomicity compatibility with BatchResolved event and RowChangedEvent

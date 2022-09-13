@@ -10,8 +10,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	orm "github.com/pingcap/tiflow/engine/pkg/orm"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // MockMetastoreCreator is a mock of MetastoreCreator interface.
@@ -52,32 +50,17 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateClientConnForBusiness(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClientConnForBusiness", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateClientConnForBusiness), arg0, arg1)
 }
 
-// CreateDBClientForFramework mocks base method.
-func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 model.StoreConfig) (orm.Client, error) {
+// CreateClientConnForFramework mocks base method.
+func (m *MockMetastoreCreator) CreateClientConnForFramework(arg0 context.Context, arg1 model.StoreConfig) (model.ClientConn, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateDBClientForFramework", arg0, arg1)
-	ret0, _ := ret[0].(orm.Client)
+	ret := m.ctrl.Call(m, "CreateClientConnForFramework", arg0, arg1)
+	ret0, _ := ret[0].(model.ClientConn)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateDBClientForFramework indicates an expected call of CreateDBClientForFramework.
-func (mr *MockMetastoreCreatorMockRecorder) CreateDBClientForFramework(arg0, arg1 interface{}) *gomock.Call {
+// CreateClientConnForFramework indicates an expected call of CreateClientConnForFramework.
+func (mr *MockMetastoreCreatorMockRecorder) CreateClientConnForFramework(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDBClientForFramework", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateDBClientForFramework), arg0, arg1)
-}
-
-// CreateEtcdCliForServiceDiscovery mocks base method.
-func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 model.StoreConfig) (*clientv3.Client, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateEtcdCliForServiceDiscovery", arg0, arg1)
-	ret0, _ := ret[0].(*clientv3.Client)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateEtcdCliForServiceDiscovery indicates an expected call of CreateEtcdCliForServiceDiscovery.
-func (mr *MockMetastoreCreatorMockRecorder) CreateEtcdCliForServiceDiscovery(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEtcdCliForServiceDiscovery", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateEtcdCliForServiceDiscovery), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClientConnForFramework", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateClientConnForFramework), arg0, arg1)
 }

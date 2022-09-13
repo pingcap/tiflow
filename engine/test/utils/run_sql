@@ -1,0 +1,46 @@
+#!/bin/bash
+set -e
+
+host="127.0.0.1"
+port=3306
+user="root"
+password=""
+sql=""
+
+while [[ ${1} ]]; do
+	case "${1}" in
+	--host)
+		host=${2}
+		shift
+		;;
+	--port)
+		port=${2}
+		shift
+		;;
+	--user)
+		user=${2}
+		shift
+		;;
+	--password)
+		password=${2}
+		shift
+		;;
+	*)
+		sql="$sql ${1}"
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+if [ -z ${password} ]; then
+	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 -e \"${sql}\""
+else
+	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e \"${sql}\""
+fi
+
+echo "will execute: $cmd" >&2
+eval $cmd

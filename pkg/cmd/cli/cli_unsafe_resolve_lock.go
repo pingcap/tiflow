@@ -21,6 +21,7 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -128,13 +129,9 @@ func newCmdResolveLock(f factory.Factory) *cobra.Command {
 		Use:   "resolve-lock",
 		Short: "resolve locks in regions",
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, args []string) error {
-			err := o.complete(f)
-			if err != nil {
-				return err
-			}
-
-			return o.run()
+		Run: func(_ *cobra.Command, args []string) {
+			util.CheckErr(o.complete(f))
+			util.CheckErr(o.run())
 		},
 	}
 

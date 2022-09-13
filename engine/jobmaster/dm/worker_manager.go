@@ -18,13 +18,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -60,10 +60,12 @@ type CheckpointAgent interface {
 type WorkerManager struct {
 	*ticker.DefaultTicker
 
+	jobID           string
 	jobStore        *metadata.JobStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
+	logger          *zap.Logger
 
 	// workerStatusMap record the runtime worker status
 	// taskID -> WorkerStatus
@@ -71,13 +73,15 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent) *WorkerManager {
+func NewWorkerManager(jobID string, initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:           jobID,
 		jobStore:        jobStore,
 		workerAgent:     workerAgent,
 		messageAgent:    messageAgent,
 		checkpointAgent: checkpointAgent,
+		logger:          pLogger.With(zap.String("component", "worker_manager")),
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
 
@@ -89,7 +93,7 @@ func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadat
 
 // UpdateWorkerStatus is called when receive worker status.
 func (wm *WorkerManager) UpdateWorkerStatus(workerStatus runtime.WorkerStatus) {
-	log.L().Debug("update worker status", zap.String("task_id", workerStatus.TaskID), zap.String("worker_id", workerStatus.ID))
+	wm.logger.Debug("update worker status", zap.String("task_id", workerStatus.TaskID), zap.String(logutil.ConstFieldWorkerKey, workerStatus.ID))
 	wm.workerStatusMap.Store(workerStatus.TaskID, workerStatus)
 }
 
@@ -107,13 +111,13 @@ func (wm *WorkerManager) WorkerStatus() map[string]runtime.WorkerStatus {
 // TickImpl stop unneeded workers.
 // TickImpl create new workers if needed.
 func (wm *WorkerManager) TickImpl(ctx context.Context) error {
-	log.L().Info("start to schedule workers")
+	wm.logger.Info("start to schedule workers")
 	wm.removeOfflineWorkers()
 
 	state, err := wm.jobStore.Get(ctx)
-	if err != nil {
-		log.L().Error("get job state failed", zap.Error(err))
-		if err2 := wm.onJobNotExist(ctx); err2 != nil {
+	if err != nil || state.(*metadata.Job).Deleting {
+		wm.logger.Info("on job deleting", zap.Error(err))
+		if err2 := wm.onJobDel(ctx); err2 != nil {
 			return err2
 		}
 		return err
@@ -122,6 +126,9 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 
 	var recordError error
 	if err := wm.stopUnneededWorkers(ctx, job); err != nil {
+		recordError = err
+	}
+	if err := wm.stopOutdatedWorkers(ctx, job); err != nil {
 		recordError = err
 	}
 	if err := wm.checkAndScheduleWorkers(ctx, job); err != nil {
@@ -135,10 +142,10 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		worker := value.(runtime.WorkerStatus)
 		if worker.IsOffline() {
-			log.L().Info("remove offline worker status", zap.String("task_id", worker.TaskID))
+			wm.logger.Info("remove offline worker status", zap.String("task_id", worker.TaskID))
 			wm.workerStatusMap.Delete(key)
 		} else if worker.CreateFailed() {
-			log.L().Info("remove failed worker status when creating", zap.String("task_id", worker.TaskID))
+			wm.logger.Info("remove failed worker status when creating", zap.String("task_id", worker.TaskID))
 			wm.workerStatusMap.Delete(key)
 		}
 		return true
@@ -146,11 +153,15 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 }
 
 // stop all workers, usually happened when delete jobs.
-func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
+func (wm *WorkerManager) onJobDel(ctx context.Context) error {
 	var recordError error
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
-		log.L().Info("stop worker", zap.String("task_id", key.(string)), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
-		if err := wm.stopWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
+		workerStatus := value.(runtime.WorkerStatus)
+		if workerStatus.IsTombStone() {
+			return true
+		}
+		wm.logger.Info("stop worker", zap.String("task_id", key.(string)), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID))
+		if err := wm.stopWorker(ctx, key.(string), workerStatus.ID); err != nil {
 			recordError = err
 		}
 		return true
@@ -164,7 +175,11 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
-			log.L().Info("stop unneeded worker", zap.String("task_id", taskID), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
+			workerStatus := value.(runtime.WorkerStatus)
+			if workerStatus.IsTombStone() {
+				return true
+			}
+			wm.logger.Info("stop unneeded worker", zap.String("task_id", taskID), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID))
 			if err := wm.stopWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
 				recordError = err
 			}
@@ -174,15 +189,38 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 	return recordError
 }
 
+// stop outdated workers, usually happened when update job cfgs.
+func (wm *WorkerManager) stopOutdatedWorkers(ctx context.Context, job *metadata.Job) error {
+	var recordError error
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		taskID := key.(string)
+		workerStatus := value.(runtime.WorkerStatus)
+		task, ok := job.Tasks[taskID]
+		if !ok || task.Cfg.ModRevision == workerStatus.CfgModRevision {
+			return true
+		}
+		if workerStatus.IsTombStone() {
+			return true
+		}
+		wm.logger.Info("stop outdated worker", zap.String("task_id", taskID), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID),
+			zap.Uint64("config_modify_revision", workerStatus.CfgModRevision), zap.Uint64("expected_config_modify_revision", task.Cfg.ModRevision))
+		if err := wm.stopWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
+			recordError = err
+		}
+		return true
+	})
+	return recordError
+}
+
 // checkAndScheduleWorkers check whether a task need a new worker.
 // If there is no related worker, create a new worker.
 // If task is finished, check whether need a new worker.
-// This function does not handle taskCfg updated(update-job).
-// TODO: support update taskCfg, or we may need to send update request manually.
+// TODO: support incremental -> all mode switch.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
 		nextUnit      frameModel.WorkerType
+		isFresh       bool
 		err           error
 		recordError   error
 	)
@@ -193,27 +231,30 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		if ok {
 			runningWorker = worker.(runtime.WorkerStatus)
 			nextUnit = getNextUnit(persistentTask, runningWorker)
-		} else if nextUnit, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
-			log.L().Error("get current unit failed", zap.String("task", taskID), zap.Error(err))
+			isFresh = nextUnit != runningWorker.Unit
+		} else if nextUnit, isFresh, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
+			wm.logger.Error("get current unit failed", zap.String("task", taskID), zap.Error(err))
 			recordError = err
 			continue
 		}
 
 		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
-			log.L().Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
+			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
 			continue
 		} else if !ok {
-			log.L().Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
+			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
 		} else if !runningWorker.RunAsExpected() {
-			log.L().Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
 		} else {
-			log.L().Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
 		}
 
 		var resources []resourcemeta.ResourceID
-		// we can assure only first worker don't need local resource.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 {
-			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
+		// first worker don't need local resource.
+		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
+		// TODO: storage should be created/discarded in jobmaster instead of worker.
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
+			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
 		// createWorker should be an asynchronous operation
@@ -240,52 +281,38 @@ var workerSeqMap = map[string][]frameModel.WorkerType{
 	},
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, error) {
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, bool, error) {
 	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
 	if !ok {
-		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
+		wm.logger.Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
 	}
 
 	for i := len(workerSeq) - 1; i >= 0; i-- {
 		isFresh, err := wm.checkpointAgent.IsFresh(ctx, workerSeq[i], task)
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if !isFresh {
-			return workerSeq[i], nil
+			return workerSeq[i], false, nil
 		}
 	}
 
-	return workerSeq[0], nil
+	return workerSeq[0], true, nil
 }
 
 func workerIdxInSeq(taskMode string, worker frameModel.WorkerType) int {
-	workerSeq, ok := workerSeqMap[taskMode]
-	if !ok {
-		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
-	}
-	for i, w := range workerSeq {
+	for i, w := range workerSeqMap[taskMode] {
 		if w == worker {
 			return i
 		}
 	}
-	log.L().Panic("worker not found",
-		zap.String("taskMode", taskMode),
-		zap.Any("currWorker", worker))
 	return -1
 }
 
 func nextWorkerIdxAndType(taskMode string, currWorker frameModel.WorkerType) (int, frameModel.WorkerType) {
-	workerSeq, ok := workerSeqMap[taskMode]
-	if !ok {
-		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
-	}
-
+	workerSeq := workerSeqMap[taskMode]
 	idx := workerIdxInSeq(taskMode, currWorker)
 	if idx == len(workerSeq)-1 {
-		log.L().Error("workerSeq overflow",
-			zap.String("taskMode", taskMode),
-			zap.Any("currWorker", currWorker))
 		return idx, workerSeq[idx]
 	}
 	return idx + 1, workerSeq[idx+1]
@@ -307,10 +334,10 @@ func (wm *WorkerManager) createWorker(
 	taskCfg *config.TaskCfg,
 	resources ...resourcemeta.ResourceID,
 ) error {
-	log.L().Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg.ToDMSubTaskCfg(), 1, resources...)
+	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
 	if err != nil {
-		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
+		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
 	if len(workerID) != 0 {
 		//	There are two mechanisms for create workers status.
@@ -327,22 +354,16 @@ func (wm *WorkerManager) createWorker(
 }
 
 func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID frameModel.WorkerID) error {
-	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
+	wm.logger.Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
 
 	msg := &dmpkg.StopWorkerMessage{
 		Task: taskID,
 	}
 	if err := wm.messageAgent.SendMessage(ctx, taskID, dmpkg.StopWorker, msg); err != nil {
-		log.L().Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
+		wm.logger.Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}
-	//	There are two mechanisms for removing worker status.
-	//	1.	remove worker status when no error.
-	//		It is possible that the worker will be stopped twice, so the stop needs to be idempotent.
-	//	2.	remove worker status even if there is error.
-	//		When stop fails, we stop it again until the next time we receive worker online status, so the stop interval will be longer.
-	//	We choose the first mechanism now.
-	wm.workerStatusMap.Delete(taskID)
+	// workerStatus will be removed when the worker is offline.
 	return nil
 }
 
@@ -354,4 +375,17 @@ func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.Worker
 		}
 		return true
 	})
+}
+
+func (wm *WorkerManager) allTombStone() bool {
+	result := true
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		workerStatus := value.(runtime.WorkerStatus)
+		if !workerStatus.IsTombStone() {
+			result = false
+			return false
+		}
+		return true
+	})
+	return result
 }

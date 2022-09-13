@@ -24,8 +24,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
@@ -66,10 +68,10 @@ func newMqSink(
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
 	defaultTopic string,
-	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
+	replicaConfig *config.ReplicaConfig, encoderConfig *common.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -79,18 +81,19 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
-	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
+	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
 		eventRouter:    eventRouter,
 		encoderBuilder: encoderBuilder,
-		protocol:       encoderConfig.Protocol(),
+		protocol:       encoderConfig.Protocol,
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
 		resolvedBuffer: chann.New[resolvedTsEvent](),
@@ -360,7 +363,7 @@ func (k *mqSink) run(ctx context.Context) error {
 // asyncFlushToPartitionZero writes message to
 // partition zero asynchronously and flush it immediately.
 func (k *mqSink) asyncFlushToPartitionZero(
-	ctx context.Context, topic string, message *codec.MQMessage,
+	ctx context.Context, topic string, message *common.Message,
 ) error {
 	err := k.mqProducer.AsyncSendMessage(ctx, topic, dispatcher.PartitionZero, message)
 	if err != nil {
@@ -413,7 +416,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol)
+	encoderConfig := common.NewConfig(protocol)
 	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -474,6 +477,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig, errCh chan error,
 ) (*mqSink, error) {
+	log.Warn("Pulsar Sink is not recommended for production use.")
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
@@ -484,7 +488,7 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol)
+	encoderConfig := common.NewConfig(protocol)
 	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, errors.Trace(err)
 	}

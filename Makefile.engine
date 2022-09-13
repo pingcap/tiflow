@@ -1,0 +1,56 @@
+### Makefile for engine. 
+### This is used for some trivial commands, like 'Deployment', 'Image'
+
+engine_image:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build
+
+engine_image_amd64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./ 
+
+engine_image_arm64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/arm64 -f ./deployments/engine/docker/dev.Dockerfile -t dataflow:test ./
+
+engine_image_from_local:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build-local
+
+engine_deploy_1master1executor_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh deploy ./deployments/engine/docker-compose/1m1e.yaml 
+
+engine_stop_1master1executor_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh stop ./deployments/engine/docker-compose/1m1e.yaml 
+
+engine_deploy_3masters3executors_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh deploy ./deployments/engine/docker-compose/3m3e.yaml 
+
+engine_stop_3masters3executors_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh stop ./deployments/engine/docker-compose/3m3e.yaml
+
+engine_deploy_1master1executor1dm_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh deploy ./deployments/engine/docker-compose/1m1e.yaml ./deployments/engine/docker-compose/dm_databases.yaml 
+
+engine_stop_1master1executor1dm_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh stop ./deployments/engine/docker-compose/1m1e.yaml ./deployments/engine/docker-compose/dm_databases.yaml
+
+engine_deploy_monitor_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh deploy ./deployments/engine/docker-compose/1prometheus.yaml
+
+engine_stop_monitor_env:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh stop ./deployments/engine/docker-compose/1prometheus.yaml

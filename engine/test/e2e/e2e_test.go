@@ -25,10 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
-	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
 type Config struct {
@@ -124,13 +123,16 @@ func TestSubmitTest(t *testing.T) {
 
 // run this test after docker-compose has been up
 func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr string, flowControl chan struct{}) {
+	var (
+		tenantID  = "e2e-test"
+		projectID = "project-basic-test"
+	)
+
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, demoAddr)
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
-	masterclient, err := client.NewMasterClient(ctx, config.MasterAddrs)
-	require.Nil(t, err)
 
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
@@ -147,37 +149,33 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	<-flowControl
 	fmt.Printf("test is ready\n")
 
-	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     int32(engineModel.JobTypeCVSDemo),
-		Config: configBytes,
-	})
-	require.Nil(t, err)
-	require.Nil(t, resp.Err)
+	jobID, err := e2e.CreateJobViaHTTP(ctx, config.MasterAddrs[0],
+		tenantID, projectID, pb.Job_CVSDemo, configBytes)
+	require.NoError(t, err)
 
-	fmt.Printf("job id %s\n", resp.JobId)
+	fmt.Printf("job id %s\n", jobID)
 
-	queryReq := &pb.QueryJobRequest{
-		JobId: resp.JobId,
-	}
 	// continue to query
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
-		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
+		job, err := e2e.QueryJobViaHTTP(ctx1, config.MasterAddrs[0],
+			tenantID, projectID, jobID,
+		)
 		require.NoError(t, err)
-		require.Nil(t, queryResp.Err)
-		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
 		cancel()
-		fmt.Printf("query id %s, status %d, time %s\n", resp.JobId, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
-		if queryResp.Status == pb.QueryJobResponse_finished {
+		require.Equal(t, pb.Job_CVSDemo, job.Type)
+		fmt.Printf("query id %s, status %d, time %s\n",
+			jobID, int(job.State), time.Now().Format("2006-01-02 15:04:05"))
+		if job.State == pb.Job_Finished {
 			break
 		}
 		time.Sleep(time.Second)
 	}
-	fmt.Printf("job id %s checking\n", resp.JobId)
+	fmt.Printf("job id %s checking\n", jobID)
 	// check files
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,
 	})
-	require.Nil(t, err, resp.JobId)
+	require.Nil(t, err, jobID)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }

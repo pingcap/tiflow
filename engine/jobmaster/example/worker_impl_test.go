@@ -57,7 +57,7 @@ func TestExampleWorker(t *testing.T) {
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
-		return worker.Status().Code == frameModel.WorkerStatusFinished
+		return worker.Status().State == frameModel.WorkerStateFinished
 	}, time.Second, time.Millisecond*100)
 
 	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)

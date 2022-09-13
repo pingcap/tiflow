@@ -14,17 +14,25 @@
 package tablesink
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/emirpasic/gods/maps/linkedhashmap"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
-// waitingInterval is the interval to wait for the all callbacks be called.
-// It used for close the table sink.
-const waitingInterval = 100 * time.Millisecond
+const (
+	// waitingInterval is the interval to wait for the all callbacks be called.
+	// It used for close the table sink.
+	waitingInterval = 100 * time.Millisecond
+	// warnDuration is the duration to warn the progress tracker is not closed.
+	warnDuration = 3 * time.Minute
+)
 
 // progressTracker is used to track the progress of the table sink.
 // For example,
@@ -34,6 +42,8 @@ const waitingInterval = 100 * time.Millisecond
 // Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
 // Next, since no data is being written, we can update to resolvedTs5 in order.
 type progressTracker struct {
+	// tableID is the table ID of the table sink.
+	tableID model.TableID
 	// This lock for both pendingEventAndResolvedTs and lastMinResolvedTs.
 	lock sync.Mutex
 	// pendingEventAndResolvedTs is used to store the pending event keys and resolved tss.
@@ -52,8 +62,9 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker() *progressTracker {
+func newProgressTracker(tableID model.TableID) *progressTracker {
 	return &progressTracker{
+		tableID:                   tableID,
 		pendingEventAndResolvedTs: linkedhashmap.New(),
 		// It means the start of the table.
 		// It's Ok to use 0 here.
@@ -139,12 +150,28 @@ func (r *progressTracker) trackingCount() int {
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close() {
+func (r *progressTracker) close(ctx context.Context) error {
 	r.closed.Store(true)
 
-	// TODO: add logs to measure the time of waiting for the all callbacks be called.
-	for r.trackingCount() != 0 {
-		// Sleep for a while to prevent CPU spin.
-		time.Sleep(waitingInterval)
+	blockTicker := time.NewTicker(warnDuration)
+	defer blockTicker.Stop()
+	// Used to block for loop for a while to prevent CPU spin.
+	waitingTicker := time.NewTicker(waitingInterval)
+	defer waitingTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-blockTicker.C:
+			log.Warn("Close process doesn't return in time, may be stuck",
+				zap.Int64("tableID", r.tableID),
+				zap.Int("trackingCount", r.trackingCount()),
+				zap.Any("lastMinResolvedTs", r.minTs()),
+			)
+		case <-waitingTicker.C:
+			if r.trackingCount() == 0 {
+				return nil
+			}
+		}
 	}
 }
