@@ -22,6 +22,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 )
 
 // JobManagerUUID defines the global unique id for job manager
@@ -70,8 +71,10 @@ func (c *MasterMetadataClient) Store(ctx context.Context, data *frameModel.Maste
 }
 
 // Update update the data
-func (c *MasterMetadataClient) Update(ctx context.Context, data *frameModel.MasterMeta) error {
-	return errors.Trace(c.metaClient.UpdateJob(ctx, data))
+func (c *MasterMetadataClient) Update(
+	ctx context.Context, values ormModel.KeyValueMap,
+) error {
+	return errors.Trace(c.metaClient.UpdateJob(ctx, c.masterID, values))
 }
 
 // Delete deletes the metadata of this master
