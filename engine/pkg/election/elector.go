@@ -147,7 +147,12 @@ func (e *Elector) renew(ctx context.Context) error {
 	}
 }
 
-func (e *Elector) tryAcquireOrRenew(ctx context.Context) error {
+func (e *Elector) tryAcquireOrRenew(ctx context.Context) (err error) {
+	start := time.Now()
+	defer func() {
+		log.Debug("tryAcquireOrRenew", zap.Duration("took", time.Since(start)), zap.Error(err))
+	}()
+
 	s := e.config.Storage
 
 	record, err := s.Get(ctx)
