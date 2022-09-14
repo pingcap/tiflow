@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
@@ -99,12 +99,12 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
-		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
+		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
 		finishedTaskStatus = runtime.FinishedTaskStatus{
 			TaskStatus: runtime.TaskStatus{
-				Unit:           framework.WorkerDMLoad,
+				Unit:           frameModel.WorkerDMLoad,
 				Task:           "task2",
 				Stage:          metadata.StageFinished,
 				CfgModRevision: 3,
@@ -119,12 +119,12 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", framework.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", frameModel.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", frameModel.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", frameModel.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", frameModel.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
 	jm.finishedStatus.Store("task7", finishedTaskStatus)
 
 	// no job
@@ -145,7 +145,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.NoError(t, err)
 	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
-	require.Equal(t, "", string(taskStatus.ExpectedStage))
+	require.Equal(t, "", taskStatus.ExpectedStage.String())
 	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
@@ -155,49 +155,49 @@ func TestQueryStatusAPI(t *testing.T) {
 	"job_id": "dm-jobmaster-id",
 	"task_status": {
 		"task1": {
-			"expected_stage": "paused",
+			"expected_stage": "Paused",
 			"worker_id": "",
 			"config_outdated": true,
 			"status": {
 				"error_message": "worker for task task1 not found",
-				"unit": 0,
+				"unit": "",
 				"stage": "",
 				"result": null,
 				"status": null
 			}
 		},
 		"task2": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker2",
 			"config_outdated": true,
 			"status": {
 				"error_message": "task task2 is finished and status has been deleted",
-				"unit": 11,
-				"stage": "finished",
+				"unit": "DMLoadTask",
+				"stage": "Finished",
 				"result": null,
 				"status": null
 			}
 		},
 		"task3": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker3",
 			"config_outdated": false,
 			"status": {
 				"error_message": "context deadline exceeded",
-				"unit": 0,
+				"unit": "",
 				"stage": "",
 				"result": null,
 				"status": null
 			}
 		},
 		"task4": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker4",
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
-				"unit": 11,
-				"stage": "paused",
+				"unit": "DMLoadTask",
+				"stage": "Paused",
 				"result": {
 					"is_canceled": true
 				},
@@ -211,13 +211,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task5": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker5",
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
-				"unit": 12,
-				"stage": "error",
+				"unit": "DMSyncTask",
+				"stage": "Error",
 				"result": {
 					"errors": [
 						{
@@ -248,13 +248,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task6": {
-			"expected_stage": "running",
+			"expected_stage": "Running",
 			"worker_id": "worker6",
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
-				"unit": 10,
-				"stage": "running",
+				"unit": "DMDumpTask",
+				"stage": "Running",
 				"result": null,
 				"status": {
 					"totalTables": 10,
@@ -266,13 +266,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			}
 		},
 		"task7": {
-			"expected_stage": "finished",
+			"expected_stage": "Finished",
 			"worker_id": "worker7",
 			"config_outdated": false,
 			"status": {
 				"error_message": "",
-				"unit": 11,
-				"stage": "finished",
+				"unit": "DMLoadTask",
+				"stage": "Finished",
 				"result": {},
 				"status": {
 					"finishedBytes": 4,
