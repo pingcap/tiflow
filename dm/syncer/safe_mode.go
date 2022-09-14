@@ -16,9 +16,9 @@ package syncer
 import (
 	"time"
 
-	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -55,8 +55,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	}
 
 	var duration time.Duration
-	var initPhaseSeconds string
-	initPhaseSeconds = s.cfg.SafeModeDuration
+	initPhaseSeconds := s.cfg.SafeModeDuration
 
 	failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
 		initPhaseSeconds = val.(string)
@@ -116,12 +115,6 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	}
 
 	if int64(duration) == 0 && !s.cfg.SafeMode && s.safeMode.Enable() {
-		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
-			seconds := val.(string)
-			if seconds == "0s" {
-				failpoint.Return()
-			}
-		})
 		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 	}
 }
