@@ -215,7 +215,7 @@ function safe_mode_duration() {
 
 	# restart workers
 	kill_dm_worker
-	
+
 	export GO_FAILPOINTS=""
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
