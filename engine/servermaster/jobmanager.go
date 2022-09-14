@@ -678,12 +678,11 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 // OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
-		log.Warn("dispatch worker met error", zap.Error(result))
-		if pkgClient.ErrCreateWorkerTerminate.Is(result) {
-			log.Info("job master terminated", zap.String("job-id", worker.ID()))
+		if errIn, ok := pkgClient.ErrCreateWorkerTerminate.Convert(result); ok {
+			log.Warn("job master terminated",
+				zap.String("job-id", worker.ID()), zap.String("details", errIn.Details))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
-			errIn, _ := pkgClient.ErrCreateWorkerTerminate.Convert(result)
 			if err := jm.UpdateJobStatus(
 				ctx, worker.ID(), errIn.Details, frameModel.MasterStateFailed,
 			); err != nil {
@@ -692,6 +691,7 @@ func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, resu
 			jm.JobFsm.JobOffline(worker, false /* needFailover */)
 			return nil
 		}
+		log.Warn("dispatch worker met error", zap.Error(result))
 		jm.JobBackoffMgr.JobFail(worker.ID())
 		return jm.JobFsm.JobDispatchFailed(worker)
 	}
