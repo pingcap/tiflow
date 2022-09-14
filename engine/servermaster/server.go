@@ -45,7 +45,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -839,7 +838,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	masterMeta := &frameModel.MasterMeta{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Type:      framework.JobManager,
+		Type:      frameModel.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
