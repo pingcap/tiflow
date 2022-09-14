@@ -138,7 +138,6 @@ type mockTablePipeline struct {
 	resolvedTs   model.Ts
 	checkpointTs model.Ts
 	barrierTs    model.Ts
-	stopTs       model.Ts
 	state        pipeline.TableState
 	canceled     bool
 
@@ -165,8 +164,7 @@ func (m *mockTablePipeline) UpdateBarrierTs(ts model.Ts) {
 	m.barrierTs = ts
 }
 
-func (m *mockTablePipeline) AsyncStop(targetTs model.Ts) bool {
-	m.stopTs = targetTs
+func (m *mockTablePipeline) AsyncStop() bool {
 	return true
 }
 
@@ -488,7 +486,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 
 	require.Len(t, p.tables, 4)
 	require.False(t, table3.canceled)
-	require.Equal(t, model.Ts(60), table3.stopTs)
+	require.Equal(t, model.Ts(60), table3.CheckpointTs())
 
 	checkpointTs, done = p.IsRemoveTableFinished(3)
 	require.False(t, done)
