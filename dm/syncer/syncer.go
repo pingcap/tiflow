@@ -1058,6 +1058,10 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 	switch job.tp {
 	case xid:
+		failpoint.Inject("SkipSaveGlobalPoint", func() {
+			s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
+			panic("SkipSaveGlobalPoint")
+		})
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
 		s.isTransactionEnd = true
@@ -1137,11 +1141,6 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 }
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
-	failpoint.Inject("SkipSaveGlobalPoint", func() {
-		s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
-		failpoint.Return()
-	})
-
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		globalLocation = s.sgk.AdjustGlobalLocation(globalLocation)
 	} else if s.cfg.ShardMode == config.ShardOptimistic {
@@ -1382,6 +1381,10 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		})
 
 		if !ignore {
+			failpoint.Inject("SkipSaveGlobalPoint", func() {
+				s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
+				panic("SkipSaveGlobalPoint")
+			})
 			var affected int
 			var ddlCreateTime int64 = -1 // default when scan failed
 			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
