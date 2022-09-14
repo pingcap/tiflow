@@ -85,7 +85,7 @@ func init() {
 
 // String implements fmt.Stringer interface
 func (wt WorkerType) String() string {
-	if int(wt) >= len(typesStringify) {
+	if int(wt) >= len(typesStringify) || wt < 0 {
 		return fmt.Sprintf("Unknown WorkerType %d", wt)
 	}
 	return typesStringify[wt]

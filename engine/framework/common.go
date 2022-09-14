@@ -18,14 +18,13 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
-	"github.com/pingcap/tiflow/engine/framework/model"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
 type (
 	// WorkerType alias to model.WorkerType
-	WorkerType = model.WorkerType
+	WorkerType = frameModel.WorkerType
 
 	// WorkerConfig stores worker config in any type
 	WorkerConfig = interface{}
@@ -87,13 +86,13 @@ const (
 
 // WorkerStateToExitReason translates WorkerState to ExitReason
 // TODO: business logic should not sense 'WorkerState'
-func WorkerStateToExitReason(code model.WorkerState) ExitReason {
+func WorkerStateToExitReason(code frameModel.WorkerState) ExitReason {
 	switch code {
-	case model.WorkerStateFinished:
+	case frameModel.WorkerStateFinished:
 		return ExitReasonFinished
-	case model.WorkerStateStopped:
+	case frameModel.WorkerStateStopped:
 		return ExitReasonCanceled
-	case model.WorkerStateError:
+	case frameModel.WorkerStateError:
 		return ExitReasonFailed
 	}
 

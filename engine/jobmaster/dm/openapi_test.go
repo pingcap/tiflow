@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -194,7 +193,6 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	r = httptest.NewRequest("GET", baseURL+"status"+"?tasks=task1&tasks=task2", nil)
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
-	fmt.Println(string(w.Body.Bytes()))
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))
 	require.Equal(t.T(), "task task1 for job not found", jobStatus2.TaskStatus["task1"].Status.ErrorMsg)
 	require.Equal(t.T(), "task task2 for job not found", jobStatus2.TaskStatus["task2"].Status.ErrorMsg)

@@ -75,7 +75,7 @@ func init() {
 
 // String implements fmt.Stringer interface
 func (op OperateType) String() string {
-	if int(op) >= len(typesStringify) {
+	if int(op) >= len(typesStringify) || op < 0 {
 		return fmt.Sprintf("Unknown OperateType %d", op)
 	}
 	return typesStringify[op]

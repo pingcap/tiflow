@@ -67,7 +67,7 @@ func init() {
 
 // String implements fmt.Stringer interface
 func (ts TaskStage) String() string {
-	if int(ts) >= len(typesStringify) {
+	if int(ts) >= len(typesStringify) || ts < 0 {
 		return fmt.Sprintf("Unknown TaskStage %d", ts)
 	}
 	return typesStringify[ts]
