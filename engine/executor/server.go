@@ -225,6 +225,10 @@ func (s *Server) makeTask(
 func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
+	if pkgClient.ErrCreateWorkerTerminate.Is(err) {
+		return rpcerror.ToGRPCError(err)
+	}
+
 	switch tp {
 	case frameModel.DMJobMaster:
 		err = errors.ToDMError(err)
