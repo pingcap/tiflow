@@ -71,7 +71,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 		Addr:      ctx.Environ.Addr,
 		NodeID:    ctx.Environ.NodeID,
 		ID:        id,
-		Type:      FakeJobMaster,
+		Type:      frameModel.FakeJobMaster,
 		Epoch:     epoch,
 		State:     frameModel.MasterStateUninit,
 	}
@@ -83,7 +83,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 		ctx,
 		masterImpl,
 		id,
-		FakeTask,
+		frameModel.FakeTask,
 	)
 
 	return ret.(*DefaultBaseMaster)
