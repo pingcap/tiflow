@@ -16,10 +16,10 @@ function run() {
 	# copy auto-generated certificates from MySQL to bypass permission
 	mkdir -p $WORK_DIR/mysql1
 	mkdir -p $WORK_DIR/mysql2
-	sudo cat /tmp/mysql1/client-key.pem >$WORK_DIR/mysql1/client-key.pem
-	sudo cat /tmp/mysql1/client-cert.pem >$WORK_DIR/mysql1/client-cert.pem
-	sudo cat /tmp/mysql2/client-key.pem >$WORK_DIR/mysql2/client-key.pem
-	sudo cat /tmp/mysql2/client-cert.pem >$WORK_DIR/mysql2/client-cert.pem
+	docker cp dm_upstream_mysql:/var/lib/mysql/client-key.pem $WORK_DIR/mysql1/client-key.pem
+	docker cp dm_upstream_mysql:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql1/client-cert.pem
+	docker cp dm_upstream_mysql2:/var/lib/mysql/client-key.pem $WORK_DIR/mysql2/client-key.pem
+	docker cp dm_upstream_mysql2:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql2/client-cert.pem
 
 	wait_mysql_online.sh --password 123456 --ssl-key $WORK_DIR/mysql1/client-key.pem --ssl-cert $WORK_DIR/mysql1/client-cert.pem
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem

@@ -10,7 +10,6 @@ services:
             - "3306:3306"
         volumes:
             - ./config/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
-            - /tmp/mysql1:/var/lib/mysql
         environment:
             MYSQL_ROOT_PASSWORD: 123456
 
@@ -21,8 +20,6 @@ services:
             - --require_secure_transport=ON
         ports:
             - "3307:3306"
-        volumes:
-            - /tmp/mysql2:/var/lib/mysql
         environment:
             MYSQL_ROOT_PASSWORD: 123456
 
