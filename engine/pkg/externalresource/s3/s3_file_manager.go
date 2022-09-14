@@ -31,8 +31,10 @@ const (
 
 type FileManager struct {
 	bucketSelector BucketSelector
+	storageFactory externalStorageFactory
 	options        *brStorage.S3BackendOptions
 	index          indexManager
+	prefix         string
 }
 
 func NewFileManager(
@@ -40,10 +42,37 @@ func NewFileManager(
 	bucketSelector BucketSelector,
 	s3Options *brStorage.S3BackendOptions,
 ) *FileManager {
+	return newFileManager(
+		executorID,
+		bucketSelector,
+		newExternalStorageFactory(),
+		s3Options)
+}
+
+func NewFileManagerWithFactory(
+	executorID model.ExecutorID,
+	bucketSelector BucketSelector,
+	factory externalStorageFactory,
+	s3Options *brStorage.S3BackendOptions,
+) *FileManager {
+	return newFileManager(
+		executorID,
+		bucketSelector,
+		factory,
+		s3Options)
+}
+
+func newFileManager(
+	executorID model.ExecutorID,
+	bucketSelector BucketSelector,
+	factory externalStorageFactory,
+	s3Options *brStorage.S3BackendOptions,
+) *FileManager {
 	return &FileManager{
 		bucketSelector: bucketSelector,
+		storageFactory: factory,
 		options:        s3Options,
-		index:          newIndexManager(executorID, bucketSelector, s3Options),
+		index:          newIndexManager(executorID, bucketSelector, factory, s3Options),
 	}
 }
 
@@ -55,7 +84,7 @@ func (m *FileManager) CreateResource(
 		return nil, errors.Annotate(err, "FileManager: CreateResource")
 	}
 
-	desc := newResourceDescriptor(bucket, ident, m.options)
+	desc := newResourceDescriptor(bucket, ident, m.storageFactory, m.options)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +104,7 @@ func (m *FileManager) GetPersistedResource(
 		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
 	}
 
-	desc := newResourceDescriptor(bucket, ident, m.options)
+	desc := newResourceDescriptor(bucket, ident, m.storageFactory, m.options)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -159,7 +188,7 @@ func (m *FileManager) removeFilesIf(
 		return err
 	}
 
-	storage, err := newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
+	storage, err := m.storageFactory.newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
 	if err != nil {
 		return err
 	}
@@ -192,6 +221,11 @@ func (m *FileManager) removeFilesIf(
 
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
 	writer, err := storage.Create(ctx, placeholderFileName)
+	if err != nil {
+		return errors.Annotate(err, "creating placeholder file")
+	}
+
+	_, err = writer.Write(ctx, []byte("dummy"))
 	if err != nil {
 		return errors.Annotate(err, "creating placeholder file")
 	}

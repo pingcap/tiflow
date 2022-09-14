@@ -44,8 +44,9 @@ func getS3OptionsForUT() (*brStorage.S3BackendOptions, error) {
 
 	return &brStorage.S3BackendOptions{
 		Endpoint:        endpoint,
-		AccessKey:       envS3SecretAccessKey,
+		AccessKey:       accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		Provider:        "minio",
+		ForcePathStyle:  true,
 	}, nil
 }

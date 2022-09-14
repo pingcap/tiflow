@@ -15,7 +15,6 @@ package s3
 
 import (
 	"context"
-	"path"
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
@@ -33,18 +32,21 @@ type resourceDescriptor struct {
 	Ident   internal.ResourceIdent
 	Options *brStorage.S3BackendOptions
 
-	storage brStorage.ExternalStorage
+	storageFactory externalStorageFactory
+	storage        brStorage.ExternalStorage
 }
 
 func newResourceDescriptor(
 	bucket BucketName,
 	ident internal.ResourceIdent,
+	factory externalStorageFactory,
 	options *brStorage.S3BackendOptions,
 ) *resourceDescriptor {
 	return &resourceDescriptor{
-		Bucket:  bucket,
-		Ident:   ident,
-		Options: options,
+		Bucket:         bucket,
+		Ident:          ident,
+		Options:        options,
+		storageFactory: factory,
 	}
 }
 
@@ -63,13 +65,9 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 
 // makeExternalStorage actually creates the storage object.
 func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
-	return newS3ExternalStorage(ctx, r.generateURI(), r.Options)
+	return r.storageFactory.newS3ExternalStorageFromURI(ctx, r.URI(), r.Options)
 }
 
 func (r *resourceDescriptor) URI() string {
-	return r.generateURI()
-}
-
-func (r *resourceDescriptor) generateURI() string {
-	return path.Join(scopeURI(r.Bucket, r.Ident.Scope()), r.Ident.Name)
+	return r.storageFactory.scopeURI(r.Bucket, r.Ident.Scope()) + "/" + r.Ident.Name
 }

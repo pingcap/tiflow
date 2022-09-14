@@ -16,7 +16,6 @@ package s3
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -103,6 +102,7 @@ func (f *indexFile) GetPersistedFileSet() map[model.ResourceName]struct{} {
 type indexManagerImpl struct {
 	executorID     model.ExecutorID
 	bucketSelector BucketSelector
+	storageFactory externalStorageFactory
 	options        *brStorage.S3BackendOptions
 
 	indexMu     sync.Mutex
@@ -122,12 +122,14 @@ type indexManagerImpl struct {
 func newIndexManager(
 	executorID model.ExecutorID,
 	bucketSelector BucketSelector,
+	factory externalStorageFactory,
 	s3Options *brStorage.S3BackendOptions,
 ) *indexManagerImpl {
 	ret := &indexManagerImpl{
 		executorID:     executorID,
 		bucketSelector: bucketSelector,
 		options:        s3Options,
+		storageFactory: factory,
 
 		indexFiles: make(map[model.WorkerID]*indexFile),
 
@@ -181,12 +183,7 @@ func (m *indexManagerImpl) SetPersisted(ctx context.Context, ident internal.Reso
 func (m *indexManagerImpl) LoadPersistedFileSet(
 	ctx context.Context, scope internal.ResourceScope,
 ) (map[model.ResourceName]struct{}, error) {
-	uri, err := m.indexFilePathURI(ctx, scope.ProjectInfo, scope.WorkerID)
-	if err != nil {
-		return nil, err
-	}
-
-	storage, err := newS3ExternalStorage(ctx, uri, m.options)
+	storage, err := m.createStorageForIndexFile(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -273,12 +270,11 @@ func (m *indexManagerImpl) doFlush(
 		return err
 	}
 
-	uri, err := m.indexFilePathURI(ctx, project, workerID)
-	if err != nil {
-		return err
-	}
-
-	storage, err := newS3ExternalStorage(ctx, uri, m.options)
+	storage, err := m.createStorageForIndexFile(ctx, internal.ResourceScope{
+		ProjectInfo: project,
+		Executor:    m.executorID,
+		WorkerID:    workerID,
+	})
 	if err != nil {
 		return err
 	}
@@ -291,20 +287,14 @@ func (m *indexManagerImpl) doFlush(
 	return nil
 }
 
-func (m *indexManagerImpl) indexFilePathURI(
+func (m *indexManagerImpl) createStorageForIndexFile(
 	ctx context.Context,
-	project tenant.ProjectInfo,
-	workerID model.WorkerID,
-) (string, error) {
-	bucket, err := m.bucketSelector.GetBucket(ctx, internal.ResourceScope{
-		ProjectInfo: project,
-		Executor:    m.executorID,
-		WorkerID:    workerID,
-	})
+	scope internal.ResourceScope,
+) (brStorage.ExternalStorage, error) {
+	bucket, err := m.bucketSelector.GetBucket(ctx, scope)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return fmt.Sprintf("s3://%s/%s/%s",
-		bucket, m.executorID, workerID), nil
+	return m.storageFactory.newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
 }
