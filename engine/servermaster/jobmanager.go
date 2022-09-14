@@ -62,7 +62,7 @@ type JobManager interface {
 
 	GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error)
 	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error)
-	UpdateJobStatus(ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState) error
+	UpdateJobStatus(ctx context.Context, jobID frameModel.MasterID, errMsg string, code frameModel.MasterState) error
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
@@ -501,13 +501,14 @@ func (jm *JobManagerImpl) GetJobStatuses(
 
 // UpdateJobStatus implements JobManager.UpdateJobStatus
 func (jm *JobManagerImpl) UpdateJobStatus(
-	ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState,
+	ctx context.Context, jobID frameModel.MasterID, errMsg string, code frameModel.MasterState,
 ) error {
 	// Note since the job is not online, it is safe to get from metastore and then update
 	meta, err := jm.frameMetaClient.GetJobByID(ctx, jobID)
 	if err != nil {
 		return err
 	}
+	meta.ErrorMsg = errMsg
 	meta.State = code
 	return jm.frameMetaClient.UpsertJob(ctx, meta)
 }
@@ -682,7 +683,10 @@ func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, resu
 			log.Info("job master terminated", zap.String("job-id", worker.ID()))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
-			if err := jm.UpdateJobStatus(ctx, worker.ID(), frameModel.MasterStateFailed); err != nil {
+			errIn, _ := pkgClient.ErrCreateWorkerTerminate.Convert(result)
+			if err := jm.UpdateJobStatus(
+				ctx, worker.ID(), errIn.Details, frameModel.MasterStateFailed,
+			); err != nil {
 				return err
 			}
 			jm.JobFsm.JobOffline(worker, false /* needFailover */)
