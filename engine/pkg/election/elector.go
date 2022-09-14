@@ -92,6 +92,7 @@ func (e *Elector) Run(ctx context.Context) error {
 						callbackIsRunning.Store(false)
 						callbackWg.Done()
 					}()
+					log.Info("leader callback is called")
 					err := leaderCallback(leaderCtx)
 					log.Info("leader callback returned", zap.Error(err))
 				}()
