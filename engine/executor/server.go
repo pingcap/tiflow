@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
@@ -294,7 +295,7 @@ func checkBusinessErrorIsRetryable(
 	case frameModel.DMJobMaster:
 		err = errors.ToDMError(err)
 	case frameModel.FakeJobMaster:
-		err = registry.ToFakeJobError(err)
+		err = fake.ToFakeJobError(err)
 	default:
 	}
 	return register.IsRetryableError(err, tp)

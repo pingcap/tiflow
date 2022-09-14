@@ -16,14 +16,13 @@ package registry
 import (
 	"encoding/json"
 	libErrors "errors"
-	"fmt"
 	"reflect"
-	"regexp"
 
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 )
@@ -82,54 +81,19 @@ func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config.(C)), nil
 }
 
-// FakeJobUnRetryableError is used in fake job and unit test only
-type FakeJobUnRetryableError struct {
-	errIn error
-}
-
-// NewFakeJobUnRetryableError creates a new FakeJobUnRetryableError
-func NewFakeJobUnRetryableError(errIn error) *FakeJobUnRetryableError {
-	return &FakeJobUnRetryableError{
-		errIn: errIn,
-	}
-}
-
-// Message returns raw error message of FakeJobUnRetryableError
-func (e *FakeJobUnRetryableError) Message() string {
-	return "fake job unretryable error"
-}
-
-// Error implements error interface
-func (e *FakeJobUnRetryableError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Message(), e.errIn)
-}
-
-const fakeJobErrorFormat = "fake job unretryable error: (.*)"
-
-var fakeJobErrorRegexp = regexp.MustCompile(fakeJobErrorFormat)
-
-// ToFakeJobError tries best to construct a fake job error from an error object
-func ToFakeJobError(err error) error {
-	subMatch := fakeJobErrorRegexp.FindStringSubmatch(err.Error())
-	if len(subMatch) > 1 {
-		return NewFakeJobUnRetryableError(errors.New(subMatch[1]))
-	}
-	return err
-}
-
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	var config C
 	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(NewFakeJobUnRetryableError(err))
+		return nil, errors.Trace(fake.NewJobUnRetryableError(err))
 	}
 	return config, nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
 func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
-	var errOut *FakeJobUnRetryableError
+	var errOut *fake.JobUnRetryableError
 	if libErrors.As(err, &errOut) {
 		return false
 	}

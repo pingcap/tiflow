@@ -142,7 +142,7 @@ func TestIsRetryableError(t *testing.T) {
 		err         error
 		isRetryable bool
 	}{
-		{NewFakeJobUnRetryableError(errors.New("inner err")), false},
+		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
 		{errors.New("normal error"), true},
 	}
 
