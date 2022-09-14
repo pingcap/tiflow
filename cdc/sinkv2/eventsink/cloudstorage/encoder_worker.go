@@ -16,9 +16,11 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"go.uber.org/zap"
 )
 
 type encoderWorker struct {
@@ -49,6 +51,7 @@ func newWorker(
 func (w *encoderWorker) run(ctx context.Context, msgChan *chann.Chann[eventFragment]) {
 	w.wg.Add(1)
 	go func() {
+		log.Info("encoder worker started", zap.Int("id", w.id))
 		defer w.wg.Done()
 		for {
 			select {
@@ -62,6 +65,7 @@ func (w *encoderWorker) run(ctx context.Context, msgChan *chann.Chann[eventFragm
 				err := w.encodeEvents(ctx, frag)
 				if err != nil {
 					w.errCh <- err
+					return
 				}
 			}
 		}

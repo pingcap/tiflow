@@ -26,18 +26,27 @@ type dmlWriter struct {
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
 	concurrency    int
+	extension      string
+	errCh          chan<- error
 }
 
-func newDMLWriter(ctx context.Context, storage storage.ExternalStorage, concurrency int) *dmlWriter {
+func newDMLWriter(ctx context.Context,
+	storage storage.ExternalStorage,
+	concurrency int,
+	extension string,
+	errCh chan<- error,
+) *dmlWriter {
 	w := &dmlWriter{
 		storage:        storage,
-		workerChannels: make([]*chann.Chann[eventFragment], 5),
+		workerChannels: make([]*chann.Chann[eventFragment], concurrency),
 		hasher:         hash.NewPositionInertia(),
 		concurrency:    concurrency,
+		extension:      extension,
+		errCh:          errCh,
 	}
 
 	for i := 0; i < concurrency; i++ {
-		d := newDMLWorker(i+1, storage)
+		d := newDMLWorker(i+1, storage, extension, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)

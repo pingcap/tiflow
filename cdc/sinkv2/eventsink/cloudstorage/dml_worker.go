@@ -14,84 +14,132 @@ package cloudstorage
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"go.uber.org/zap"
 )
 
+const defaultFlushInterval = 5 * time.Second
+
 type dmlWorker struct {
-	storage       storage.ExternalStorage
-	msgChannels   map[*model.TableName]*chann.Chann[*common.Message]
-	defragmenters map[*model.TableName]*defragmenter
-	wg            sync.WaitGroup
-	id            int
+	storage        storage.ExternalStorage
+	msgChannels    map[*model.TableName]*chann.Chann[*common.Message]
+	defragmenters  map[*model.TableName]*defragmenter
+	fileIndex      map[*model.TableName]uint64
+	activeTablesCh *chann.Chann[*model.TableName]
+	wg             sync.WaitGroup
+	errCh          chan<- error
+	extension      string
+	id             int
 }
 
-func newDMLWorker(id int, storage storage.ExternalStorage) *dmlWorker {
-	return &dmlWorker{
-		id:            id,
-		storage:       storage,
-		msgChannels:   make(map[*model.TableName]*chann.Chann[*common.Message]),
-		defragmenters: make(map[*model.TableName]*defragmenter),
+func newDMLWorker(
+	id int,
+	storage storage.ExternalStorage,
+	extension string,
+	errCh chan<- error,
+) *dmlWorker {
+	d := &dmlWorker{
+		id:             id,
+		storage:        storage,
+		msgChannels:    make(map[*model.TableName]*chann.Chann[*common.Message]),
+		defragmenters:  make(map[*model.TableName]*defragmenter),
+		activeTablesCh: chann.New[*model.TableName](),
+		fileIndex:      make(map[*model.TableName]uint64),
+		extension:      extension,
+		errCh:          errCh,
 	}
+
+	return d
 }
 
 func (d *dmlWorker) flushEvents(ctx context.Context, readyTables []*model.TableName) error {
 	for _, table := range readyTables {
 		var data []byte
-		_, err := d.defragmenters[table].output(ctx, d.msgChannels[table])
+	LOOP:
+		for {
+			select {
+			case msg := <-d.msgChannels[table].Out():
+				data = append(data, msg.Value...)
+			default:
+				break LOOP
+			}
+		}
+
+		err := d.storage.WriteFile(ctx, d.generateCloudStoragePath(table), data)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		for msg := range d.msgChannels[table].Out() {
-			data = append(data, msg.Value...)
-		}
-
-		d.storage.WriteFile(ctx, d.generateCloudStoragePath(table), data)
 	}
 
 	return nil
 }
 
-func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+func (d *dmlWorker) backgroundDefragmenter(ctx context.Context) {
 	d.wg.Add(1)
-	ticker := time.NewTicker(5 * time.Second)
-	var readyTables []*model.TableName
 	go func() {
 		defer d.wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case table := <-d.activeTablesCh.Out():
+				_, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
+				if err != nil {
+					d.errCh <- err
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
+	d.backgroundDefragmenter(ctx)
+	d.wg.Add(1)
+	ticker := time.NewTicker(defaultFlushInterval)
+	var readyTables []*model.TableName
+	go func() {
+		log.Info("dml worker started", zap.Int("id", d.id))
+		defer d.wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
 			case <-ticker.C:
-				d.flushEvents(ctx, readyTables)
+				err := d.flushEvents(ctx, readyTables)
+				if err != nil {
+					d.errCh <- err
+					return
+				}
 				readyTables = nil
 			case frag := <-ch.Out():
 				tableName := frag.tableName
-				if frag.event == nil {
-					d.defragmenters[tableName].setLast(frag.seqNumber)
-					readyTables = append(readyTables, tableName)
-					continue
-				}
-
 				if _, ok := d.defragmenters[tableName]; !ok {
 					d.defragmenters[tableName] = newDefragmenter()
 					d.msgChannels[tableName] = chann.New[*common.Message]()
 				}
 				d.defragmenters[tableName].register(frag)
+				if frag.event == nil {
+					readyTables = append(readyTables, tableName)
+					d.activeTablesCh.In() <- tableName
+				}
 			}
 		}
 	}()
-	return nil
 }
 
 func (d *dmlWorker) generateCloudStoragePath(table *model.TableName) string {
-	return ""
+	d.fileIndex[table]++
+	return fmt.Sprintf("%s/%s/CDC%6d.%s", table.Schema, table.Table, d.fileIndex[table], d.extension)
 }
 
 func (d *dmlWorker) stop() {

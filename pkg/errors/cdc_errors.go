@@ -419,6 +419,10 @@ var (
 		"csv decode failed",
 		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
 	)
+	ErrCloudStorageInvalidConfig = errors.Normalize(
+		"cloud storage config invalid",
+		errors.RFCCodeText("CDC:ErrCloudStorageInvalidConfig"),
+	)
 
 	// utilities related errors
 	ErrToTLSConfigFailed = errors.Normalize(

@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"net/url"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -24,11 +23,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
+
+const defaultEncodingConcurrency = 8
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -52,8 +53,13 @@ func NewCloudStorageSink(ctx context.Context,
 	errCh chan error,
 ) (*sink, error) {
 	s := &sink{}
-	storageURL := strings.Split(sinkURI.String(), "?")[0]
-	bs, err := storage.ParseBackend(storageURL, &storage.BackendOptions{})
+	cfg := NewConfig()
+	err := cfg.Apply(ctx, sinkURI, replicaConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	bs, err := storage.ParseBackend(sinkURI.String(), &storage.BackendOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +68,13 @@ func NewCloudStorageSink(ctx context.Context,
 		return nil, err
 	}
 
-	protocol, err := mqutil.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	ext := util.GetFileExtension(protocol)
 
-	encoderConfig, err := mqutil.GetEncoderConfig(sinkURI, protocol, replicaConfig, 0)
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -75,15 +82,15 @@ func NewCloudStorageSink(ctx context.Context,
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
 	}
 	encoder := encoderBuilder.Build()
-	writer := newDMLWriter(ctx, storage, 8)
+	s.writer = newDMLWriter(ctx, storage, cfg.WorkerCount, ext, errCh)
 
 	s.id = changefeedID
 	s.msgChan = chann.New[eventFragment]()
-	for i := 0; i < 5; i++ {
-		w := newWorker(i+1, changefeedID, encoder, writer, errCh)
+	for i := 0; i < defaultEncodingConcurrency; i++ {
+		w := newWorker(i+1, changefeedID, encoder, s.writer, errCh)
 		w.run(ctx, s.msgChan)
 		s.encoderWorkers = append(s.encoderWorkers, w)
 	}
@@ -104,7 +111,6 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		}
 	}
 
-	// s.writer.setLastSeqForTable(tableName, int64(s.tableSeqMap[tableName]))
 	s.msgChan.In() <- eventFragment{
 		tableName: tableName,
 		seqNumber: int64(s.tableSeqMap[tableName]),

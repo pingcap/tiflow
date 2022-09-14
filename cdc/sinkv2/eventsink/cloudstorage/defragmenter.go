@@ -21,31 +21,25 @@ import (
 )
 
 type defragmenter struct {
-	lastWritten     int64
-	lastSeqNumber   int64
-	written         int64
-	future          map[int64]eventFragment
-	registryCh      chan eventFragment
-	lastSeqNotifyCh chan int64
+	lastWritten   int64
+	lastSeqNumber int64
+	written       int64
+	future        map[int64]eventFragment
+	registryCh    *chann.Chann[eventFragment]
 }
 
 func newDefragmenter() *defragmenter {
 	return &defragmenter{
-		future:          make(map[int64]eventFragment),
-		registryCh:      make(chan eventFragment),
-		lastSeqNotifyCh: make(chan int64),
+		future:     make(map[int64]eventFragment),
+		registryCh: chann.New[eventFragment](),
 	}
 }
 
 func (d *defragmenter) register(frag eventFragment) {
-	d.registryCh <- frag
+	d.registryCh.In() <- frag
 }
 
-func (d *defragmenter) setLast(lastSeq int64) {
-	d.lastSeqNotifyCh <- lastSeq
-}
-
-func (d *defragmenter) output(ctx context.Context, dst *chann.Chann[*common.Message]) (int64, error) {
+func (d *defragmenter) writeMsgs(ctx context.Context, dst *chann.Chann[*common.Message]) (int64, error) {
 	for {
 		if d.lastWritten >= d.lastSeqNumber && d.lastSeqNumber > 0 {
 			break
@@ -55,11 +49,16 @@ func (d *defragmenter) output(ctx context.Context, dst *chann.Chann[*common.Mess
 		case <-ctx.Done():
 			d.future = nil
 			return 0, ctx.Err()
-		case frag := <-d.registryCh:
+		case frag := <-d.registryCh.Out():
+			// check whether we meet an ending mark
+			if frag.event == nil {
+				d.lastSeqNumber = frag.seqNumber
+				continue
+			}
 			// check whether to output right now.
 			next := d.lastWritten + 1
 			if frag.seqNumber == next {
-				n, err := d.outputConsecutive(ctx, dst, frag)
+				n, err := d.writeMsgsConsecutive(ctx, dst, frag)
 				d.written += n
 				if err != nil {
 					return d.written, err
@@ -69,15 +68,13 @@ func (d *defragmenter) output(ctx context.Context, dst *chann.Chann[*common.Mess
 			} else {
 				return d.written, errors.New("unexpected error")
 			}
-		case d.lastSeqNumber = <-d.lastSeqNotifyCh:
-			continue
 		}
 	}
 
 	return d.written, nil
 }
 
-func (d *defragmenter) outputConsecutive(
+func (d *defragmenter) writeMsgsConsecutive(
 	ctx context.Context,
 	dst *chann.Chann[*common.Message],
 	start eventFragment,
@@ -88,7 +85,6 @@ func (d *defragmenter) outputConsecutive(
 	}
 
 	d.lastWritten++
-
 	for {
 		select {
 		case <-ctx.Done():

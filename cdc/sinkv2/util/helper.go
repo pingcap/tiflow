@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mq
+package util
 
 import (
 	"net/url"
@@ -47,6 +47,21 @@ func GetProtocol(protocolStr string) (config.Protocol, error) {
 	return protocol, nil
 }
 
+// GetFileExtension returns the extension for specific protocol
+func GetFileExtension(protocol config.Protocol) string {
+	switch protocol {
+	case config.ProtocolAvro, config.ProtocolCanalJSON, config.ProtocolMaxwell,
+		config.ProtocolOpen:
+		return "json"
+	case config.ProtocolCraft:
+		return "craft"
+	case config.ProtocolCanal:
+		return "canal"
+	default:
+		return "unknown"
+	}
+}
+
 // GetEncoderConfig returns the encoder config and validates the config.
 func GetEncoderConfig(
 	sinkURI *url.URL,
@@ -56,7 +71,7 @@ func GetEncoderConfig(
 ) (*common.Config, error) {
 	encoderConfig := common.NewConfig(protocol)
 	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 	}
 	// Always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large
@@ -64,7 +79,7 @@ func GetEncoderConfig(
 	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes)
 
 	if err := encoderConfig.Validate(); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 	}
 
 	return encoderConfig, nil

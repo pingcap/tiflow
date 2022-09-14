@@ -35,35 +35,41 @@ func (t Type) String() string {
 }
 
 const (
-	// KafkaSchema indicates the schema is kafka.
-	KafkaSchema = "kafka"
-	// KafkaSSLSchema indicates the schema is kafka+ssl.
-	KafkaSSLSchema = "kafka+ssl"
-	// BlackHoleSchema indicates the schema is blackhole.
-	BlackHoleSchema = "blackhole"
-	// MySQLSchema indicates the schema is MySQL.
-	MySQLSchema = "mysql"
-	// MySQLSSLSchema indicates the schema is MySQL+ssl.
-	MySQLSSLSchema = "mysql+ssl"
-	// TiDBSchema indicates the schema is TiDB.
-	TiDBSchema = "tidb"
-	// TiDBSSLSchema indicates the schema is TiDB+ssl.
-	TiDBSSLSchema = "tidb+ssl"
-	// S3Schema indicates the schema is s3.
-	S3Schema = "s3"
-	// NFSSchema indicates the schema is nfs
-	NFSSchema = "nfs"
-	// LocalSchema indicates the schema is local
-	LocalSchema = "local"
+	// KafkaScheme indicates the scheme is kafka.
+	KafkaScheme = "kafka"
+	// KafkaSSLScheme indicates the scheme is kafka+ssl.
+	KafkaSSLScheme = "kafka+ssl"
+	// BlackHoleScheme indicates the scheme is blackhole.
+	BlackHoleScheme = "blackhole"
+	// MySQLScheme indicates the scheme is MySQL.
+	MySQLScheme = "mysql"
+	// MySQLSSLScheme indicates the scheme is MySQL+ssl.
+	MySQLSSLScheme = "mysql+ssl"
+	// TiDBScheme indicates the scheme is TiDB.
+	TiDBScheme = "tidb"
+	// TiDBSSLScheme indicates the scheme is TiDB+ssl.
+	TiDBSSLScheme = "tidb+ssl"
+	// S3Scheme indicates the scheme is s3.
+	S3Scheme = "s3"
+	// NFSScheme indicates the scheme is nfs
+	NFSScheme = "nfs"
+	// LocalScheme indicates the scheme is local
+	LocalScheme = "local"
 )
 
-// IsMQScheme returns true if the scheme belong to mq schema.
+// IsMQScheme returns true if the scheme belong to mq scheme.
 func IsMQScheme(scheme string) bool {
-	return scheme == KafkaSchema || scheme == KafkaSSLSchema
+	return scheme == KafkaScheme || scheme == KafkaSSLScheme
 }
 
 // IsMySQLCompatibleScheme returns true if the scheme is compatible with MySQL.
 func IsMySQLCompatibleScheme(scheme string) bool {
-	return scheme == MySQLSchema || scheme == MySQLSSLSchema ||
-		scheme == TiDBSchema || scheme == TiDBSSLSchema
+	return scheme == MySQLScheme || scheme == MySQLSSLScheme ||
+		scheme == TiDBScheme || scheme == TiDBSSLScheme
+}
+
+// IsStorageScheme returns true if the scheme belong to storage scheme.
+func IsStorageScheme(scheme string) bool {
+	return scheme == LocalScheme || scheme == NFSScheme ||
+		scheme == S3Scheme
 }
