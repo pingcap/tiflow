@@ -305,11 +305,11 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
+			frameModel.FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
-			FakeTask, fakeWorkerCfg,
+			frameModel.FakeTask, fakeWorkerCfg,
 			fakeCfgBytes, fakeWorkerID,
 		},
 	}

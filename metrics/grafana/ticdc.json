@@ -6157,7 +6157,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -6166,7 +6166,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -6175,7 +6175,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"DB\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -20821,7 +20821,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -20830,7 +20830,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -20839,7 +20839,7 @@
             },
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_received_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_large_row_changed_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\", type=\"MQ\"}[1m])) by (le, instance, changefeed))",
               "format": "time_series",
               "hide": false,
               "interval": "",
