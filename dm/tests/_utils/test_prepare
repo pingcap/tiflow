@@ -35,6 +35,12 @@ function cleanup_process() {
     wait_process_exit dm-syncer.test
 }
 
+function kill_process() {
+    keyword=$1
+    ps aux | grep $keyword | grep -v 'grep' | awk '{print $2}' | xargs kill || true
+    wait_process_exit $keyword
+}
+
 function wait_pattern_exit() {
     pattern=$1
     while true

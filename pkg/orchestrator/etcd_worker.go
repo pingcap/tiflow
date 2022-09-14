@@ -15,13 +15,16 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -41,6 +44,7 @@ const (
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
+	changefeedInfoKey          = "/changefeed/info"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -455,7 +459,18 @@ func logEtcdOps(ops []clientv3.Op, committed bool) {
 		if op.IsDelete() {
 			logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
-			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			etcdKey := util.NewEtcdKeyFromBytes(op.KeyBytes())
+			value := string(op.ValueBytes())
+			// we need to mask the sink-uri in changefeedInfo
+			if strings.Contains(etcdKey.String(), changefeedInfoKey) {
+				changefeedInfo := &model.ChangeFeedInfo{}
+				if err := json.Unmarshal(op.ValueBytes(), changefeedInfo); err != nil {
+					logFn("[etcd worker] unmarshal changefeed info failed", zap.Error(err))
+					continue
+				}
+				value = changefeedInfo.String()
+			}
+			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.String("value", value))
 		}
 	}
 	logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))

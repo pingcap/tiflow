@@ -22,6 +22,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
+	ticdcutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -129,7 +130,10 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	for captureID, status := range processorInfos {
 		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
 	}
-
+	info.SinkURI, err = ticdcutil.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		cmd.PrintErr(err)
+	}
 	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 
 	return util.JSONPrint(cmd, meta)
