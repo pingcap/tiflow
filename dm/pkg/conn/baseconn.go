@@ -116,7 +116,7 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 // ExecuteSQLWithIgnoreError executes sql on real DB, and will ignore some error and continue execute the next query.
 // return
 // 1. failed: (the index of sqls executed error, error)
-// 2. succeed: (affect, nil).
+// 2. succeed: (rows affected, nil).
 func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, ignoreErr func(error) bool, queries []string, args ...[]interface{}) (int, error) {
 	var affect int64
 	// inject an error to trigger retry, this should be placed before the real execution of the SQL statement.
@@ -218,7 +218,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 // ExecuteSQL executes sql on real DB,
 // return
 // 1. failed: (the index of sqls executed error, error)
-// 2. succeed: (affect, nil).
+// 2. succeed: (rows affected, nil).
 func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, queries []string, args ...[]interface{}) (int, error) {
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
 }
