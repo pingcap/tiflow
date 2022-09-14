@@ -1169,7 +1169,7 @@ type TaskConfigForDowngrade struct {
 	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
 	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
 	Loaders                 map[string]*LoaderConfigForDowngrade `yaml:"loaders"`
-	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers,omitempty"`
+	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
 	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
 	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
 	RemoveMeta              bool                                 `yaml:"remove-meta"`
