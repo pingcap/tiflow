@@ -10,7 +10,7 @@ CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 
 function run() {
-	generate_cert /tmp/tiflow_engine_test/certs/downstream tidb
+	generate_cert /tmp/certs/downstream tidb
 	start_engine_cluster $CONFIG
 
 	# copy auto-generated certificates from MySQL to bypass permission
@@ -34,13 +34,13 @@ function run() {
 
 	# create downstream user
 
-	run_sql --port 4000 --ssl-key /tmp/tiflow_engine_test/certs/downstream/client.key --ssl-cert /tmp/tiflow_engine_test/certs/downstream/client.pem "CREATE USER 'dm_user'@'%' REQUIRE X509;"
+	run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "CREATE USER 'dm_user'@'%' REQUIRE X509;"
 
 	# create job
 
 	cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
-	sed -i "s,<downstream-key>,$(base64 -w0 /tmp/tiflow_engine_test/certs/downstream/client.key)," $WORK_DIR/job.yaml
-	sed -i "s,<downstream-cert>,$(base64 -w0 /tmp/tiflow_engine_test/certs/downstream/client.pem)," $WORK_DIR/job.yaml
+	sed -i "s,<downstream-key>,$(base64 -w0 /tmp/certs/downstream/client.key)," $WORK_DIR/job.yaml
+	sed -i "s,<downstream-cert>,$(base64 -w0 /tmp/certs/downstream/client.pem)," $WORK_DIR/job.yaml
 	sed -i "s,<mysql1-key>,$(base64 -w0 $WORK_DIR/mysql1/client-key.pem)," $WORK_DIR/job.yaml
 	sed -i "s,<mysql1-cert>,$(base64 -w0 $WORK_DIR/mysql1/client-cert.pem)," $WORK_DIR/job.yaml
 	sed -i "s,<mysql2-key>,$(base64 -w0 $WORK_DIR/mysql2/client-key.pem)," $WORK_DIR/job.yaml
@@ -62,8 +62,8 @@ function run() {
 
 	# check data
 
-	exec_with_retry 'run_sql --port 4000 --ssl-key /tmp/tiflow_engine_test/certs/downstream/client.key --ssl-cert /tmp/tiflow_engine_test/certs/downstream/client.pem "select count(1) from tls.t1\G" | grep -Fq "count(1): 2"'
-	exec_with_retry 'run_sql --port 4000 --ssl-key /tmp/tiflow_engine_test/certs/downstream/client.key --ssl-cert /tmp/tiflow_engine_test/certs/downstream/client.pem "select count(1) from tls.t2\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "select count(1) from tls.t1\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "select count(1) from tls.t2\G" | grep -Fq "count(1): 2"'
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
