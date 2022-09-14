@@ -720,9 +720,8 @@ function DM_KEY_NOT_FOUND_CASE() {
 	run_sql_source2 "update ${shardddl1}.${tb1} set id=4 where id=2;"
 	run_sql_source1 "delete from ${shardddl1}.${tb1} where id=3;"
 	run_sql_source2 "delete from ${shardddl1}.${tb1} where id=4;"
-	check_log_contain_with_retry "no matching record is found to update/delete, ER_KEY_NOT_FOUND" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "no matching record is found to update/delete, ER_KEY_NOT_FOUND" 2
-	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "no matching record is found to update/delete, ER_KEY_NOT_FOUND" 2
+	check_log_contain_with_retry "no matching record is found to update/delete, ER_KEY_NOT_FOUND" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "no matching record is found to update/delete, ER_KEY_NOT_FOUND" $WORK_DIR/worker2/log/dm-worker.log
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 }
 
