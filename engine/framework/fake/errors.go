@@ -14,6 +14,7 @@
 package fake
 
 import (
+	libErrors "errors"
 	"fmt"
 	"regexp"
 
@@ -32,14 +33,13 @@ func NewJobUnRetryableError(errIn error) *JobUnRetryableError {
 	}
 }
 
-// Message returns raw error message of JobUnRetryableError
-func (e *JobUnRetryableError) Message() string {
-	return "fake job unretryable error"
-}
-
 // Error implements error interface
 func (e *JobUnRetryableError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Message(), e.errIn)
+	return fmt.Sprintf("%s: %s", e.message(), e.errIn)
+}
+
+func (e *JobUnRetryableError) message() string {
+	return "fake job unretryable error"
 }
 
 const fakeJobErrorFormat = "fake job unretryable error: (.*)"
@@ -48,9 +48,15 @@ var fakeJobErrorRegexp = regexp.MustCompile(fakeJobErrorFormat)
 
 // ToFakeJobError tries best to construct a fake job error from an error object
 func ToFakeJobError(err error) error {
+	var errOut *JobUnRetryableError
+	if libErrors.As(err, &errOut) {
+		return err
+	}
+
 	subMatch := fakeJobErrorRegexp.FindStringSubmatch(err.Error())
 	if len(subMatch) > 1 {
 		return NewJobUnRetryableError(errors.New(subMatch[1]))
 	}
+
 	return err
 }
