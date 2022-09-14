@@ -1799,7 +1799,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
 	n, err := conn.ExecuteSQLWithIgnore(tctx, nil, errorutil.IsIgnorableMySQLDDLError, sqls)
 	c.Assert(err, IsNil)
-	c.Assert(n, Equals, 2)
+	c.Assert(n, Equals, 1)
 
 	// will return error when execute the first sql
 	mock.ExpectBegin()
