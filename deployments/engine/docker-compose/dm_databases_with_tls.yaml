@@ -54,7 +54,7 @@ services:
             - "10080:10080"
         volumes:
             - ./config/tidb_tls.toml:/tidb.toml
-            - /tmp/certs/downstream:/etc/certs
+            - /tmp/tiflow_engine_test/certs/downstream:/etc/certs
         command:
             - --store=tikv
             - --path=dm_downstream_pd:2379
