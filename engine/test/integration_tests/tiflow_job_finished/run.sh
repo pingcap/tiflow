@@ -14,12 +14,11 @@ function run() {
 	# add a delay in case that the cluster is not ready
 	sleep 3s
 
-	create_job_json=$(base64 -i $CUR_DIR/conf/fake_job.json | tr -d \\n | jq -Rs '{ type: "FakeJob", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=tiflow_job_finished&project_id=tiflow_job_finished)" | tee /dev/stderr | jq -r .id)
-	echo "job_id: $job_id"
-
-	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	for conf in $(ls $CUR_DIR/conf/*.json); do
+		job_id=$(create_job "FakeJob" "$conf" "tiflow_job_finished")
+		exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+		echo "job $job_id finished"
+	done
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT

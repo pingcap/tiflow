@@ -15,9 +15,9 @@ function run() {
 	wait_mysql_online.sh --port 4000
 
 	# prepare data
-
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 
+<<<<<<< HEAD
 	# create job
 
 	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
@@ -27,18 +27,19 @@ function run() {
 
 	# wait for dump and load finished
 
+=======
+	# create job & wait for job finished
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_new_collation_off")
+>>>>>>> b1edbbd8a (add create job util)
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
 
 	# check data
-
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 
 	# insert increment data
-
 	run_sql_file --port 3307 $CUR_DIR/data/db2.increment.sql
 
 	# check data
-
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 }
 
