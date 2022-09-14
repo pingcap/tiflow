@@ -1,25 +1,40 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases_with_tls.yaml"
+CONFIG="$DOCKER_COMPOSE_DIR/3m3e_with_tls.yaml $DOCKER_COMPOSE_DIR/dm_databases_with_tls.yaml"
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 
+if which docker-compose &>/dev/null; then
+	COMPOSECMD="docker-compose"
+else
+	COMPOSECMD="docker compose"
+fi
+
 function run() {
+  seq=($CONFIG)
+  echo ${seq[0]}
 	generate_cert /tmp/certs/downstream tidb
+
+	# start a cluster with tls, but now master can't access the certificate so exit
 	start_engine_cluster $CONFIG
+	$COMPOSECMD -f ${seq[0]} ps | grep "server-master-0" | grep -q "exited"
 
 	# copy auto-generated certificates from MySQL to bypass permission
 	mkdir -p $WORK_DIR/mysql1
 	mkdir -p $WORK_DIR/mysql2
+	mkdir -p /tmp/master_cert
 	sudo cat /tmp/mysql1/client-key.pem >$WORK_DIR/mysql1/client-key.pem
 	sudo cat /tmp/mysql1/client-cert.pem >$WORK_DIR/mysql1/client-cert.pem
 	sudo cat /tmp/mysql2/client-key.pem >$WORK_DIR/mysql2/client-key.pem
 	sudo cat /tmp/mysql2/client-cert.pem >$WORK_DIR/mysql2/client-cert.pem
+	sudo bash -c "cat /tmp/mysql_meta/ca.pem >/tmp/master_cert/ca.pem"
+
+	read -p 123
 
 	wait_mysql_online.sh --password 123456 --ssl-key $WORK_DIR/mysql1/client-key.pem --ssl-cert $WORK_DIR/mysql1/client-cert.pem
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem
