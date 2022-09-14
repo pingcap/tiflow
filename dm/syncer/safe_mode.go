@@ -76,8 +76,8 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		}
 	}
 	exitPoint := s.checkpoint.SafeModeExitPoint()
-	beginLocation := s.checkpoint.GlobalPoint()
 	if exitPoint != nil {
+		beginLocation := s.checkpoint.GlobalPoint()
 		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exitPoint", exitPoint), zap.Stringer("beginLocation", beginLocation))
 		if binlog.CompareLocation(*exitPoint, beginLocation, s.cfg.EnableGTID) == 0 {
 			s.tctx.L().Info("exitPoint equal to beginLocation, so disable the safe mode")

@@ -149,7 +149,7 @@ function safe_mode_recover() {
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-		sleep 3
+		# sleep 3
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task test" \
 			"\"result\": true" 3
@@ -206,7 +206,7 @@ function safe_mode_duration() {
 
 	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	sleep 1
+	# sleep 1
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
