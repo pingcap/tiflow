@@ -92,7 +92,7 @@ type TablePipeline interface {
 	// UpdateBarrierTs updates the barrier ts in this table pipeline
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-	AsyncStop(targetTs model.Ts) bool
+	AsyncStop() bool
 
 	// Start the sink consume data from the given `ts`
 	Start(ts model.Ts)
