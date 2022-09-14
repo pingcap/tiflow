@@ -189,6 +189,8 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
+	# make sure exitPoint not equal to beginPosition
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SkipSaveGlobalPoint=return()"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# worker1 -> source1
@@ -213,6 +215,8 @@ function safe_mode_duration() {
 
 	# restart workers
 	kill_dm_worker
+	
+	export GO_FAILPOINTS=""
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT

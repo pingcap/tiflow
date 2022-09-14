@@ -1137,6 +1137,11 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 }
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
+	failpoint.Inject("SkipSaveGlobalPoint", func() {
+		s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
+		failpoint.Return()
+	})
+
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		globalLocation = s.sgk.AdjustGlobalLocation(globalLocation)
 	} else if s.cfg.ShardMode == config.ShardOptimistic {
