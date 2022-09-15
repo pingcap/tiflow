@@ -254,7 +254,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		// we skip a rename table ddl only when its old table name and new table name are both filtered.
 		skip := p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, table.Name.O)
 		if skip {
-			// if a table should be skip by its old name and its new name is in filter rule, return error.
+			// if a table should be skipped by its old name and its new name is in filter rule, return error.
 			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 			}
@@ -322,6 +322,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 
 	// Do this first to fill the schema name to its origin schema name.
 	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
+		// If we can find a job's schema, check if it's been filtered.
+		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+			return true, nil
+		}
 		return true, errors.Trace(err)
 	}
 
@@ -358,7 +362,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		} else {
 			// 2. If we can find the preTableInfo, we filter it by the old table name.
 			skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, oldTable.Name.O)
-			// 3. If it old table name is not in filter rule, and it new table name in filter rule, return error.
+			// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
 			if skip && !p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O) {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
