@@ -2559,7 +2559,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
 			}},
-			RegionID: 3,
+			//RegionID: 3,
 		},
 		{
 			Val: &model.RawKVEntry{
@@ -3044,7 +3044,7 @@ func testKVClientForceReconnect(t *testing.T) {
 			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			ResolvedTs: 135,
 		}},
-		RegionID: regionID3,
+		//RegionID: regionID3,
 	}
 
 eventLoop:
@@ -3283,7 +3283,7 @@ func TestEvTimeUpdate(t *testing.T) {
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
 			}},
-			RegionID: 3,
+			//RegionID: 3,
 		},
 		{
 			Val: &model.RawKVEntry{
