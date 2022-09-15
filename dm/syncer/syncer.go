@@ -2197,7 +2197,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// check pass SafeModeExitLoc and try to disable safe mode, but not in sharding or replacing error
 		safeModeExitLoc := s.checkpoint.SafeModeExitPoint()
-		if s.safeMode.Enable() && safeModeExitLoc != nil && shardingReSync == nil {
+		if safeModeExitLoc != nil && shardingReSync == nil {
 			if binlog.CompareLocation(endLocation, *safeModeExitLoc, s.cfg.EnableGTID) > 0 {
 				s.checkpoint.SaveSafeModeExitPoint(nil)
 				// must flush here to avoid the following situation:
