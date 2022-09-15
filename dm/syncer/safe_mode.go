@@ -85,7 +85,11 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx)
 			return
 		}
-
+		if duration == 0 {
+			err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
+			s.tctx.L().Error("safe-mode-duration=0 is conflict with that exitPoint equal to beginLocation", zap.Error(err))
+			return
+		}
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
 		s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
@@ -112,9 +116,5 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				}
 			}()
 		}
-	}
-
-	if duration == 0 && !s.cfg.SafeMode && s.safeMode.Enable() {
-		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 	}
 }
