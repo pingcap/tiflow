@@ -98,7 +98,7 @@ var defaultServerConfig = &ServerConfig{
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
 	// however it will decrease RTO when single TiCDC node error happens.
-	CaptureSessionTTL:      20,
+	CaptureSessionTTL:      30,
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
