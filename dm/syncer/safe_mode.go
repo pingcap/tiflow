@@ -92,7 +92,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	} else {
 		s.tctx.L().Info("enable safe-mode because of task initialization", zap.Duration("duration", duration))
 
-		if int64(duration) > 0 {
+		if duration > 0 {
 			//nolint:errcheck
 			s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
 			go func() {
@@ -114,7 +114,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		}
 	}
 
-	if int64(duration) == 0 && !s.cfg.SafeMode && s.safeMode.Enable() {
+	if duration == 0 && !s.cfg.SafeMode && s.safeMode.Enable() {
 		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 	}
 }
