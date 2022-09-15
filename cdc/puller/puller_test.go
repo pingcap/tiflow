@@ -76,7 +76,7 @@ func (mc *mockCDCKVClient) EventFeed(
 	span regionspan.ComparableSpan,
 	ts uint64,
 	lockResolver txnutil.LockResolver,
-	eventCh chan<- []model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	for {
 		select {
@@ -86,7 +86,7 @@ func (mc *mockCDCKVClient) EventFeed(
 			if !ok {
 				return nil
 			}
-			eventCh <- []model.RegionFeedEvent{ev}
+			eventCh <- ev
 		}
 	}
 }
