@@ -322,7 +322,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 
 	// Do this first to fill the schema name to its origin schema name.
 	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
-		// If we can find a job's schema, check if it's been filtered.
+		// If we can't find a job's schema, check if it's been filtered.
 		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
 			return true, nil
 		}
