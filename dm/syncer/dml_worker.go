@@ -322,6 +322,9 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 }
 
 func (w *DMLWorker) judgeKeyNotFound(affect int, jobs []*job) bool {
+	// TODO: support compact and multiple rows
+	// In compact mode, we need to calculate the expected affected rows based on the compacted job
+	// while in multiple-rows, we need to calculate the affected rows based on the sql type
 	if w.compact || w.multipleRows {
 		return false
 	}
