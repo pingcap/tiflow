@@ -3026,7 +3026,7 @@
             "y": 9
           },
           "hiddenSeries": false,
-          "id": 293,
+          "id": 523,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -3061,7 +3061,7 @@
               "hide": false,
               "interval": "30s",
               "intervalFactor": 1,
-              "legendFormat": "PD-{{instance}}",
+              "legendFormat": "{{instance}}-{{version}}",
               "refId": "A"
             }
           ],
