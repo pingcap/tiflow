@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -134,7 +135,7 @@ func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 
 // IsFresh implements Agent.IsFresh
 func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error) {
-	if workerType == framework.WorkerDMDump {
+	if workerType == frameModel.WorkerDMDump {
 		return true, nil
 	}
 
@@ -144,7 +145,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 	}
 	defer db.Close()
 
-	if workerType == framework.WorkerDMLoad {
+	if workerType == frameModel.WorkerDMLoad {
 		return isLoadFresh(ctx, c.jobID, task.Cfg, db)
 	}
 	return isSyncFresh(ctx, c.jobID, task.Cfg, db)

@@ -24,7 +24,6 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
@@ -38,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -225,7 +225,7 @@ func TestConvertMakeTaskError(t *testing.T) {
 	t.Parallel()
 
 	register := registry.NewRegistry()
-	ok := register.RegisterWorkerType(framework.FakeJobMaster,
+	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
 		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
 	require.True(t, ok)
 
@@ -238,7 +238,7 @@ func TestConvertMakeTaskError(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		err := convertMakeTaskErrorToRPCError(register, tc.err, framework.FakeJobMaster)
+		err := convertMakeTaskErrorToRPCError(register, tc.err, frameModel.FakeJobMaster)
 		require.Error(t, err)
 		errIn := rpcerror.FromGRPCError(err)
 		if tc.isRetryable {
