@@ -15,6 +15,7 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/log"
@@ -125,4 +126,28 @@ func TestJobStore(t *testing.T) {
 	require.EqualError(t, jobStore.UpdateConfig(context.Background(), jobCfg), "failed to update config because job is being deleted")
 
 	require.Len(t, jobStore.UpgradeFuncs(), 0)
+}
+
+func TestTaskStage(t *testing.T) {
+	t.Parallel()
+	for i, s := range typesStringify {
+		ts, ok := toTaskStage[s]
+		require.True(t, ok)
+		bs, err := json.Marshal(ts)
+		require.NoError(t, err)
+		var ts2 TaskStage
+		require.NoError(t, json.Unmarshal(bs, &ts2))
+		require.Equal(t, ts, ts2)
+		require.Equal(t, ts, TaskStage(i))
+	}
+
+	ts := TaskStage(-1)
+	require.Equal(t, "Unknown TaskStage -1", ts.String())
+	ts = TaskStage(1000)
+	require.Equal(t, "Unknown TaskStage 1000", ts.String())
+	bs, err := json.Marshal(ts)
+	require.NoError(t, err)
+	var ts2 TaskStage
+	require.EqualError(t, json.Unmarshal(bs, &ts2), "Unknown TaskStage Unknown TaskStage 1000")
+	require.Equal(t, TaskStage(0), ts2)
 }

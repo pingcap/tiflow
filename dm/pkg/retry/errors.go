@@ -68,6 +68,7 @@ var (
 		int32(terror.ErrDumpUnitGlobalLock.Code()):          {},
 		int32(terror.ErrDumpUnitRuntime.Code()):             {},
 		int32(terror.ErrSyncerUnitDMLColumnNotMatch.Code()): {},
+		int32(terror.ErrSyncerCancelledDDL.Code()):          {},
 	}
 
 	// UnresumableRelayErrCodes is a set of unresumeable relay unit err codes.
