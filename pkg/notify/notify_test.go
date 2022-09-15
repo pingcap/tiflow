@@ -116,12 +116,12 @@ func TestNewReceiverWithClosedNotifier(t *testing.T) {
 func TestNotifierMultiple(t *testing.T) {
 	t.Parallel()
 	notifier := new(Notifier)
+
 	receiver, err := notifier.NewReceiver(-1)
 	require.NoError(t, err)
-
-	var wg sync.WaitGroup
 	counter := atomic.NewInt32(0)
 
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -136,7 +136,6 @@ func TestNotifierMultiple(t *testing.T) {
 
 	receiver1, err := notifier.NewReceiver(time.Minute)
 	require.NoError(t, err)
-
 	counter1 := atomic.NewInt32(0)
 
 	wg.Add(1)

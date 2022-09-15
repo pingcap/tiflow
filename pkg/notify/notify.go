@@ -106,7 +106,7 @@ func (n *Notifier) Close() {
 // Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
 type Receiver struct {
 	C       <-chan struct{}
-	c       chan struct{}
+	c       chan<- struct{}
 	Stop    func()
 	ticker  *time.Ticker
 	closeCh chan struct{}
@@ -143,6 +143,8 @@ func (r *Receiver) signalTickLoop() {
 
 func (r *Receiver) close() {
 	if r.ticker != nil {
+		// in this case, r.c could be accessed by signalTickLoop goroutine, hence
+		// we should not close it here.
 		r.ticker.Stop()
 	} else {
 		close(r.c)
