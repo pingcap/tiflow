@@ -13,6 +13,7 @@
 package cloudstorage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -62,19 +63,21 @@ func newDMLWorker(
 }
 
 func (d *dmlWorker) flushEvents(ctx context.Context, readyTables []*model.TableName) error {
+	var buf bytes.Buffer
+
 	for _, table := range readyTables {
-		var data []byte
+		buf.Reset()
 	LOOP:
 		for {
 			select {
 			case msg := <-d.msgChannels[table].Out():
-				data = append(data, msg.Value...)
+				buf.Write(msg.Value)
 			default:
 				break LOOP
 			}
 		}
 
-		err := d.storage.WriteFile(ctx, d.generateCloudStoragePath(table), data)
+		err := d.storage.WriteFile(ctx, d.generateCloudStoragePath(table), buf.Bytes())
 		if err != nil {
 			return errors.Trace(err)
 		}

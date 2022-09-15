@@ -34,12 +34,12 @@ const (
 	maxWorkerCount = 256
 )
 
-// Config is the configs for MySQL backend.
+// Config is the configuration for cloud storage sink.
 type Config struct {
 	WorkerCount int
 }
 
-// NewConfig returns the default mysql backend config.
+// NewConfig returns the default cloud storage sink config.
 func NewConfig() *Config {
 	return &Config{
 		WorkerCount: defaultWorkerCount,

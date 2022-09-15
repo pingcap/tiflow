@@ -55,6 +55,7 @@ func (d *defragmenter) writeMsgs(ctx context.Context, dst *chann.Chann[*common.M
 				d.lastSeqNumber = frag.seqNumber
 				continue
 			}
+
 			// check whether to output right now.
 			next := d.lastWritten + 1
 			if frag.seqNumber == next {

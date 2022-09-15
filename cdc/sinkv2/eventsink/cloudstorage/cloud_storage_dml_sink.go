@@ -129,6 +129,6 @@ func (s *sink) Close() error {
 type eventFragment struct {
 	seqNumber   int64
 	tableName   *model.TableName
-	event       *eventsink.CallbackableEvent[*model.SingleTableTxn]
+	event       *eventsink.TxnCallbackableEvent
 	encodedMsgs []*common.Message
 }
