@@ -296,7 +296,7 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *DBConfig {
 		}
 		toDBCfg.Security = &Security{
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKEYBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
 			CertAllowedCN: certAllowedCN,
 		}
