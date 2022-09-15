@@ -878,7 +878,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		// After this resolved ts event is sent, we don't need to send one more
 		// resolved ts event when the region starts to work.
 		resolvedEv := model.RegionFeedEvent{
-			RegionID: sri.verID.GetID(),
+			//RegionID: sri.verID.GetID(),
 			Resolved: []*model.ResolvedSpan{{
 				Span:       sri.span,
 				ResolvedTs: sri.ts,
