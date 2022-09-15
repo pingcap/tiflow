@@ -94,7 +94,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	// test enable by config
 	s.cliArgs = nil
 	s.cfg.SafeMode = true
-	s.cfg.SafeModeDuration = "0" // test safeMode's priority higher than SafeModeDuration's
+	s.cfg.SafeModeDuration = "0s" // test safeMode's priority higher than SafeModeDuration's
 	mockCheckpoint := &mockCheckpointForSafeMode{}
 	mockCheckpoint.globalPoint = binlog.Location{}
 	mockCheckpoint.tablePoint = make(map[string]map[string]binlog.Location)
