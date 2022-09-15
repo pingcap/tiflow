@@ -25,5 +25,8 @@ v1-sources-path = ""
 ssl-ca = ""
 ssl-cert = ""
 ssl-key = ""
+ssl-ca-base64 = ""
+ssl-key-base64 = ""
+ssl-cert-base64 = ""
 
 [experimental]

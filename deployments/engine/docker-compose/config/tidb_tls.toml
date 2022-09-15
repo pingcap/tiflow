@@ -1,0 +1,4 @@
+[security]
+ssl-ca = "/etc/certs/ca.pem"
+ssl-cert = "/etc/certs/tidb.pem"
+ssl-key = "/etc/certs/tidb.key"
