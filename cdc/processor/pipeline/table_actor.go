@@ -418,7 +418,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
-func (t *tableActor) AsyncStop(_ model.Ts) bool {
+func (t *tableActor) AsyncStop() bool {
 	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
 	// and then stop the whole table pipeline by call Cancel
 	msg := message.StopMessage[pmessage.Message]()
