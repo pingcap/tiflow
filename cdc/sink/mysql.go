@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/tidb/errno"
 	"net/url"
 	"runtime"
 	"strconv"
@@ -29,9 +30,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
@@ -127,7 +128,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
-// FlushRowChangedEvents will flushes all received events, we don't allow mysql
+// FlushRowChangedEvents will flush all received events, we don't allow mysql
 // sink to receive events before resolving
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	v, ok := s.tableMaxResolvedTs.Load(tableID)
@@ -948,17 +949,32 @@ func isRetryableDMLError(err error) bool {
 	if !cerror.IsRetryableError(err) {
 		return false
 	}
-
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
 		return true
 	}
 
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
+	err = errors.Cause(err) // check the original error
+	mysqlErr, ok := err.(*dmysql.MySQLError)
+	if !ok {
 		return false
 	}
-	return true
+
+	switch mysqlErr.Number {
+	case errno.ErrLockDeadlock: // https://dev.mysql.com/doc/refman/5.7/en/innodb-deadlocks.html
+		return true // retryable error in MySQL
+	case errno.ErrPDServerTimeout,
+		errno.ErrTiKVServerBusy,
+		errno.ErrResolveLockTimeout,
+		errno.ErrInfoSchemaExpired,
+		errno.ErrInfoSchemaChanged,
+		errno.ErrWriteConflictInTiDB,
+		errno.ErrTxnRetryable,
+		errno.ErrWriteConflict:
+		return true // retryable error in TiDB
+	}
+	// Check if the error is a retriable TiDB error or MySQL error.
+	return false
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
