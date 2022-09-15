@@ -293,6 +293,10 @@ func (e *Elector) isLeaseExpired(memberID string) bool {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
+	return e.isLeaseExpiredLocked(memberID)
+}
+
+func (e *Elector) isLeaseExpiredLocked(memberID string) bool {
 	member, ok := e.observedRecord.FindMember(memberID)
 	if !ok {
 		return true
@@ -301,20 +305,27 @@ func (e *Elector) isLeaseExpired(memberID string) bool {
 	return renewTime.Add(member.LeaseDuration).Before(time.Now())
 }
 
-// IsLeader returns true if the current member is the leader.
+// IsLeader returns true if the current member is the leader
+// and its lease is still valid.
 func (e *Elector) IsLeader() bool {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
+	if e.isLeaseExpiredLocked(e.config.ID) {
+		return false
+	}
 	return e.observedRecord.LeaderID == e.config.ID
 }
 
-// GetLeader returns the leader member.
+// GetLeader returns the last observed leader whose lease is still valid.
 func (e *Elector) GetLeader() (*Member, bool) {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
 	for _, m := range e.observedRecord.Members {
+		if e.isLeaseExpiredLocked(m.ID) {
+			continue
+		}
 		if m.ID == e.observedRecord.LeaderID {
 			return m.Clone(), true
 		}

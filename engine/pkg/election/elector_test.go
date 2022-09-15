@@ -297,6 +297,10 @@ func TestElectorRenewFailure(t *testing.T) {
 		return false
 	}, time.Second*3, time.Millisecond*100, "elector 2 not elected")
 
+	require.False(t, e1.IsLeader())
+	_, ok := e1.GetLeader()
+	require.False(t, ok)
+
 	cancel()
 	wg.Wait()
 }
