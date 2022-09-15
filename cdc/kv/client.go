@@ -294,7 +294,7 @@ type CDCKVClient interface {
 		span regionspan.ComparableSpan,
 		ts uint64,
 		lockResolver txnutil.LockResolver,
-		eventCh chan<- model.RegionFeedEvent,
+		eventCh chan<- []model.RegionFeedEvent,
 	) error
 }
 
@@ -399,7 +399,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 	lockResolver txnutil.LockResolver,
-	eventCh chan<- model.RegionFeedEvent,
+	eventCh chan<- []model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(
 		ctx, c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
@@ -426,7 +426,7 @@ type eventFeedSession struct {
 	totalSpan regionspan.ComparableSpan
 
 	// The channel to send the processed events.
-	eventCh chan<- model.RegionFeedEvent
+	eventCh chan<- []model.RegionFeedEvent
 	// The token based region router, it controls the uninitialized regions with
 	// a given size limit.
 	regionRouter LimitRegionRouter
@@ -468,7 +468,7 @@ func newEventFeedSession(
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	startTs uint64,
-	eventCh chan<- model.RegionFeedEvent,
+	eventCh chan<- []model.RegionFeedEvent,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
 	tableName string,
@@ -880,7 +880,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 			},
 		}
 		select {
-		case s.eventCh <- resolvedEv:
+		case s.eventCh <- []model.RegionFeedEvent{resolvedEv}:
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		}

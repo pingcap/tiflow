@@ -140,7 +140,7 @@ type regionWorker struct {
 	session   *eventFeedSession
 
 	inputCh  chan []*regionStatefulEvent
-	outputCh chan<- model.RegionFeedEvent
+	outputCh chan<- []model.RegionFeedEvent
 	errorCh  chan error
 
 	// event handlers in region worker
@@ -677,17 +677,19 @@ func (w *regionWorker) handleEventEntry(
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow(state.initialized)
+			revents := make([]model.RegionFeedEvent, 0, len(cachedEvents))
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				select {
-				case w.outputCh <- revent:
-					w.metrics.metricSendEventCommitCounter.Inc()
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				}
+				revents = append(revents, revent)
+			}
+			select {
+			case w.outputCh <- revents:
+				w.metrics.metricSendEventCommitCounter.Add(float64(len(revents)))
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
 			}
 			state.matcher.matchCachedRollbackRow(state.initialized)
 		case cdcpb.Event_COMMITTED:
@@ -706,7 +708,7 @@ func (w *regionWorker) handleEventEntry(
 				return errUnreachable
 			}
 			select {
-			case w.outputCh <- revent:
+			case w.outputCh <- []model.RegionFeedEvent{revent}:
 				w.metrics.metricSendEventCommittedCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
@@ -742,7 +744,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 
 			select {
-			case w.outputCh <- revent:
+			case w.outputCh <- []model.RegionFeedEvent{revent}:
 				w.metrics.metricSendEventCommitCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
@@ -799,7 +801,7 @@ func (w *regionWorker) handleResolvedTs(
 	}
 
 	select {
-	case w.outputCh <- revent:
+	case w.outputCh <- []model.RegionFeedEvent{revent}:
 		w.metrics.metricSendEventResolvedCounter.Inc()
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
