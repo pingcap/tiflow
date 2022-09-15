@@ -206,7 +206,7 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 		Addr:      ctx.Environ.Addr,
 		NodeID:    ctx.Environ.NodeID,
 		ID:        jobMasterID,
-		Type:      FakeJobMaster,
+		Type:      frameModel.FakeJobMaster,
 		Epoch:     epoch,
 		State:     frameModel.MasterStateUninit,
 	}
@@ -221,7 +221,7 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 		impl,
 		jobManagerID,
 		jobMasterID,
-		FakeTask,
+		frameModel.FakeTask,
 		epoch,
 	).(*DefaultBaseJobMaster)
 }

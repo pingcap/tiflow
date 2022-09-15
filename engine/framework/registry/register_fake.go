@@ -14,15 +14,15 @@
 package registry
 
 import (
-	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 // RegisterFake registers fake job master and fake worker to global registry
 func RegisterFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(fake.NewFakeMaster)
-	registry.MustRegisterWorkerType(framework.FakeJobMaster, fakeMasterFactory)
+	registry.MustRegisterWorkerType(frameModel.FakeJobMaster, fakeMasterFactory)
 
 	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker)
-	registry.MustRegisterWorkerType(framework.FakeTask, fakeWorkerFactory)
+	registry.MustRegisterWorkerType(frameModel.FakeTask, fakeWorkerFactory)
 }

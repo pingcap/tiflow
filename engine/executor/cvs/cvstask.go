@@ -113,7 +113,7 @@ type cvsTask struct {
 // RegisterWorker is used to register cvs task worker into global registry
 func RegisterWorker() {
 	factory := registry.NewSimpleWorkerFactory(newCvsTask)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.CvsTask, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.CvsTask, factory)
 }
 
 func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID frameModel.MasterID, conf *Config) *cvsTask {
