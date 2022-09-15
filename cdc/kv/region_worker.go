@@ -541,7 +541,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// We measure whether the current worker is busy based on the input
 			// channel size. If the buffered event count is larger than the high
 			// watermark, we send events to worker pool to increase processing
-			// throughput. Otherwise we process event in local region worker to
+			// throughput. Otherwise, we process event in local region worker to
 			// ensure low processing latency.
 			for _, event := range events {
 				exitEventHandler, skipEvent := preprocess(event, ok)
