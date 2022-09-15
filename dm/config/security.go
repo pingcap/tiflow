@@ -55,6 +55,11 @@ func (s *Security) LoadTLSContent() error {
 		if firstErr != nil {
 			return
 		}
+		// already loaded. And DM does not support certificate rotation.
+		if len(*target) > 0 {
+			return
+		}
+
 		if source == "" {
 			return
 		}
