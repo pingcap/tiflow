@@ -87,7 +87,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		}
 		if duration == 0 {
 			err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
-			s.tctx.L().Error("safe-mode-duration=0 is conflict with that exitPoint equal to beginLocation", zap.Error(err))
+			s.tctx.L().Error("safe-mode-duration=0 is conflict with that exitPoint not equal to beginLocation", zap.Error(err))
 			return
 		}
 		//nolint:errcheck
