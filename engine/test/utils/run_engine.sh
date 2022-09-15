@@ -45,12 +45,15 @@ case $1 in
 	docker container ls
 	;;
 "logs")
+	echo -e "[$(date)] <<<<<< check engine cluster state! >>>>>>"
+	docker container ls -a
+
 	shift && WORK_DIR=$1
 	flag=()
 	generate_flag "$@"
 	$COMPOSECMD "${flag[@]}" logs -t >$WORK_DIR/docker_compose.log || echo "fail to save logs"
 
-	echo -e "[$(date)] <<<<<< save docker compose logs success! >>>>>>\n"
+	echo -e "[$(date)] <<<<<< save docker compose logs success! >>>>>>\n\n"
 	;;
 *)
 	echo "Unknown parameter: ${1}" >&2

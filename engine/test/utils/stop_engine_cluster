@@ -3,9 +3,9 @@
 # parameter 1: work directory
 # other parameters: config files
 
-set -x
+set -eu
 
-echo "save docker compose logs..."
+echo -e "\n\nsave docker compose logs..."
 run_engine.sh logs $*
 shift
 
