@@ -96,9 +96,9 @@ type singleRegionInfo struct {
 }
 
 type regionStatefulEvent struct {
-	changeEvent *cdcpb.Event
-	resolvedTs  *cdcpb.ResolvedTs
-	state       *regionFeedState
+	changeEvent     *cdcpb.Event
+	resolvedTsEvent *resolvedTsEvent
+	state           *regionFeedState
 
 	// regionID is used for load balancer, we don't use fields in state to reduce lock usage
 	regionID uint64
@@ -106,6 +106,11 @@ type regionStatefulEvent struct {
 	// finishedCallbackCh is used to mark events that are sent from a give region
 	// worker to this worker(one of the workers in worker pool) are all processed.
 	finishedCallbackCh chan struct{}
+}
+
+type resolvedTsEvent struct {
+	resolvedTs uint64
+	regions    []*regionFeedState
 }
 
 var (
@@ -874,10 +879,10 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		// resolved ts event when the region starts to work.
 		resolvedEv := model.RegionFeedEvent{
 			RegionID: sri.verID.GetID(),
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       sri.span,
 				ResolvedTs: sri.ts,
-			},
+			}},
 		}
 		select {
 		case s.eventCh <- resolvedEv:
@@ -1323,11 +1328,17 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
-	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
+	statefulEvents := make([]*regionStatefulEvent, worker.inputSlots)
+	// split resolved ts
 	for i := 0; i < worker.inputSlots; i++ {
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
 		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
-		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
+		statefulEvents[i] = &regionStatefulEvent{
+			resolvedTsEvent: &resolvedTsEvent{
+				resolvedTs: resolvedTs.Ts,
+				regions:    make([]*regionFeedState, 0, buffLen),
+			},
+		}
 	}
 
 	for _, regionID := range resolvedTs.Regions {
@@ -1343,16 +1354,16 @@ func (s *eventFeedSession) sendResolvedTs(
 				continue
 			}
 			slot := worker.inputCalcSlot(regionID)
-			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
-				resolvedTs: resolvedTs,
-				regionID:   regionID,
-				state:      state,
-			})
+			statefulEvents[slot].resolvedTsEvent.regions = append(
+				statefulEvents[slot].resolvedTsEvent.regions, state,
+			)
+			// regionID is just an slot index
+			statefulEvents[slot].regionID = regionID
 		}
 	}
-	for _, events := range statefulEvents {
-		if len(events) > 0 {
-			err := worker.sendEvents(ctx, events)
+	for _, event := range statefulEvents {
+		if len(event.resolvedTsEvent.regions) > 0 {
+			err := worker.sendEvents(ctx, []*regionStatefulEvent{event})
 			if err != nil {
 				return err
 			}

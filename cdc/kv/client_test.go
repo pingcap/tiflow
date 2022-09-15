@@ -351,7 +351,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	}
 
 	checkEvent := func(event model.RegionFeedEvent, ts uint64) {
-		require.Equal(t, ts, event.Resolved.ResolvedTs)
+		require.Equal(t, ts, event.Resolved[0].ResolvedTs)
 	}
 
 	initialized := mockInitializedEvent(3 /* regionID */, currentRequestID())
@@ -605,7 +605,7 @@ consumePreResolvedTs:
 		select {
 		case event = <-eventCh:
 			require.NotNil(t, event.Resolved)
-			require.Equal(t, uint64(100), event.Resolved.ResolvedTs)
+			require.Equal(t, uint64(100), event.Resolved[0].ResolvedTs)
 		case <-time.After(time.Second):
 			break consumePreResolvedTs
 		}
@@ -641,7 +641,7 @@ consumePreResolvedTs:
 		require.FailNow(t, "reconnection not succeed in 3 seconds")
 	}
 	require.NotNil(t, event.Resolved)
-	require.Equal(t, uint64(120), event.Resolved.ResolvedTs)
+	require.Equal(t, uint64(120), event.Resolved[0].ResolvedTs)
 
 	cancel()
 }
@@ -1080,10 +1080,10 @@ func testHandleFeedEvent(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: 3,
 		},
 		{
@@ -1152,25 +1152,25 @@ func testHandleFeedEvent(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 135,
-			},
+			}},
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 145,
-			},
+			}},
 			RegionID: 3,
 		},
 	}
 	multipleExpected := model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
+		Resolved: []*model.ResolvedSpan{{
 			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			ResolvedTs: 160,
-		},
+		}},
 		RegionID: 3,
 	}
 
@@ -1436,17 +1436,17 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 120,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 120,
-			},
+			}},
 			RegionID: regionID,
 		},
 	}
@@ -1456,7 +1456,7 @@ eventLoop:
 	for {
 		select {
 		case ev := <-eventCh:
-			if ev.Resolved.ResolvedTs != uint64(100) {
+			if ev.Resolved[0].ResolvedTs != uint64(100) {
 				events = append(events, ev)
 			}
 		case <-time.After(time.Second):
@@ -1624,7 +1624,7 @@ ReceiveLoop:
 				break ReceiveLoop
 			}
 			received = append(received, event)
-			if event.Resolved.ResolvedTs == 130 {
+			if event.Resolved[0].ResolvedTs == 130 {
 				break ReceiveLoop
 			}
 		case <-time.After(time.Second):
@@ -1633,7 +1633,7 @@ ReceiveLoop:
 	}
 	var lastResolvedTs uint64
 	for _, e := range received {
-		if lastResolvedTs > e.Resolved.ResolvedTs {
+		if lastResolvedTs > e.Resolved[0].ResolvedTs {
 			require.Fail(t, fmt.Sprintf("the resolvedTs is back off %#v", resolved))
 		}
 	}
@@ -1831,7 +1831,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	ch1 <- initialized
 	ev := <-eventCh
 	require.NotNil(t, ev.Resolved)
-	require.Equal(t, uint64(100), ev.Resolved.ResolvedTs)
+	require.Equal(t, uint64(100), ev.Resolved[0].ResolvedTs)
 
 	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
 		{
@@ -1843,7 +1843,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	ch1 <- resolved
 	ev = <-eventCh
 	require.NotNil(t, ev.Resolved)
-	require.Equal(t, uint64(200), ev.Resolved.ResolvedTs)
+	require.Equal(t, uint64(200), ev.Resolved[0].ResolvedTs)
 
 	cancel()
 }
@@ -1918,24 +1918,24 @@ func TestDropStaleRequest(t *testing.T) {
 	}}
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 120,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 130,
-			},
+			}},
 			RegionID: regionID,
 		},
 	}
@@ -2021,17 +2021,17 @@ func TestResolveLock(t *testing.T) {
 	}}
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: tso,
-			},
+			}},
 			RegionID: regionID,
 		},
 	}
@@ -2355,17 +2355,17 @@ func testEventAfterFeedStop(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: regionID,
 		},
 		{
@@ -2380,10 +2380,10 @@ func testEventAfterFeedStop(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 120,
-			},
+			}},
 			RegionID: regionID,
 		},
 	}
@@ -2555,10 +2555,10 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: 3,
 		},
 		{
@@ -2584,10 +2584,10 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 145,
-			},
+			}},
 			RegionID: 3,
 		},
 	}
@@ -3040,10 +3040,10 @@ func testKVClientForceReconnect(t *testing.T) {
 	ch2 <- resolved
 
 	expected := model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
+		Resolved: []*model.ResolvedSpan{{
 			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			ResolvedTs: 135,
-		},
+		}},
 		RegionID: regionID3,
 	}
 
@@ -3051,7 +3051,7 @@ eventLoop:
 	for {
 		select {
 		case ev := <-eventCh:
-			if ev.Resolved != nil && ev.Resolved.ResolvedTs == uint64(100) {
+			if ev.Resolved != nil && ev.Resolved[0].ResolvedTs == uint64(100) {
 				continue
 			}
 			require.Equal(t, expected, ev)
@@ -3279,10 +3279,10 @@ func TestEvTimeUpdate(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
+			Resolved: []*model.ResolvedSpan{{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 100,
-			},
+			}},
 			RegionID: 3,
 		},
 		{

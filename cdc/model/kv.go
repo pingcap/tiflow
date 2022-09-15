@@ -38,7 +38,7 @@ const (
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
-	Resolved *ResolvedSpan
+	Resolved []*ResolvedSpan
 
 	// Additional debug info
 	RegionID uint64
