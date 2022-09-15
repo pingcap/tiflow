@@ -1312,15 +1312,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 	return
 }
 
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
-		return -1, false
-	}
-
-	return errors.ErrCode(mysqlErr.Number), true
-}
-
 func buildColumnList(names []string) string {
 	var b strings.Builder
 	for i, name := range names {
