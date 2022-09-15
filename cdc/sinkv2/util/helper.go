@@ -52,13 +52,13 @@ func GetFileExtension(protocol config.Protocol) string {
 	switch protocol {
 	case config.ProtocolAvro, config.ProtocolCanalJSON, config.ProtocolMaxwell,
 		config.ProtocolOpen:
-		return "json"
+		return ".json"
 	case config.ProtocolCraft:
-		return "craft"
+		return ".craft"
 	case config.ProtocolCanal:
-		return "canal"
+		return ".canal"
 	default:
-		return "unknown"
+		return ".unknown"
 	}
 }
 

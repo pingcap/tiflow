@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
 )
@@ -31,6 +32,7 @@ type dmlWriter struct {
 }
 
 func newDMLWriter(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
 	concurrency int,
 	extension string,
@@ -46,7 +48,7 @@ func newDMLWriter(ctx context.Context,
 	}
 
 	for i := 0; i < concurrency; i++ {
-		d := newDMLWorker(i+1, storage, extension, errCh)
+		d := newDMLWorker(i+1, changefeedID, storage, extension, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)
@@ -55,8 +57,8 @@ func newDMLWriter(ctx context.Context,
 	return w
 }
 
-func (d *dmlWriter) dispatchFragmentToWorker(frag eventFragment) {
-	tableName := frag.event.Event.Table
+func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
+	tableName := frag.tableName
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 	workerID := d.hasher.Sum32() % uint32(d.concurrency)
@@ -66,5 +68,12 @@ func (d *dmlWriter) dispatchFragmentToWorker(frag eventFragment) {
 func (d *dmlWriter) stop() {
 	for _, w := range d.workers {
 		w.stop()
+	}
+
+	for _, ch := range d.workerChannels {
+		ch.Close()
+		for range ch.Out() {
+			// drain the worker channel
+		}
 	}
 }

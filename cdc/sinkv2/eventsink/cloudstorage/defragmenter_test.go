@@ -44,7 +44,7 @@ func TestDeframenter(t *testing.T) {
 	require.Nil(t, err)
 
 	for i := 0; i < 50; i++ {
-		go func(seq int64) {
+		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
 				tableName: &model.TableName{
@@ -52,7 +52,7 @@ func TestDeframenter(t *testing.T) {
 					Table:   "table1",
 					TableID: 100,
 				},
-				seqNumber: int64(seq),
+				seqNumber: uint64(seq),
 				event: &eventsink.TxnCallbackableEvent{
 					Event: &model.SingleTableTxn{},
 				},
@@ -81,7 +81,7 @@ func TestDeframenter(t *testing.T) {
 				msg.Key = []byte(strconv.Itoa(int(seq)))
 			}
 			defrag.register(frag)
-		}(int64(i + 1))
+		}(uint64(i + 1))
 	}
 	defrag.register(eventFragment{seqNumber: 50})
 

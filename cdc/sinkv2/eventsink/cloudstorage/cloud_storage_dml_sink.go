@@ -26,10 +26,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	pcloudstorage "github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-const defaultEncodingConcurrency = 8
+const (
+	defaultEncodingConcurrency = 8
+	defaultMaxMessageBytes     = 1073741824 //1GB
+)
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -39,9 +44,9 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 type sink struct {
 	id model.ChangeFeedID
 	// storage   storage.ExternalStorage
-	msgChan        *chann.Chann[eventFragment]
-	encoderWorkers []*encoderWorker
-	writer         *dmlWriter
+	msgChan         *chann.Chann[eventFragment]
+	encodingWorkers []*encodingWorker
+	writer          *dmlWriter
 
 	tableSeqMap map[*model.TableName]uint64
 }
@@ -53,7 +58,7 @@ func NewCloudStorageSink(ctx context.Context,
 	errCh chan error,
 ) (*sink, error) {
 	s := &sink{}
-	cfg := NewConfig()
+	cfg := pcloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
@@ -63,6 +68,7 @@ func NewCloudStorageSink(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+
 	storage, err := storage.New(ctx, bs, nil)
 	if err != nil {
 		return nil, err
@@ -72,9 +78,9 @@ func NewCloudStorageSink(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ext := util.GetFileExtension(protocol)
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
+	ext := util.GetFileExtension(protocol)
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, defaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -84,15 +90,15 @@ func NewCloudStorageSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
 	}
-	encoder := encoderBuilder.Build()
-	s.writer = newDMLWriter(ctx, storage, cfg.WorkerCount, ext, errCh)
 
+	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg.WorkerCount, ext, errCh)
 	s.id = changefeedID
 	s.msgChan = chann.New[eventFragment]()
 	for i := 0; i < defaultEncodingConcurrency; i++ {
-		w := newWorker(i+1, changefeedID, encoder, s.writer, errCh)
+		encoder := encoderBuilder.Build()
+		w := newEncodingWorker(i+1, changefeedID, encoder, s.writer, errCh)
 		w.run(ctx, s.msgChan)
-		s.encoderWorkers = append(s.encoderWorkers, w)
+		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
 
 	return s, nil
@@ -101,25 +107,33 @@ func NewCloudStorageSink(ctx context.Context,
 // WriteEvents write events
 func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tableName *model.TableName
+	var tableVersion uint64
 	for _, txn := range txns {
 		tableName = txn.Event.Table
+		tableVersion = txn.Event.TableVersion
 		s.tableSeqMap[tableName]++
 		s.msgChan.In() <- eventFragment{
-			seqNumber: int64(s.tableSeqMap[tableName]),
-			tableName: tableName,
-			event:     txn,
+			seqNumber:    s.tableSeqMap[tableName],
+			tableName:    tableName,
+			tableVersion: tableVersion,
+			event:        txn,
 		}
 	}
 
 	s.msgChan.In() <- eventFragment{
-		tableName: tableName,
-		seqNumber: int64(s.tableSeqMap[tableName]),
+		tableName:    tableName,
+		tableVersion: tableVersion,
+		seqNumber:    s.tableSeqMap[tableName],
 	}
 	return nil
 }
 
 func (s *sink) Close() error {
-	for _, w := range s.encoderWorkers {
+	s.msgChan.Close()
+	for range s.msgChan.Out() {
+		// drain the msgChan
+	}
+	for _, w := range s.encodingWorkers {
 		w.stop()
 	}
 	s.writer.stop()
@@ -127,8 +141,9 @@ func (s *sink) Close() error {
 }
 
 type eventFragment struct {
-	seqNumber   int64
-	tableName   *model.TableName
-	event       *eventsink.TxnCallbackableEvent
-	encodedMsgs []*common.Message
+	seqNumber    uint64
+	tableVersion uint64
+	tableName    *model.TableName
+	event        *eventsink.TxnCallbackableEvent
+	encodedMsgs  []*common.Message
 }

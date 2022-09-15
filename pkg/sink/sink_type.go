@@ -51,10 +51,12 @@ const (
 	TiDBSSLScheme = "tidb+ssl"
 	// S3Scheme indicates the scheme is s3.
 	S3Scheme = "s3"
-	// NFSScheme indicates the scheme is nfs
-	NFSScheme = "nfs"
-	// LocalScheme indicates the scheme is local
-	LocalScheme = "local"
+	// FileScheme indicates the scheme is local fs or NFS.
+	FileScheme = "file"
+	// GCS indicates the scheme is gcs.
+	GCSScheme = "gcs"
+	// AzblobScheme indicates the scheme is azure blob storage.\
+	AzblobScheme = "azblob"
 )
 
 // IsMQScheme returns true if the scheme belong to mq scheme.
@@ -70,6 +72,6 @@ func IsMySQLCompatibleScheme(scheme string) bool {
 
 // IsStorageScheme returns true if the scheme belong to storage scheme.
 func IsStorageScheme(scheme string) bool {
-	return scheme == LocalScheme || scheme == NFSScheme ||
-		scheme == S3Scheme
+	return scheme == FileScheme || scheme == S3Scheme ||
+		scheme == GCSScheme || scheme == AzblobScheme
 }

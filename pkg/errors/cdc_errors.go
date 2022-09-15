@@ -423,6 +423,10 @@ var (
 		"cloud storage config invalid",
 		errors.RFCCodeText("CDC:ErrCloudStorageInvalidConfig"),
 	)
+	ErrCloudStorageDefragmentFailed = errors.Normalize(
+		"cloud storage defragment encoded messages failed",
+		errors.RFCCodeText("CDC:ErrCloudStorageDefragmentFailed"),
+	)
 
 	// utilities related errors
 	ErrToTLSConfigFailed = errors.Normalize(
