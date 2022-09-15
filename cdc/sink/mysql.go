@@ -17,13 +17,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/tidb/errno"
 	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pingcap/tidb/errno"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
