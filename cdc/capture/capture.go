@@ -281,6 +281,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
+		captureVersion.DeleteLabelValues(c.info.ID, c.info.Version)
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
 			log.Warn("failed to delete capture info when capture exited",
@@ -304,6 +305,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
 	})
+	captureVersion.WithLabelValues(c.info.ID, c.info.Version).Inc()
 
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws

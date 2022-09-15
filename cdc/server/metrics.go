@@ -14,6 +14,7 @@
 package server
 
 import (
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -46,6 +47,7 @@ func init() {
 		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
 	initServerMetrics(registry)
+	capture.InitMetrics(registry)
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
