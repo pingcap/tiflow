@@ -1,0 +1,66 @@
+version: '2.3'
+
+services:
+    dm_upstream_mysql:
+        image: mysql:5.7
+        container_name: dm_upstream_mysql
+        command:
+            - --require_secure_transport=ON
+        ports:
+            - "3306:3306"
+        volumes:
+            - ./config/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
+        environment:
+            MYSQL_ROOT_PASSWORD: 123456
+
+    dm_upstream_mysql2:
+        image: mysql:8.0
+        container_name: dm_upstream_mysql2
+        command:
+            - --require_secure_transport=ON
+            - --default-authentication-plugin=mysql_native_password
+        ports:
+            - "3307:3306"
+        environment:
+            MYSQL_ROOT_PASSWORD: 123456
+
+    dm_downstream_pd:
+        image: pingcap/pd:nightly
+        ports:
+            - "2379"
+        command:
+            - --name=dm_downstream_pd
+            - --client-urls=http://0.0.0.0:2379
+            - --peer-urls=http://0.0.0.0:2380
+            - --advertise-client-urls=http://dm_downstream_pd:2379
+            - --advertise-peer-urls=http://dm_downstream_pd:2380
+            - --initial-cluster=dm_downstream_pd=http://dm_downstream_pd:2380
+            - --data-dir=/data/dm_downstream_pd
+        restart: on-failure
+
+    dm_downstream_tikv:
+        image: pingcap/tikv:nightly
+        command:
+            - --addr=0.0.0.0:20160
+            - --advertise-addr=dm_downstream_tikv:20160
+            - --pd=dm_downstream_pd:2379
+        depends_on:
+            - "dm_downstream_pd"
+        restart: on-failure
+
+    dm_downstream_tidb:
+        image: pingcap/tidb:nightly
+        ports:
+            - "4000:4000"
+            - "10080:10080"
+        volumes:
+            - ./config/tidb_tls.toml:/tidb.toml
+            - /tmp/certs/downstream:/etc/certs
+        command:
+            - --store=tikv
+            - --path=dm_downstream_pd:2379
+            - --advertise-address=dm_downstream_tidb
+            - --config=/tidb.toml
+        depends_on:
+            - "dm_downstream_tikv"
+        restart: on-failure
