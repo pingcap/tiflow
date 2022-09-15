@@ -149,7 +149,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventCh := make(chan model.RegionFeedEvent, 2)
+	eventCh := make(chan []model.RegionFeedEvent, 2)
 	s := createFakeEventFeedSession(ctx)
 	s.eventCh = eventCh
 	span := regionspan.Span{}.Hack()
@@ -193,14 +193,16 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	require.Nil(t, err)
 
 	// Must not output event.
-	var event model.RegionFeedEvent
+	var evs []model.RegionFeedEvent
 	var ok bool
 	select {
-	case event, ok = <-eventCh:
+	case evs, ok = <-eventCh:
 	default:
 	}
-	require.Falsef(t, ok, "%v", event)
-	require.EqualValuesf(t, model.RegionFeedEvent{}, event, "%v", event)
+	for _, event := range evs {
+		require.Falsef(t, ok, "%v", event)
+		require.EqualValuesf(t, model.RegionFeedEvent{}, event, "%v", event)
+	}
 
 	// Receive prewrite1 with actual value.
 	events = &cdcpb.Event_Entries_{
@@ -220,10 +222,11 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 
 	// Must not output event.
 	select {
-	case event, ok = <-eventCh:
+	case evs, ok = <-eventCh:
 	default:
 	}
-	require.Falsef(t, ok, "%v", event)
+	require.Falsef(t, ok, "%v", evs)
+	event := evs[0]
 	require.EqualValuesf(t, model.RegionFeedEvent{}, event, "%v", event)
 
 	// Receive prewrite1 with actual value.
@@ -241,10 +244,11 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 
 	// Must output event.
 	select {
-	case event, ok = <-eventCh:
+	case evs, ok = <-eventCh:
 	default:
 	}
-	require.Truef(t, ok, "%v", event)
+	require.Truef(t, ok, "%v", evs)
+	event = evs[0]
 	require.EqualValuesf(t, model.RegionFeedEvent{
 		RegionID: 0,
 		Val: &model.RawKVEntry{

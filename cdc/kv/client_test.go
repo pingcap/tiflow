@@ -323,7 +323,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -350,8 +350,10 @@ func TestConnectOfflineTiKV(t *testing.T) {
 		}
 	}
 
-	checkEvent := func(event model.RegionFeedEvent, ts uint64) {
-		require.Equal(t, ts, event.Resolved.ResolvedTs)
+	checkEvent := func(events []model.RegionFeedEvent, ts uint64) {
+		for _, event := range events {
+			require.Equal(t, ts, event.Resolved.ResolvedTs)
+		}
 	}
 
 	initialized := mockInitializedEvent(3 /* regionID */, currentRequestID())
@@ -363,22 +365,22 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	ver := kv.NewVersion(ts)
 	require.Nil(t, err)
 	ch2 <- makeEvent(ver.Ver)
-	var event model.RegionFeedEvent
+	var events []model.RegionFeedEvent
 	// consume the first resolved ts event, which is sent before region starts
 	<-eventCh
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(time.Second):
 		require.FailNow(t, "reconnection not succeed in 1 second")
 	}
-	checkEvent(event, 1)
+	checkEvent(events, 1)
 
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(time.Second):
 		require.FailNow(t, "reconnection not succeed in 1 second")
 	}
-	checkEvent(event, ver.Ver)
+	checkEvent(events, ver.Ver)
 
 	// check gRPC connection active counter is updated correctly
 	bucket, ok := grpcPool.bucketConns[invalidStore]
@@ -423,7 +425,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -439,13 +441,13 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	initialized := mockInitializedEvent(3 /* regionID */, currentRequestID())
 	ch2 <- initialized
 
-	var event model.RegionFeedEvent
+	var events []model.RegionFeedEvent
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(time.Second):
 		require.FailNow(t, "recving message takes too long")
 	}
-	require.NotNil(t, event)
+	require.NotNil(t, events)
 
 	largeValSize := 128*1024*1024 + 1 // 128MB + 1
 	largeMsg := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
@@ -467,11 +469,11 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	}}
 	ch2 <- largeMsg
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(30 * time.Second): // Send 128MB object may costs lots of time.
 		require.FailNow(t, "receiving message takes too long")
 	}
-	require.Equal(t, largeValSize, len(event.Val.Value))
+	require.Equal(t, largeValSize, len(events[0].Val.Value))
 	cancel()
 }
 
@@ -523,7 +525,7 @@ func TestHandleError(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -603,9 +605,11 @@ func TestHandleError(t *testing.T) {
 consumePreResolvedTs:
 	for {
 		select {
-		case event = <-eventCh:
-			require.NotNil(t, event.Resolved)
-			require.Equal(t, uint64(100), event.Resolved.ResolvedTs)
+		case events := <-eventCh:
+			for _, event := range events {
+				require.NotNil(t, event.Resolved)
+				require.Equal(t, uint64(100), event.Resolved.ResolvedTs)
+			}
 		case <-time.After(time.Second):
 			break consumePreResolvedTs
 		}
@@ -636,7 +640,8 @@ consumePreResolvedTs:
 	// normal resolved ts event
 	ch2 <- makeEvent(120)
 	select {
-	case event = <-eventCh:
+	case events := <-eventCh:
+		event = events[0]
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "reconnection not succeed in 3 seconds")
 	}
@@ -682,7 +687,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -749,7 +754,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -818,7 +823,7 @@ func testHandleFeedEvent(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1274,7 +1279,7 @@ func TestStreamSendWithError(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1329,9 +1334,11 @@ func TestStreamSendWithError(t *testing.T) {
 	initRegions := make(map[uint64]struct{})
 	for i := 0; i < 2; i++ {
 		select {
-		case event := <-eventCh:
-			require.NotNil(t, event.Resolved)
-			initRegions[event.RegionID] = struct{}{}
+		case events := <-eventCh:
+			for _, event := range events {
+				require.NotNil(t, event.Resolved)
+				initRegions[event.RegionID] = struct{}{}
+			}
 		case <-time.After(time.Second):
 			require.Fail(t, fmt.Sprintf("expected events are not receive, received: %v", initRegions))
 		}
@@ -1387,7 +1394,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1455,9 +1462,11 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 eventLoop:
 	for {
 		select {
-		case ev := <-eventCh:
-			if ev.Resolved.ResolvedTs != uint64(100) {
-				events = append(events, ev)
+		case evs := <-eventCh:
+			for _, ev := range evs {
+				if ev.Resolved.ResolvedTs != uint64(100) {
+					events = append(events, ev)
+				}
 			}
 		case <-time.After(time.Second):
 			break eventLoop
@@ -1518,7 +1527,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1619,13 +1628,15 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 ReceiveLoop:
 	for {
 		select {
-		case event, ok := <-eventCh:
+		case events, ok := <-eventCh:
 			if !ok {
 				break ReceiveLoop
 			}
-			received = append(received, event)
-			if event.Resolved.ResolvedTs == 130 {
-				break ReceiveLoop
+			for _, event := range events {
+				received = append(received, event)
+				if event.Resolved.ResolvedTs == 130 {
+					break ReceiveLoop
+				}
 			}
 		case <-time.After(time.Second):
 			require.Fail(t, "event received timeout")
@@ -1728,7 +1739,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	// NOTICE: eventCh may block the main logic of EventFeed
-	eventCh := make(chan model.RegionFeedEvent, 128)
+	eventCh := make(chan []model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1759,9 +1770,11 @@ func TestIncompatibleTiKV(t *testing.T) {
 	initialized := mockInitializedEvent(regionID, reqID.(uint64))
 	ch1 <- initialized
 	select {
-	case event := <-eventCh:
-		require.NotNil(t, event.Resolved)
-		require.Equal(t, regionID, event.RegionID)
+	case events := <-eventCh:
+		for _, event := range events {
+			require.NotNil(t, event.Resolved)
+			require.Equal(t, regionID, event.RegionID)
+		}
 	case <-time.After(time.Second):
 		require.Fail(t, "expected events are not receive")
 	}
@@ -1805,7 +1818,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 
 	wg.Add(1)
 	go func() {
@@ -1829,9 +1842,11 @@ func TestNoPendingRegionError(t *testing.T) {
 
 	initialized := mockInitializedEvent(3, currentRequestID())
 	ch1 <- initialized
-	ev := <-eventCh
-	require.NotNil(t, ev.Resolved)
-	require.Equal(t, uint64(100), ev.Resolved.ResolvedTs)
+	evs := <-eventCh
+	for _, ev := range evs {
+		require.NotNil(t, ev.Resolved)
+		require.Equal(t, uint64(100), ev.Resolved.ResolvedTs)
+	}
 
 	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
 		{
@@ -1841,10 +1856,11 @@ func TestNoPendingRegionError(t *testing.T) {
 		},
 	}}
 	ch1 <- resolved
-	ev = <-eventCh
-	require.NotNil(t, ev.Resolved)
-	require.Equal(t, uint64(200), ev.Resolved.ResolvedTs)
-
+	evs = <-eventCh
+	for _, ev := range evs {
+		require.NotNil(t, ev.Resolved)
+		require.Equal(t, uint64(200), ev.Resolved.ResolvedTs)
+	}
 	cancel()
 }
 
@@ -1884,7 +1900,7 @@ func TestDropStaleRequest(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1995,7 +2011,7 @@ func TestResolveLock(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2098,7 +2114,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2251,7 +2267,7 @@ func testEventAfterFeedStop(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2432,7 +2448,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2648,7 +2664,7 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2680,8 +2696,10 @@ func TestResolveLockNoCandidate(t *testing.T) {
 			}}
 			ch1 <- resolved
 			select {
-			case event := <-eventCh:
-				require.NotNil(t, event.Resolved)
+			case events := <-eventCh:
+				for _, event := range events {
+					require.NotNil(t, event.Resolved)
+				}
 			case <-time.After(time.Second):
 				require.Fail(t, "resolved event not received")
 			}
@@ -2744,7 +2762,7 @@ func TestFailRegionReentrant(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2827,7 +2845,7 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2895,7 +2913,7 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2973,7 +2991,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3050,12 +3068,14 @@ func testKVClientForceReconnect(t *testing.T) {
 eventLoop:
 	for {
 		select {
-		case ev := <-eventCh:
-			if ev.Resolved != nil && ev.Resolved.ResolvedTs == uint64(100) {
-				continue
+		case evs := <-eventCh:
+			for _, ev := range evs {
+				if ev.Resolved != nil && ev.Resolved.ResolvedTs == uint64(100) {
+					continue
+				}
+				require.Equal(t, expected, ev)
+				break eventLoop
 			}
-			require.Equal(t, expected, ev)
-			break eventLoop
 		case <-time.After(time.Second):
 			require.Fail(t, fmt.Sprintf("expected event %v not received", expected))
 		}
@@ -3123,7 +3143,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 100)
+	eventCh := make(chan []model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3240,7 +3260,7 @@ func TestEvTimeUpdate(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3365,7 +3385,7 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3457,7 +3477,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
+	eventCh := make(chan []model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
 	wg.Add(1)

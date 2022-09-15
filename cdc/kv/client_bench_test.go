@@ -104,7 +104,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	*sync.Map, /* regionID -> requestID/storeID */
 	*sync.WaitGroup, /* ensure eventfeed routine exit */
 	context.CancelFunc, /* cancle both mock server and cdc kv client */
-	chan model.RegionFeedEvent, /* kv client output channel */
+	chan []model.RegionFeedEvent, /* kv client output channel */
 	[]chan *cdcpb.ChangeDataEvent, /* mock server data channels */
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -197,7 +197,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 1000000)
+	eventCh := make(chan []model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx,
@@ -232,7 +232,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	*sync.Map, /* regionID -> requestID */
 	*sync.WaitGroup, /* ensure eventfeed routine exit */
 	context.CancelFunc, /* cancle both mock server and cdc kv client */
-	chan model.RegionFeedEvent, /* kv client output channel */
+	chan []model.RegionFeedEvent, /* kv client output channel */
 	chan *cdcpb.ChangeDataEvent, /* mock server data channel */
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -291,7 +291,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
 		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
-	eventCh := make(chan model.RegionFeedEvent, 1000000)
+	eventCh := make(chan []model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx,
