@@ -285,7 +285,7 @@ func waitRequestID(t *testing.T, allocatedID uint64) {
 	require.Nil(t, err)
 }
 
-func TestConnectOfflineTiKV(t *testing.T) {
+func testConnectOfflineTiKV(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	wg := &sync.WaitGroup{}
@@ -401,6 +401,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 		server2.Stop()
 		wg.Wait()
 	}()
+	defer cancel()
 
 	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 	require.Nil(t, err)
@@ -637,7 +638,7 @@ consumePreResolvedTs:
 	ch2 <- makeEvent(120)
 	select {
 	case event = <-eventCh:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		require.FailNow(t, "reconnection not succeed in 3 seconds")
 	}
 	require.NotNil(t, event.Resolved)

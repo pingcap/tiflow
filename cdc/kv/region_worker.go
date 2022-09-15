@@ -418,6 +418,7 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 			if err != nil {
 				err = w.handleSingleRegionError(err, event.state)
 			}
+			event.state.lock.Unlock()
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event",
 				zap.Stringer("event", event.changeEvent),
@@ -431,14 +432,10 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 			)
 			event.state.lock.Unlock()
 		case *cdcpb.Event_ResolvedTs:
-			if err = w.handleResolvedTs(ctx, &resolvedTsEvent{
+			err = w.handleResolvedTs(ctx, &resolvedTsEvent{
 				resolvedTs: x.ResolvedTs,
 				regions:    []*regionFeedState{event.state},
-			}); err != nil {
-				event.state.lock.Lock()
-				err = w.handleSingleRegionError(err, event.state)
-				event.state.lock.Unlock()
-			}
+			})
 		}
 		if err != nil {
 			return err
@@ -805,6 +802,9 @@ func (w *regionWorker) handleResolvedTs(
 			ResolvedTs: resolvedTs,
 		})
 		regions = append(regions, regionID)
+	}
+	if len(resolvedSpans) == 0 {
+		return nil
 	}
 	// Send resolved ts update in non-blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
