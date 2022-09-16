@@ -84,19 +84,20 @@ func newFileManagerForUT(t *testing.T) (*FileManager, *mockExternalStorageFactor
 	), factory
 }
 
-func TestFileManagerCreateResource(t *testing.T) {
+func TestFileManagerCreateAndRemoveResource(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	fm, factory := newFileManagerForUT(t)
 
-	desc, err := fm.CreateResource(ctx, internal.ResourceIdent{
+	ident := internal.ResourceIdent{
 		ResourceScope: internal.ResourceScope{
 			Executor: mockExecutorID,
 			WorkerID: "worker-1",
 		},
 		Name: "resource-1",
-	})
+	}
+	desc, err := fm.CreateResource(ctx, ident)
 	require.NoError(t, err)
 	factory.assertFileExists(filepath.Join(
 		utBucketName, mockExecutorID, "worker-1", "resource-1", placeholderFileName))
@@ -107,4 +108,65 @@ func TestFileManagerCreateResource(t *testing.T) {
 	require.NoError(t, err)
 	factory.assertFileExists(filepath.Join(
 		utBucketName, mockExecutorID, "worker-1", "resource-1", "file-1"))
+
+	err = fm.RemoveResource(ctx, ident)
+	require.NoError(t, err)
+
+	factory.assertFileNotExist(filepath.Join(
+		utBucketName, mockExecutorID, "worker-1", "resource-1", placeholderFileName))
+	factory.assertFileNotExist(filepath.Join(
+		utBucketName, mockExecutorID, "worker-1", "resource-1", "file-1"))
+}
+
+func TestFileManagerCreateDuplicate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fm, _ := newFileManagerForUT(t)
+
+	ident := internal.ResourceIdent{
+		ResourceScope: internal.ResourceScope{
+			Executor: mockExecutorID,
+			WorkerID: "worker-1",
+		},
+		Name: "resource-1",
+	}
+	_, err := fm.CreateResource(ctx, ident)
+	require.NoError(t, err)
+
+	_, err = fm.CreateResource(ctx, ident)
+	require.ErrorContains(t, err, "resource already exists")
+}
+
+func TestFileManagerSetAndGetPersisted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fm, _ := newFileManagerForUT(t)
+
+	ident := internal.ResourceIdent{
+		ResourceScope: internal.ResourceScope{
+			Executor: mockExecutorID,
+			WorkerID: "worker-1",
+		},
+		Name: "resource-1",
+	}
+	desc, err := fm.CreateResource(ctx, ident)
+	require.NoError(t, err)
+
+	storage, err := desc.ExternalStorage(ctx)
+	require.NoError(t, err)
+	err = storage.WriteFile(ctx, "file-1", []byte("dummydummy"))
+	require.NoError(t, err)
+
+	err = fm.SetPersisted(ctx, ident)
+	require.NoError(t, err)
+
+	desc, err = fm.GetPersistedResource(ctx, ident)
+	require.NoError(t, err)
+	storage, err = desc.ExternalStorage(ctx)
+	require.NoError(t, err)
+	ok, err := storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.True(t, ok)
 }
