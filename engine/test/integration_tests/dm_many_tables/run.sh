@@ -16,7 +16,6 @@ function run() {
 	wait_mysql_online.sh --port 4000
 
 	# prepare data
-
 	run_sql 'DROP DATABASE IF EXISTS dm_many_tables'
 	run_sql 'CREATE DATABASE dm_many_tables;'
 	for i in $(seq $TABLE_NUM); do
@@ -28,18 +27,11 @@ function run() {
 		run_sql "INSERT INTO dm_many_tables.t$i VALUES (9, 90009);"
 	done
 
-	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_many_tables&project_id=dm_many_tables" | jq -r .id)
-	echo "job_id: $job_id"
-
-	# wait for job finished
+	# create job & wait for job finished
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_many_tables")
 	exec_with_retry --count 200 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Stage == \"Finished\"'"
 
 	# check data
-
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
