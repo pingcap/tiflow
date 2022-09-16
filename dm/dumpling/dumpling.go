@@ -30,8 +30,6 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -41,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
 // Dumpling dumps full data from a MySQL-compatible database.
@@ -375,7 +374,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 
 		dumpConfig.Security.SSLCABytes = db.Security.SSLCABytes
 		dumpConfig.Security.SSLCertBytes = db.Security.SSLCertBytes
-		dumpConfig.Security.SSLKEYBytes = db.Security.SSLKEYBytes
+		dumpConfig.Security.SSLKeyBytes = db.Security.SSLKeyBytes
 	}
 
 	// `true` means dumpling will release lock after working connection established

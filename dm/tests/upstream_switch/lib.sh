@@ -37,7 +37,7 @@ function install_sync_diff() {
 }
 
 function prepare_more_binlogs() {
-	exec_sql $1 "create database db1;"
+	exec_sql $1 "create database db1 collate latin1_bin;"
 	exec_sql $1 "flush logs;"
 	exec_sql $1 "create table db1.tb1(id int);"
 	exec_sql $1 "flush logs;"
@@ -46,7 +46,7 @@ function prepare_more_binlogs() {
 }
 
 function prepare_less_binlogs() {
-	exec_sql $1 "create database db2;"
+	exec_sql $1 "create database db2 collate latin1_bin;"
 	exec_sql $1 "flush logs;"
 	exec_sql $1 "create table db2.tb2(id int);"
 	exec_sql $1 "insert into db2.tb2 values(1);"
