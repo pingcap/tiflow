@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -32,9 +32,9 @@ function run() {
   docker cp dm_upstream_mysql:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql1/client-cert.pem
   docker cp dm_upstream_mysql2:/var/lib/mysql/client-key.pem $WORK_DIR/mysql2/client-key.pem
   docker cp dm_upstream_mysql2:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql2/client-cert.pem
-  docker cp mysql-standalone:/var/lib/mysql/ca.pem /tmp/master_cert/ca.pem
+  sudo docker cp mysql-standalone:/var/lib/mysql/ca.pem /tmp/master_cert/ca.pem
 
-	read -p 123
+	$COMPOSECMD -f ${seq[0]} up -d server-master-0 server-master-1 server-master-2
 
 	wait_mysql_online.sh --password 123456 --ssl-key $WORK_DIR/mysql1/client-key.pem --ssl-cert $WORK_DIR/mysql1/client-cert.pem
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem

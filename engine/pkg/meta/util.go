@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/tiflow/engine/pkg/dbutil"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -27,7 +27,7 @@ func CreateSchemaIfNotExists(ctx context.Context, storeConf model.StoreConfig) e
 	schema := storeConf.Schema
 	// clear the schema to open a connection without any schema
 	storeConf.Schema = ""
-	db, err := dbutil.NewSQLDB("mysql", model.GenerateDSNByParams(&storeConf, nil), nil /*DBConfig*/)
+	db, err := sqlkv.NewSQLDB(&storeConf)
 	if err != nil {
 		return nil
 	}
