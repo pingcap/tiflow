@@ -786,6 +786,7 @@ func (w *regionWorker) handleResolvedTs(
 			continue
 		}
 		regionID := state.sri.verID.GetID()
+		regions = append(regions, regionID)
 		if resolvedTs < state.lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -801,7 +802,6 @@ func (w *regionWorker) handleResolvedTs(
 			Span:       state.sri.span,
 			ResolvedTs: resolvedTs,
 		})
-		regions = append(regions, regionID)
 	}
 	if len(resolvedSpans) == 0 {
 		return nil
