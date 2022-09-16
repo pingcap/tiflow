@@ -90,7 +90,7 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 
 	for i, d := range data {
 		d = castUnsigned(d, &columns[i].FieldType)
-		isLatin1 := columns[i].GetCharset() == charset.CharsetLatin1 || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetLatin1
+		isLatin1 := columns[i].Charset == charset.CharsetLatin1 || columns[i].Charset == "" && sourceTI.Charset == charset.CharsetLatin1
 
 		switch v := d.(type) {
 		case int8:
@@ -117,17 +117,10 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 				}
 			}
 		case string:
-<<<<<<< HEAD
-			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
-			if columns[i].Charset == charset.CharsetGBK {
-				d = []byte(v)
-			} else if columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK {
-=======
-			isGBK := columns[i].GetCharset() == charset.CharsetGBK || columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK
+			isGBK := columns[i].Charset == charset.CharsetGBK || columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK
 			switch {
 			case isGBK:
 				// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
->>>>>>> 81c8e09bd (syncer(dm): fix corrupt latin1 data when replicating (#7027))
 				d = []byte(v)
 			case isLatin1:
 				// TiDB has bug in latin1 so we must convert it to utf8 at DM's scope
