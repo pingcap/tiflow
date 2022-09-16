@@ -29,7 +29,7 @@ var crcTable = crc64.MakeTable(crc64.ISO)
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
 	start        time.Time
-	conflictKeys []int64
+	conflictKeys []uint64
 }
 
 func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
@@ -37,37 +37,33 @@ func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 }
 
 // ConflictKeys implements causality.txnEvent interface.
-func (e *txnEvent) ConflictKeys() []int64 {
+func (e *txnEvent) ConflictKeys() []uint64 {
 	if len(e.conflictKeys) > 0 {
 		return e.conflictKeys
 	}
-
 	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
-	e.conflictKeys = make([]int64, 0, len(keys))
-	for _, key := range keys {
-		hasher := crc64.New(crcTable)
-		if _, err := hasher.Write(key); err != nil {
-			log.Panic("crc64 hasher fail")
-		}
-		e.conflictKeys = append(e.conflictKeys, int64(hasher.Sum64()))
-	}
+	e.conflictKeys = keys
 	return e.conflictKeys
 }
 
-func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
+// genTxnKeys returns hash keys for `txn`.
+func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
-	keysSet := make(map[string]struct{}, len(txn.Rows))
+	hashRes := make(map[uint64]struct{}, len(txn.Rows))
 	for _, row := range txn.Rows {
-		rowKeys := genRowKeys(row)
-		for _, key := range rowKeys {
-			keysSet[string(key)] = struct{}{}
+		hasher := crc64.New(crcTable)
+		for _, key := range genRowKeys(row) {
+			if _, err := hasher.Write(key); err != nil {
+				log.Panic("crc64 hasher fail")
+			}
 		}
+		hashRes[hasher.Sum64()] = struct{}{}
 	}
-	keys := make([][]byte, 0, len(keysSet))
-	for key := range keysSet {
-		keys = append(keys, []byte(key))
+	keys := make([]uint64, 0, len(hashRes))
+	for key := range hashRes {
+		keys = append(keys, key)
 	}
 	return keys
 }

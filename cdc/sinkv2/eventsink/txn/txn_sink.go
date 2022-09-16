@@ -31,7 +31,7 @@ import (
 
 const (
 	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots int64 = 1024 * 1024
+	DefaultConflictDetectorSlots uint64 = 8 * 1024 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -49,7 +49,7 @@ type sink struct {
 	closed int32
 }
 
-func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots int64) *sink {
+func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
 		w := newWorker(ctx, i, backend, errCh, len(backends))
@@ -66,7 +66,7 @@ func NewMySQLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan<- error,
-	conflictDetectorSlots int64,
+	conflictDetectorSlots uint64,
 ) (*sink, error) {
 	var getConn pmysql.Factory = pmysql.CreateMySQLDBConn
 

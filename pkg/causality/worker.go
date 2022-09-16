@@ -14,10 +14,11 @@
 package causality
 
 type (
-	conflictKey = int64
+	conflictKey = uint64
 )
 
 type txnEvent interface {
+	// Keys must be deduped.
 	ConflictKeys() []conflictKey
 }
 

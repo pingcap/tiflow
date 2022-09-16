@@ -7,7 +7,6 @@ package mock_txn
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	eventsink "github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -62,20 +61,6 @@ func (m *Mockbackend) Flush(ctx context.Context) error {
 func (mr *MockbackendMockRecorder) Flush(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*Mockbackend)(nil).Flush), ctx)
-}
-
-// MaxFlushInterval mocks base method.
-func (m *Mockbackend) MaxFlushInterval() time.Duration {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaxFlushInterval")
-	ret0, _ := ret[0].(time.Duration)
-	return ret0
-}
-
-// MaxFlushInterval indicates an expected call of MaxFlushInterval.
-func (mr *MockbackendMockRecorder) MaxFlushInterval() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxFlushInterval", reflect.TypeOf((*Mockbackend)(nil).MaxFlushInterval))
 }
 
 // OnTxnEvent mocks base method.
