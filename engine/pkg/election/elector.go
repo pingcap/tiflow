@@ -42,7 +42,7 @@ type Elector struct {
 	observedRenews map[string]time.Time
 
 	// resignCh is used to notify the elector to resign leadership.
-	// The value is the interval that the elector should not be leader.
+	// The value is the duration that the elector should not be leader.
 	resignCh chan time.Duration
 	// Elector will not be leader until this time.
 	resignUntil time.Time
@@ -121,8 +121,8 @@ func (e *Elector) Run(ctx context.Context) error {
 				callbackWg.Wait()
 			}
 			return ctx.Err()
-		case resignInterval := <-e.resignCh:
-			e.resignUntil = time.Now().Add(resignInterval)
+		case duration := <-e.resignCh:
+			e.resignUntil = time.Now().Add(duration)
 		case <-time.After(e.config.RenewInterval):
 		}
 	}
@@ -346,12 +346,12 @@ func (e *Elector) GetMembers() []*Member {
 }
 
 // ResignLeader resigns the leadership and let the elector
-// not to try to campaign for leadership during the resignInterval.
-func (e *Elector) ResignLeader(ctx context.Context, resignInterval time.Duration) error {
+// not to try to campaign for leadership during the duration.
+func (e *Elector) ResignLeader(ctx context.Context, duration time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case e.resignCh <- resignInterval:
+	case e.resignCh <- duration:
 		return nil
 	}
 }

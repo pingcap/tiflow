@@ -78,7 +78,7 @@ import (
 // TODO: make it configurable in the future.
 const (
 	leaderElectionTable  = "leader_election"
-	resignLeaderInterval = 10 * time.Second
+	resignLeaderDuration = 10 * time.Second
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -443,7 +443,7 @@ func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLe
 
 // ResignLeader implements DiscoveryServer.ResignLeader.
 func (s *Server) ResignLeader(ctx context.Context, _ *pb.ResignLeaderRequest) (*emptypb.Empty, error) {
-	if err := s.elector.ResignLeader(ctx, resignLeaderInterval); err != nil {
+	if err := s.elector.ResignLeader(ctx, resignLeaderDuration); err != nil {
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
