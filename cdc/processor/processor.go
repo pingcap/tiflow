@@ -374,8 +374,8 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-// GetTableMeta implements TableExecutor interface
-func (p *processor) GetTableMeta(tableID model.TableID) tablepb.TableStatus {
+// GetTableStatus implements TableExecutor interface
+func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	table, ok := p.tables[tableID]
 	if !ok {
 		return tablepb.TableStatus{

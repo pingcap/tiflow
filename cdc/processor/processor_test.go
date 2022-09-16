@@ -382,7 +382,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
 	require.Equal(t, tablepb.TableStatePreparing, table1.state)
-	meta := p.GetTableMeta(model.TableID(1))
+	meta := p.GetTableStatus(model.TableID(1))
 	require.Equal(t, model.TableID(1), meta.TableID)
 	require.Equal(t, tablepb.TableStatePreparing, meta.State)
 
@@ -514,7 +514,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	checkpointTs, done = p.IsRemoveTableFinished(3)
 	require.True(t, done)
 	require.Equal(t, model.Ts(65), checkpointTs)
-	meta = p.GetTableMeta(model.TableID(3))
+	meta = p.GetTableStatus(model.TableID(3))
 	require.Equal(t, model.TableID(3), meta.TableID)
 	require.Equal(t, tablepb.TableStateAbsent, meta.State)
 

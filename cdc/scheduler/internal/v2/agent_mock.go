@@ -180,7 +180,7 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
-// GetTableMeta implements TableExecutor interface
-func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) tablepb.TableStatus {
+// GetTableStatus implements TableExecutor interface
+func (e *MockTableExecutor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	return tablepb.TableStatus{}
 }
