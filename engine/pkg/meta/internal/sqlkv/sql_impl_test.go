@@ -62,7 +62,7 @@ func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sq
 		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
 		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
-		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` blob,"+
+		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` longblob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
