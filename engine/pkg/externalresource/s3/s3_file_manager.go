@@ -226,6 +226,13 @@ func (m *FileManager) removeFilesIf(
 
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
 	exists, err := storage.FileExists(ctx, placeholderFileName)
+	if err != nil {
+		return errors.Annotate(err, "checking placeholder file")
+	}
+	if exists {
+		// This should not happen in production. Unless the caller of the FileManager has a bug.
+		return errors.New("resource already exists")
+	}
 
 	writer, err := storage.Create(ctx, placeholderFileName)
 	if err != nil {
