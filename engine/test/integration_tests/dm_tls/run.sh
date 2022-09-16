@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eux
+set -eu
 
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -28,11 +28,11 @@ function run() {
 	mkdir -p $WORK_DIR/mysql1
 	mkdir -p $WORK_DIR/mysql2
 	mkdir -p /tmp/master_cert
-	sudo cat /tmp/mysql1/client-key.pem >$WORK_DIR/mysql1/client-key.pem
-	sudo cat /tmp/mysql1/client-cert.pem >$WORK_DIR/mysql1/client-cert.pem
-	sudo cat /tmp/mysql2/client-key.pem >$WORK_DIR/mysql2/client-key.pem
-	sudo cat /tmp/mysql2/client-cert.pem >$WORK_DIR/mysql2/client-cert.pem
-	sudo bash -c "cat /tmp/mysql_meta/ca.pem >/tmp/master_cert/ca.pem"
+	docker cp dm_upstream_mysql:/var/lib/mysql/client-key.pem $WORK_DIR/mysql1/client-key.pem
+  docker cp dm_upstream_mysql:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql1/client-cert.pem
+  docker cp dm_upstream_mysql2:/var/lib/mysql/client-key.pem $WORK_DIR/mysql2/client-key.pem
+  docker cp dm_upstream_mysql2:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql2/client-cert.pem
+  docker cp mysql-standalone:/var/lib/mysql/ca.pem /tmp/master_cert/ca.pem
 
 	read -p 123
 
@@ -68,7 +68,7 @@ function run() {
 
 	# wait for dump and load finished
 
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == 12'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
 
 	# insert increment data
 

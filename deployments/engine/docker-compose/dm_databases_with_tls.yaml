@@ -10,7 +10,6 @@ services:
             - "3306:3306"
         volumes:
             - ./config/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
-            - /tmp/mysql1:/var/lib/mysql
         environment:
             MYSQL_ROOT_PASSWORD: 123456
 
@@ -19,10 +18,9 @@ services:
         container_name: dm_upstream_mysql2
         command:
             - --require_secure_transport=ON
+            - --default-authentication-plugin=mysql_native_password
         ports:
             - "3307:3306"
-        volumes:
-            - /tmp/mysql2:/var/lib/mysql
         environment:
             MYSQL_ROOT_PASSWORD: 123456
 
@@ -51,7 +49,7 @@ services:
         restart: on-failure
 
     dm_downstream_tidb:
-        image: pingcap/tidb:latest
+        image: pingcap/tidb:nightly
         ports:
             - "4000:4000"
             - "10080:10080"
