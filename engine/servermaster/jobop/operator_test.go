@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 
-	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	frameworkModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
@@ -90,7 +90,7 @@ func TestJobOperator(t *testing.T) {
 	jobID := "cancel-job-id"
 	meta := &frameworkModel.MasterMeta{
 		ID:    jobID,
-		Type:  framework.CvsJobMaster,
+		Type:  frameModel.CvsJobMaster,
 		State: frameworkModel.MasterStateInit,
 	}
 	err = router.jobOnline(ctx, jobID, meta)

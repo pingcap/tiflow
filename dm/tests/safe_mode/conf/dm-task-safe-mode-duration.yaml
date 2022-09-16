@@ -1,0 +1,69 @@
+---
+name: test
+task-mode: all
+is-sharding: true
+meta-schema: "dm_meta"
+enable-heartbeat: false
+ignore-checking-items: ["auto_increment_ID"]
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "test"
+
+  - source-id: "mysql-replica-02"
+    block-allow-list:  "instance"
+    route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "normal"
+
+block-allow-list:
+  instance:
+    do-dbs: ["safe_mode_test"]
+    do-tables:
+    -  db-name: "safe_mode_test"
+       tbl-name: "~^t[\\d]+"
+
+routes:
+  sharding-route-rules-table:
+    schema-pattern: safe_mode_test
+    table-pattern: t*
+    target-schema: safe_mode_target
+    target-table: t_target
+
+  sharding-route-rules-schema:
+    schema-pattern: safe_mode_test
+    target-schema: safe_mode_target
+
+mydumpers:
+  global:
+    threads: 4
+    chunk-filesize: 64
+    skip-tz-utc: true
+    extra-args: "--consistency lock"
+
+loaders:
+  global:
+    pool-size: 16
+    dir: "./dumped_data"
+
+syncers:
+  test:
+    worker-count: 16
+    batch: 100
+    safe-mode-duration: "0s"  # test
+  
+  normal:
+    worker-count: 16
+    batch: 100
+    safe-mode-duration: "60s"
