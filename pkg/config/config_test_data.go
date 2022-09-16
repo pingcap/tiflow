@@ -92,7 +92,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 18874368, 
+  "per-table-memory-quota": 18874368,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
