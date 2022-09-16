@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
@@ -39,7 +38,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -317,7 +315,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithMaxTries(defaultDDLMaxRetry),
-		retry.WithIsRetryableErr(cerror.IsRetryableError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -608,7 +606,7 @@ func logDMLTxnErr(
 	err error, start time.Time, changefeed model.ChangeFeedID,
 	query string, count int, startTs []model.Ts,
 ) error {
-	if isRetryableDMLError(err) {
+	if errorutil.IsRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
 			zap.String("query", query), zap.Int("count", count),
@@ -623,18 +621,6 @@ func logDMLTxnErr(
 			zap.String("changefeed", changefeed.ID))
 	}
 	return err
-}
-
-func isRetryableDMLError(err error) bool {
-	if !cerror.IsRetryableError(err) {
-		return false
-	}
-	// Check if the error is connection errors that can retry safely.
-	if dmretry.IsConnectionError(err) {
-		return true
-	}
-	// Check if the error is an retriable TiDB error or MySQL error.
-	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
@@ -700,7 +686,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithMaxTries(defaultDMLMaxRetry),
-		retry.WithIsRetryableErr(isRetryableDMLError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDMLError))
 }
 
 type preparedDMLs struct {

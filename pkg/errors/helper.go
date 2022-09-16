@@ -75,7 +75,7 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrSyncRenameTableFailed,
 }
 
-// IsChangefeedUnRetryableError returns true if a error is a changefeed not retry error.
+// IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
 func IsChangefeedUnRetryableError(err error) bool {
 	for _, e := range changefeedUnRetryableErrors {
 		if e.Equal(err) {
