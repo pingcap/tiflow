@@ -592,9 +592,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameworkMeta)); err != nil {
-			log.Warn("create schema for framework metastore fail, but it can be ignored.",
+			log.Error("create schema for framework metastore fail",
 				zap.String("schema", s.cfg.FrameworkMeta.Schema),
 				zap.Error(err))
+			return err
 		}
 	}
 	var err error
@@ -622,9 +623,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMeta)); err != nil {
-			log.Warn("create schema for business metastore fail, but it can be ignored.",
+			log.Error("create schema for business metastore fail",
 				zap.String("schema", s.cfg.BusinessMeta.Schema),
 				zap.Error(err))
+			return err
 		}
 	}
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMeta)
