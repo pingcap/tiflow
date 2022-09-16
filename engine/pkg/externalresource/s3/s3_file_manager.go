@@ -99,6 +99,17 @@ func (m *FileManager) CreateResource(
 func (m *FileManager) GetPersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
+	persistedResourceSet, err := m.index.LoadPersistedFileSet(ctx, ident.Scope())
+	if err != nil {
+		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
+	}
+	if _, ok := persistedResourceSet[ident.Name]; !ok {
+		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
+			&internal.ResourceFilesNotFoundError{
+				Ident: ident,
+			})
+	}
+
 	bucket, err := m.bucketSelector.GetBucket(ctx, ident.Scope())
 	if err != nil {
 		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
