@@ -151,9 +151,9 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
-["CDC:ErrChangefeedUnRetryable"]
+["CDC:ErrChangefeedUnretryable"]
 error = '''
-changefeed is in un-retryable state, please check the error message, and you should manually handle it
+changefeed is in unretryable state, please check the error message, and you should manually handle it
 '''
 
 ["CDC:ErrChangefeedUpdateFailed"]
