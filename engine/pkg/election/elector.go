@@ -160,7 +160,7 @@ func (e *Elector) tryRenew(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	e.setObservedRecord(record.Clone())
+	e.setObservedRecord(record)
 
 	var activeMembers []*Member
 	for _, m := range record.Members {
@@ -233,7 +233,7 @@ func (e *Elector) release(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	e.setObservedRecord(record.Clone())
+	e.setObservedRecord(record)
 
 	for i, m := range record.Members {
 		if m.ID == e.config.ID {
@@ -286,7 +286,7 @@ func (e *Elector) setObservedRecord(record *Record) {
 		}
 	}
 
-	e.observedRecord = *record
+	e.observedRecord = *record.Clone()
 }
 
 func (e *Elector) isLeaseExpired(memberID string) bool {
@@ -322,13 +322,9 @@ func (e *Elector) GetLeader() (*Member, bool) {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
-	for _, m := range e.observedRecord.Members {
-		if e.isLeaseExpiredLocked(m.ID) {
-			continue
-		}
-		if m.ID == e.observedRecord.LeaderID {
-			return m.Clone(), true
-		}
+	leader, ok := e.observedRecord.FindMember(e.observedRecord.LeaderID)
+	if ok && !e.isLeaseExpiredLocked(leader.ID) {
+		return leader.Clone(), true
 	}
 	return nil, false
 }
