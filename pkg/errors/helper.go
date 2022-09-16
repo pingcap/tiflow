@@ -73,6 +73,7 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrExpressionParseFailed,
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
+	ErrChangefeedUnretryable,
 }
 
 // IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
@@ -170,4 +171,9 @@ func IsCliUnprintableError(err error) bool {
 		}
 	}
 	return false
+}
+
+// WrapChangefeedUnretryableErr wraps an error into ErrChangefeedUnRetryable.
+func WrapChangefeedUnretryableErr(err error, args ...interface{}) error {
+	return WrapError(ErrChangefeedUnretryable, err, args...)
 }
