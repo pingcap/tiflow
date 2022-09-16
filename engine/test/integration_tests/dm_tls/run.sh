@@ -46,13 +46,8 @@ function run() {
 	sed -i "s,<mysql2-key>,$(base64 -w0 $WORK_DIR/mysql2/client-key.pem)," $WORK_DIR/job.yaml
 	sed -i "s,<mysql2-cert>,$(base64 -w0 $WORK_DIR/mysql2/client-cert.pem)," $WORK_DIR/job.yaml
 
-	create_job_json=$(base64 -w0 $WORK_DIR/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_tls&project_id=dm_tls" | jq -r .id)
-	echo "job_id: $job_id"
-
-	# wait for dump and load finished
-
+	# create job & wait for job finished
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_tls")
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
 
 	# insert increment data
