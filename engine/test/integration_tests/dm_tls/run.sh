@@ -61,6 +61,9 @@ function run() {
 	sed -i "s,<mysql2-key>,$(base64 -w0 $WORK_DIR/mysql2/client-key.pem)," $WORK_DIR/job.yaml
 	sed -i "s,<mysql2-cert>,$(base64 -w0 $WORK_DIR/mysql2/client-cert.pem)," $WORK_DIR/job.yaml
 
+	# wait executor online
+	sleep 20
+
 	create_job_json=$(base64 -w0 $WORK_DIR/job.yaml | jq -Rs '{ type: "DM", config: . }')
 	echo "create_job_json: $create_job_json"
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_tls&project_id=dm_tls" | jq -r .id)
