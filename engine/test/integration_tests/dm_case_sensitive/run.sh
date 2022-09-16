@@ -24,12 +24,7 @@ function run() {
 	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS \`UPPER_DB_ROUTE\`'
 
 	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
-
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_case_sensitive")
 	# wait for job finished
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
