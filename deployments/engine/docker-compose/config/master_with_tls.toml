@@ -7,7 +7,7 @@ user = "root"
 password = "123456"
 
 [framework-meta.security]
-ca-path = "/cert/ca.pem"
+ca-path = "/ca.pem"
 
 [business-meta]
 endpoints = ["mysql-standalone:3306"]
@@ -16,7 +16,7 @@ user = "root"
 password = "123456"
 
 [business-meta.security]
-ca-path = "/cert/ca.pem"
+ca-path = "/ca.pem"
 
 [log]
 level = "debug"

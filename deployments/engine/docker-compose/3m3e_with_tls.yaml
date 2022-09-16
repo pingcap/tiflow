@@ -8,7 +8,6 @@ services:
     volumes:
       - ./config/master_with_tls.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "master"
@@ -29,7 +28,6 @@ services:
     volumes:
       - ./config/master_with_tls.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "master"
@@ -50,7 +48,6 @@ services:
     volumes:
       - ./config/master_with_tls.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "master"
@@ -71,7 +68,6 @@ services:
     volumes:
       - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "executor"
@@ -95,7 +91,6 @@ services:
     volumes:
       - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "executor"
@@ -119,7 +114,6 @@ services:
     volumes:
       - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
-      - /tmp/meta_cert:/cert
     command:
       - "/tiflow"
       - "executor"
