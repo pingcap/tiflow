@@ -238,20 +238,6 @@ func (n *Node) tryResolve() (int64, bool) {
 		// No conflict at all
 		return -1, true
 	}
-	if conflictNumber == 1 {
-		_, ok := n.conflictCounts[unassigned]
-		if ok {
-			// All conflicts are unassigned. So
-			// no resolution is available.
-			return 0, false
-		}
-
-		// Use for loop to retrieve the only key.
-		for workerNum := range n.conflictCounts {
-			// Only conflicting with one worker, i.e., workerNum.
-			return workerNum, true
-		}
-	}
 	// Conflicting with at least one worker and unassigned nodes,
 	// or conflicting with at least two workers. In both cases,
 	// no resolution is available.
