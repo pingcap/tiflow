@@ -28,24 +28,21 @@ import (
 // so it is not thread-safe to use. But thread-safety does not seem
 // to be a necessary requirement.
 type resourceDescriptor struct {
-	Bucket  BucketName
-	Ident   internal.ResourceIdent
-	Options *brStorage.S3BackendOptions
+	Bucket BucketName
+	Ident  internal.ResourceIdent
 
-	storageFactory externalStorageFactory
+	storageFactory ExternalStorageFactory
 	storage        brStorage.ExternalStorage
 }
 
 func newResourceDescriptor(
 	bucket BucketName,
 	ident internal.ResourceIdent,
-	factory externalStorageFactory,
-	options *brStorage.S3BackendOptions,
+	factory ExternalStorageFactory,
 ) *resourceDescriptor {
 	return &resourceDescriptor{
 		Bucket:         bucket,
 		Ident:          ident,
-		Options:        options,
 		storageFactory: factory,
 	}
 }
@@ -65,7 +62,7 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 
 // makeExternalStorage actually creates the storage object.
 func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
-	return r.storageFactory.newS3ExternalStorageFromURI(ctx, r.URI(), r.Options)
+	return r.storageFactory.newS3ExternalStorageFromURI(ctx, r.URI())
 }
 
 func (r *resourceDescriptor) URI() string {

@@ -102,8 +102,7 @@ func (f *indexFile) GetPersistedFileSet() map[model.ResourceName]struct{} {
 type indexManagerImpl struct {
 	executorID     model.ExecutorID
 	bucketSelector BucketSelector
-	storageFactory externalStorageFactory
-	options        *brStorage.S3BackendOptions
+	storageFactory ExternalStorageFactory
 
 	indexMu     sync.Mutex
 	indexFiles  map[model.WorkerID]*indexFile
@@ -122,13 +121,11 @@ type indexManagerImpl struct {
 func newIndexManager(
 	executorID model.ExecutorID,
 	bucketSelector BucketSelector,
-	factory externalStorageFactory,
-	s3Options *brStorage.S3BackendOptions,
+	factory ExternalStorageFactory,
 ) *indexManagerImpl {
 	ret := &indexManagerImpl{
 		executorID:     executorID,
 		bucketSelector: bucketSelector,
-		options:        s3Options,
 		storageFactory: factory,
 
 		indexFiles: make(map[model.WorkerID]*indexFile),
@@ -296,5 +293,5 @@ func (m *indexManagerImpl) createStorageForIndexFile(
 		return nil, err
 	}
 
-	return m.storageFactory.newS3ExternalStorageForScope(ctx, bucket, scope, m.options)
+	return m.storageFactory.newS3ExternalStorageForScope(ctx, bucket, scope)
 }

@@ -23,48 +23,56 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 )
 
-type externalStorageFactory interface {
+type ExternalStorageFactory interface {
 	newS3ExternalStorageForScope(
 		ctx context.Context,
 		bucket BucketName,
 		scope internal.ResourceScope,
-		options *brStorage.S3BackendOptions,
 	) (brStorage.ExternalStorage, error)
 
 	newS3ExternalStorageFromURI(
 		ctx context.Context,
 		uri string,
-		options *brStorage.S3BackendOptions,
 	) (brStorage.ExternalStorage, error)
 
 	scopeURI(bucket BucketName, scope internal.ResourceScope) string
 }
 
-// ExternalStorageFactoryImpl implements externalStorageFactory.
+// ExternalStorageFactoryImpl implements ExternalStorageFactory.
 // It is exported for testing purposes.
 type ExternalStorageFactoryImpl struct {
 	// Prefix is an optional prefix in the S3 file path.
 	// It can be useful when a shared bucket is used for testing purposes.
 	Prefix string
+
+	// Options provide necessary information such as endpoints and access key
+	// for creating an s3 client.
+	Options *brStorage.S3BackendOptions
 }
 
-func newExternalStorageFactory() *ExternalStorageFactoryImpl {
-	return &ExternalStorageFactoryImpl{}
+func newExternalStorageFactory(
+	options *brStorage.S3BackendOptions,
+) *ExternalStorageFactoryImpl {
+	return &ExternalStorageFactoryImpl{
+		Options: options,
+	}
 }
 
 // NewExternalStorageFactoryWithPrefix is exported for integration tests.
-func NewExternalStorageFactoryWithPrefix(prefix string) *ExternalStorageFactoryImpl {
-	return &ExternalStorageFactoryImpl{Prefix: prefix}
+func NewExternalStorageFactoryWithPrefix(
+	prefix string,
+	options *brStorage.S3BackendOptions,
+) *ExternalStorageFactoryImpl {
+	return &ExternalStorageFactoryImpl{Prefix: prefix, Options: options}
 }
 
 func (f *ExternalStorageFactoryImpl) newS3ExternalStorageForScope(
 	ctx context.Context,
 	bucket BucketName,
 	scope internal.ResourceScope,
-	options *brStorage.S3BackendOptions,
 ) (brStorage.ExternalStorage, error) {
 	uri := f.scopeURI(bucket, scope)
-	return f.newS3ExternalStorageFromURI(ctx, uri, options)
+	return f.newS3ExternalStorageFromURI(ctx, uri)
 }
 
 func (f *ExternalStorageFactoryImpl) scopeURI(
@@ -86,10 +94,9 @@ func (f *ExternalStorageFactoryImpl) scopeURI(
 func (f *ExternalStorageFactoryImpl) newS3ExternalStorageFromURI(
 	ctx context.Context,
 	uri string,
-	options *brStorage.S3BackendOptions,
 ) (brStorage.ExternalStorage, error) {
 	opts := &brStorage.BackendOptions{
-		S3: *options,
+		S3: *f.Options,
 	}
 	backEnd, err := brStorage.ParseBackend(uri, opts)
 	if err != nil {

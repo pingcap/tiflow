@@ -37,12 +37,11 @@ func newFileManagerForTest(t *testing.T) *s3.FileManager {
 	require.NoError(t, err)
 
 	pathPrefix := fmt.Sprintf("%d", rand.Int())
-	factory := s3.NewExternalStorageFactoryWithPrefix(pathPrefix)
+	factory := s3.NewExternalStorageFactoryWithPrefix(pathPrefix, options)
 	return s3.NewFileManagerWithFactory(
 		mockExecutorID,
 		s3.NewConstantBucketSelector(utBucketName),
 		factory,
-		options,
 	)
 }
 
