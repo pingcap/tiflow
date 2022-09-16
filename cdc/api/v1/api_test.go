@@ -896,11 +896,21 @@ func TestHealth(t *testing.T) {
 	// capture is owner
 	ctrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCapture(ctrl)
-	sp := mock_owner.NewMockStatusProvider(ctrl)
-	ownerRouter := newRouter(cp, sp)
-	api := testCase{url: "/api/v1/health", method: "GET"}
+	ownerRouter := newRouter(cp, nil)
 
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().StatusProvider().Return(nil).Times(1)
+
+	api := testCase{url: "/api/v1/health", method: "GET"}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 500, w.Code)
+
+	sp := mock_owner.NewMockStatusProvider(ctrl)
+	ownerRouter = newRouter(cp, sp)
+
 	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
 		return model.CaptureInfo{}, nil
 	}).AnyTimes()
@@ -911,8 +921,8 @@ func TestHealth(t *testing.T) {
 	// IsHealthy returns error.
 	isHealthError := sp.EXPECT().IsHealthy(gomock.Any()).
 		Return(false, cerror.ErrOwnerNotFound)
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	ownerRouter.ServeHTTP(w, req)
 	require.Equal(t, 500, w.Code)
 
