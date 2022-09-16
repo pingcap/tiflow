@@ -874,7 +874,14 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 func (h *OpenAPI) Health(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	health, err := h.statusProvider().IsHealthy(ctx)
+	provider := h.statusProvider()
+	if provider == nil {
+		log.Warn("healthy: status provider is nil")
+		c.JSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrOwnerNotFound.FastGenByArgs()))
+		return
+	}
+
+	health, err := provider.IsHealthy(ctx)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
