@@ -21,9 +21,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -234,11 +235,11 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
 	allTables := a.tableM.getAllTables()
-	result := make([]schedulepb.TableStatus, 0, len(allTables))
+	result := make([]tablepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
 		status := table.getTableStatus()
 		if table.task != nil && table.task.IsRemove {
-			status.State = schedulepb.TableStateStopping
+			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
 	}
