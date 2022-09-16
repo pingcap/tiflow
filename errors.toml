@@ -891,16 +891,6 @@ error = '''
 processor running unknown error
 '''
 
-["CDC:ErrPulsarNewProducer"]
-error = '''
-new pulsar producer
-'''
-
-["CDC:ErrPulsarSendMessage"]
-error = '''
-pulsar send message failed
-'''
-
 ["CDC:ErrReachMaxTry"]
 error = '''
 reach maximum try: %s, error: %s

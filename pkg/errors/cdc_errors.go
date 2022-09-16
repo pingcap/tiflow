@@ -271,14 +271,6 @@ var (
 	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
 		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
 	)
-	ErrPulsarNewProducer = errors.Normalize(
-		"new pulsar producer",
-		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
-	)
-	ErrPulsarSendMessage = errors.Normalize(
-		"pulsar send message failed",
-		errors.RFCCodeText("CDC:ErrPulsarSendMessage"),
-	)
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
 		errors.RFCCodeText("CDC:ErrRedoConfigInvalid"),
