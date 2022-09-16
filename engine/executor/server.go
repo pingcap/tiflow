@@ -226,7 +226,7 @@ func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
 	switch tp {
-	case framework.DMJobMaster:
+	case frameModel.DMJobMaster:
 		err = errors.ToDMError(err)
 	default:
 	}

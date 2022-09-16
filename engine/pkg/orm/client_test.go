@@ -421,7 +421,8 @@ func TestJob(t *testing.T) {
 		{
 			fn: "UpdateJob",
 			inputs: []interface{}{
-				&frameModel.MasterMeta{
+				"j111",
+				(&frameModel.MasterMeta{
 					ProjectID: "p111",
 					ID:        "j111",
 					Type:      1,
@@ -430,10 +431,79 @@ func TestJob(t *testing.T) {
 					State:     1,
 					Addr:      "127.0.0.1",
 					Config:    []byte{0x11, 0x22},
-				},
+				}).RefreshValues(),
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("UPDATE `master_meta` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(regexp.QuoteMeta(
+					"UPDATE `master_meta` SET `address`=?,`epoch`=?,`node_id`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			fn: "UpdateJob",
+			inputs: []interface{}{
+				"j111",
+				(&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+				}).UpdateStateValues(),
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta(
+					"UPDATE `master_meta` SET `state`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			fn: "UpdateJob",
+			inputs: []interface{}{
+				"j111",
+				(&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					ErrorMsg:  "error message",
+					Detail:    []byte("job detail"),
+				}).UpdateErrorValues(),
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta(
+					"UPDATE `master_meta` SET `error_message`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			fn: "UpdateJob",
+			inputs: []interface{}{
+				"j111",
+				(&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					ErrorMsg:  "error message",
+					Detail:    []byte("job detail"),
+				}).ExitValues(),
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta(
+					"UPDATE `master_meta` SET `detail`=?,`error_message`=?,`state`=?,`updated_at`=? WHERE id = ? AND `master_meta`.`deleted` IS NULL")).
+					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
 		{

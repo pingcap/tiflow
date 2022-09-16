@@ -21,7 +21,6 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
-	github.com/emirpasic/gods v1.18.1
 	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.13.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
@@ -52,16 +51,15 @@ require (
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modern-go/reflect2 v1.0.2
-	github.com/ngaut/log v0.0.0-20210830112240-0124ec040aeb
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20220906053631-2e37953b2b43
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20220908163255-827fe400bc7b
+	github.com/pingcap/tidb v1.1.0-beta.0.20220907091857-be7de700bd5c
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220909024256-3f0cea3206fe
+	github.com/pingcap/tidb/parser v0.0.0-20220907091857-be7de700bd5c
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -212,6 +210,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/ncw/directio v1.0.5 // indirect
+	github.com/ngaut/log v0.0.0-20210830112240-0124ec040aeb // indirect
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7 // indirect
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef // indirect
 	github.com/opentracing/basictracer-go v1.1.0 // indirect

@@ -48,9 +48,9 @@ import (
 
 // RegisterWorker is used to register dm task to global registry
 func RegisterWorker() {
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMDump, newWorkerFactory(framework.WorkerDMDump))
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMLoad, newWorkerFactory(framework.WorkerDMLoad))
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMSync, newWorkerFactory(framework.WorkerDMSync))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.WorkerDMDump, newWorkerFactory(frameModel.WorkerDMDump))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.WorkerDMLoad, newWorkerFactory(frameModel.WorkerDMLoad))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.WorkerDMSync, newWorkerFactory(frameModel.WorkerDMSync))
 }
 
 // workerFactory create dm task
@@ -222,7 +222,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	if currentStage == previousStage {
 		return nil
 	}
-	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.String("from", string(previousStage)), zap.String("to", string(currentStage)))
+	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.Stringer("from", previousStage), zap.Stringer("to", currentStage))
 	w.setStage(currentStage)
 
 	status := w.workerStatus(ctx)
@@ -231,7 +231,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return w.UpdateStatus(ctx, status)
 	}
 
-	if w.workerType == framework.WorkerDMDump {
+	if w.workerType == frameModel.WorkerDMDump {
 		if err := w.persistStorage(ctx); err != nil {
 			w.Logger().Error("failed to persist storage", zap.Error(err))
 			// persist in next tick

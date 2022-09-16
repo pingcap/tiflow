@@ -263,11 +263,11 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		if err := json.Unmarshal(job.Config, extConfig); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "failed to decode config: %v", err)
 		}
-		meta.Type = framework.CvsJobMaster
+		meta.Type = frameModel.CvsJobMaster
 	case pb.Job_DM:
-		meta.Type = framework.DMJobMaster
+		meta.Type = frameModel.DMJobMaster
 	case pb.Job_FakeJob:
-		meta.Type = framework.FakeJobMaster
+		meta.Type = frameModel.FakeJobMaster
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "job type %v is not supported", job.Type)
 	}
@@ -372,7 +372,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 
 	var job *pb.Job
 	for i := firstIdx; i < len(masterMetas); i++ {
-		if masterMetas[i].Type == framework.JobManager {
+		if masterMetas[i].Type == frameModel.JobManager {
 			continue
 		}
 
@@ -516,6 +516,7 @@ func (jm *JobManagerImpl) UpdateJobStatus(
 func NewJobManagerImpl(
 	dctx *dcontext.Context,
 	id frameModel.MasterID,
+	backoffConfig *jobop.BackoffConfig,
 ) (*JobManagerImpl, error) {
 	metaCli, err := dctx.Deps().Construct(func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 		return cli, nil
@@ -532,23 +533,24 @@ func NewJobManagerImpl(
 		return nil, err
 	}
 
+	clocker := clock.New()
 	impl := &JobManagerImpl{
 		JobFsm:              NewJobFsm(),
 		uuidGen:             uuid.NewGenerator(),
 		masterMetaClient:    cli,
-		clocker:             clock.New(),
+		clocker:             clocker,
 		frameMetaClient:     metaClient,
 		jobStatusChangeMu:   ctxmu.New(),
 		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 		jobOperatorNotifier: new(notify.Notifier),
 		jobHTTPClient:       engineHTTPUtil.NewJobHTTPClient(httpCli),
-		JobBackoffMgr:       jobop.NewBackoffManager(),
+		JobBackoffMgr:       jobop.NewBackoffManager(clocker, backoffConfig),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
 		impl,
 		id,
-		framework.JobManager,
+		frameModel.JobManager,
 	)
 	impl.jobOperator = jobop.NewJobOperatorImpl(metaClient, impl)
 	wg, ctx := errgroup.WithContext(dctx)
@@ -658,7 +660,7 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 	impl.InitProjectInfosAfterRecover(jobs)
 
 	for _, job := range jobs {
-		if job.Type == framework.JobManager {
+		if job.Type == frameModel.JobManager {
 			continue
 		}
 		// TODO: filter the job in backend

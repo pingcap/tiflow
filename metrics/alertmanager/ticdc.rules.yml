@@ -26,12 +26,12 @@ groups:
       summary: cdc cluster has no owner for more than 10 minutes
 
   - alert: cdc_checkpoint_high_delay
-    expr: ticdc_processor_checkpoint_ts_lag > 600
+    expr: ticdc_owner_checkpoint_ts_lag > 600
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: ticdc_processor_checkpoint_ts_lag > 600
+      expr: ticdc_owner_checkpoint_ts_lag > 600
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'

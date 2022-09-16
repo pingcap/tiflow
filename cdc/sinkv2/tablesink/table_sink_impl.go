@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Assert TableSink implementation
@@ -36,6 +37,9 @@ type eventTableSink[E eventsink.TableEvent] struct {
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
+
+	// For dataflow metrics.
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -43,21 +47,24 @@ func New[E eventsink.TableEvent](
 	tableID model.TableID,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
+	totalRowsCounter prometheus.Counter,
 ) *eventTableSink[E] {
 	return &eventTableSink[E]{
-		tableID:         tableID,
-		eventID:         0,
-		maxResolvedTs:   model.NewResolvedTs(0),
-		backendSink:     backendSink,
-		progressTracker: newProgressTracker(tableID),
-		eventAppender:   appender,
-		eventBuffer:     make([]E, 0, 1024),
-		state:           state.TableSinkSinking,
+		tableID:                   tableID,
+		eventID:                   0,
+		maxResolvedTs:             model.NewResolvedTs(0),
+		backendSink:               backendSink,
+		progressTracker:           newProgressTracker(tableID, defaultBufferSize),
+		eventAppender:             appender,
+		eventBuffer:               make([]E, 0, 1024),
+		state:                     state.TableSinkSinking,
+		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
 
 func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
+	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
 func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
@@ -73,7 +80,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 	})
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
-		e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
+		e.progressTracker.addResolvedTs(resolvedTs)
 		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
@@ -85,24 +92,20 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 
 	for _, ev := range resolvedEvents {
 		// We have to record the event ID for the callback.
-		eventID := e.genEventID()
 		ce := &eventsink.CallbackableEvent[E]{
-			Event: ev,
-			Callback: func() {
-				e.progressTracker.remove(eventID)
-			},
+			Event:     ev,
+			Callback:  e.progressTracker.addEvent(),
 			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
-		e.progressTracker.addEvent(eventID)
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
-	e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
+	e.progressTracker.addResolvedTs(resolvedTs)
 	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
-	return e.progressTracker.minTs()
+	return e.progressTracker.advance()
 }
 
 // Close the table sink and wait for all callbacks be called.
@@ -116,11 +119,4 @@ func (e *eventTableSink[E]) Close(ctx context.Context) error {
 	e.state.Store(state.TableSinkStopped)
 
 	return nil
-}
-
-// genEventID generates an unique ID for event.
-func (e *eventTableSink[E]) genEventID() uint64 {
-	res := e.eventID
-	e.eventID++
-	return res
 }

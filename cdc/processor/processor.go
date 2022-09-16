@@ -221,8 +221,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 		return true
 	}
 
-	boundaryTs := p.changefeed.Status.CheckpointTs
-	if !table.AsyncStop(boundaryTs) {
+	if !table.AsyncStop() {
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
 		log.Debug("async stop the table failed, due to a full pipeline",
@@ -960,7 +959,7 @@ func (p *processor) createTablePipelineImpl(
 		}
 
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(tableID)
+		s := p.sinkV2Factory.CreateTableSink(tableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
