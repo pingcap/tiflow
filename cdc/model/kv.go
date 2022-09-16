@@ -40,7 +40,7 @@ type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved []*ResolvedSpan
 
-	// Additional debug info
+	// Additional debug info, not used
 	RegionID uint64
 }
 
