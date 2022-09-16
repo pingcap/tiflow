@@ -47,10 +47,14 @@ var (
 // in conflict detection.
 type Node struct {
 	// Immutable fields.
-	id           int64
-	OnResolved   func(id workerID)
+	id int64
+
+	// Set the callback that the node is resolved.
+	OnResolved func(id workerID)
+	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
 
+	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependees    int32
 	resolvedDependees int32
 	removedDependees  int32
@@ -79,6 +83,7 @@ type Node struct {
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
+		ret.id = nextNodeID.Add(1)
 		ret.OnResolved = nil
 		ret.RandWorkerID = nil
 		ret.totalDependees = 0
@@ -95,11 +100,6 @@ func NewNode() (ret *Node) {
 		ret = new(Node)
 	}
 	return
-}
-
-// AllocID implements interface internal.SlotNode.
-func (n *Node) AllocID() {
-	n.id = nextNodeID.Add(1)
 }
 
 // NodeID implements interface internal.SlotNode.
@@ -120,16 +120,20 @@ func (n *Node) DependOn(others map[int64]*Node) {
 		defer target.mu.Unlock()
 
 		if target.assignedTo != unassigned {
+			// The target has already been assigned to a worker.
 			resolvedDependees = stdAtomic.AddInt32(&n.resolvedDependees, 1)
 			stdAtomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
 		}
 		if target.removed {
+			// The target has already been removed.
 			removedDependees = stdAtomic.AddInt32(&n.removedDependees, 1)
 		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
+			// Should never depend on a target redundantly.
 			panic("should never exist")
 		}
 	}
 
+	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependees = int32(len(others))
 	n.resolvedList = make([]int64, 0, n.totalDependees)
 	for i := 0; i < int(n.totalDependees); i++ {
@@ -175,7 +179,7 @@ func (n *Node) Free() {
 	nodePool.Put(n)
 }
 
-// assignTo assigns a node to a worker.
+// assignTo assigns a node to a worker. Returns `true` on success.
 func (n *Node) assignTo(workerID int64) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -183,15 +187,13 @@ func (n *Node) assignTo(workerID int64) bool {
 		// Already resolved by some other guys.
 		return false
 	}
-	n.assignedTo = workerID
-	n.OnResolved(workerID)
-	n.OnResolved = nil
-	return true
-}
 
-func (n *Node) notifyDependers() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	n.assignedTo = workerID
+	if n.OnResolved != nil {
+		n.OnResolved(workerID)
+		n.OnResolved = nil
+	}
+
 	if n.dependers != nil {
 		n.dependers.Ascend(func(node *Node) bool {
 			resolvedDependees := stdAtomic.AddInt32(&node.resolvedDependees, 1)
@@ -200,6 +202,7 @@ func (n *Node) notifyDependers() {
 			return true
 		})
 	}
+	return true
 }
 
 func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
@@ -207,9 +210,7 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 		if workerNum < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
-		if n.assignTo(workerNum) {
-			n.notifyDependers()
-		}
+		n.assignTo(workerNum)
 	}
 	return
 }

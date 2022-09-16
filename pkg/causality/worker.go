@@ -19,6 +19,9 @@ type (
 
 type txnEvent interface {
 	// Keys must be deduped.
+	//
+	// NOTE: if the conflict detector is accessed by multiple threads concurrently,
+	// ConflictKeys must also be sorted.
 	ConflictKeys() []conflictKey
 }
 

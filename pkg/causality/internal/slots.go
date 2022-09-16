@@ -19,7 +19,6 @@ import (
 
 // SlotNode describes objects that can be compared for equality.
 type SlotNode[T any] interface {
-	AllocID()
 	// NodeID tells the node's ID.
 	NodeID() int64
 	// Construct a dependency on `others`.
@@ -63,7 +62,6 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 		}
 		*s.slots[key].tail = elem
 	}
-	elem.AllocID()
 	elem.DependOn(dependOnList)
 	// Lock those slots one by one and then unlock them one by one, so that
 	// we can avoid 2 transactions get executed interleaved.
@@ -87,6 +85,6 @@ func (s *Slots[E]) Free(elem E, keys []uint64) {
 }
 
 type slot[E SlotNode[E]] struct {
-	tail *E
+	tail *E // `tail` points to the last node in the slot.
 	mu   sync.Mutex
 }

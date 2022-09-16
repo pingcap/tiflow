@@ -89,11 +89,12 @@ func NewMySQLBackends(
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
-			changefeed:                    changefeed,
-			db:                            db,
-			cfg:                           cfg,
-			dmlMaxRetry:                   defaultDMLMaxRetry,
-			statistics:                    statistics,
+			changefeed:  changefeed,
+			db:          db,
+			cfg:         cfg,
+			dmlMaxRetry: defaultDMLMaxRetry,
+			statistics:  statistics,
+
 			metricTxnSinkDMLBatchCommit:   metrics.TxnSinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: metrics.TxnSinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		})

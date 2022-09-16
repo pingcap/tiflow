@@ -35,7 +35,7 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
-	// For a uackground loop to GC nodes.
+	// Used to run a background goroutine to GC nodes.
 	garbageNodes *containers.SliceQueue[txnFinishedEvent[Txn]]
 	wg           sync.WaitGroup
 	closeCh      chan struct{}
@@ -68,6 +68,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 }
 
 // Add pushes a transaction to the ConflictDetector.
+//
+// NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 	node := internal.NewNode()
 	node.OnResolved = func(workerID int64) {
