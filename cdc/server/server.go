@@ -27,6 +27,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -68,7 +70,7 @@ type Server interface {
 	Close()
 	// Drain removes tables in the current TiCDC instance.
 	// It's part of graceful shutdown, should be called before Close.
-	Drain(ctx context.Context) <-chan struct{}
+	Drain() <-chan struct{}
 }
 
 // server implement the TiCDC Server interface
@@ -81,6 +83,9 @@ type server struct {
 	statusServer *http.Server
 	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
+
+	sorterSystem     *ssystem.System
+	tableActorSystem *system.System
 }
 
 // New creates a server instance.
@@ -117,8 +122,7 @@ func New(pdEndpoints []string) (*server, error) {
 	return s, nil
 }
 
-// Run runs the server.
-func (s *server) Run(ctx context.Context) error {
+func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
@@ -176,11 +180,50 @@ func (s *server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	kv.InitWorkerPool()
+	if err := s.startActorSystems(ctx); err != nil {
+		return errors.Trace(err)
+	}
 
-	s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient, s.grpcService)
+	s.capture = capture.NewCapture(
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sorterSystem, s.tableActorSystem)
 
-	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	return nil
+}
+
+func (s *server) startActorSystems(ctx context.Context) error {
+	if s.tableActorSystem != nil {
+		s.tableActorSystem.Stop()
+	}
+	s.tableActorSystem = system.NewSystem()
+	s.tableActorSystem.Start(ctx)
+
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableDBSorter {
+		return nil
+	}
+
+	if s.sorterSystem != nil {
+		s.sorterSystem.Stop()
+	}
+	// Sorter dir has been set and checked when server starts.
+	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
+	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
+	s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
+	err := s.sorterSystem.Start(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// Run runs the server.
+func (s *server) Run(ctx context.Context) error {
+	if err := s.prepare(ctx); err != nil {
+		return err
+	}
+
+	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
@@ -282,10 +325,6 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return unified.RunWorkerPool(cctx)
-	})
-
-	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
 	})
 
@@ -294,6 +333,13 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	conf := config.GetGlobalServerConfig()
+
+	if !conf.Debug.EnableDBSorter {
+		wg.Go(func() error {
+			return unified.RunWorkerPool(cctx)
+		})
+	}
+
 	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
@@ -313,12 +359,14 @@ func (s *server) run(ctx context.Context) (err error) {
 
 // Drain removes tables in the current TiCDC instance.
 // It's part of graceful shutdown, should be called before Close.
-func (s *server) Drain(ctx context.Context) <-chan struct{} {
-	return s.capture.Drain(ctx)
+func (s *server) Drain() <-chan struct{} {
+	return s.capture.Drain()
 }
 
 // Close closes the server.
 func (s *server) Close() {
+	s.stopActorSystems()
+
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
@@ -336,6 +384,22 @@ func (s *server) Close() {
 		}
 		s.tcpServer = nil
 	}
+}
+
+func (s *server) stopActorSystems() {
+	start := time.Now()
+	if s.tableActorSystem != nil {
+		s.tableActorSystem.Stop()
+		s.tableActorSystem = nil
+	}
+	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
+
+	start = time.Now()
+	if s.sorterSystem != nil {
+		s.sorterSystem.Stop()
+		s.sorterSystem = nil
+	}
+	log.Info("sorter actor system closed", zap.Duration("duration", time.Since(start)))
 }
 
 func (s *server) initDir(ctx context.Context) error {

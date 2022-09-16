@@ -71,7 +71,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 		Addr:      ctx.Environ.Addr,
 		NodeID:    ctx.Environ.NodeID,
 		ID:        id,
-		Type:      FakeJobMaster,
+		Type:      frameModel.FakeJobMaster,
 		Epoch:     epoch,
 		State:     frameModel.MasterStateUninit,
 	}
@@ -83,7 +83,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 		ctx,
 		masterImpl,
 		id,
-		FakeTask,
+		frameModel.FakeTask,
 	)
 
 	return ret.(*DefaultBaseMaster)
@@ -134,12 +134,11 @@ func MockBaseMasterCreateWorker(
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
 			WorkerEpoch:  workerEpoch,
-		}), gomock.Any(), gomock.Any()).Do(
+		}), gomock.Any()).Do(
 		func(
 			ctx context.Context,
 			args *client.DispatchTaskArgs,
 			start client.StartWorkerCallback,
-			abort client.AbortWorkerCallback,
 		) {
 			start()
 		}).Times(1).Return(nil)

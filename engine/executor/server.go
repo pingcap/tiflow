@@ -41,6 +41,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -219,27 +220,54 @@ func (s *Server) makeTask(
 	return taskutil.WrapWorker(newWorker), nil
 }
 
+// convertMakeTaskErrorToRPCError converts an error returned from `makeTask` to
+// a gRPC friendly error.
+func convertMakeTaskErrorToRPCError(
+	register registry.Registry, err error, tp frameModel.WorkerType,
+) error {
+	switch tp {
+	case frameModel.DMJobMaster:
+		err = errors.ToDMError(err)
+	default:
+	}
+	// retryable means whether job is retryable from the perspective of business
+	// logic. This rpc error is non-retryable from the perspective of rpc client.
+	retryable, inErr := register.IsRetryableError(err, tp)
+	if inErr != nil {
+		return inErr
+	}
+	if retryable {
+		return rpcerror.ToGRPCError(
+			pkgClient.ErrCreateWorkerNonTerminate.GenWithStack(
+				&pkgClient.CreateWorkerNonTerminateError{
+					Details: err.Error(),
+				}))
+	}
+	return rpcerror.ToGRPCError(
+		pkgClient.ErrCreateWorkerTerminate.GenWithStack(
+			&pkgClient.CreateWorkerTerminateError{
+				Details: err.Error(),
+			}))
+}
+
 // PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	if !s.isReadyToServe() {
 		return nil, status.Error(codes.Unavailable, "executor server is not ready")
 	}
 
+	workerType := frameModel.WorkerType(req.GetTaskTypeId())
 	task, err := s.makeTask(
 		ctx,
 		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		frameModel.WorkerType(req.GetTaskTypeId()),
+		workerType,
 		req.GetTaskConfig(),
 		req.GetWorkerEpoch(),
 	)
 	if err != nil {
-		// We use the code Aborted here per the suggestion in gRPC's documentation
-		// "Use Aborted if the client should retry at a higher-level".
-		// Failure to make task is usually a problem that the business logic
-		// should be notified of.
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, convertMakeTaskErrorToRPCError(registry.GlobalWorkerRegistry(), err, workerType)
 	}
 
 	if !s.taskCommitter.PreDispatchTask(req.GetRequestId(), task) {
@@ -552,6 +580,7 @@ func (s *Server) selfRegister(ctx context.Context) error {
 			Name:       s.cfg.Name,
 			Address:    s.cfg.AdvertiseAddr,
 			Capability: defaultCapability,
+			Labels:     s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)

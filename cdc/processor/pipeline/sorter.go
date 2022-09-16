@@ -183,7 +183,7 @@ func (n *sorterNode) start(
 		case <-stdCtx.Done():
 			return nil
 		case <-n.preparedCh:
-			log.Info("table is prepared",
+			log.Debug("table is prepared",
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.String("namespace", n.changefeed.Namespace),
@@ -215,12 +215,12 @@ func (n *sorterNode) start(
 				return errors.Trace(err)
 			}
 			log.Info("table is replicating",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.Uint64("replicateTs", replicateTs),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID))
+				zap.Duration("duration", time.Since(start)))
 		}
 
 		n.state.Store(TableStateReplicating)
@@ -255,7 +255,12 @@ func (n *sorterNode) start(
 					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
-						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
+						log.Error("got an error from mounter, sorter will stop.",
+							zap.String("namespace", n.changefeed.Namespace),
+							zap.String("changefeed", n.changefeed.ID),
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName),
+							zap.Error(err))
 						ctx.Throw(err)
 						return errors.Trace(err)
 					}
@@ -359,7 +364,11 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
 		if n.state.Load() == TableStatePreparing {
-			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
+			log.Debug("sorterNode, first resolved event received",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs))
 			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}

@@ -244,8 +244,6 @@ func (c *CDCEtcdClientImpl) CheckMultipleCDCClusterExist(ctx context.Context) er
 			}
 		}
 		if isReserved {
-			log.Warn("found etcd key with reserved cluster id",
-				zap.String("key", key))
 			continue
 		}
 		return cerror.ErrMultipleCDCClustersExist.GenWithStackByArgs()

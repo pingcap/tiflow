@@ -75,7 +75,7 @@ func MockBaseWorker(
 		workerImpl,
 		workerID,
 		masterID,
-		FakeTask,
+		frameModel.FakeTask,
 		epoch,
 	)
 	return &BaseWorkerForTesting{

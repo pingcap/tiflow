@@ -58,14 +58,14 @@ func TestAsyncStopFailed(t *testing.T) {
 	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
 		0, 0, &mockFlowController{}, tbl.redoManager,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
-	require.True(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop())
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
 	tableActorSystem.Stop()
-	require.True(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop())
 }
 
 func TestTableActorInterface(t *testing.T) {
@@ -375,7 +375,7 @@ func TestNewTableActor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}
@@ -426,7 +426,7 @@ func TestTableActorStart(t *testing.T) {
 	realStartSorterFunc := startSorter
 	ctx, cancel := context.WithCancel(context.TODO())
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}

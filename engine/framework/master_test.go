@@ -305,16 +305,16 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
+			frameModel.FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
-			FakeTask, fakeWorkerCfg,
+			frameModel.FakeTask, fakeWorkerCfg,
 			fakeCfgBytes, fakeWorkerID,
 		},
 	}
 	for _, tc := range testCases {
-		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		rawConfig, workerID, err := master.PrepareWorkerConfig(tc.workerType, tc.config)
 		require.NoError(t, err)
 		require.Equal(t, tc.rawConfig, rawConfig)
 		require.Equal(t, tc.workerID, workerID)

@@ -72,7 +72,7 @@ type dmJobMasterFactory struct{}
 
 // RegisterWorker is used to register dm job master to global registry
 func RegisterWorker() {
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.DMJobMaster, dmJobMasterFactory{})
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.DMJobMaster, dmJobMasterFactory{})
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
@@ -94,6 +94,13 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 		return m, nil
 	})
 	return jm, nil
+}
+
+// IsRetryableError implements WorkerFactory.IsRetryableError
+func (j dmJobMasterFactory) IsRetryableError(err error) bool {
+	// TODO: business logic implements this, err is a *terror.Error if it is
+	// generated from DM code.
+	return true
 }
 
 // initComponents initializes components of dm job master

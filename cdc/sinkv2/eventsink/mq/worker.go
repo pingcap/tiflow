@@ -189,7 +189,6 @@ func (w *worker) asyncSend(
 			rowsCount++
 			w.statistics.ObserveRows(event.Event)
 		}
-		w.statistics.AddRowsCount(rowsCount)
 
 		for _, message := range w.encoder.Build() {
 			err := w.statistics.RecordBatchExecution(func() (int, error) {

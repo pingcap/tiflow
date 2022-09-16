@@ -97,7 +97,7 @@ type ProjectOperationClient interface {
 // JobClient defines interface that manages job in metastore
 type JobClient interface {
 	UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error
-	UpdateJob(ctx context.Context, job *frameModel.MasterMeta) error
+	UpdateJob(ctx context.Context, jobID string, values model.KeyValueMap) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
 
 	GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMeta, error)
@@ -308,16 +308,13 @@ func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMet
 }
 
 // UpdateJob update the jobInfo
-func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMeta) error {
-	if job == nil {
-		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
-	}
-	// we don't use `Save` here to avoid user dealing with the basic model
-	// expected SQL: UPDATE xxx SET xxx='xxx', updated_at='2013-11-17 21:34:10' WHERE id=xxx;
+func (c *metaOpsClient) UpdateJob(
+	ctx context.Context, jobID string, values model.KeyValueMap,
+) error {
 	if err := c.db.WithContext(ctx).
 		Model(&frameModel.MasterMeta{}).
-		Where("id = ?", job.ID).
-		Updates(job.Map()).Error; err != nil {
+		Where("id = ?", jobID).
+		Updates(values).Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -381,7 +378,7 @@ func (c *metaOpsClient) QueryJobsByState(ctx context.Context,
 ) ([]*frameModel.MasterMeta, error) {
 	var jobs []*frameModel.MasterMeta
 	if err := c.db.WithContext(ctx).
-		Where("id = ? AND state = ?", jobID, state).
+		Where("project_id = ? AND state = ?", jobID, state).
 		Find(&jobs).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -716,9 +713,9 @@ func (c *metaOpsClient) SetJobCanceling(ctx context.Context, jobID string) (Resu
 }
 
 // SetJobCanceled sets a cancelled status if a cancelling op exists.
-// - If cancelling operation is not found, it can be triggered by unexpected
-//   SetJobCanceled don't make any change and return nil error.
-// - If a job is already cancelled, don't make any change and return nil error.
+//   - If cancelling operation is not found, it can be triggered by unexpected
+//     SetJobCanceled don't make any change and return nil error.
+//   - If a job is already cancelled, don't make any change and return nil error.
 func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Result, error) {
 	result := &ormResult{}
 	ops := &model.JobOp{

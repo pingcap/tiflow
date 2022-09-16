@@ -197,7 +197,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 
 // This function is not thread safe, it must be called with m.workerListMu locked
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
-	workerID, err := m.CreateWorker(framework.FakeTask, wcfg, 1)
+	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg, 1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -543,8 +543,10 @@ func (m *Master) getState() frameModel.WorkerState {
 
 func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 	dws := &dummyWorkerStatus{}
-	err := json.Unmarshal(data, dws)
-	return dws, err
+	if err := json.Unmarshal(data, dws); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dws, nil
 }
 
 // CheckpointKey returns key path used in etcd for checkpoint

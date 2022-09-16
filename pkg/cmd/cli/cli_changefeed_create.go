@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/pingcap/errors"
@@ -39,15 +38,13 @@ import (
 
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
-	noConfirm         bool
-	targetTs          uint64
-	sinkURI           string
-	schemaRegistry    string
-	configFile        string
-	sortEngine        string
-	sortDir           string
-	syncPointEnabled  bool
-	syncPointInterval time.Duration
+	noConfirm      bool
+	targetTs       uint64
+	sinkURI        string
+	schemaRegistry string
+	configFile     string
+	sortEngine     string
+	sortDir        string
 
 	upstreamPDAddrs  string
 	upstreamCaPath   string
@@ -69,8 +66,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&o.configFile, "config", "", "Path of the configuration file")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
-	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "",
 		"Avro Schema Registry URI")
 	cmd.PersistentFlags().StringVar(&o.upstreamPDAddrs, "upstream-pd", "",
@@ -245,15 +240,13 @@ func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(o.cfg)
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
-		ID:                o.changefeedID,
-		StartTs:           o.startTs,
-		TargetTs:          o.commonChangefeedOptions.targetTs,
-		SinkURI:           o.commonChangefeedOptions.sinkURI,
-		Engine:            o.commonChangefeedOptions.sortEngine,
-		ReplicaConfig:     replicaConfig,
-		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
-		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDConfig:          upstreamConfig.PDConfig,
+		ID:            o.changefeedID,
+		StartTs:       o.startTs,
+		TargetTs:      o.commonChangefeedOptions.targetTs,
+		SinkURI:       o.commonChangefeedOptions.sinkURI,
+		Engine:        o.commonChangefeedOptions.sortEngine,
+		ReplicaConfig: replicaConfig,
+		PDConfig:      upstreamConfig.PDConfig,
 	}
 }
 
