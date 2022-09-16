@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +101,7 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
+	defaultSafeModeDuration        = strconv.Itoa(2*defaultCheckpointFlushInterval) + "s"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -325,8 +327,9 @@ type SyncerConfig struct {
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
-	DisableCausality bool `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
-	SafeMode         bool `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	DisableCausality bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
+	SafeMode         bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
@@ -338,6 +341,7 @@ func DefaultSyncerConfig() SyncerConfig {
 		Batch:                   defaultBatch,
 		QueueSize:               defaultQueueSize,
 		CheckpointFlushInterval: defaultCheckpointFlushInterval,
+		SafeModeDuration:        defaultSafeModeDuration,
 	}
 }
 
@@ -792,6 +796,20 @@ func (c *TaskConfig) adjust() error {
 			defaultCfg := DefaultSyncerConfig()
 			inst.Syncer = &defaultCfg
 		}
+		if inst.Syncer.QueueSize == 0 {
+			inst.Syncer.QueueSize = defaultQueueSize
+		}
+		if inst.Syncer.CheckpointFlushInterval == 0 {
+			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
+		}
+		if inst.Syncer.SafeModeDuration == "" {
+			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
+		}
+		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
+			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
+		} else if inst.Syncer.SafeMode && duration == 0 {
+			return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
+		}
 		if inst.SyncerThread != 0 {
 			inst.Syncer.WorkerCount = inst.SyncerThread
 		}
@@ -1089,8 +1107,9 @@ type SyncerConfigForDowngrade struct {
 	SafeMode                bool   `yaml:"safe-mode"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
-	Compact      bool `yaml:"compact,omitempty"`
-	MultipleRows bool `yaml:"multipleRows,omitempty"`
+	SafeModeDuration string `yaml:"safe-mode-duration,omitempty"`
+	Compact          bool   `yaml:"compact,omitempty"`
+	MultipleRows     bool   `yaml:"multipleRows,omitempty"`
 }
 
 // NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
@@ -1107,6 +1126,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
+			SafeModeDuration:        syncerConfig.SafeModeDuration,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,
@@ -1114,6 +1134,15 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 		syncerConfigsForDowngrade[configName] = newSyncerConfig
 	}
 	return syncerConfigsForDowngrade
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SyncerConfigForDowngrade) omitDefaultVals() {
+	if c.SafeModeDuration == strconv.Itoa(2*c.CheckpointFlushInterval)+"s" {
+		c.SafeModeDuration = ""
+	}
 }
 
 // TaskConfigForDowngrade is the base configuration for task in v2.0.
@@ -1196,6 +1225,9 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	}
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
+	}
+	for _, s := range c.Syncers {
+		s.omitDefaultVals()
 	}
 	c.OnlineDDL = false
 }
