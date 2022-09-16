@@ -15,15 +15,8 @@ package tablepb
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-)
-
-const (
-	// TODO determine a reasonable default value
-	// This is part of sink performance optimization
-	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
 
 // Load TableState with THREAD-SAFE
