@@ -16,8 +16,8 @@ else
 fi
 
 function run() {
-  seq=($CONFIG)
-  echo ${seq[0]}
+	seq=($CONFIG)
+	echo ${seq[0]}
 	generate_cert /tmp/certs/downstream tidb
 
 	# start a cluster with tls, but now master can't access the certificate so exit
@@ -27,12 +27,12 @@ function run() {
 	# copy auto-generated certificates from MySQL to bypass permission
 	mkdir -p $WORK_DIR/mysql1
 	mkdir -p $WORK_DIR/mysql2
-	mkdir -p /tmp/master_cert
+	mkdir -p /tmp/meta_cert
 	docker cp dm_upstream_mysql:/var/lib/mysql/client-key.pem $WORK_DIR/mysql1/client-key.pem
-  docker cp dm_upstream_mysql:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql1/client-cert.pem
-  docker cp dm_upstream_mysql2:/var/lib/mysql/client-key.pem $WORK_DIR/mysql2/client-key.pem
-  docker cp dm_upstream_mysql2:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql2/client-cert.pem
-  sudo docker cp mysql-standalone:/var/lib/mysql/ca.pem /tmp/master_cert/ca.pem
+	docker cp dm_upstream_mysql:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql1/client-cert.pem
+	docker cp dm_upstream_mysql2:/var/lib/mysql/client-key.pem $WORK_DIR/mysql2/client-key.pem
+	docker cp dm_upstream_mysql2:/var/lib/mysql/client-cert.pem $WORK_DIR/mysql2/client-cert.pem
+	sudo docker cp mysql-standalone:/var/lib/mysql/ca.pem /tmp/meta_cert/ca.pem
 
 	$COMPOSECMD -f ${seq[0]} up -d server-master-0 server-master-1 server-master-2
 
