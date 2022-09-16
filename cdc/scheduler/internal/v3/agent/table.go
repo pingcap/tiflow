@@ -53,7 +53,7 @@ func newTable(
 func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
 	oldState := t.state
 
-	meta := t.executor.GetTableMeta(t.id)
+	meta := t.executor.GetTableStatus(t.id)
 	t.state = meta.State
 
 	if oldState != t.state {
@@ -69,7 +69,7 @@ func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
 }
 
 func (t *table) getTableStatus() tablepb.TableStatus {
-	return t.executor.GetTableMeta(t.id)
+	return t.executor.GetTableStatus(t.id)
 }
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
