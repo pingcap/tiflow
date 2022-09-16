@@ -872,17 +872,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	var err error
-	provider := h.statusProvider()
-	if provider == nil {
-		err = cerror.ErrOwnerNotFound.FastGenByArgs()
-		c.JSON(http.StatusInternalServerError, model.NewHTTPError(err))
+	if !h.capture.IsOwner() {
+		middleware.ForwardToOwnerMiddleware(h.capture)(c)
 		return
 	}
 
-	health, err := provider.IsHealthy(ctx)
+	ctx := c.Request.Context()
+	health, err := h.statusProvider().IsHealthy(ctx)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
