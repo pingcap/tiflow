@@ -16,7 +16,7 @@ package tests
 import "golang.org/x/exp/rand"
 
 type workloadGenerator interface {
-	Next() []int64
+	Next() []uint64
 }
 
 type uniformGenerator struct {
@@ -31,10 +31,10 @@ func newUniformGenerator(workingSetSize int64, batchSize int) *uniformGenerator 
 	}
 }
 
-func (g *uniformGenerator) Next() []int64 {
-	ret := make([]int64, 0, g.batchSize)
+func (g *uniformGenerator) Next() []uint64 {
+	ret := make([]uint64, 0, g.batchSize)
 	for i := 0; i < g.batchSize; i++ {
-		ret = append(ret, rand.Int63n(g.workingSetSize))
+		ret = append(ret, uint64(rand.Int63n(g.workingSetSize)))
 	}
 	return ret
 }
