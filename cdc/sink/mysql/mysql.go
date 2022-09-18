@@ -294,6 +294,10 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
+	// we should not retry changefeed if DDL failed by return an unretryable error.
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 
