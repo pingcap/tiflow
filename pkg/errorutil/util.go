@@ -88,6 +88,11 @@ func IsRetryableEtcdError(err error) bool {
 	if strings.Contains(etcdErr.Error(), "received prior goaway: code: NO_ERROR") {
 		return true
 	}
+
+	// this may happen if the PD instance shutdown by `kill -9`, no matter the instance is the leader or not.
+	if strings.Contains(etcdErr.Error(), "connection reset by peer") {
+		return true
+	}
 	return false
 }
 

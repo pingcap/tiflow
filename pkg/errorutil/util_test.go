@@ -63,6 +63,8 @@ func TestIsRetryableEtcdError(t *testing.T) {
 		{errors.New("rpc error: code = Unavailable desc = closing transport due to: " +
 			"connection error: desc = \\\"error reading from server: EOF\\\", " +
 			"received prior goaway: code: NO_ERROR\""), true},
+		{errors.New("rpc error: code = Unavailable desc = error reading from server: " +
+			"xxx: read: connection reset by peer"), true},
 	}
 
 	for _, item := range cases {
