@@ -18,11 +18,11 @@ type (
 )
 
 type txnEvent interface {
-	// Keys must be deduped.
+	// Keys are in range [0, numSlots) and must be deduped.
 	//
 	// NOTE: if the conflict detector is accessed by multiple threads concurrently,
 	// ConflictKeys must also be sorted.
-	ConflictKeys() []conflictKey
+	ConflictKeys(numSlots uint64) []conflictKey
 }
 
 type worker[Txn txnEvent] interface {

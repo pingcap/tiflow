@@ -52,7 +52,6 @@ func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
 func (s *Slots[E]) Add(elem E, keys []uint64) {
 	dependOnList := make(map[int64]E, len(keys))
 	for _, key := range keys {
-		key = key % s.numSlots
 		s.slots[key].mu.Lock()
 		if s.slots[key].tail == nil {
 			s.slots[key].tail = new(E)
@@ -66,7 +65,6 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 	// Lock those slots one by one and then unlock them one by one, so that
 	// we can avoid 2 transactions get executed interleaved.
 	for _, key := range keys {
-		key = key % s.numSlots
 		s.slots[key].mu.Unlock()
 	}
 }
@@ -74,7 +72,6 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 // Free removes an element from the Slots.
 func (s *Slots[E]) Free(elem E, keys []uint64) {
 	for _, key := range keys {
-		key = key % s.numSlots
 		s.slots[key].mu.Lock()
 		if s.slots[key].tail != nil && (*s.slots[key].tail).NodeID() == elem.NodeID() {
 			s.slots[key].tail = nil

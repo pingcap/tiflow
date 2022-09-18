@@ -25,7 +25,7 @@ type txnForTest struct {
 	done func()
 }
 
-func (t *txnForTest) ConflictKeys() []uint64 {
+func (t *txnForTest) ConflictKeys(numSlots uint64) []uint64 {
 	return t.keys
 }
 

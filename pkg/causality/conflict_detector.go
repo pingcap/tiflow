@@ -30,20 +30,21 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
-	slots *internal.Slots[*internal.Node]
+	slots    *internal.Slots[*internal.Node]
+	numSlots uint64
 
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
 	// Used to run a background goroutine to GC nodes.
-	garbageNodes *containers.SliceQueue[txnFinishedEvent[Txn]]
+	garbageNodes *containers.SliceQueue[txnFinishedEvent]
 	wg           sync.WaitGroup
 	closeCh      chan struct{}
 }
 
-type txnFinishedEvent[Txn txnEvent] struct {
-	txn  Txn
-	node *internal.Node
+type txnFinishedEvent struct {
+	node         *internal.Node
+	conflictKeys []uint64
 }
 
 // NewConflictDetector creates a new ConflictDetector.
@@ -54,7 +55,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	ret := &ConflictDetector[Worker, Txn]{
 		workers:      workers,
 		slots:        internal.NewSlots[*internal.Node](numSlots),
-		garbageNodes: containers.NewSliceQueue[txnFinishedEvent[Txn]](),
+		numSlots:     numSlots,
+		garbageNodes: containers.NewSliceQueue[txnFinishedEvent](),
 		closeCh:      make(chan struct{}),
 	}
 
@@ -71,16 +73,17 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 //
 // NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
+	conflictKeys := txn.ConflictKeys(d.numSlots)
 	node := internal.NewNode()
 	node.OnResolved = func(workerID int64) {
 		unlock := func() {
 			node.Remove()
-			d.garbageNodes.Push(txnFinishedEvent[Txn]{txn, node})
+			d.garbageNodes.Push(txnFinishedEvent{node, conflictKeys})
 		}
 		d.sendToWorker(txn, unlock, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
-	d.slots.Add(node, txn.ConflictKeys())
+	d.slots.Add(node, conflictKeys)
 	return nil
 }
 
@@ -101,7 +104,7 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 				if !ok {
 					break
 				}
-				d.slots.Free(event.node, event.txn.ConflictKeys())
+				d.slots.Free(event.node, event.conflictKeys)
 			}
 		}
 	}
