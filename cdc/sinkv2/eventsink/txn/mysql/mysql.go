@@ -44,6 +44,7 @@ const (
 )
 
 type mysqlBackend struct {
+	workerID    int
 	changefeed  string
 	db          *sql.DB
 	cfg         *pmysql.Config
@@ -89,6 +90,7 @@ func NewMySQLBackends(
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
+			workerID:    i,
 			changefeed:  changefeed,
 			db:          db,
 			cfg:         cfg,
@@ -327,7 +329,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
-				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				log.Debug("exec row", zap.Int("workerID", s.workerID),
+					zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -353,6 +356,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 			return errors.Trace(err)
 		}
 		log.Debug("Exec Rows succeeded",
+			zap.Int("workerID", s.workerID),
 			zap.String("changefeed", s.changefeed),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
