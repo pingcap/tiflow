@@ -19,8 +19,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -113,8 +114,8 @@ func NewReplicationManager(
 
 // HandleCaptureChanges handles capture changes.
 func (r *Manager) HandleCaptureChanges(
-	init map[model.CaptureID][]schedulepb.TableStatus,
-	removed map[model.CaptureID][]schedulepb.TableStatus,
+	init map[model.CaptureID][]tablepb.TableStatus,
+	removed map[model.CaptureID][]tablepb.TableStatus,
 	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if init != nil {
@@ -124,12 +125,12 @@ func (r *Manager) HandleCaptureChanges(
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Any("init", init), zap.Any("tables", r.tables))
 		}
-		tableStatus := map[model.TableID]map[model.CaptureID]*schedulepb.TableStatus{}
+		tableStatus := map[model.TableID]map[model.CaptureID]*tablepb.TableStatus{}
 		for captureID, tables := range init {
 			for i := range tables {
 				table := tables[i]
 				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[model.CaptureID]*schedulepb.TableStatus{}
+					tableStatus[table.TableID] = map[model.CaptureID]*tablepb.TableStatus{}
 				}
 				tableStatus[table.TableID][captureID] = &table
 			}
@@ -224,7 +225,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 func (r *Manager) handleMessageDispatchTableResponse(
 	from model.CaptureID, msg *schedulepb.DispatchTableResponse,
 ) ([]*schedulepb.Message, error) {
-	var status *schedulepb.TableStatus
+	var status *tablepb.TableStatus
 	switch resp := msg.Response.(type) {
 	case *schedulepb.DispatchTableResponse_AddTable:
 		status = resp.AddTable.Status

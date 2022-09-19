@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -57,6 +57,6 @@ type TableExecutor interface {
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
-	// GetTableMeta return the checkpoint and resolved ts for the given table
-	GetTableMeta(tableID model.TableID) pipeline.TableMeta
+	// GetTableStatus return the checkpoint and resolved ts for the given table
+	GetTableStatus(tableID model.TableID) tablepb.TableStatus
 }
