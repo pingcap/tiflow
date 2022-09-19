@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements Eq[*Node].
+var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements SlotNode[*Node].
 
 func TestNodeFree(t *testing.T) {
 	// This case should not be run parallel to

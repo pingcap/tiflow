@@ -127,6 +127,7 @@ func (w *worker) runBackgroundLoop() {
 	LOOP:
 		for {
 			if !w.hasPending {
+				// There is no pending events, so use a blocking `select`.
 				select {
 				case <-w.ctx.Done():
 					log.Info("Transaction sink worker exits as canceled",
@@ -151,6 +152,7 @@ func (w *worker) runBackgroundLoop() {
 					flushTimeSlice = 0
 				}
 			} else {
+				// Have fetched some events so that do a nonblocking `select`.
 				select {
 				case txn := <-w.txnCh.Out():
 					w.hasPending = true
@@ -175,6 +177,8 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 		// The table where the event comes from is in stopping so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
+		// Still necessary to append the wantMore callback into the pending list.
+		w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 		return false
 	}
 

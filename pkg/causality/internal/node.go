@@ -16,7 +16,7 @@ package internal
 import (
 	"math"
 	"sync"
-	stdAtomic "sync/atomic"
+	stdatomic "sync/atomic"
 
 	"github.com/google/btree"
 	"go.uber.org/atomic"
@@ -121,12 +121,12 @@ func (n *Node) DependOn(others map[int64]*Node) {
 
 		if target.assignedTo != unassigned {
 			// The target has already been assigned to a worker.
-			resolvedDependees = stdAtomic.AddInt32(&n.resolvedDependees, 1)
-			stdAtomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
 		}
 		if target.removed {
 			// The target has already been removed.
-			removedDependees = stdAtomic.AddInt32(&n.removedDependees, 1)
+			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
 		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
 			// Should never depend on a target redundantly.
 			panic("should never exist")
@@ -155,7 +155,7 @@ func (n *Node) Remove() {
 	n.removed = true
 	if n.dependers != nil {
 		n.dependers.Ascend(func(node *Node) bool {
-			removedDependees := stdAtomic.AddInt32(&node.removedDependees, 1)
+			removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
 			node.maybeResolve(0, removedDependees)
 			return true
 		})
@@ -196,8 +196,8 @@ func (n *Node) assignTo(workerID int64) bool {
 
 	if n.dependers != nil {
 		n.dependers.Ascend(func(node *Node) bool {
-			resolvedDependees := stdAtomic.AddInt32(&node.resolvedDependees, 1)
-			stdAtomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
+			resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
+			stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
 			node.maybeResolve(resolvedDependees, 0)
 			return true
 		})
@@ -229,14 +229,14 @@ func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, boo
 		// The node only depends on 1 other node, and the target has be assigned.
 		// So assign the node to the same worker directly.
 		if n.totalDependees == 1 {
-			return stdAtomic.LoadInt64(&n.resolvedList[0]), true
+			return stdatomic.LoadInt64(&n.resolvedList[0]), true
 		}
 
 		// If all dependees are assigned to one same worker, we can assign
 		// this node to the same worker directly.
 		minDep, maxDep := int64(math.MaxInt64), int64(0)
 		for i := 0; i < int(n.totalDependees); i++ {
-			curr := stdAtomic.LoadInt64(&n.resolvedList[i])
+			curr := stdatomic.LoadInt64(&n.resolvedList[i])
 			if curr < minDep {
 				minDep = curr
 			}
