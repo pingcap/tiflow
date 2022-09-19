@@ -14,6 +14,7 @@
 package kv
 
 import (
+	"container/list"
 	"context"
 	"fmt"
 	"io"
@@ -301,6 +302,9 @@ type CDCKVClient interface {
 		lockResolver txnutil.LockResolver,
 		eventCh chan<- model.RegionFeedEvent,
 	) error
+
+	// RegionCount returns the number of captured regions.
+	RegionCount() uint64
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -315,14 +319,18 @@ type CDCClient struct {
 
 	grpcPool GrpcPool
 
-	regionCache *tikv.RegionCache
-	pdClock     pdutil.Clock
+	regionCache    *tikv.RegionCache
+	pdClock        pdutil.Clock
+	regionLimiters *regionEventFeedLimiters
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
 
-	regionLimiters *regionEventFeedLimiters
+	regionCounts struct {
+		sync.Mutex
+		counts *list.List
+	}
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -351,6 +359,12 @@ func NewCDCClient(
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableName:  tableName,
+		regionCounts: struct {
+			sync.Mutex
+			counts *list.List
+		}{
+			counts: list.New(),
+		},
 	}
 	return
 }
@@ -406,9 +420,25 @@ func (c *CDCClient) EventFeed(
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
+	c.regionCounts.Lock()
+	regionCount := int64(0)
+	c.regionCounts.counts.PushBack(&regionCount)
+	c.regionCounts.Unlock()
 	s := newEventFeedSession(
 		ctx, c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
-	return s.eventFeed(ctx, ts)
+	return s.eventFeed(ctx, ts, &regionCount)
+}
+
+// RegionCount returns the number of captured regions.
+func (c *CDCClient) RegionCount() uint64 {
+	c.regionCounts.Lock()
+	defer c.regionCounts.Unlock()
+
+	totalCount := uint64(0)
+	for e := c.regionCounts.counts.Front(); e != nil; e = e.Next() {
+		totalCount += uint64(atomic.LoadInt64(e.Value.(*int64)))
+	}
+	return totalCount
 }
 
 var currentID uint64 = 0
@@ -506,7 +536,7 @@ func newEventFeedSession(
 	}
 }
 
-func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
+func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount *int64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
@@ -517,7 +547,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	g.Go(func() error {
-		return s.requestRegionToStore(ctx, g)
+		return s.requestRegionToStore(ctx, g, regionCount)
 	})
 
 	g.Go(func() error {
@@ -694,6 +724,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 func (s *eventFeedSession) requestRegionToStore(
 	ctx context.Context,
 	g *errgroup.Group,
+	regionCount *int64,
 ) error {
 	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
 	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
@@ -789,7 +820,9 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
-				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
+				return s.receiveFromStream(
+					ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client,
+					pendingRegions, regionCount)
 			})
 		}
 
@@ -1122,6 +1155,7 @@ func (s *eventFeedSession) receiveFromStream(
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
+	regionCount *int64,
 ) error {
 	// Cancel the pending regions if the stream failed.
 	// Otherwise, it will remain unhandled in the pendingRegions list
@@ -1238,6 +1272,9 @@ func (s *eventFeedSession) receiveFromStream(
 			if err != nil {
 				return err
 			}
+			// TiKV send resolved ts events every second by default.
+			// We check and update region count here to save CPU.
+			atomic.StoreInt64(regionCount, worker.statesManager.regionCount())
 		}
 	}
 }

@@ -63,6 +63,7 @@ const (
 type regionStateManager struct {
 	bucket int
 	states []*sync.Map
+	count  int64
 }
 
 func newRegionStateManager(bucket int) *regionStateManager {
@@ -99,12 +100,26 @@ func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool
 
 func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
 	bucket := rsm.getBucket(regionID)
+	_, ok := rsm.states[bucket].Load(regionID)
+	if !ok {
+		// Add a new region.
+		atomic.AddInt64(&rsm.count, 1)
+	}
 	rsm.states[bucket].Store(regionID, state)
 }
 
 func (rsm *regionStateManager) delState(regionID uint64) {
 	bucket := rsm.getBucket(regionID)
+	_, ok := rsm.states[bucket].Load(regionID)
+	if ok {
+		// Remove a region.
+		atomic.AddInt64(&rsm.count, -1)
+	}
 	rsm.states[bucket].Delete(regionID)
+}
+
+func (rsm *regionStateManager) regionCount() int64 {
+	return atomic.LoadInt64(&rsm.count)
 }
 
 type regionWorkerMetrics struct {

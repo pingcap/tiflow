@@ -41,12 +41,18 @@ const (
 	defaultPullerOutputChanSize = 128
 )
 
+// Workload of a puller.
+type Workload struct {
+	RegionCount uint64
+}
+
 // Puller pull data from tikv and push changes into a buffer.
 type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer.
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
+	Workload() Workload
 }
 
 type pullerImpl struct {
@@ -254,4 +260,8 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
+}
+
+func (p *pullerImpl) Workload() Workload {
+	return Workload{RegionCount: p.kvCli.RegionCount()}
 }
