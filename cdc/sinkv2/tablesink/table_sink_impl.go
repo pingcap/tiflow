@@ -15,6 +15,7 @@ package tablesink
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -114,22 +115,25 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
 func (e *eventTableSink[E]) Close(ctx context.Context) error {
-	if e.state.Load() == state.TableSinkStopping ||
-		e.state.Load() == state.TableSinkStopped {
-		log.Warn("Table sink is already closed", zap.Uint64("tableID", uint64(e.tableID)))
+	currentState := e.state.Load()
+	if currentState == state.TableSinkStopping ||
+		currentState == state.TableSinkStopped {
+		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
+			zap.Uint64("tableID", uint64(e.tableID)))
 		return nil
 	}
-	log.Info("Closing table sink", zap.Int64("tableID", e.tableID))
+
+	log.Info("Stopping table sink", zap.Int64("tableID", e.tableID))
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
 	err := e.progressTracker.close(ctx)
 	if err != nil {
-		log.Error("Failed to close table sink", zap.Error(err), zap.Int64("tableID", e.tableID),
+		log.Error("Failed to stop table sink", zap.Error(err), zap.Int64("tableID", e.tableID),
 			zap.Duration("duration", time.Since(start)))
 		return err
 	}
 	e.state.Store(state.TableSinkStopped)
-	log.Info("Table sink closed", zap.Int64("tableID", e.tableID),
+	log.Info("Table sink stopped", zap.Int64("tableID", e.tableID),
 		zap.Duration("duration", time.Since(start)))
 	return nil
 }
