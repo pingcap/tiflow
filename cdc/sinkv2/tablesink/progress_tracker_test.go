@@ -158,7 +158,7 @@ func TestCloseTrackerCancellable(t *testing.T) {
 	go func() {
 		wg.Add(1)
 		err := tracker.close(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, context.Canceled)
 		wg.Done()
 	}()
 	wg.Wait()
