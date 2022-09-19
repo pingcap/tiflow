@@ -181,11 +181,8 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 		mysql.ReloadPriv: {},
 	}
 	for _, cs := range cases {
-		result := &Result{
-			State: StateFailure,
-		}
 		dumpLackGrants := genDumpPriv(dumpPrivileges, cs.checkTables)
-		err := verifyPrivileges(result, cs.grants, dumpLackGrants)
+		err := VerifyPrivileges(cs.grants, dumpLackGrants)
 		c.Assert(err == nil, tc.Equals, cs.dumpState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
 			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)
@@ -289,11 +286,8 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 		mysql.ReplicationSlavePriv:  {},
 	}
 	for _, cs := range cases {
-		result := &Result{
-			State: StateFailure,
-		}
 		replicationLackGrants := genReplicPriv(replicationPrivileges)
-		err := verifyPrivileges(result, cs.grants, replicationLackGrants)
+		err := VerifyPrivileges(cs.grants, replicationLackGrants)
 		c.Assert(err == nil, tc.Equals, cs.replicationState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
 			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)

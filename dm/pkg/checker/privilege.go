@@ -84,9 +84,10 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	}
 
 	lackPriv := genDumpPriv(dumpPrivileges, pc.checkTables)
-	err2 := verifyPrivileges(result, grants, lackPriv)
+	err2 := VerifyPrivileges(grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
+		result.Instruction = "You need grant related privileges."
 	} else {
 		result.State = StateSuccess
 	}
@@ -131,10 +132,11 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.ReplicationSlavePriv:  {},
 	}
 	lackPriv := genReplicPriv(replicationPrivileges)
-	err2 := verifyPrivileges(result, grants, lackPriv)
+	err2 := VerifyPrivileges(grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
+		result.Instruction = "You need grant related privileges."
 	}
 	return result
 }
@@ -144,7 +146,9 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
+// VerifyPrivileges verify user privileges.
+// we expose it since dataflow-agent will reuse it.
+func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
 	if len(grants) == 0 {
 		return NewError("there is no such grant defined for current user on host '%%'")
 	}
@@ -316,7 +320,6 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 		b.WriteString("; ")
 	}
 	privileges := b.String()
-	result.Instruction = "You need grant related privileges."
 	log.L().Info("lack privilege", zap.String("err msg", privileges))
 	return NewError(privileges)
 }
