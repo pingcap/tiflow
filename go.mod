@@ -7,7 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.29.0
 	github.com/VividCortex/mysqlerr v1.0.0
-	github.com/aws/aws-sdk-go v1.36.30
+	github.com/aws/aws-sdk-go v1.44.48
 	github.com/benbjohnson/clock v1.3.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.0.2
@@ -54,11 +54,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
-	github.com/pingcap/kvproto v0.0.0-20220908075542-7c004f4daf21
+	github.com/pingcap/kvproto v0.0.0-20220913025519-586cff113d10
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20220915121459-b37a48df188f
+	github.com/pingcap/tidb v1.1.0-beta.0.20220919050900-998e12380e5c
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220915121459-b37a48df188f
+	github.com/pingcap/tidb/parser v0.0.0-20220919054100-d8c2906842a4
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -118,6 +118,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.2.0 // indirect
 	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1581 // indirect
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
@@ -144,6 +145,7 @@ require (
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
+	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
@@ -280,3 +282,6 @@ replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
+
+// copy from TiDB
+replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
