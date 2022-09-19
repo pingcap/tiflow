@@ -17,7 +17,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint: schedulepb.Checkpoint{
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 1,
 						ResolvedTs:   1,
 					},
@@ -70,9 +71,9 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
-					Status: &schedulepb.TableStatus{
+					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   schedulepb.TableStatePrepared,
+						State:   tablepb.TableStatePrepared,
 					},
 				},
 			},
@@ -88,7 +89,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
-					Checkpoint: schedulepb.Checkpoint{
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 1,
 						ResolvedTs:   1,
 					},
@@ -105,9 +106,9 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 		From:    "1",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{{
+			Tables: []tablepb.TableStatus{{
 				TableID: 1,
-				State:   schedulepb.TableStateReplicating,
+				State:   tablepb.TableStateReplicating,
 			}},
 		},
 	}})
@@ -139,8 +140,8 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
-		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
+	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
+		"1": {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
@@ -183,9 +184,9 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableResponse{
-					Status: &schedulepb.TableStatus{
+					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   schedulepb.TableStateStopping,
+						State:   tablepb.TableStateStopping,
 					},
 				},
 			},
@@ -199,9 +200,9 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 		From:    "1",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{{
+			Tables: []tablepb.TableStatus{{
 				TableID: 1,
-				State:   schedulepb.TableStateStopped,
+				State:   tablepb.TableStateStopped,
 			}},
 		},
 	}})
@@ -234,8 +235,8 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
-		source: {TableID: 1, State: schedulepb.TableStateReplicating},
+	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
+		source: {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
@@ -284,9 +285,9 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
-					Status: &schedulepb.TableStatus{
+					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   schedulepb.TableStatePrepared,
+						State:   tablepb.TableStatePrepared,
 					},
 				},
 			},
@@ -310,9 +311,9 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 		From:    source,
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{{
+			Tables: []tablepb.TableStatus{{
 				TableID: 1,
-				State:   schedulepb.TableStateStopped,
+				State:   tablepb.TableStateStopped,
 			}},
 		},
 	}})
@@ -338,9 +339,9 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
-					Status: &schedulepb.TableStatus{
+					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   schedulepb.TableStateReplicating,
+						State:   tablepb.TableStateReplicating,
 					},
 				},
 			},
@@ -395,7 +396,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     tableID,
 						IsSecondary: true,
-						Checkpoint: schedulepb.Checkpoint{
+						Checkpoint: tablepb.Checkpoint{
 							CheckpointTs: 1,
 							ResolvedTs:   1,
 						},
@@ -408,8 +409,8 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	}
 
 	// Add a new table.
-	r.tables[5], err = NewReplicationSet(5, 0, map[string]*schedulepb.TableStatus{
-		"5": {TableID: 5, State: schedulepb.TableStateReplicating},
+	r.tables[5], err = NewReplicationSet(5, 0, map[string]*tablepb.TableStatus{
+		"5": {TableID: 5, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
@@ -442,7 +443,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     4,
 					IsSecondary: true,
-					Checkpoint: schedulepb.Checkpoint{
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 2,
 						ResolvedTs:   2,
 					},
@@ -471,14 +472,14 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 
 	var err error
 	// Two tables in "1".
-	r.tables[1], err = NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
-		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
+	r.tables[1], err = NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
+		"1": {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
-	r.tables[2], err = NewReplicationSet(2, 0, map[string]*schedulepb.TableStatus{
+	r.tables[2], err = NewReplicationSet(2, 0, map[string]*tablepb.TableStatus{
 		"1": {
-			TableID: 2, State: schedulepb.TableStateReplicating,
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+			TableID: 2, State: tablepb.TableStateReplicating,
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -504,7 +505,7 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     2,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint:  tablepb.Checkpoint{CheckpointTs: 1},
 				},
 			},
 		},
@@ -559,11 +560,11 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 
 	r := NewReplicationManager(1, model.ChangeFeedID{})
 	rs, err := NewReplicationSet(model.TableID(1), model.Ts(10),
-		map[model.CaptureID]*schedulepb.TableStatus{
+		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(1),
-				State:   schedulepb.TableStateReplicating,
-				Checkpoint: schedulepb.Checkpoint{
+				State:   tablepb.TableStateReplicating,
+				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(10),
 					ResolvedTs:   model.Ts(20),
 				},
@@ -573,11 +574,11 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	r.tables[model.TableID(1)] = rs
 
 	rs, err = NewReplicationSet(model.TableID(2), model.Ts(15),
-		map[model.CaptureID]*schedulepb.TableStatus{
+		map[model.CaptureID]*tablepb.TableStatus{
 			"2": {
 				TableID: model.TableID(2),
-				State:   schedulepb.TableStateReplicating,
-				Checkpoint: schedulepb.Checkpoint{
+				State:   tablepb.TableStateReplicating,
+				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(15),
 					ResolvedTs:   model.Ts(30),
 				},
@@ -599,19 +600,19 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, checkpointCannotProceed, resolved)
 
 	rs, err = NewReplicationSet(model.TableID(3), model.Ts(5),
-		map[model.CaptureID]*schedulepb.TableStatus{
+		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(3),
-				State:   schedulepb.TableStateReplicating,
-				Checkpoint: schedulepb.Checkpoint{
+				State:   tablepb.TableStateReplicating,
+				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
 				},
 			},
 			"2": {
 				TableID: model.TableID(3),
-				State:   schedulepb.TableStatePreparing,
-				Checkpoint: schedulepb.Checkpoint{
+				State:   tablepb.TableStatePreparing,
+				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
 				},
@@ -625,11 +626,11 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 
 	currentTables = append(currentTables, 4)
 	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
-		map[model.CaptureID]*schedulepb.TableStatus{
+		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(4),
-				State:   schedulepb.TableStatePrepared,
-				Checkpoint: schedulepb.Checkpoint{
+				State:   tablepb.TableStatePrepared,
+				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(3),
 					ResolvedTs:   model.Ts(10),
 				},
@@ -646,15 +647,15 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
 	r := NewReplicationManager(1, model.ChangeFeedID{})
-	init := map[model.CaptureID][]schedulepb.TableStatus{
-		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
-		"2": {{TableID: 2, State: schedulepb.TableStateReplicating}},
+	init := map[model.CaptureID][]tablepb.TableStatus{
+		"1": {{TableID: 1, State: tablepb.TableStateReplicating}},
+		"2": {{TableID: 2, State: tablepb.TableStateReplicating}},
 		"3": {
-			{TableID: 3, State: schedulepb.TableStateReplicating},
-			{TableID: 2, State: schedulepb.TableStatePreparing},
+			{TableID: 3, State: tablepb.TableStateReplicating},
+			{TableID: 2, State: tablepb.TableStatePreparing},
 		},
-		"4": {{TableID: 4, State: schedulepb.TableStateStopping}},
-		"5": {{TableID: 5, State: schedulepb.TableStateStopped}},
+		"4": {{TableID: 4, State: tablepb.TableStateStopping}},
+		"5": {{TableID: 5, State: tablepb.TableStateStopped}},
 	}
 	msgs, err := r.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
@@ -666,8 +667,8 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	require.Equal(t, ReplicationSetStateRemoving, r.tables[4].State)
 	require.Equal(t, ReplicationSetStateAbsent, r.tables[5].State)
 
-	removed := map[string][]schedulepb.TableStatus{
-		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
+	removed := map[string][]tablepb.TableStatus{
+		"1": {{TableID: 1, State: tablepb.TableStateReplicating}},
 	}
 	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)
@@ -697,8 +698,8 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.NotNil(t, r.runningTasks[1])
 	require.Equal(t, 1, <-addTableCh)
 
-	removed := map[string][]schedulepb.TableStatus{
-		"1": {{TableID: 1, State: schedulepb.TableStatePreparing}},
+	removed := map[string][]tablepb.TableStatus{
+		"1": {{TableID: 1, State: tablepb.TableStatePreparing}},
 	}
 	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)
