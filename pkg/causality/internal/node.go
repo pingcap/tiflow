@@ -226,12 +226,14 @@ func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, boo
 	}
 
 	if resolvedDependees == n.totalDependees {
-		// NOTE: We don't pick the last unremoved worker because lots of tasks can be
-		// attached to that worker after a time.
+		// The node only depends on 1 other node, and the target has be assigned.
+		// So assign the node to the same worker directly.
 		if n.totalDependees == 1 {
 			return stdAtomic.LoadInt64(&n.resolvedList[0]), true
 		}
 
+		// If all dependees are assigned to one same worker, we can assign
+		// this node to the same worker directly.
 		minDep, maxDep := int64(math.MaxInt64), int64(0)
 		for i := 0; i < int(n.totalDependees); i++ {
 			curr := stdAtomic.LoadInt64(&n.resolvedList[i])
@@ -247,6 +249,7 @@ func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, boo
 		}
 	}
 
+	// All dependees are removed, so assign the node to any worker is fine.
 	if removedDependees == n.totalDependees {
 		return n.RandWorkerID(), true
 	}
