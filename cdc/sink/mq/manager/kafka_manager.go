@@ -142,16 +142,16 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	topicMetaList, err := m.admin.DescribeTopics(topicList)
 	if err != nil {
 		log.Warn(
-			"Kafka admin client describe topics failed",
+			"kafka: get topics meta failed",
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
 		return nil, err
 	}
+
 	log.Info(
-		"Kafka admin client describe topics success",
-		zap.Duration("duration", time.Since(start)),
-	)
+		"kafka: get topics meta",
+		zap.Any("topics", topicMetaList), zap.Duration("duration", time.Since(start)))
 
 	return topicMetaList, nil
 }
