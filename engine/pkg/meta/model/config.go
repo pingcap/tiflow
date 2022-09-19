@@ -14,13 +14,13 @@
 package model
 
 import (
-	"fmt"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -107,9 +107,9 @@ func DefaultStoreConfig() *StoreConfig {
 
 // GenerateDSNByParams generates a dsn string.
 // dsn format: [username[:password]@][protocol[(address)]]/
-func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string {
+func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) (string, error) {
 	if storeConf == nil {
-		return "invalid dsn"
+		return "", errors.ErrMetaParamsInvalid.GenWithStackByArgs("input store config is nil")
 	}
 
 	dsnCfg := dmysql.NewConfig()
@@ -129,12 +129,12 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 			util.WithCertAndKeyPath(storeConf.Security.CertPath, storeConf.Security.KeyPath),
 			util.WithVerifyCommonName(storeConf.Security.CertAllowedCN))
 		if err != nil {
-			return fmt.Sprintf("%v", err)
+			return "", errors.ErrMetaParamsInvalid.Wrap(err)
 		}
 		tlsName := "engine_tls" + storeConf.StoreID
 		if cfg != nil {
 			if err := dmysql.RegisterTLSConfig(tlsName, cfg); err != nil {
-				return fmt.Sprintf("%v", err)
+				return "", errors.ErrMetaParamsInvalid.Wrap(err)
 			}
 		}
 		pairs["tls"] = tlsName
@@ -155,7 +155,7 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 		dsnCfg.Params[k] = v
 	}
 
-	return dsnCfg.FormatDSN()
+	return dsnCfg.FormatDSN(), nil
 }
 
 // ToClientType translates store type to client type
