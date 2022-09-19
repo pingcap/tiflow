@@ -149,6 +149,35 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	return nil
 }
 
+func (h *defaultEventHandle) AddEvents(ctx context.Context, events []interface{}) error {
+	status := atomic.LoadInt32(&h.status)
+	if status != handleRunning {
+		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
+	}
+
+	failpoint.Inject("addEventDelayPoint", func() {})
+
+	task := task{
+		handle: h,
+		f: func(ctx1 context.Context) error {
+			for _, event := range events {
+				err := h.f(ctx, event)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case h.worker.taskCh <- task:
+	}
+	return nil
+}
+
 func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle {
 	// mark the timer handler function as invalid
 	atomic.StoreInt32(&h.hasTimer, 0)

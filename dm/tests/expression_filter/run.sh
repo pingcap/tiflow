@@ -33,8 +33,6 @@ function complex_behaviour() {
 
 	dmctl_start_task_standalone $cur/conf/dm-task2.yaml
 
-	# https://github.com/pingcap/dumpling/issues/296
-	sleep 1
 	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -62,8 +60,13 @@ function complex_behaviour() {
 	run_sql_tidb "select count(8) from expr_filter.t5 where should_skip = 1"
 	check_contains "count(8): 0"
 
+	run_sql_tidb "select count(9) from expr_filter.t6 where name = 'Müller' and msg = 'Müller' and name2 = 'Müller'"
+	check_contains "count(9): 2"
+	run_sql_tidb "select count(10) from expr_filter.t6 where name != 'Müller'"
+	check_contains "count(10): 0"
+
 	insert_num=$(grep -o '"number of filtered insert"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
-	[ $insert_num -eq 5 ]
+	[ $insert_num -eq 6 ]
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $update_num -eq 3 ]
 

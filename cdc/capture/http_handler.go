@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -169,10 +171,14 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		}
 		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
 	}
+	sinkURI, err := util.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink URI", zap.Error(err))
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
 		ID:             changefeedID,
-		SinkURI:        info.SinkURI,
+		SinkURI:        sinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
@@ -219,14 +225,33 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	infoStr, err := info.Marshal()
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			h.capture.pdClient,
+			gc.EnsureGCServiceCreating,
+			changefeedConfig.ID,
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
+
+	infoStr := info.String()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
 
 	err = h.capture.etcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
