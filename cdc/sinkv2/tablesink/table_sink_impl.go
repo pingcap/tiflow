@@ -114,6 +114,11 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
 func (e *eventTableSink[E]) Close(ctx context.Context) error {
+	if e.state.Load() == state.TableSinkStopping ||
+		e.state.Load() == state.TableSinkStopped {
+		log.Warn("Table sink is already closed", zap.Uint64("tableID", uint64(e.tableID)))
+		return nil
+	}
 	log.Info("Closing table sink", zap.Int64("tableID", e.tableID))
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)

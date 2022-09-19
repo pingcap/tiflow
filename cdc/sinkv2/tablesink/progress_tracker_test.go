@@ -129,15 +129,14 @@ func TestCloseTracker(t *testing.T) {
 		require.Nil(t, err, "close should not return error")
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return tracker.closed.Load()
-	}, time.Second, time.Millisecond*10, "tracker should be closed")
 
 	cb1()
 	cb2()
 	cb3()
 	wg.Wait()
-	require.Equal(t, 0, tracker.trackingCount(), "all events should be removed")
+	require.Eventually(t, func() bool {
+		return tracker.trackingCount() == 0
+	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
 }
 
 func TestCloseTrackerCancellable(t *testing.T) {
@@ -162,9 +161,6 @@ func TestCloseTrackerCancellable(t *testing.T) {
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return tracker.closed.Load()
-	}, time.Second, time.Millisecond*10, "tracker should be closed")
 	wg.Wait()
 }
 
