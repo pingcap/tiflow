@@ -1,4 +1,5 @@
 drop database if exists `partition_table`;
+set @@tidb_enable_exchange_partition=on;
 create database `partition_table`;
 use `partition_table`;
 
