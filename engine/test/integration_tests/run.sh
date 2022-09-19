@@ -23,7 +23,7 @@ if [ "${1-}" = 'debug' ]; then
 	trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
 	start_engine_cluster $CONFIG
 
-	echo 'You may now debug from another terminal. Press [ENTER] to exit.'
+	echo -e '\n\nYou may now debug from another terminal. Press [ENTER] to exit.'
 	read line
 	exit 0
 fi
