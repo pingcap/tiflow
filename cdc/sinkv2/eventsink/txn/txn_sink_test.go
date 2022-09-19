@@ -145,7 +145,7 @@ func TestGenKeys(t *testing.T) {
 				},
 			},
 		},
-		expected: []uint64{0xc048d8e038885fff, 0xc048fdaab7685fff},
+		expected: []uint64{2072713494, 3710968706},
 	}, {
 		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
@@ -184,7 +184,7 @@ func TestGenKeys(t *testing.T) {
 				},
 			},
 		},
-		expected: []uint64{0xc10dcd1685277edf, 0xc10dd8d0843f1edf},
+		expected: []uint64{318190470, 2109733718, 2658640457, 2989258527},
 	}, {
 		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
@@ -223,7 +223,7 @@ func TestGenKeys(t *testing.T) {
 				},
 			},
 		},
-		expected: []uint64{0x936fffffffffffff, 0xc10dd8d0843f1edf},
+		expected: []uint64{318190470, 2095136920, 2658640457},
 	}}
 	for _, tc := range testCases {
 		keys := genTxnKeys(tc.txn, math.MaxUint64)
