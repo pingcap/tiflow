@@ -43,6 +43,14 @@ message Checkpoint {
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
+// Stats holds a statistic for a table.
+message Stats {
+    // Number of captured regions.
+    uint64 region_count = 1;
+    // Checkponits at each stage.
+    map<string, Checkpoint> stage_checkpoints = 2;
+}
+
 // TableStatus is the running status of a table.
 message TableStatus {
     int64 table_id = 1 [
@@ -51,4 +59,5 @@ message TableStatus {
     ];
     TableState state = 2;
     Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
+    Stats stats = 4 [(gogoproto.nullable) = false];
 }
