@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -246,14 +247,10 @@ func TestPollTickMessage(t *testing.T) {
 	}))
 }
 
-func TestPollStopMessage(t *testing.T) {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 	tbl := tableActor{
-		state: tablepb.TableStateStopped,
-		cancel: func() {
-			wg.Done()
-		},
+		state:     tablepb.TableStateReplicating,
+		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
 	tbl.sinkNode = &sinkNode{
@@ -261,11 +258,27 @@ func TestPollStopMessage(t *testing.T) {
 		sinkV1:         mocksink.NewNormalMockSink(),
 		flowController: &mockFlowController{},
 	}
+
+	grs := runtime.NumGoroutine()
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
 	})
-	wg.Wait()
-	require.Equal(t, stopped, tbl.stopped)
+	require.Eventually(t, func() bool {
+		return tbl.state.Load() == tablepb.TableStateStopped
+	}, 10*time.Second, 10*time.Millisecond)
+	require.True(t, tbl.sinkStopped)
+	// Try to stop again, should not block and return immediately.
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	// Check it immediately, should no more goroutine.
+	require.LessOrEqual(t, runtime.NumGoroutine(), grs+1)
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {

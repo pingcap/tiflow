@@ -263,6 +263,10 @@ func (t *tableActor) handleTickMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleStopMsg(ctx context.Context) {
+	// Already stopped, no need to handle stop message again.
+	if t.sinkStopped {
+		return
+	}
 	t.sinkStopped = true
 	// async stops sinkNode and tableSink
 	go func() {
@@ -366,7 +370,7 @@ func (t *tableActor) stop(err error) {
 	}
 	t.cancel()
 	if t.sinkNode != nil {
-		if err := t.sinkNode.releaseResource(t.tablePipelineCtx); err != nil {
+		if err := t.sinkNode.stop(t.tablePipelineCtx); err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Warn("close sink failed",
 					zap.String("namespace", t.changefeedID.Namespace),
