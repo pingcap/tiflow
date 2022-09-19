@@ -11,55 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipeline
+package tablepb
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 )
-
-const (
-	// TODO determine a reasonable default value
-	// This is part of sink performance optimization
-	resolvedTsInterpolateInterval = 200 * time.Millisecond
-)
-
-// TableState is state of the table pipeline
-type TableState int32
-
-// TableState for table pipeline
-const (
-	TableStateUnknown TableState = iota
-	// TableStateAbsent means the table not found
-	TableStateAbsent
-	// TableStatePreparing indicate that the table is preparing connecting to regions
-	TableStatePreparing
-	// TableStatePrepared means the first `Resolved Ts` is received.
-	TableStatePrepared
-	// TableStateReplicating means that sink is consuming data from the sorter,
-	// and replicating it to downstream
-	TableStateReplicating
-	// TableStateStopping means the table is stopping, but not guaranteed yet.
-	TableStateStopping
-	// TableStateStopped means sink stop all works, but the table resource not released yet.
-	TableStateStopped
-)
-
-var tableStatusStringMap = map[TableState]string{
-	TableStateUnknown:     "Unknown",
-	TableStateAbsent:      "Absent",
-	TableStatePreparing:   "Preparing",
-	TableStatePrepared:    "Prepared",
-	TableStateReplicating: "Replicating",
-	TableStateStopping:    "Stopping",
-	TableStateStopped:     "Stopped",
-}
-
-func (s TableState) String() string {
-	return tableStatusStringMap[s]
-}
 
 // Load TableState with THREAD-SAFE
 func (s *TableState) Load() TableState {
@@ -69,14 +27,6 @@ func (s *TableState) Load() TableState {
 // Store TableState with THREAD-SAFE
 func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
-}
-
-// TableMeta is the metadata of a table.
-type TableMeta struct {
-	TableID      model.TableID
-	CheckpointTs model.Ts
-	ResolvedTs   model.Ts
-	State        TableState
 }
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
@@ -111,22 +61,3 @@ type TablePipeline interface {
 	// RemainEvents return the amount of kv events remain in sorter.
 	RemainEvents() int64
 }
-
-// TODO find a better name or avoid using an interface
-// We use an interface here for ease in unit testing.
-type tableFlowController interface {
-	Consume(
-		msg *model.PolymorphicEvent,
-		size uint64,
-		blockCallBack func(batchID uint64) error,
-	) error
-	Release(resolved model.ResolvedTs)
-	Abort()
-	GetConsumption() uint64
-}
-
-var workload = model.WorkloadInfo{Workload: 1}
-
-// Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
-// replicating 1024 tables in the worst case.
-const defaultOutputChannelSize = 64
