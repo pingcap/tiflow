@@ -52,7 +52,6 @@ func prepareMockJobManager(
 ) (*framework.MockMasterImpl, *JobManagerImpl) {
 	mockMaster := framework.NewMockMasterImpl(t, "", masterID)
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImpl{
 		BaseMaster:          mockMaster.DefaultBaseMaster,
 		JobFsm:              NewJobFsm(),
