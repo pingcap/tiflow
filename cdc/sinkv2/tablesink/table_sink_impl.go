@@ -16,11 +16,14 @@ package tablesink
 import (
 	"context"
 	"sort"
+	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 // Assert TableSink implementation
@@ -111,12 +114,17 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
 func (e *eventTableSink[E]) Close(ctx context.Context) error {
+	log.Info("Closing table sink", zap.Int64("tableID", e.tableID))
+	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
 	err := e.progressTracker.close(ctx)
 	if err != nil {
+		log.Error("Failed to close table sink", zap.Error(err), zap.Int64("tableID", e.tableID),
+			zap.Duration("duration", time.Since(start)))
 		return err
 	}
 	e.state.Store(state.TableSinkStopped)
-
+	log.Info("Table sink closed", zap.Int64("tableID", e.tableID),
+		zap.Duration("duration", time.Since(start)))
 	return nil
 }
