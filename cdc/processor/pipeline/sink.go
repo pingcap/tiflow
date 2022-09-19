@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
@@ -41,7 +42,7 @@ const (
 type sinkNode struct {
 	sinkV1  sinkv1.Sink
 	sinkV2  sinkv2.TableSink
-	state   *TableState
+	state   *tablepb.TableState
 	tableID model.TableID
 
 	// atomic operations for model.ResolvedTs
@@ -66,7 +67,7 @@ func newSinkNode(
 	startTs model.Ts, targetTs model.Ts,
 	flowController tableFlowController,
 	redoManager redo.LogManager,
-	state *TableState,
+	state *tablepb.TableState,
 	changefeed model.ChangeFeedID,
 	enableOldValue bool,
 	splitTxn bool,
@@ -96,7 +97,7 @@ func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().Resolved
 // Only for test.
 func (n *sinkNode) BarrierTs() model.Ts { return atomic.LoadUint64(&n.barrierTs) }
 
-func (n *sinkNode) State() TableState { return n.state.Load() }
+func (n *sinkNode) State() tablepb.TableState { return n.state.Load() }
 
 func (n *sinkNode) getResolvedTs() model.ResolvedTs {
 	return n.resolvedTs.Load().(model.ResolvedTs)
@@ -111,8 +112,29 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped state must be set after underlying sink is closed
-	defer n.state.Store(TableStateStopped)
-	return n.closeTableSink(ctx)
+	defer n.state.Store(tablepb.TableStateStopped)
+	if n.sinkV1 != nil {
+		err = n.sinkV1.Close(ctx)
+		if err != nil {
+			return
+		}
+		log.Info("sinkV1 is closed",
+			zap.Int64("tableID", n.tableID),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
+		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		return
+	}
+	err = n.sinkV2.Close(ctx)
+	if err != nil {
+		return
+	}
+	log.Info("sinkV2 is closed",
+		zap.Int64("tableID", n.tableID),
+		zap.String("namespace", n.changefeed.Namespace),
+		zap.String("changefeed", n.changefeed.ID))
+	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	return
 }
 
 // flushSink emits all rows in rowBuffer to the backend sink and flushes
@@ -120,7 +142,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (err error) {
 	defer func() {
 		if err != nil {
-			n.state.Store(TableStateStopped)
+			n.state.Store(tablepb.TableStateStopped)
 			return
 		}
 		if n.CheckpointTs() >= n.targetTs {
@@ -328,7 +350,7 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 }
 
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
-	if n.state.Load() == TableStateStopped {
+	if n.state.Load() == tablepb.TableStateStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {
@@ -383,7 +405,7 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 }
 
 func (n *sinkNode) releaseResource(ctx context.Context) error {
-	n.state.Store(TableStateStopped)
+	n.state.Store(tablepb.TableStateStopped)
 	n.flowController.Abort()
 	return n.closeTableSink(ctx)
 }
