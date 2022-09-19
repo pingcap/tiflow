@@ -15,7 +15,7 @@ package txn
 
 import (
 	"encoding/binary"
-	"hash/crc64"
+	"hash/fnv"
 	"sort"
 	"time"
 
@@ -24,8 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"go.uber.org/zap"
 )
-
-var crcTable = crc64.MakeTable(crc64.ISO)
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
@@ -40,7 +38,6 @@ func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
 	keys := genTxnKeys(e.TxnCallbackableEvent.Event, numSlots)
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	log.Debug("Transaction gets slots", zap.Any("slots", keys))
 	return keys
 }
 
@@ -52,11 +49,11 @@ func genTxnKeys(txn *model.SingleTableTxn, numSlots uint64) []uint64 {
 	hashRes := make(map[uint64]struct{}, len(txn.Rows))
 	for _, row := range txn.Rows {
 		for _, key := range genRowKeys(row) {
-			hasher := crc64.New(crcTable)
-			if _, err := hasher.Write(key); err != nil {
+			hasher := fnv.New32a()
+			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("crc64 hasher fail")
 			}
-			hashRes[hasher.Sum64()%numSlots] = struct{}{}
+			hashRes[uint64(hasher.Sum32())%numSlots] = struct{}{}
 		}
 	}
 	keys := make([]uint64, 0, len(hashRes))
