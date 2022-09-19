@@ -334,7 +334,7 @@ func (e *Elector) GetMembers() []*Member {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
-	var members []*Member
+	members := make([]*Member, 0, len(e.observedRecord.Members))
 	for _, m := range e.observedRecord.Members {
 		members = append(members, m.Clone())
 	}
