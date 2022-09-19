@@ -35,6 +35,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -80,7 +81,7 @@ type tableActor struct {
 	started     bool
 	stopped     uint32
 	stopLock    sync.Mutex
-	sinkStopped bool
+	sinkStopped uberatomic.Bool
 
 	// TODO: try to reduce these config fields below in the future
 	tableID        int64
@@ -215,7 +216,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		}
 
 		// process message for each node, pull message from parent node and then send it to next node
-		if !t.sinkStopped {
+		if !t.sinkStopped.Load() {
 			if err := t.handleDataMsg(ctx); err != nil {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
@@ -264,10 +265,10 @@ func (t *tableActor) handleTickMsg(ctx context.Context) error {
 
 func (t *tableActor) handleStopMsg(ctx context.Context) {
 	// Already stopped, no need to handle stop message again.
-	if t.sinkStopped {
+	if t.sinkStopped.Load() {
 		return
 	}
-	t.sinkStopped = true
+	t.sinkStopped.Store(true)
 	// async stops sinkNode and tableSink
 	go func() {
 		_, err := t.sinkNode.HandleMessage(ctx,
@@ -369,7 +370,7 @@ func (t *tableActor) stop(err error) {
 		t.sortNode.releaseResource()
 	}
 	t.cancel()
-	if t.sinkNode != nil {
+	if t.sinkNode != nil && !t.sinkStopped.Load() {
 		if err := t.sinkNode.stop(t.tablePipelineCtx); err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Warn("close sink failed",

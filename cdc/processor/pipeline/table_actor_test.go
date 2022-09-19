@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +33,7 @@ import (
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -253,20 +253,20 @@ func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
+	s := mocksink.NewNormalMockSink()
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
-		sinkV1:         mocksink.NewNormalMockSink(),
+		sinkV1:         s,
 		flowController: &mockFlowController{},
 	}
 
-	grs := runtime.NumGoroutine()
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
 	})
 	require.Eventually(t, func() bool {
 		return tbl.state.Load() == tablepb.TableStateStopped
 	}, 10*time.Second, 10*time.Millisecond)
-	require.True(t, tbl.sinkStopped)
+	require.True(t, tbl.sinkStopped.Load())
 	// Try to stop again, should not block and return immediately.
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
@@ -277,8 +277,8 @@ func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
 	})
-	// Check it immediately, should no more goroutine.
-	require.LessOrEqual(t, runtime.NumGoroutine(), grs+1)
+	// Check it immediately, should no more goroutine to call sink.Close.
+	require.Equal(t, 1, s.CloseTimes)
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {
@@ -367,7 +367,7 @@ func TestPollDataAfterSinkStopped(t *testing.T) {
 				messageProcessor: dp,
 			},
 		},
-		sinkStopped: true,
+		sinkStopped: *atomic.NewBool(true),
 	}
 	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
