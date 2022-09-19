@@ -91,6 +91,10 @@ func (mc *mockCDCKVClient) EventFeed(
 	}
 }
 
+func (mc *mockCDCKVClient) RegionCount() uint64 {
+	return 0
+}
+
 func (mc *mockCDCKVClient) Close() error {
 	close(mc.expectations)
 	if len(mc.expectations) > 0 {
