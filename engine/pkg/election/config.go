@@ -25,6 +25,7 @@ const (
 	defaultRenewInterval  = time.Second * 2
 	defaultRenewDeadline  = defaultLeaseDuration - defaultRenewInterval
 	defaultReleaseTimeout = 5 * time.Second
+	defaultResignTimeout  = 5 * time.Second
 )
 
 // Config is the configuration for the leader election.

@@ -40,7 +40,8 @@ type Record struct {
 	// LeaderID is the ID of the leader. If it is empty, it means
 	// there is no leader and all members may try to become leader.
 	LeaderID string `json:"leader_id"`
-	// Members is the members that are eligible to become leader.
+	// Members is the members that are eligible to become leader,
+	// which includes the leader itself.
 	Members []*Member `json:"members"`
 	// Version is the internal version of the record. It can be used by
 	// specific storage implementation to determine whether the record has

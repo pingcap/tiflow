@@ -344,6 +344,9 @@ func (e *Elector) GetMembers() []*Member {
 // ResignLeader resigns the leadership and let the elector
 // not to try to campaign for leadership during the duration.
 func (e *Elector) ResignLeader(ctx context.Context, duration time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, defaultResignTimeout)
+	defer cancel()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
