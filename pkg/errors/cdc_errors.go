@@ -784,6 +784,11 @@ var (
 		"etcd meta data migrate failed:%s",
 		errors.RFCCodeText("CDC:ErrEtcdMigrateFailed"),
 	)
+	ErrChangefeedUnretryable = errors.Normalize(
+		"changefeed is in unretryable state, please check the error message"+
+			", and you should manually handle it",
+		errors.RFCCodeText("CDC:ErrChangefeedUnretryable"),
+	)
 
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize(

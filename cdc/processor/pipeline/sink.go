@@ -104,28 +104,7 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped state must be set after underlying sink is closed
 	defer n.state.Store(TableStateStopped)
-	if n.sinkV1 != nil {
-		err = n.sinkV1.Close(ctx)
-		if err != nil {
-			return
-		}
-		log.Info("sinkV1 is closed",
-			zap.Int64("tableID", n.tableID),
-			zap.String("namespace", n.changefeed.Namespace),
-			zap.String("changefeed", n.changefeed.ID))
-		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-		return
-	}
-	err = n.sinkV2.Close(ctx)
-	if err != nil {
-		return
-	}
-	log.Info("sinkV2 is closed",
-		zap.Int64("tableID", n.tableID),
-		zap.String("namespace", n.changefeed.Namespace),
-		zap.String("changefeed", n.changefeed.ID))
-	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-	return
+	return n.closeTableSink(ctx)
 }
 
 // flushSink emits all rows in rowBuffer to the backend sink and flushes
@@ -400,10 +379,32 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.state.Store(TableStateStopped)
 	n.flowController.Abort()
+	return n.closeTableSink(ctx)
+}
+
+func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 	if n.sinkV1 != nil {
-		return n.sinkV1.Close(ctx)
+		err = n.sinkV1.Close(ctx)
+		if err != nil {
+			return
+		}
+		log.Info("sinkV1 is closed",
+			zap.Int64("tableID", n.tableID),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
+		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		return
 	}
-	return n.sinkV2.Close(ctx)
+	err = n.sinkV2.Close(ctx)
+	if err != nil {
+		return
+	}
+	log.Info("sinkV2 is closed",
+		zap.Int64("tableID", n.tableID),
+		zap.String("namespace", n.changefeed.Namespace),
+		zap.String("changefeed", n.changefeed.ID))
+	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	return
 }
 
 // Verify that TxnAtomicity compatibility with BatchResolved event and RowChangedEvent
