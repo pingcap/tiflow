@@ -958,7 +958,7 @@ func (s *trackerSuite) TestVarchar20000(c *C) {
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("test", "create table t(c varchar(20000)) charset=utf8"))
+			AddRow("test", "create table t(c varchar(20000), key(c(20000))) charset=utf8"))
 	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	_, ok := tracker.dsTracker.tableInfos[tableID]

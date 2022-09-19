@@ -117,6 +117,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		// bypass wait time of https://github.com/pingcap/tidb/pull/20550
 		conf.TiKVClient.AsyncCommit.SafeWindow = 0
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
+		// bypass "Specified key was too long"
+		conf.MaxIndexLength = 1<<32 - 1
 	})
 
 	if len(sessionCfg) == 0 {
