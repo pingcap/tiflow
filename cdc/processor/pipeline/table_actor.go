@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
@@ -39,10 +40,15 @@ import (
 )
 
 var (
-	_       TablePipeline                 = (*tableActor)(nil)
-	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
-	stopped                               = uint32(1)
+	_        tablepb.TablePipeline         = (*tableActor)(nil)
+	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                                = uint32(1)
+	workload                               = model.WorkloadInfo{Workload: 1}
 )
+
+// Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
+// replicating 1024 tables in the worst case.
+const defaultOutputChannelSize = 64
 
 const sinkFlushInterval = 500 * time.Millisecond
 
@@ -62,7 +68,7 @@ type tableActor struct {
 	tableSinkV2 sinkv2.TableSink
 	redoManager redo.LogManager
 
-	state TableState
+	state tablepb.TableState
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -110,7 +116,7 @@ func NewTableActor(
 	sinkV2 sinkv2.TableSink,
 	redoManager redo.LogManager,
 	targetTs model.Ts,
-) (TablePipeline, error) {
+) (tablepb.TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	changefeedVars := cdcCtx.ChangefeedVars()
 	globalVars := cdcCtx.GlobalVars()
@@ -129,7 +135,7 @@ func NewTableActor(
 		wg:        wg,
 		cancel:    cancel,
 
-		state:         TableStatePreparing,
+		state:         tablepb.TableStatePreparing,
 		tableID:       tableID,
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
@@ -443,7 +449,7 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 }
 
 // State returns the state of this table pipeline
-func (t *tableActor) State() TableState {
+func (t *tableActor) State() tablepb.TableState {
 	return t.state.Load()
 }
 

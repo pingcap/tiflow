@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v2/protocol"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -180,7 +180,7 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
-// GetTableMeta implements TableExecutor interface
-func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
-	return pipeline.TableMeta{}
+// GetTableStatus implements TableExecutor interface
+func (e *MockTableExecutor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
+	return tablepb.TableStatus{}
 }
