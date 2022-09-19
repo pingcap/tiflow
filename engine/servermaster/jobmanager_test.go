@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
+	jobopMock "github.com/pingcap/tiflow/engine/servermaster/jobop/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -640,19 +641,21 @@ func TestJobOperatorBgLoop(t *testing.T) {
 	masterID := "job-operator-bg-loop-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	tickCounter := atomic.NewInt32(0)
-	tick := func(ctx context.Context) error {
-		tickCounter.Add(1)
-		return nil
-	}
-	mockJobOperator := jobop.NewMockJobOperator(tick)
+
+	mockJobOperator := jobopMock.NewMockJobOperator(gomock.NewController(t))
 	mgr.jobOperator = mockJobOperator
 
 	wg, ctx := errgroup.WithContext(ctx)
 	mgr.wg = wg
 	mgr.bgJobOperatorLoop(ctx)
 
-	mockJobOperator.On("Tick", mock.Anything).Return(nil)
+	tickCounter := atomic.NewInt32(0)
+	mockJobOperator.EXPECT().
+		Tick(gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context) error {
+			tickCounter.Add(1)
+			return nil
+		})
 	wg.Go(func() error {
 		for i := 0; i < 6; i++ {
 			mgr.jobOperatorNotifier.Notify()
