@@ -130,6 +130,7 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoDB,
 		mysql.ErrNoSuchTable,
 		mysql.ErrNoSuchIndex,
+		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName:
 		return false
 	}
