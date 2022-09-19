@@ -45,7 +45,7 @@ function run() {
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem
 
 	echo "verify can't connect to upstream without certificates"
-	mysql -P3306 -h127.0.0.1 -uroot -p123456 -e "show databases" && echo "failed" && exit 1 || true
+	mysql -P3306 -h127.0.0.1 -uroot -p123456 -e "show databases" 2>&1 | grep -q "Connections using insecure transport are prohibited"
 
 	# prepare data
 
@@ -55,6 +55,7 @@ function run() {
 	# create downstream user
 
 	run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "CREATE USER 'dm_user'@'%' REQUIRE X509;"
+	run_sql --port 4000 --ssl-key /tmp/certs/downstream/client.key --ssl-cert /tmp/certs/downstream/client.pem "GRANT ALL PRIVILEGES ON *.* TO 'dm_user'@'%';"
 
 	# create job
 
@@ -67,7 +68,7 @@ function run() {
 	sed -i "s,<mysql2-cert>,$(base64 -w0 $WORK_DIR/mysql2/client-cert.pem)," $WORK_DIR/job.yaml
 
 	# wait executor online
-	sleep 20
+	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/executors\" | tee /dev/stderr | jq -e '.executors | length == 3'"
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_tls")

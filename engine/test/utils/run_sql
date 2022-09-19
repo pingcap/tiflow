@@ -58,5 +58,7 @@ if [[ -n ${ssl_cert} ]]; then
 fi
 cmd="${cmd} --default-character-set utf8mb4 -e \"${sql}\""
 
+set -f
 echo "will execute: $cmd" >&2
 eval $cmd
+set +f
