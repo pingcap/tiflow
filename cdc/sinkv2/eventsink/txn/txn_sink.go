@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/pingcap/tiflow/pkg/config"
 	psink "github.com/pingcap/tiflow/pkg/sink"
@@ -94,7 +95,15 @@ func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	if atomic.LoadInt32(&s.closed) != 0 {
 		return errors.Trace(errors.New("closed sink"))
 	}
+
 	for _, row := range rows {
+		if row.GetTableSinkState() == state.TableSinkStopping {
+			// The table where the event comes from is in stopping so it's safe
+			// to drop the event directly.
+			row.Callback()
+			continue
+		}
+
 		err := s.conflictDetector.Add(newTxnEvent(row))
 		if err != nil {
 			return err
