@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -84,10 +85,9 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	}
 
 	lackPriv := genDumpPriv(dumpPrivileges, pc.checkTables)
-	err2 := VerifyPrivileges(grants, lackPriv)
+	err2 := verifyPrivilegesWithResult(result, grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
-		result.Instruction = "You need grant related privileges."
 	} else {
 		result.State = StateSuccess
 	}
@@ -132,11 +132,10 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.ReplicationSlavePriv:  {},
 	}
 	lackPriv := genReplicPriv(replicationPrivileges)
-	err2 := VerifyPrivileges(grants, lackPriv)
+	err2 := verifyPrivilegesWithResult(result, grants, lackPriv)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
-		result.Instruction = "You need grant related privileges."
 	}
 	return result
 }
@@ -146,11 +145,66 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
 }
 
-// VerifyPrivileges verify user privileges.
+func verifyPrivilegesWithResult(result *Result, grants []string, neededPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
+	lackedPriv, err := VerifyPrivileges(grants, neededPriv)
+	if err != nil {
+		return NewError(err.Error())
+	}
+	if len(lackedPriv) == 0 {
+		return nil
+	}
+
+	lackedPrivStr := LackedPrivilegesAsStr(lackedPriv)
+	result.Instruction = "You need grant related privileges."
+	log.L().Info("lack privilege", zap.String("err msg", lackedPrivStr))
+	return NewError(lackedPrivStr)
+}
+
+// LackedPrivilegesAsStr format lacked privileges as string.
+func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) string {
+	var b strings.Builder
+	// generate error message, for example
+	// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
+	for p, tableMap := range lackPriv {
+		b.WriteString("lack of ")
+		b.WriteString(mysql.Priv2Str[p])
+		b.WriteString(" privilege")
+		if len(tableMap) != 0 {
+			b.WriteString(": {")
+		}
+		i := 0
+		for schema, tables := range tableMap {
+			if len(tables) == 0 {
+				b.WriteString(dbutil.ColumnName(schema))
+			}
+			j := 0
+			for table := range tables {
+				b.WriteString(dbutil.TableName(schema, table))
+				j++
+				if j != len(tables) {
+					b.WriteString(", ")
+				}
+			}
+			i++
+			if i != len(tableMap) {
+				b.WriteString("; ")
+			}
+		}
+		if len(tableMap) != 0 {
+			b.WriteString("}")
+		}
+		b.WriteString("; ")
+	}
+
+	return b.String()
+}
+
+// VerifyPrivileges verify user privileges, returns lacked privileges. this function modifies lackPriv in place.
 // we expose it so other component can reuse it.
-func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
+func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{},
+) (map[mysql.PrivilegeType]map[string]map[string]struct{}, error) {
 	if len(grants) == 0 {
-		return NewError("there is no such grant defined for current user on host '%%'")
+		return nil, errors.New("there is no such grant defined for current user on host '%%'")
 	}
 
 	p := parser.New()
@@ -160,7 +214,7 @@ func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[stri
 		}
 		node, err := p.ParseOneStmt(grant, "", "")
 		if err != nil {
-			return NewError(err.Error())
+			return nil, errors.New(err.Error())
 		}
 		grantStmt, ok := node.(*ast.GrantStmt)
 		if !ok {
@@ -168,12 +222,12 @@ func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[stri
 			case *ast.GrantProxyStmt, *ast.GrantRoleStmt:
 				continue
 			default:
-				return NewError("%s is not grant statement", grant)
+				return nil, errors.Errorf("%s is not grant statement", grant)
 			}
 		}
 
 		if len(grantStmt.Users) == 0 {
-			return NewError("grant has no user %s", grant)
+			return nil, errors.Errorf("grant has no user %s", grant)
 		}
 
 		dbName := grantStmt.Level.DBName
@@ -189,7 +243,7 @@ func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[stri
 						lackPriv[mysql.GrantPriv] = make(map[string]map[string]struct{})
 						continue
 					}
-					return nil
+					return nil, nil
 				}
 				// mysql> show master status;
 				// ERROR 1227 (42000): Access denied; you need (at least one of) the SUPER, REPLICATION CLIENT privilege(s) for this operation
@@ -283,45 +337,7 @@ func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[stri
 		}
 	}
 
-	if len(lackPriv) == 0 {
-		return nil
-	}
-	var b strings.Builder
-	// generate error message, for example
-	// lack of privilege1: {tableID1, tableID2, ...};lack of privilege2...
-	for p, tableMap := range lackPriv {
-		b.WriteString("lack of ")
-		b.WriteString(mysql.Priv2Str[p])
-		b.WriteString(" privilege")
-		if len(tableMap) != 0 {
-			b.WriteString(": {")
-		}
-		i := 0
-		for schema, tables := range tableMap {
-			if len(tables) == 0 {
-				b.WriteString(dbutil.ColumnName(schema))
-			}
-			j := 0
-			for table := range tables {
-				b.WriteString(dbutil.TableName(schema, table))
-				j++
-				if j != len(tables) {
-					b.WriteString(", ")
-				}
-			}
-			i++
-			if i != len(tableMap) {
-				b.WriteString("; ")
-			}
-		}
-		if len(tableMap) != 0 {
-			b.WriteString("}")
-		}
-		b.WriteString("; ")
-	}
-	privileges := b.String()
-	log.L().Info("lack privilege", zap.String("err msg", privileges))
-	return NewError(privileges)
+	return lackPriv, nil
 }
 
 // lackPriv map privilege => schema => table.

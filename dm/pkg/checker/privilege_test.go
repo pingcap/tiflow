@@ -19,6 +19,7 @@ import (
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClient(t *testing.T) {
@@ -29,7 +30,7 @@ var _ = tc.Suite(&testCheckSuite{})
 
 type testCheckSuite struct{}
 
-func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
+func TestVerifyDumpPrivileges(t *testing.T) {
 	cases := []struct {
 		grants      []string
 		checkTables []*filter.Table
@@ -181,16 +182,19 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 		mysql.ReloadPriv: {},
 	}
 	for _, cs := range cases {
+		result := &Result{
+			State: StateFailure,
+		}
 		dumpLackGrants := genDumpPriv(dumpPrivileges, cs.checkTables)
-		err := VerifyPrivileges(cs.grants, dumpLackGrants)
-		c.Assert(err == nil, tc.Equals, cs.dumpState == StateSuccess)
+		err := verifyPrivilegesWithResult(result, cs.grants, dumpLackGrants)
+		require.Equal(t, err == nil, cs.dumpState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
-			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)
+			require.Regexp(t, cs.errMatch, err.ShortErr)
 		}
 	}
 }
 
-func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
+func TestVerifyReplicationPrivileges(t *testing.T) {
 	cases := []struct {
 		grants           []string
 		checkTables      []*filter.Table
@@ -286,11 +290,14 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 		mysql.ReplicationSlavePriv:  {},
 	}
 	for _, cs := range cases {
+		result := &Result{
+			State: StateFailure,
+		}
 		replicationLackGrants := genReplicPriv(replicationPrivileges)
-		err := VerifyPrivileges(cs.grants, replicationLackGrants)
-		c.Assert(err == nil, tc.Equals, cs.replicationState == StateSuccess)
+		err := verifyPrivilegesWithResult(result, cs.grants, replicationLackGrants)
+		require.Equal(t, err == nil, cs.replicationState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
-			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)
+			require.Regexp(t, cs.errMatch, err.ShortErr)
 		}
 	}
 }
