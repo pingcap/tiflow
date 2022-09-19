@@ -39,7 +39,7 @@ func newConflictTestDriver(
 	for i := 0; i < numWorkers; i++ {
 		workers = append(workers, newWorkerForTest())
 	}
-	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, int64(numSlots))
+	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, uint64(numSlots))
 	return &conflictTestDriver{
 		workers:          workers,
 		conflictDetector: detector,
