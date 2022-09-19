@@ -404,7 +404,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
+func (n *sorterNode) releaseResource() {
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
