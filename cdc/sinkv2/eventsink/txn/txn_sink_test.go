@@ -15,6 +15,7 @@ package txn
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -224,8 +225,8 @@ func TestGenKeys(t *testing.T) {
 		},
 		expected: []uint64{0x936fffffffffffff, 0xc10dd8d0843f1edf},
 	}}
-	for i, tc := range testCases {
-		keys := genTxnKeys(tc.txn)
+	for _, tc := range testCases {
+		keys := genTxnKeys(tc.txn, math.MaxUint64)
 		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 		require.Equal(t, tc.expected, keys)
 	}
