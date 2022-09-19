@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,6 +71,8 @@ func TestTxnSinkNolocking(t *testing.T) {
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0
 	for i := 0; i < 100; i++ {
+		sinkState := new(state.TableSinkState)
+		*sinkState = state.TableSinkSinking
 		e := &eventsink.CallbackableEvent[*model.SingleTableTxn]{
 			Event: &model.SingleTableTxn{
 				Rows: []*model.RowChangedEvent{
@@ -82,7 +85,8 @@ func TestTxnSinkNolocking(t *testing.T) {
 					},
 				},
 			},
-			Callback: func() { atomic.AddUint32(&handled, 1) },
+			Callback:  func() { atomic.AddUint32(&handled, 1) },
+			SinkState: sinkState,
 		}
 		sink.WriteEvents(e)
 	}
