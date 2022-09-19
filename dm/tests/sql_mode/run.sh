@@ -45,8 +45,8 @@ function run() {
 	run_sql_file $cur/data/timezone.America-Phoenix.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-  run_sql_source2 "SET @@GLOBAL.SQL_MODE='NO_BACKSLASH_ESCAPES'"
-  run_sql_source2 'create table sql_mode.t0(id bigint primary key, a text,b text as ((regexp_replace(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$","aaaaa"))),  c text as ((regexp_substr(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))), d text as ((regexp_like(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))), e text as ((regexp_instr(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))));'
+	run_sql_source2 "SET @@GLOBAL.SQL_MODE='NO_BACKSLASH_ESCAPES'"
+	run_sql_source2 'create table sql_mode.t0(id bigint primary key, a text,b text as ((regexp_replace(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$","aaaaa"))),  c text as ((regexp_substr(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))), d text as ((regexp_like(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))), e text as ((regexp_instr(a, "^([a-zA-Z]+-?)+[a-zA-Z0-9]+\\.[x|X][m|M][l|L]$"))));'
 	run_sql_tidb_with_retry "show create table sql_mode.t0" $'CREATE TABLE `t0` (
   `id` bigint(20) NOT NULL,
   `a` text DEFAULT NULL,
