@@ -74,7 +74,7 @@ function run() {
 	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_tls")
 
 	# wait for dump and load finished
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
+	exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
 
 	# insert increment data
 
