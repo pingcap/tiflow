@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
