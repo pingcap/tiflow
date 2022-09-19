@@ -90,8 +90,8 @@ type tableActor struct {
 
 	// use to report error to processor
 	reportErr func(error)
-	// stopCtx use to stop table actor
-	stopCtx context.Context
+	// tablePipelineCtx use to drive the nodes in table pipeline.
+	tablePipelineCtx context.Context
 	// cancel use to cancel all goroutines spawned from table actor
 	cancel context.CancelFunc
 
@@ -99,7 +99,8 @@ type tableActor struct {
 }
 
 // NewTableActor creates a table actor and starts it.
-func NewTableActor(cdcCtx cdcContext.Context,
+func NewTableActor(
+	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
@@ -148,7 +149,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		router:         globalVars.TableActorSystem.Router(),
 		actorID:        actorID,
 
-		stopCtx: cctx,
+		tablePipelineCtx: cctx,
 	}
 
 	startTime := time.Now()
@@ -190,12 +191,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		case message.TypeValue:
 			switch msgs[i].Value.Tp {
 			case pmessage.MessageTypeBarrier:
-				err = t.handleBarrierMsg(ctx, msgs[i].Value.BarrierTs)
+				err = t.handleBarrierMsg(t.tablePipelineCtx, msgs[i].Value.BarrierTs)
 			case pmessage.MessageTypeTick:
-				err = t.handleTickMsg(ctx)
+				err = t.handleTickMsg(t.tablePipelineCtx)
 			}
 		case message.TypeStop:
-			t.handleStopMsg(ctx)
+			t.handleStopMsg(t.tablePipelineCtx)
 		}
 		if err != nil {
 			log.Error("failed to process message, stop table actor ",
@@ -355,11 +356,11 @@ func (t *tableActor) stop(err error) {
 	atomic.StoreUint32(&t.stopped, stopped)
 	if t.sortNode != nil {
 		// releaseResource will send a message to sorter router
-		t.sortNode.releaseResource(t.changefeedID)
+		t.sortNode.releaseResource()
 	}
 	t.cancel()
 	if t.sinkNode != nil {
-		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
+		if err := t.sinkNode.releaseResource(t.tablePipelineCtx); err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Warn("close sink failed",
 					zap.String("namespace", t.changefeedID.Namespace),
