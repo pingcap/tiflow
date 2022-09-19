@@ -111,30 +111,11 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
+	n.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer n.state.Store(tablepb.TableStateStopped)
-	if n.sinkV1 != nil {
-		err = n.sinkV1.Close(ctx)
-		if err != nil {
-			return
-		}
-		log.Info("sinkV1 is closed",
-			zap.Int64("tableID", n.tableID),
-			zap.String("namespace", n.changefeed.Namespace),
-			zap.String("changefeed", n.changefeed.ID))
-		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-		return
-	}
-	err = n.sinkV2.Close(ctx)
-	if err != nil {
-		return
-	}
-	log.Info("sinkV2 is closed",
-		zap.Int64("tableID", n.tableID),
-		zap.String("namespace", n.changefeed.Namespace),
-		zap.String("changefeed", n.changefeed.ID))
-	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-	return
+	n.flowController.Abort()
+	return n.closeTableSink(ctx)
 }
 
 // flushSink emits all rows in rowBuffer to the backend sink and flushes
@@ -402,12 +383,6 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func (n *sinkNode) releaseResource(ctx context.Context) error {
-	n.state.Store(tablepb.TableStateStopped)
-	n.flowController.Abort()
-	return n.closeTableSink(ctx)
 }
 
 func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {

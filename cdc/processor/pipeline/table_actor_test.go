@@ -33,6 +33,7 @@ import (
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -246,26 +247,38 @@ func TestPollTickMessage(t *testing.T) {
 	}))
 }
 
-func TestPollStopMessage(t *testing.T) {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 	tbl := tableActor{
-		state: tablepb.TableStateStopped,
-		cancel: func() {
-			wg.Done()
-		},
+		state:     tablepb.TableStateReplicating,
+		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
+	s := mocksink.NewNormalMockSink()
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
-		sinkV1:         mocksink.NewNormalMockSink(),
+		sinkV1:         s,
 		flowController: &mockFlowController{},
 	}
+
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
 	})
-	wg.Wait()
-	require.Equal(t, stopped, tbl.stopped)
+	require.Eventually(t, func() bool {
+		return tbl.state.Load() == tablepb.TableStateStopped
+	}, 10*time.Second, 10*time.Millisecond)
+	require.True(t, tbl.sinkStopped.Load())
+	// Try to stop again, should not block and return immediately.
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	// Check it immediately, should no more goroutine to call sink.Close.
+	require.Equal(t, 1, s.CloseTimes)
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {
@@ -354,7 +367,7 @@ func TestPollDataAfterSinkStopped(t *testing.T) {
 				messageProcessor: dp,
 			},
 		},
-		sinkStopped: true,
+		sinkStopped: *atomic.NewBool(true),
 	}
 	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
