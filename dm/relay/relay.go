@@ -1133,13 +1133,13 @@ func (r *Relay) setSyncConfig() error {
 		if loadErr := r.cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
-			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes, r.cfg.From.Security.CertAllowedCN)
+		tlsConfig, err = util.NewTLSConfig(
+			util.WithCAContent(r.cfg.From.Security.SSLCABytes),
+			util.WithCertAndKeyContent(r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKeyBytes),
+			util.WithVerifyCommonName(r.cfg.From.Security.CertAllowedCN),
+		)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
-		}
-		if tlsConfig != nil {
-			tlsConfig.InsecureSkipVerify = true
 		}
 	}
 

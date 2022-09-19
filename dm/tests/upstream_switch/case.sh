@@ -110,13 +110,13 @@ function run_dm_components_and_create_sources() {
 function gen_full_data() {
 	echo "-------gen_full_data--------"
 
-	exec_sql $host1 "create database ${db};"
+	exec_sql $host1 "create database ${db} collate latin1_bin;"
 	exec_sql $host1 "create table ${db}.${tb}(id int primary key, a int);"
 	for i in $(seq 1 100); do
 		exec_sql $host1 "insert into ${db}.${tb} values($i,$i);"
 	done
 
-	exec_sql $host2 "create database ${db};"
+	exec_sql $host2 "create database ${db} collate latin1_bin;"
 	exec_sql $host2 "create table ${db}.${tb}(id int primary key, a int);"
 	for i in $(seq 101 200); do
 		exec_sql $host2 "insert into ${db}.${tb} values($i,$i);"

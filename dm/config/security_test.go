@@ -19,9 +19,10 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"testing"
 
-	. "github.com/pingcap/check"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const (
@@ -51,55 +52,67 @@ var (
 	keyFilePath  string
 )
 
-func createTestFixture(c *C) {
-	dir := c.MkDir()
+func createTestFixture(t *testing.T) {
+	t.Helper()
+
+	dir := t.TempDir()
 
 	caFilePath = path.Join(dir, caFile)
 	err := os.WriteFile(caFilePath, []byte(caFileContent), 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	certFilePath = path.Join(dir, certFile)
 	err = os.WriteFile(certFilePath, []byte(certFileContent), 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	keyFilePath = path.Join(dir, keyFile)
 	err = os.WriteFile(keyFilePath, []byte(keyFileContent), 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 }
 
-type testTLSConfig struct{}
-
-var _ = Suite(&testTLSConfig{})
-
-func (t *testTLSConfig) SetUpTest(c *C) {
-	createTestFixture(c)
+func TestPessimistSuite(t *testing.T) {
+	suite.Run(t, new(testTLSConfig))
 }
 
-func (t *testTLSConfig) TestLoadAndClearContent(c *C) {
+type testTLSConfig struct {
+	suite.Suite
+
+	noContent []byte
+}
+
+func (c *testTLSConfig) SetupSuite() {
+	createTestFixture(c.T())
+	c.noContent = []byte("test no content")
+}
+
+func (c *testTLSConfig) TestLoadAndClearContent() {
 	s := &Security{
 		SSLCA:   caFilePath,
 		SSLCert: certFilePath,
 		SSLKey:  keyFilePath,
 	}
 	err := s.LoadTLSContent()
-	c.Assert(err, IsNil)
-	c.Assert(len(s.SSLCABytes) > 0, Equals, true)
-	c.Assert(len(s.SSLCertBytes) > 0, Equals, true)
-	c.Assert(len(s.SSLKEYBytes) > 0, Equals, true)
+	c.Require().NoError(err)
+	c.Require().Greater(len(s.SSLCABytes), 0)
+	c.Require().Greater(len(s.SSLCertBytes), 0)
+	c.Require().Greater(len(s.SSLKeyBytes), 0)
 
-	noContentBytes := []byte("test no content")
-
-	c.Assert(bytes.Contains(s.SSLCABytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(s.SSLKEYBytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(s.SSLCertBytes, noContentBytes), Equals, true)
+	c.Require().True(bytes.Contains(s.SSLCABytes, c.noContent))
+	c.Require().True(bytes.Contains(s.SSLCertBytes, c.noContent))
+	c.Require().True(bytes.Contains(s.SSLKeyBytes, c.noContent))
 
 	s.ClearSSLBytesData()
-	c.Assert(s.SSLCABytes, HasLen, 0)
-	c.Assert(s.SSLCertBytes, HasLen, 0)
-	c.Assert(s.SSLKEYBytes, HasLen, 0)
+	c.Require().Len(s.SSLCABytes, 0)
+	c.Require().Len(s.SSLCertBytes, 0)
+	c.Require().Len(s.SSLKeyBytes, 0)
+
+	s.SSLCABase64 = "MTIz"
+	err = s.LoadTLSContent()
+	c.Require().NoError(err)
+	c.Require().Greater(len(s.SSLCABytes), 0)
 }
 
-func (t *testTLSConfig) TestTLSTaskConfig(c *C) {
+func (c *testTLSConfig) TestTLSTaskConfig() {
 	taskRowStr := fmt.Sprintf(`---
 name: test
 task-mode: all
@@ -121,70 +134,70 @@ mysql-instances:
 `, caFilePath, certFilePath, keyFilePath)
 	task1 := NewTaskConfig()
 	err := task1.RawDecode(taskRowStr)
-	c.Assert(err, IsNil)
-	c.Assert(task1.TargetDB.Security.LoadTLSContent(), IsNil)
+	c.Require().NoError(err)
+	c.Require().NoError(task1.TargetDB.Security.LoadTLSContent())
 	// test load tls content
-	noContentBytes := []byte("test no content")
-	c.Assert(bytes.Contains(task1.TargetDB.Security.SSLCABytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(task1.TargetDB.Security.SSLKEYBytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(task1.TargetDB.Security.SSLCertBytes, noContentBytes), Equals, true)
+	c.Require().True(bytes.Contains(task1.TargetDB.Security.SSLCABytes, c.noContent))
+	c.Require().True(bytes.Contains(task1.TargetDB.Security.SSLCertBytes, c.noContent))
+	c.Require().True(bytes.Contains(task1.TargetDB.Security.SSLKeyBytes, c.noContent))
 
 	// test after to string, taskStr can be `Decode` normally
 	taskStr := task1.String()
 	task2 := NewTaskConfig()
 	err = task2.Decode(taskStr)
-	c.Assert(err, IsNil)
-	c.Assert(bytes.Contains(task2.TargetDB.Security.SSLCABytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(task2.TargetDB.Security.SSLKEYBytes, noContentBytes), Equals, true)
-	c.Assert(bytes.Contains(task2.TargetDB.Security.SSLCertBytes, noContentBytes), Equals, true)
-	c.Assert(task2.adjust(), IsNil)
+	c.Require().NoError(err)
+	c.Require().True(bytes.Contains(task2.TargetDB.Security.SSLCABytes, c.noContent))
+	c.Require().True(bytes.Contains(task2.TargetDB.Security.SSLCertBytes, c.noContent))
+	c.Require().True(bytes.Contains(task2.TargetDB.Security.SSLKeyBytes, c.noContent))
+	c.Require().NoError(task2.adjust())
 }
 
-func (t *testTLSConfig) TestClone(c *C) {
+func (c *testTLSConfig) TestClone() {
 	s := &Security{
 		SSLCA:         "a",
 		SSLCert:       "b",
 		SSLKey:        "c",
 		CertAllowedCN: []string{"d"},
 		SSLCABytes:    nil,
-		SSLKEYBytes:   []byte("e"),
+		SSLKeyBytes:   []byte("e"),
 		SSLCertBytes:  []byte("f"),
 	}
 	// When add new fields, also update this value
-	c.Assert(reflect.Indirect(reflect.ValueOf(s)).NumField(), Equals, 7)
+	// TODO: check it
+	c.Require().Equal(10, reflect.TypeOf(*s).NumField())
 	clone := s.Clone()
-	c.Assert(clone, DeepEquals, s)
+	c.Require().Equal(s, clone)
 	clone.CertAllowedCN[0] = "g"
-	c.Assert(clone, Not(DeepEquals), s)
+	c.Require().NotEqual(s, clone)
 }
 
-func (t *testTLSConfig) TestLoadDumpTLSContent(c *C) {
+func (c *testTLSConfig) TestLoadDumpTLSContent() {
 	s := &Security{
 		SSLCA:   caFilePath,
 		SSLCert: certFilePath,
 		SSLKey:  keyFilePath,
 	}
 	err := s.LoadTLSContent()
-	c.Assert(err, IsNil)
-	c.Assert(len(s.SSLCABytes) > 0, Equals, true)
-	c.Assert(len(s.SSLCertBytes) > 0, Equals, true)
-	c.Assert(len(s.SSLKEYBytes) > 0, Equals, true)
+	c.Require().NoError(err)
+	c.Require().Greater(len(s.SSLCABytes), 0)
+	c.Require().Greater(len(s.SSLCertBytes), 0)
+	c.Require().Greater(len(s.SSLKeyBytes), 0)
 
 	// cert file not exist
 	s.SSLCA += ".new"
 	s.SSLCert += ".new"
 	s.SSLKey += ".new"
-	c.Assert(s.DumpTLSContent(c.MkDir()), IsNil)
-	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
-	c.Assert(utils.IsFileExists(s.SSLCert), Equals, true)
-	c.Assert(utils.IsFileExists(s.SSLKey), Equals, true)
+	c.Require().NoError(s.DumpTLSContent(c.T().TempDir()))
+	c.Require().FileExists(s.SSLCA)
+	c.Require().FileExists(s.SSLCert)
+	c.Require().FileExists(s.SSLKey)
 
 	// user not specify cert file
 	s.SSLCA = ""
 	s.SSLCert = ""
 	s.SSLKey = ""
-	c.Assert(s.DumpTLSContent(c.MkDir()), IsNil)
-	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
-	c.Assert(utils.IsFileExists(s.SSLCert), Equals, true)
-	c.Assert(utils.IsFileExists(s.SSLKey), Equals, true)
+	c.Require().NoError(s.DumpTLSContent(c.T().TempDir()))
+	c.Require().FileExists(s.SSLCA)
+	c.Require().FileExists(s.SSLCert)
+	c.Require().FileExists(s.SSLKey)
 }

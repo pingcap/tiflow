@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -463,53 +462,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		topicManager,
 		sProducer,
 		topic,
-		replicaConfig,
-		encoderConfig,
-		errCh,
-	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sink, nil
-}
-
-// NewPulsarSink creates a new Pulsar mqSink.
-func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
-	replicaConfig *config.ReplicaConfig, errCh chan error,
-) (*mqSink, error) {
-	log.Warn("Pulsar Sink is not recommended for production use.")
-	s := sinkURI.Query().Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
-	var protocol config.Protocol
-	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	encoderConfig := common.NewConfig(protocol)
-	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
-		return nil, errors.Trace(err)
-	}
-	// todo: set by pulsar producer's `max.message.bytes`
-	// encoderConfig = encoderConfig.WithMaxMessageBytes()
-	if err := encoderConfig.Validate(); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	producer, err := pulsar.NewProducer(sinkURI, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	fakeTopicManager := manager.NewPulsarTopicManager(
-		producer.GetPartitionNum(),
-	)
-	sink, err := newMqSink(
-		ctx,
-		fakeTopicManager,
-		producer,
-		"",
 		replicaConfig,
 		encoderConfig,
 		errCh,
