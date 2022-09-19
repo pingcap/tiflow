@@ -14,10 +14,12 @@
 package model
 
 import (
+	"fmt"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	"github.com/pingcap/tiflow/pkg/security"
 )
@@ -120,6 +122,24 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 	if storeConf.Password != "" {
 		dsnCfg.Passwd = storeConf.Password
 	}
+
+	if storeConf.Security != nil {
+		cfg, err := util.NewTLSConfig(
+			util.WithCAPath(storeConf.Security.CAPath),
+			util.WithCertAndKeyPath(storeConf.Security.CertPath, storeConf.Security.KeyPath),
+			util.WithVerifyCommonName(storeConf.Security.CertAllowedCN))
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
+		tlsName := "engine_tls" + storeConf.StoreID
+		if cfg != nil {
+			if err := dmysql.RegisterTLSConfig(tlsName, cfg); err != nil {
+				return fmt.Sprintf("%v", err)
+			}
+		}
+		pairs["tls"] = tlsName
+	}
+
 	dsnCfg.Net = "tcp"
 	dsnCfg.Addr = storeConf.Endpoints[0]
 	dsnCfg.DBName = storeConf.Schema
