@@ -747,6 +747,7 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
+	jm.jobOperatorNotifier.Close()
 	return jm.wg.Wait()
 }
 
@@ -789,6 +790,9 @@ func (jm *JobManagerImpl) WatchJobStatuses(
 
 func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 	jm.wg.Go(func() error {
+		defer func() {
+			log.Info("job manager job operator loop exited")
+		}()
 		receiver, err := jm.jobOperatorNotifier.NewReceiver(jobOperateInterval)
 		if err != nil {
 			return err
@@ -798,7 +802,10 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case <-receiver.C:
+			case _, ok := <-receiver.C:
+				if !ok {
+					return nil
+				}
 			}
 			if err := jm.jobOperator.Tick(ctx); err != nil {
 				// error returns from Tick is only caused by metastore error, so
