@@ -45,19 +45,28 @@ type ResourceIdent struct {
 	Name resModel.ResourceName
 }
 
+// Scope returns the Scope of the ResourceIdent.
 func (i ResourceIdent) Scope() ResourceScope {
 	return i.ResourceScope
 }
 
 // FileManager abstracts the operations on the underlying storage.
 type FileManager interface {
+	// CreateResource creates a new resource.
 	CreateResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
 
+	// GetPersistedResource returns the descriptor of an already persisted resource.
 	GetPersistedResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
 
+	// RemoveTemporaryFiles cleans up all un-persisted resource files under the scope.
 	RemoveTemporaryFiles(ctx context.Context, scope ResourceScope) error
 
+	// RemoveResource removes a resource's files.
 	RemoveResource(ctx context.Context, ident ResourceIdent) error
 
+	// SetPersisted sets a resource as persisted.
 	SetPersisted(ctx context.Context, ident ResourceIdent) error
+
+	// Close shuts down the FileManager.
+	Close()
 }

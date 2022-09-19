@@ -38,7 +38,7 @@ func newFileManagerForTest(t *testing.T) *s3.FileManager {
 
 	pathPrefix := fmt.Sprintf("%d", rand.Int())
 	factory := s3.NewExternalStorageFactoryWithPrefix(pathPrefix, options)
-	return s3.NewFileManagerWithFactory(
+	return s3.NewFileManager(
 		mockExecutorID,
 		s3.NewConstantBucketSelector(utBucketName),
 		factory,

@@ -19,8 +19,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 )
 
+// BucketName represents a name of an s3 bucket.
 type BucketName = string
 
+// BucketSelector is an interface for a selector of s3 bucket by scope.
 type BucketSelector interface {
 	GetBucket(ctx context.Context, scope internal.ResourceScope) (BucketName, error)
 }
@@ -29,6 +31,8 @@ type constantBucketSelector struct {
 	bucket BucketName
 }
 
+// NewConstantBucketSelector creates a BucketSelector that always return the same
+// bucket name.
 func NewConstantBucketSelector(bucketName BucketName) BucketSelector {
 	return &constantBucketSelector{bucket: bucketName}
 }

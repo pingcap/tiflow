@@ -23,6 +23,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 )
 
+// ExternalStorageFactory represents a factory used to create
+// brStorage.ExternalStorage.
+// Implementing mock or stub ExternalStorageFactory will make
+// unit testing easier.
 type ExternalStorageFactory interface {
 	newS3ExternalStorageForScope(
 		ctx context.Context,
@@ -50,7 +54,9 @@ type ExternalStorageFactoryImpl struct {
 	Options *brStorage.S3BackendOptions
 }
 
-func newExternalStorageFactory(
+// NewExternalStorageFactory creates a new ExternalStorageFactory with
+// s3 options.
+func NewExternalStorageFactory(
 	options *brStorage.S3BackendOptions,
 ) *ExternalStorageFactoryImpl {
 	return &ExternalStorageFactoryImpl{

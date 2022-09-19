@@ -15,6 +15,7 @@ package s3
 
 import (
 	"context"
+	gerrors "errors"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -29,6 +30,7 @@ const (
 	placeholderFileName = ".keep"
 )
 
+// FileManager manages resource files stored on s3.
 type FileManager struct {
 	bucketSelector BucketSelector
 	storageFactory ExternalStorageFactory
@@ -36,29 +38,8 @@ type FileManager struct {
 	prefix         string
 }
 
+// NewFileManager creates a new FileManager.
 func NewFileManager(
-	executorID model.ExecutorID,
-	bucketSelector BucketSelector,
-	factory ExternalStorageFactory,
-) *FileManager {
-	return newFileManager(
-		executorID,
-		bucketSelector,
-		factory)
-}
-
-func NewFileManagerWithFactory(
-	executorID model.ExecutorID,
-	bucketSelector BucketSelector,
-	factory ExternalStorageFactory,
-) *FileManager {
-	return newFileManager(
-		executorID,
-		bucketSelector,
-		factory)
-}
-
-func newFileManager(
 	executorID model.ExecutorID,
 	bucketSelector BucketSelector,
 	factory ExternalStorageFactory,
@@ -70,6 +51,7 @@ func newFileManager(
 	}
 }
 
+// CreateResource creates a new resource on s3.
 func (m *FileManager) CreateResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
@@ -90,11 +72,21 @@ func (m *FileManager) CreateResource(
 	return desc, nil
 }
 
+// GetPersistedResource returns the descriptor of a resource that has already
+// been marked as persisted.
+// Note that GetPersistedResource will work on any executor for any persisted resource.
 func (m *FileManager) GetPersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	persistedResourceSet, err := m.index.LoadPersistedFileSet(ctx, ident.Scope())
 	if err != nil {
+		if gerrors.Is(err, errIndexFileDoesNotExist) {
+			return nil, internal.ErrResourceFilesNotFound.GenWithStack(
+				&internal.ResourceFilesNotFoundError{
+					Ident:   ident,
+					Details: err.Error(),
+				})
+		}
 		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
 	}
 	if _, ok := persistedResourceSet[ident.Name]; !ok {
@@ -129,6 +121,8 @@ func (m *FileManager) GetPersistedResource(
 	return desc, nil
 }
 
+// RemoveTemporaryFiles removes all temporary resources (those that are not persisted).
+// It can only be used to clean up resources created by the local executor.
 func (m *FileManager) RemoveTemporaryFiles(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
@@ -152,6 +146,8 @@ func (m *FileManager) RemoveTemporaryFiles(
 	return err
 }
 
+// RemoveResource removes a resource from s3. It can be called
+// on any executor node.
 func (m *FileManager) RemoveResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
@@ -169,6 +165,8 @@ func (m *FileManager) RemoveResource(
 	return err
 }
 
+// SetPersisted marks a resource as persisted. It can only be called
+// on the creator of the resource.
 func (m *FileManager) SetPersisted(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
@@ -181,6 +179,11 @@ func (m *FileManager) SetPersisted(
 			zap.Any("ident", ident))
 	}
 	return nil
+}
+
+// Close closes the FileManager.
+func (m *FileManager) Close() {
+	m.index.Close()
 }
 
 func (m *FileManager) removeFilesIf(
@@ -212,7 +215,7 @@ func (m *FileManager) removeFilesIf(
 		return errors.Annotate(err, "RemoveTemporaryFiles")
 	}
 
-	log.Info("Removing temporary resources",
+	log.Info("Removing resources",
 		zap.Any("scope", scope),
 		zap.Any("file-set", toRemoveFiles))
 

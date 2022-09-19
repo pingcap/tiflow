@@ -33,6 +33,8 @@ const (
 	indexFileName = ".index"
 )
 
+var errIndexFileDoesNotExist = errors.New("index file does not exist")
+
 // indexManager is used to manage the set of all persisted file resources
 // on s3.
 //
@@ -185,6 +187,15 @@ func (m *indexManagerImpl) LoadPersistedFileSet(
 		return nil, err
 	}
 
+	exists, err := storage.FileExists(ctx, indexFileName)
+	if err != nil {
+		return nil, errors.Annotate(err, "check index file exists")
+	}
+
+	if !exists {
+		return nil, errors.Trace(errIndexFileDoesNotExist)
+	}
+
 	bytes, err := storage.ReadFile(ctx, indexFileName)
 	if err != nil {
 		return nil, err
@@ -203,6 +214,7 @@ func (m *indexManagerImpl) Close() {
 		return
 	}
 	close(m.closeCh)
+	m.wg.Wait()
 }
 
 func (m *indexManagerImpl) backgroundTask() {
