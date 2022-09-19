@@ -481,8 +481,15 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+	case timodel.ActionTruncateTablePartition,
+		timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition:
 		err := s.inner.updatePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case timodel.ActionExchangeTablePartition:
+		err := s.inner.exchangePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -893,9 +900,83 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 	}
 	s.currentTs = currentTs
 	// TODO: is it necessary to print changes detailly?
+	// yes
 	log.Debug("adjust partition success",
 		zap.String("schema", tbInfo.TableName.Schema),
 		zap.String("table", tbInfo.TableName.Table))
+	return nil
+}
+
+func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uint64) error {
+	var sourceTable *model.TableInfo
+	oldTable, ok := s.physicalTableByID(targetTable.ID)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
+	}
+
+	oldPartitions := oldTable.GetPartitionInfo().Definitions
+	if oldPartitions == nil {
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", oldTable.ID)
+	}
+
+	newPartitions := targetTable.GetPartitionInfo().Definitions
+	if newPartitions == nil {
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", targetTable.ID)
+	}
+
+	oldIDs := make(map[int64]struct{}, len(oldPartitions))
+	for _, p := range oldPartitions {
+		oldIDs[p.ID] = struct{}{}
+	}
+
+	newIDs := make(map[int64]struct{}, len(oldPartitions))
+	for _, p := range newPartitions {
+		newIDs[p.ID] = struct{}{}
+	}
+
+	// 1. find the source table info
+	var diff []int64
+	for id := range newIDs {
+		if _, ok := oldIDs[id]; !ok {
+			diff = append(diff, id)
+		}
+	}
+	if len(diff) != 1 {
+		// TODO(dongmen): refine this log.
+		return errors.New(fmt.Sprintf("new partition number not equal to 1, diff %v", diff))
+	}
+	sourceTable, ok = s.physicalTableByID(diff[0])
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(diff[0])
+	}
+
+	// 3.find the exchanged partition info
+	diff = diff[:0]
+	for id := range oldIDs {
+		if _, ok := newIDs[id]; !ok {
+			diff = append(diff, id)
+		}
+	}
+	if len(diff) != 1 {
+		// TODO(dongmen): refine this log.
+		return errors.New(fmt.Sprintf("old partition number not equal to 1, diff %v", diff))
+	}
+
+	exchangedPartitionID := diff[0]
+	// 4.update the targetTable
+	s.updatePartition(targetTable, currentTS)
+
+	newSourceTable := sourceTable.Clone()
+	// 5.update the sourceTable
+	s.dropTable(sourceTable.ID, currentTS)
+	newSourceTable.ID = exchangedPartitionID
+	s.createTable(newSourceTable, currentTS)
+
+	log.Info("handle exchange partition success",
+		zap.String("sourceTable", sourceTable.TableName.String()),
+		zap.Int64("exchanged partition id", exchangedPartitionID),
+		zap.String("targetTable", targetTable.TableName.String()),
+		zap.Any("partition", targetTable.GetPartitionInfo().Definitions))
 	return nil
 }
 
