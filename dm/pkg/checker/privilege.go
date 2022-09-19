@@ -147,7 +147,7 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 }
 
 // VerifyPrivileges verify user privileges.
-// we expose it since dataflow-agent will reuse it.
+// we expose it so other component can reuse it.
 func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{}) *Error {
 	if len(grants) == 0 {
 		return NewError("there is no such grant defined for current user on host '%%'")
