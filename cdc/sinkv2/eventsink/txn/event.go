@@ -16,6 +16,7 @@ package txn
 import (
 	"encoding/binary"
 	"hash/crc64"
+	"sort"
 	"time"
 
 	"github.com/pingcap/log"
@@ -37,7 +38,9 @@ func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
-	return genTxnKeys(e.TxnCallbackableEvent.Event, numSlots)
+	keys := genTxnKeys(e.TxnCallbackableEvent.Event, numSlots)
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
 }
 
 // genTxnKeys returns hash keys for `txn`.
