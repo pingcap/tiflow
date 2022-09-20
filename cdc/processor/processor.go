@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -61,7 +62,7 @@ type processor struct {
 
 	upstream *upstream.Upstream
 
-	tables map[model.TableID]pipeline.TablePipeline
+	tables map[model.TableID]tablepb.TablePipeline
 
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
@@ -78,7 +79,7 @@ type processor struct {
 	wg          sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error)
 	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
 	liveness     *model.Liveness
@@ -135,7 +136,7 @@ func (p *processor) AddTable(
 		switch table.State() {
 		// table is still `preparing`, which means the table is `replicating` on other captures.
 		// no matter `isPrepare` or not, just ignore it should be ok.
-		case pipeline.TableStatePreparing:
+		case tablepb.TableStatePreparing:
 			log.Warn("table is still preparing, ignore the request",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -144,14 +145,14 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatePrepared:
+		case tablepb.TableStatePrepared:
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				table.Start(startTs)
 			}
 			return true, nil
-		case pipeline.TableStateReplicating:
+		case tablepb.TableStateReplicating:
 			log.Warn("Ignore existing table",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -160,7 +161,7 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStateStopped:
+		case tablepb.TableStateStopped:
 			log.Warn("The same table exists but is stopped. Cancel it and continue.",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -258,12 +259,12 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 
 	done := func() bool {
 		if isPrepare {
-			return table.State() == pipeline.TableStatePrepared
+			return table.State() == tablepb.TableStatePrepared
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableSchedulerV3 {
 			// The table is `replicating`, it's indicating that the `add table` must be finished.
-			return table.State() == pipeline.TableStateReplicating
+			return table.State() == tablepb.TableStateReplicating
 		}
 
 		// TODO: this should be removed, after SchedulerV3 become the first choice.
@@ -333,7 +334,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 		return 0, true
 	}
 	status := table.State()
-	if status != pipeline.TableStateStopped {
+	if status != tablepb.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -373,22 +374,22 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-// GetTableMeta implements TableExecutor interface
-func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
+// GetTableStatus implements TableExecutor interface
+func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	table, ok := p.tables[tableID]
 	if !ok {
-		return pipeline.TableMeta{
-			TableID:      tableID,
-			CheckpointTs: 0,
-			ResolvedTs:   0,
-			State:        pipeline.TableStateAbsent,
+		return tablepb.TableStatus{
+			TableID: tableID,
+			State:   tablepb.TableStateAbsent,
 		}
 	}
-	return pipeline.TableMeta{
-		TableID:      tableID,
-		CheckpointTs: table.CheckpointTs(),
-		ResolvedTs:   table.ResolvedTs(),
-		State:        table.State(),
+	return tablepb.TableStatus{
+		TableID: tableID,
+		Checkpoint: tablepb.Checkpoint{
+			CheckpointTs: table.CheckpointTs(),
+			ResolvedTs:   table.ResolvedTs(),
+		},
+		State: table.State(),
 	}
 }
 
@@ -403,7 +404,7 @@ func newProcessor(
 	p := &processor{
 		changefeed:   state,
 		upstream:     up,
-		tables:       make(map[model.TableID]pipeline.TablePipeline),
+		tables:       make(map[model.TableID]tablepb.TablePipeline),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
 		captureInfo:  captureInfo,
@@ -922,7 +923,7 @@ func (p *processor) createTablePipelineImpl(
 	ctx cdcContext.Context,
 	tableID model.TableID,
 	replicaInfo *model.TableReplicaInfo,
-) (table pipeline.TablePipeline, err error) {
+) (table tablepb.TablePipeline, err error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
@@ -979,7 +980,7 @@ func (p *processor) createTablePipelineImpl(
 	return table, nil
 }
 
-func (p *processor) removeTable(table pipeline.TablePipeline, tableID model.TableID) {
+func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)

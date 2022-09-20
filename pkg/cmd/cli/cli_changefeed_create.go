@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -212,15 +211,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
-	sinkURI, err := url.Parse(o.commonChangefeedOptions.sinkURI)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	if sink.IsPulsarScheme(sinkURI.Scheme) {
-		cmd.Printf(color.HiYellowString("[WARN] Pulsar Sink is " +
-			"not recommended for production use.\n"))
-	}
-
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}

@@ -14,10 +14,8 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,29 +92,6 @@ func TestTomlFileToApiModel(t *testing.T) {
 	apiModel := v2.ToAPIReplicaConfig(cfg)
 	cfg2 := apiModel.ToInternalReplicaConfig()
 	require.Equal(t, cfg, cfg2)
-}
-
-func TestPulsarSchemaWarning(t *testing.T) {
-	t.Parallel()
-
-	cases := []string{
-		"pulsar://localhost:6650/schema/test",
-		"pulsar+ssl://localhost:6650/schema/test",
-	}
-	for _, cs := range cases {
-		cmd := new(cobra.Command)
-		b := bytes.NewBufferString("")
-		cmd.SetOut(b)
-		o := newChangefeedCommonOptions()
-		o.addFlags(cmd)
-		require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=" + cs}))
-		opt := newCreateChangefeedOptions(o)
-		err := opt.validate(cmd)
-		require.Nil(t, err)
-		out, err := ioutil.ReadAll(b)
-		require.Nil(t, err)
-		require.Contains(t, string(out), "Pulsar Sink is not recommended for production use")
-	}
 }
 
 func TestInvalidSortEngine(t *testing.T) {
