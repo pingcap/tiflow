@@ -686,7 +686,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		// make sure `s` is not nil before assign it to the `sinkV1`, which is an interface.
+		// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
 		if s != nil {
 			p.sinkV1 = s
 		}
