@@ -72,7 +72,7 @@ function run() {
 	sed -i "s,<mysql2-cert>,$(base64 -w0 $WORK_DIR/mysql2/client-cert.pem)," $WORK_DIR/job.yaml
 
 	# wait executor online
-	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/executors\" | tee /dev/stderr | jq -e '.executors | length == 3'"
+	exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/executors\" | tee /dev/stderr | jq -e '.executors | length == 3'"
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_tls")
