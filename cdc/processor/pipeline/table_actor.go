@@ -45,7 +45,7 @@ var (
 	_        tablepb.TablePipeline         = (*tableActor)(nil)
 	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
 	stopped                                = uint32(1)
-	workload                               = model.WorkloadInfo{Workload: 1}
+	workload                               = tablepb.Stats{}
 )
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
@@ -455,7 +455,7 @@ func (t *tableActor) AsyncStop() bool {
 }
 
 // Workload returns the workload of this table pipeline
-func (t *tableActor) Workload() model.WorkloadInfo {
+func (t *tableActor) Stats() tablepb.Stats {
 	// We temporarily set the value to constant 1
 	return workload
 }
