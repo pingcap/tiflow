@@ -40,6 +40,9 @@ func NewJobBackoff(jobID string, clocker clock.Clock, config *BackoffConfig) *Jo
 	errBackoff.InitialInterval = config.InitialInterval
 	errBackoff.MaxInterval = config.MaxInterval
 	errBackoff.Multiplier = config.Multiplier
+	// MaxElapsedTime=0 means the backoff never stops, since there is other ways
+	// to stop backoff, including continuously failure check, cancel job.
+	errBackoff.MaxElapsedTime = 0
 	errBackoff.Reset()
 
 	return &JobBackoff{
@@ -65,6 +68,21 @@ type JobBackoff struct {
 	events          []backoffEvent
 	errBackoff      *backoff.ExponentialBackOff
 	backoffInterval time.Duration
+}
+
+// Terminate returns whether job should be terminated.
+// It happens when job fails continuously for more than max try times.
+func (b *JobBackoff) Terminate() bool {
+	if len(b.events) < b.config.MaxTryTime {
+		return false
+	}
+	failCount := 0
+	for _, event := range b.events {
+		if event.tp == backoffOffline {
+			failCount++
+		}
+	}
+	return failCount >= b.config.MaxTryTime
 }
 
 // Allow returns whether new request(create job) is allowd
