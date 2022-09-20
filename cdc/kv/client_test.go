@@ -401,7 +401,6 @@ func TestRecvLargeMessageSize(t *testing.T) {
 		server2.Stop()
 		wg.Wait()
 	}()
-	defer cancel()
 
 	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 	require.Nil(t, err)
