@@ -221,7 +221,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
-		log.Info("range locked",
+		log.Debug("range locked",
 			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.Uint64("version", version),
@@ -387,7 +387,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 		panic("unreachable")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
-	log.Info("unlocked range",
+	log.Debug("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
 		zap.Uint64("checkpointTs", checkpointTs),

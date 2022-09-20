@@ -115,12 +115,14 @@ func (c *Config) AdjustAndValidate() (err error) {
 	c.BusinessMeta.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMeta.StoreType))
 
 	if c.FrameworkMeta.Schema == defaultFrameMetaSchema {
-		log.Warn("use default test schema for framework metastore, " +
-			"better to use predefined schema in production environment")
+		log.Warn("use default schema for framework metastore, "+
+			"better to use predefined schema in production environment",
+			zap.String("schema", defaultFrameMetaSchema))
 	}
 	if c.BusinessMeta.Schema == defaultBusinessMetaSchema {
-		log.Warn("use default test schema for business metastore, " +
-			"better to use predefined schema in production environment")
+		log.Warn("use default schema for business metastore, "+
+			"better to use predefined schema in production environment",
+			zap.String("schema", defaultBusinessMetaSchema))
 	}
 
 	if c.AdvertiseAddr == "" {

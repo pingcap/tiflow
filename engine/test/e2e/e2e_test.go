@@ -81,14 +81,14 @@ func TestSubmitTest(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		democlient, err := NewDemoClient(ctx, demoAddr)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		fmt.Println("connect demo " + demoAddr)
 
 		resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
 			FileNum:   int32(config.FileNum),
 			RecordNum: int32(config.RecordNum),
 		})
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Empty(t, resp.ErrMsg)
 	}
 
@@ -131,12 +131,12 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, demoAddr)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	fmt.Printf("connect clients\n")
 
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
-		require.Nil(t, err)
+		require.NoError(t, err)
 		if resp.Ready {
 			break
 		}
@@ -144,7 +144,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	}
 
 	configBytes, err := json.Marshal(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	<-flowControl
 	fmt.Printf("test is ready\n")
@@ -176,6 +176,6 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,
 	})
-	require.Nil(t, err, jobID)
+	require.NoError(t, err)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }
