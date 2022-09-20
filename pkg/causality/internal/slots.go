@@ -58,7 +58,7 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 	dependOnList := make(map[int64]E, len(keys))
 	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		slotIdx := key % s.numSlots
+		slotIdx := getSlot(key, s.numSlots)
 		if lastSlot != slotIdx {
 			s.slots[slotIdx].mu.Lock()
 			lastSlot = slotIdx
@@ -75,7 +75,7 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 	// we can avoid 2 transactions get executed interleaved.
 	lastSlot = math.MaxUint64
 	for _, key := range keys {
-		slotIdx := key % s.numSlots
+		slotIdx := getSlot(key, s.numSlots)
 		if lastSlot != slotIdx {
 			s.slots[slotIdx].mu.Unlock()
 			lastSlot = slotIdx
@@ -87,7 +87,7 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 func (s *Slots[E]) Free(elem E, keys []uint64) {
 	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		slotIdx := key % s.numSlots
+		slotIdx := getSlot(key, s.numSlots)
 		if lastSlot != slotIdx {
 			s.slots[slotIdx].mu.Lock()
 		}
@@ -105,4 +105,8 @@ func (s *Slots[E]) Free(elem E, keys []uint64) {
 type slot[E SlotNode[E]] struct {
 	nodes map[uint64]E
 	mu    sync.Mutex
+}
+
+func getSlot(key, numSlots uint64) uint64 {
+	return key % numSlots
 }
