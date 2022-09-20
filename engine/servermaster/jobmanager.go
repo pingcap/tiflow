@@ -62,7 +62,7 @@ type JobManager interface {
 
 	GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error)
 	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterState, error)
-	UpdateJobStatus(ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState) error
+	UpdateJobStatus(ctx context.Context, jobID frameModel.MasterID, errMsg string, code frameModel.MasterState) error
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
@@ -501,13 +501,14 @@ func (jm *JobManagerImpl) GetJobStatuses(
 
 // UpdateJobStatus implements JobManager.UpdateJobStatus
 func (jm *JobManagerImpl) UpdateJobStatus(
-	ctx context.Context, jobID frameModel.MasterID, code frameModel.MasterState,
+	ctx context.Context, jobID frameModel.MasterID, errMsg string, code frameModel.MasterState,
 ) error {
 	// Note since the job is not online, it is safe to get from metastore and then update
 	meta, err := jm.frameMetaClient.GetJobByID(ctx, jobID)
 	if err != nil {
 		return err
 	}
+	meta.ErrorMsg = errMsg
 	meta.State = code
 	return jm.frameMetaClient.UpsertJob(ctx, meta)
 }
@@ -677,17 +678,20 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 // OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
-		log.Warn("dispatch worker met error", zap.Error(result))
-		if pkgClient.ErrCreateWorkerTerminate.Is(result) {
-			log.Info("job master terminated", zap.String("job-id", worker.ID()))
+		if errIn, ok := pkgClient.ErrCreateWorkerTerminate.Convert(result); ok {
+			log.Warn("job master terminated",
+				zap.String("job-id", worker.ID()), zap.String("details", errIn.Details))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
-			if err := jm.UpdateJobStatus(ctx, worker.ID(), frameModel.MasterStateFailed); err != nil {
+			if err := jm.UpdateJobStatus(
+				ctx, worker.ID(), errIn.Details, frameModel.MasterStateFailed,
+			); err != nil {
 				return err
 			}
 			jm.JobFsm.JobOffline(worker, false /* needFailover */)
 			return nil
 		}
+		log.Warn("dispatch worker met error", zap.Error(result))
 		jm.JobBackoffMgr.JobFail(worker.ID())
 		return jm.JobFsm.JobDispatchFailed(worker)
 	}
@@ -747,6 +751,7 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
+	jm.jobOperatorNotifier.Close()
 	return jm.wg.Wait()
 }
 
@@ -789,6 +794,9 @@ func (jm *JobManagerImpl) WatchJobStatuses(
 
 func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 	jm.wg.Go(func() error {
+		defer func() {
+			log.Info("job manager job operator loop exited")
+		}()
 		receiver, err := jm.jobOperatorNotifier.NewReceiver(jobOperateInterval)
 		if err != nil {
 			return err
@@ -798,7 +806,10 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case <-receiver.C:
+			case _, ok := <-receiver.C:
+				if !ok {
+					return nil
+				}
 			}
 			if err := jm.jobOperator.Tick(ctx); err != nil {
 				// error returns from Tick is only caused by metastore error, so

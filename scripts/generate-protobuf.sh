@@ -14,8 +14,15 @@
 
 set -eu
 
-TOOLS_BIN_DIR=tools/bin
-TOOLS_INCLUDE_DIR=tools/include
+TOOLS_BIN_DIR="tools/bin"
+TOOLS_INCLUDE_DIR="tools/include"
+PROTO_DIR="proto"
+DM_PROTO_DIR="dm/proto"
+TiCDC_SOURCE_DIR="cdc"
+INCLUDE="-I $PROTO_DIR \
+	-I $TOOLS_INCLUDE_DIR \
+	-I $TiCDC_SOURCE_DIR \
+	-I $DM_PROTO_DIR"
 
 PROTOC="$TOOLS_BIN_DIR/protoc"
 GO="$TOOLS_BIN_DIR/protoc-gen-go"
@@ -25,6 +32,20 @@ GRPC_GATEWAY=$TOOLS_BIN_DIR/protoc-gen-grpc-gateway
 GRPC_GATEWAY_V2=$TOOLS_BIN_DIR/protoc-gen-grpc-gateway-v2
 OPENAPIV2=tools/bin/protoc-gen-openapiv2
 
+function generate() {
+	local out_dir=$1
+	local proto_file=$2
+	local gogo_option=
+	if [ $# -eq 3 ]; then
+		gogo_option=$3
+	fi
+
+	echo "generate $proto_file..."
+	$PROTOC $INCLUDE \
+		--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
+		--gogofaster_out=$gogo_option:$out_dir $proto_file
+}
+
 for tool in $PROTOC $GO $GO_GRPC $GOGO_FASTER $GRPC_GATEWAY $GRPC_GATEWAY_V2 $OPENAPIV2; do
 	if [ ! -x $tool ]; then
 		echo "$tool does not exist, please run 'make $tool' first."
@@ -32,41 +53,17 @@ for tool in $PROTOC $GO $GO_GRPC $GOGO_FASTER $GRPC_GATEWAY $GRPC_GATEWAY_V2 $OP
 	fi
 done
 
-echo "generate canal..."
-mkdir -p ./proto/canal
-$PROTOC -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=./proto/canal ./proto/EntryProtocol.proto
-$PROTOC -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=./proto/canal ./proto/CanalProtocol.proto
-
-echo "generate craft benchmark protocol..."
-mkdir -p ./proto/benchmark
-$PROTOC -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=./proto/benchmark ./proto/CraftBenchmark.proto
-
-echo "generate p2p..."
-mkdir -p ./proto/p2p
-$PROTOC -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=plugins=grpc:./proto/p2p ./proto/CDCPeerToPeer.proto
-
-echo "generate schedulepb..."
-mkdir -p ./cdc/scheduler/internal/v3/schedulepb
-$PROTOC -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=plugins=grpc:./cdc/scheduler/internal/v3/schedulepb ./proto/table_schedule.proto
-
-echo "generate dmpb..."
-mkdir -p ./dm/pb
-$PROTOC -I"./dm/proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=plugins=grpc:./dm/pb ./dm/proto/*.proto
-$PROTOC -I"./dm/proto" -I"$TOOLS_INCLUDE_DIR" \
-	--plugin=protoc-gen-grpc-gateway="$GRPC_GATEWAY" \
-	--grpc-gateway_out=./dm/pb ./dm/proto/dmmaster.proto
+generate ./proto/canal ./proto/EntryProtocol.proto
+generate ./proto/canal ./proto/CanalProtocol.proto
+generate ./proto/benchmark ./proto/CraftBenchmark.proto
+generate ./proto/p2p ./proto/CDCPeerToPeer.proto plugins=grpc
+generate ./dm/pb ./dm/proto/dmworker.proto plugins=grpc,protoc-gen-grpc-gateway="$GRPC_GATEWAY"
+generate ./dm/pb ./dm/proto/dmmaster.proto plugins=grpc,protoc-gen-grpc-gateway="$GRPC_GATEWAY"
+shopt -s globstar
+for pb in cdc/**/*.proto; do
+	# Output generated go files next to protobuf files.
+	generate ./cdc $pb paths="source_relative"
+done
 
 echo "generate enginepb..."
 mkdir -p ./engine/enginepb

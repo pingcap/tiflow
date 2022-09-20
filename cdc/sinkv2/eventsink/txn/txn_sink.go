@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/pingcap/tiflow/pkg/config"
 	psink "github.com/pingcap/tiflow/pkg/sink"
@@ -31,7 +32,7 @@ import (
 
 const (
 	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots int64 = 1024 * 1024
+	DefaultConflictDetectorSlots uint64 = 8 * 1024 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -40,16 +41,16 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 // sink is the sink for SingleTableTxn.
 type sink struct {
 	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
-	statistics       *metrics.Statistics
 	workers          []*worker
 	cancel           func()
-
 	// set when the sink is closed explicitly. and then subsequence `WriteEvents` call
-	// should returns an error.
+	// should return an error.
 	closed int32
+
+	statistics *metrics.Statistics
 }
 
-func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots int64) *sink {
+func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
 		w := newWorker(ctx, i, backend, errCh, len(backends))
@@ -66,7 +67,7 @@ func NewMySQLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan<- error,
-	conflictDetectorSlots int64,
+	conflictDetectorSlots uint64,
 ) (*sink, error) {
 	var getConn pmysql.Factory = pmysql.CreateMySQLDBConn
 
@@ -94,11 +95,16 @@ func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	if atomic.LoadInt32(&s.closed) != 0 {
 		return errors.Trace(errors.New("closed sink"))
 	}
+
 	for _, row := range rows {
-		err := s.conflictDetector.Add(newTxnEvent(row))
-		if err != nil {
-			return err
+		if row.GetTableSinkState() == state.TableSinkStopping {
+			// The table where the event comes from is in stopping, so it's safe
+			// to drop the event directly.
+			row.Callback()
+			continue
 		}
+
+		s.conflictDetector.Add(newTxnEvent(row))
 	}
 	return nil
 }
