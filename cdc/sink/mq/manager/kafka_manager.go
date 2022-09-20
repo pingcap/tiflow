@@ -142,7 +142,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	topicMetaList, err := m.admin.DescribeTopics(topicList)
 	if err != nil {
 		log.Warn(
-			"kafka: get topics meta failed",
+			"Kafka admin client describe topics failed",
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
@@ -150,8 +150,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	}
 
 	log.Info(
-		"kafka: get topics meta",
-		zap.Any("topics", topicMetaList), zap.Duration("duration", time.Since(start)))
+		"Kafka admin client describe topics success",
+		zap.Duration("duration", time.Since(start)))
 
 	return topicMetaList, nil
 }
@@ -289,7 +289,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
-		return 0, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	log.Info(

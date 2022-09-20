@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -88,7 +87,7 @@ func GetTopicManagerAndTryCreateTopic(
 	}
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
 	return topicManager, nil

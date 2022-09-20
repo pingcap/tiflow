@@ -442,7 +442,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
 	sProducer, err := kafka.NewKafkaSaramaProducer(
