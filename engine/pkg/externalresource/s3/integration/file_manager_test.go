@@ -34,7 +34,9 @@ const (
 
 func newFileManagerForTest(t *testing.T) *s3.FileManager {
 	options, err := getS3OptionsForUT()
-	require.NoError(t, err)
+	if err != nil {
+		t.Skipf("server not configured for s3 integration: %s", err.Error())
+	}
 
 	pathPrefix := fmt.Sprintf("%d", rand.Int())
 	factory := s3.NewExternalStorageFactoryWithPrefix(pathPrefix, options)
