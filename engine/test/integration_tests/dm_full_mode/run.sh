@@ -14,18 +14,6 @@ function run() {
 	wait_mysql_online.sh --port 3306
 	wait_mysql_online.sh --port 4000
 
-	# test a ill-formatted job should fail
-
-	cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
-	sed -i "20,23d" $WORK_DIR/job.yaml
-	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_full_mode")
-	echo "job_id: $job_id"
-
-	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'Access denied'"
-
-	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
-	read -p 123
-
 	# prepare data
 
 	run_sql "SET @@GLOBAL.SQL_MODE='NO_BACKSLASH_ESCAPES'"
@@ -33,6 +21,33 @@ function run() {
 	run_sql --port 4000 "SET @@global.time_zone = '+02:00';"
 
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
+
+	# test a ill-formatted job should fail
+
+	cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
+	sed -i "20,23d" $WORK_DIR/job.yaml
+	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_full_mode")
+	echo "job_id: $job_id"
+
+	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'route-rules global not exist in routes'"
+
+	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
+	# TODO: delete the job
+
+	# test stop a wrongly configuration job
+
+	cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
+	sed -i "s/root/wrong_user/g" $WORK_DIR/job.yaml
+
+	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_full_mode")
+	echo "job_id: $job_id"
+
+	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'Access denied'"
+
+	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
+	# TODO: delete the job
+
+	# happy path
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
