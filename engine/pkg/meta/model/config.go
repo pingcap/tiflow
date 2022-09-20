@@ -137,7 +137,7 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) (strin
 				return "", errors.ErrMetaParamsInvalid.Wrap(err)
 			}
 		}
-		pairs["tls"] = tlsName
+		dsnCfg.Params["tls"] = tlsName
 	}
 
 	dsnCfg.Net = "tcp"
