@@ -19,11 +19,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
@@ -156,9 +157,9 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		From:    "a",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{
-				{TableID: 1, State: schedulepb.TableStateReplicating},
-				{TableID: 2, State: schedulepb.TableStateReplicating},
+			Tables: []tablepb.TableStatus{
+				{TableID: 1, State: tablepb.TableStateReplicating},
+				{TableID: 2, State: tablepb.TableStateReplicating},
 			},
 		},
 	})
@@ -188,11 +189,11 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	init := map[string][]schedulepb.TableStatus{
+	init := map[string][]tablepb.TableStatus{
 		"a": {
-			{TableID: 1, State: schedulepb.TableStateReplicating},
-			{TableID: 2, State: schedulepb.TableStateReplicating},
-			{TableID: 3, State: schedulepb.TableStateReplicating},
+			{TableID: 1, State: tablepb.TableStateReplicating},
+			{TableID: 2, State: tablepb.TableStateReplicating},
+			{TableID: 3, State: tablepb.TableStateReplicating},
 		},
 	}
 	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
@@ -247,10 +248,10 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	coord.captureM.Captures["c"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	init := map[string][]schedulepb.TableStatus{
-		"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
-		"b": {{TableID: 2, State: schedulepb.TableStateReplicating}},
-		"c": {{TableID: 3, State: schedulepb.TableStateReplicating}},
+	init := map[string][]tablepb.TableStatus{
+		"a": {{TableID: 1, State: tablepb.TableStateReplicating}},
+		"b": {{TableID: 2, State: tablepb.TableStateReplicating}},
+		"c": {{TableID: 3, State: tablepb.TableStateReplicating}},
 	}
 	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
@@ -356,16 +357,16 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 		From:    "a",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{
+			Tables: []tablepb.TableStatus{
 				{
-					TableID: 1, State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{
+					TableID: 1, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 2, ResolvedTs: 4,
 					},
 				},
 				{
-					TableID: 2, State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{
+					TableID: 2, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 2, ResolvedTs: 4,
 					},
 				},
@@ -389,16 +390,16 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 		From:    "a",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{
+			Tables: []tablepb.TableStatus{
 				{
-					TableID: 1, State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{
+					TableID: 1, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 3, ResolvedTs: 5,
 					},
 				},
 				{
-					TableID: 2, State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{
+					TableID: 2, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 4, ResolvedTs: 5,
 					},
 				},

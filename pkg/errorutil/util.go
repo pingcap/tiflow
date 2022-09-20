@@ -16,7 +16,11 @@ package errorutil
 import (
 	"strings"
 
-	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+
+	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -31,7 +35,7 @@ import (
 // tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
 func IsIgnorableMySQLDDLError(err error) bool {
 	err = errors.Cause(err)
-	mysqlErr, ok := err.(*dmysql.MySQLError)
+	mysqlErr, ok := err.(*gmysql.MySQLError)
 	if !ok {
 		return false
 	}
@@ -84,5 +88,51 @@ func IsRetryableEtcdError(err error) bool {
 	if strings.Contains(etcdErr.Error(), "received prior goaway: code: NO_ERROR") {
 		return true
 	}
+
+	// this may happen if the PD instance shutdown by `kill -9`, no matter the instance is the leader or not.
+	if strings.Contains(etcdErr.Error(), "connection reset by peer") {
+		return true
+	}
 	return false
+}
+
+// IsRetryableDMLError check if the error is a retryable dml error.
+func IsRetryableDMLError(err error) bool {
+	if !cerror.IsRetryableError(err) {
+		return false
+	}
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
+		return true
+	}
+	// Check if the error is a retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
+}
+
+// IsRetryableDDLError check if the error is a retryable ddl error.
+func IsRetryableDDLError(err error) bool {
+	if IsRetryableDMLError(err) {
+		return true
+	}
+
+	err = errors.Cause(err)
+	mysqlErr, ok := err.(*gmysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	// If the error is in the black list, return false.
+	switch mysqlErr.Number {
+	case mysql.ErrAccessDenied,
+		mysql.ErrDBaccessDenied,
+		mysql.ErrSyntax,
+		mysql.ErrParse,
+		mysql.ErrNoDB,
+		mysql.ErrNoSuchTable,
+		mysql.ErrNoSuchIndex,
+		mysql.ErrKeyColumnDoesNotExits,
+		mysql.ErrWrongColumnName:
+		return false
+	}
+	return true
 }

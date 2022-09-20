@@ -126,16 +126,6 @@ func init() {
 		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
-
-	// register pulsar sink
-	sinkIniterMap["pulsar"] = func(
-		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		config *config.ReplicaConfig,
-		errCh chan error,
-	) (Sink, error) {
-		return mq.NewPulsarSink(ctx, sinkURI, config, errCh)
-	}
-	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
 }
 
 // New creates a new sink with the sink-uri

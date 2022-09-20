@@ -63,9 +63,51 @@ func TestIsRetryableEtcdError(t *testing.T) {
 		{errors.New("rpc error: code = Unavailable desc = closing transport due to: " +
 			"connection error: desc = \\\"error reading from server: EOF\\\", " +
 			"received prior goaway: code: NO_ERROR\""), true},
+		{errors.New("rpc error: code = Unavailable desc = error reading from server: " +
+			"xxx: read: connection reset by peer"), true},
 	}
 
 	for _, item := range cases {
 		require.Equal(t, item.ret, IsRetryableEtcdError(item.err))
+	}
+}
+
+func TestIsRetryableDMLError(t *testing.T) {
+	cases := []struct {
+		err error
+		ret bool
+	}{
+		{nil, false},
+		{errors.New("raw error"), false},
+		{newMysqlErr(tmysql.ErrDupKeyName, "Error: Duplicate key name 'some_key'"), false},
+		{tmysql.ErrBadConn, true},
+		{newMysqlErr(tmysql.ErrLockWaitTimeout, "Lock wait timeout exceeded"), false},
+		{newMysqlErr(tmysql.ErrLockDeadlock, "Deadlock found when trying to get lock"), true},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.ret, IsRetryableDMLError(c.err))
+	}
+}
+
+func TestIsRetryableDDLError(t *testing.T) {
+	cases := []struct {
+		err error
+		ret bool
+	}{
+		{nil, false},
+		{errors.New("raw error"), false},
+		{newMysqlErr(tmysql.ErrNoDB, "Error: Duplicate key name 'some_key'"), false},
+		{newMysqlErr(tmysql.ErrParse, "Can't create database"), false},
+		{newMysqlErr(tmysql.ErrAccessDenied, "Access denied for user"), false},
+		{newMysqlErr(tmysql.ErrDBaccessDenied, "Access denied for db"), false},
+		{newMysqlErr(tmysql.ErrNoSuchTable, "table not exist"), false},
+		{newMysqlErr(tmysql.ErrNoSuchIndex, "index not exist"), false},
+		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
+		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.ret, IsRetryableDDLError(c.err))
 	}
 }

@@ -2,7 +2,7 @@
     "demo_address": ["127.0.0.1:1234"],
     "demo_host": ["demo-server:1234"],
     "master_address_list": ["127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"],
-    "demo_record_num": 5000000,
+    "demo_record_num": 50000,
     "job_num": 2,
     "file_num": 5
 }

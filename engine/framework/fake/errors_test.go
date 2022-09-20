@@ -11,7 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !linux
-// +build !linux
+package fake
 
-package hack
+import (
+	"testing"
+
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+)
+
+func TestToFakeJobError(t *testing.T) {
+	t.Parallel()
+
+	normalErr := errors.New("normal error")
+	fakeJobErr := NewJobUnRetryableError(normalErr)
+	errFromPlainText := errors.New(fakeJobErr.Error())
+
+	require.Equal(t, normalErr, ToFakeJobError(normalErr))
+	require.Equal(t, fakeJobErr, ToFakeJobError(fakeJobErr))
+	require.EqualError(t, ToFakeJobError(errFromPlainText), fakeJobErr.Error())
+}

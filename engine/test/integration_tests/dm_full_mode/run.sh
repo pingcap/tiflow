@@ -34,14 +34,8 @@ function run() {
 
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
 
-	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_full_mode&project_id=dm_full_mode" | jq -r .id)
-	echo "job_id: $job_id"
-
-	# wait for job finished
+	# create job & wait for job finished
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
 	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
