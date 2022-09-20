@@ -160,7 +160,7 @@ func NewTableActor(
 
 	startTime := time.Now()
 	if err := table.start(cctx); err != nil {
-		table.stop(err)
+		table.stop()
 		return nil, errors.Trace(err)
 	}
 	err := globalVars.TableActorSystem.System().Spawn(mb, table)
@@ -345,7 +345,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
-func (t *tableActor) stop(err error) {
+func (t *tableActor) stop() {
 	log.Debug("table actor begin to stop....",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
@@ -367,7 +367,9 @@ func (t *tableActor) stop(err error) {
 	t.cancel()
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.tablePipelineCtx); err != nil {
-			if errors.Cause(err) != context.Canceled {
+			switch errors.Cause(err) {
+			case context.Canceled, cerror.ErrTableProcessorStoppedSafely:
+			default:
 				log.Warn("close sink failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
@@ -380,13 +382,12 @@ func (t *tableActor) stop(err error) {
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Error(err))
+		zap.Int64("tableID", t.tableID))
 }
 
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
-	t.stop(err)
+	t.stop()
 	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
 		t.reportErr(err)
 	}
@@ -467,7 +468,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// cancel wait group, release resource and mark the state as stopped
-	t.stop(nil)
+	t.stop()
 	// actor is closed, tick actor to remove this actor router
 	msg := pmessage.TickMessage()
 	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
