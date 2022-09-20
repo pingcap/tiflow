@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // Where clause for meta kv option
@@ -78,15 +79,30 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, storeType metaModel.StoreType, table stri
 		tableScopeDB = db.Table(table)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
 	impl := &sqlKVClientImpl{
 		db:           db,
 		jobID:        jobID,
 		tableScopeDB: tableScopeDB,
 		table:        table,
 	}
-	if err := impl.initialize(ctx); err != nil {
+	retryInterval := 500 * time.Millisecond
+	retryDuration := 3 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), retryDuration)
+	defer cancel()
+	err = retry.Do(ctx, func() error {
+		ctx, cancel := context.WithTimeout(ctx, retryInterval)
+		defer cancel()
+		err := impl.initialize(ctx)
+		if err != nil {
+			log.Warn("sql client initialize failed", zap.Error(err))
+		}
+		return err
+	},
+		retry.WithBackoffBaseDelay(int64(retryInterval/time.Millisecond)),
+		retry.WithBackoffMaxDelay(int64(retryInterval/time.Millisecond)),
+		retry.WithMaxTries(uint64(retryDuration/retryInterval)),
+	)
+	if err != nil {
 		return nil, err
 	}
 
