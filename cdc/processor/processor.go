@@ -518,7 +518,8 @@ func (p *processor) handleErr(err error) error {
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err))
 		return cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
