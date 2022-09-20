@@ -39,6 +39,11 @@ const (
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 
+type versionedTable struct {
+	model.TableName
+	TableVersion uint64
+}
+
 // sink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type sink struct {
@@ -48,7 +53,7 @@ type sink struct {
 	encodingWorkers []*encodingWorker
 	writer          *dmlWriter
 
-	tableSeqMap map[*model.TableName]uint64
+	tableSeqMap map[versionedTable]uint64
 }
 
 // New creates a cloud storage sink.
@@ -59,7 +64,7 @@ func NewCloudStorageSink(ctx context.Context,
 ) (*sink, error) {
 	s := &sink{}
 	cfg := pcloudstorage.NewConfig()
-	err := cfg.Apply(ctx, sinkURI, replicaConfig)
+	err := cfg.Apply(ctx, sinkURI)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +99,8 @@ func NewCloudStorageSink(ctx context.Context,
 	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg.WorkerCount, ext, errCh)
 	s.id = changefeedID
 	s.msgChan = chann.New[eventFragment]()
+	s.tableSeqMap = make(map[versionedTable]uint64)
+
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
 		w := newEncodingWorker(i+1, changefeedID, encoder, s.writer, errCh)
@@ -106,24 +113,25 @@ func NewCloudStorageSink(ctx context.Context,
 
 // WriteEvents write events
 func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	var tableName *model.TableName
-	var tableVersion uint64
+	var tbl versionedTable
 	for _, txn := range txns {
-		tableName = txn.Event.Table
-		tableVersion = txn.Event.TableVersion
-		s.tableSeqMap[tableName]++
+		tbl = versionedTable{
+			TableName:    *txn.Event.Table,
+			TableVersion: txn.Event.TableVersion,
+		}
+		s.tableSeqMap[tbl]++
 		s.msgChan.In() <- eventFragment{
-			seqNumber:    s.tableSeqMap[tableName],
-			tableName:    tableName,
-			tableVersion: tableVersion,
+			seqNumber:    s.tableSeqMap[tbl],
+			tableName:    tbl.TableName,
+			tableVersion: tbl.TableVersion,
 			event:        txn,
 		}
 	}
 
 	s.msgChan.In() <- eventFragment{
-		tableName:    tableName,
-		tableVersion: tableVersion,
-		seqNumber:    s.tableSeqMap[tableName],
+		tableName:    tbl.TableName,
+		tableVersion: tbl.TableVersion,
+		seqNumber:    s.tableSeqMap[tbl],
 	}
 	return nil
 }
@@ -143,7 +151,7 @@ func (s *sink) Close() error {
 type eventFragment struct {
 	seqNumber    uint64
 	tableVersion uint64
-	tableName    *model.TableName
+	tableName    model.TableName
 	event        *eventsink.TxnCallbackableEvent
 	encodedMsgs  []*common.Message
 }

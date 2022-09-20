@@ -32,7 +32,7 @@ import (
 
 func TestDeframenter(t *testing.T) {
 	defrag := newDefragmenter()
-	uri := "local:///tmp/test"
+	uri := "file:///tmp/test"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCanalJSON,
@@ -47,7 +47,7 @@ func TestDeframenter(t *testing.T) {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
-				tableName: &model.TableName{
+				tableName: model.TableName{
 					Schema:  "test",
 					Table:   "table1",
 					TableID: 100,
@@ -88,9 +88,11 @@ func TestDeframenter(t *testing.T) {
 	dstCh := chann.New[*common.Message]()
 	_, err = defrag.writeMsgs(ctx, dstCh)
 	require.Nil(t, err)
-	dstCh.Close()
 	prevSeq := 0
 	for msg := range dstCh.Out() {
+		if msg == nil {
+			break
+		}
 		curSeq, err := strconv.Atoi(string(msg.Key))
 		require.Nil(t, err)
 		require.GreaterOrEqual(t, curSeq, prevSeq)

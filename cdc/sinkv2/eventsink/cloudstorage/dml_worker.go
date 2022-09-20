@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -31,23 +30,22 @@ import (
 const defaultFlushInterval = 5 * time.Second
 
 type dmlWorker struct {
-	id           int
-	changeFeedID model.ChangeFeedID
-	storage      storage.ExternalStorage
-	msgChannels  map[versionedTable]*chann.Chann[*common.Message]
-
+	id             int
+	changeFeedID   model.ChangeFeedID
+	storage        storage.ExternalStorage
+	msgChannels    map[versionedTable]*chann.Chann[*common.Message]
+	flushNotifyCh  chan flushTask
 	defragmenters  map[versionedTable]*defragmenter
 	fileIndex      map[versionedTable]uint64
 	activeTablesCh *chann.Chann[versionedTable]
 	wg             sync.WaitGroup
 	errCh          chan<- error
 	extension      string
-	flushing       uint64
 }
 
-type versionedTable struct {
-	*model.TableName
-	TableVersion uint64
+
+type flushTask struct {
+	activeTables []versionedTable
 }
 
 func newDMLWorker(
@@ -63,6 +61,7 @@ func newDMLWorker(
 		storage:        storage,
 		msgChannels:    make(map[versionedTable]*chann.Chann[*common.Message]),
 		defragmenters:  make(map[versionedTable]*defragmenter),
+		flushNotifyCh:  make(chan flushTask, 1),
 		activeTablesCh: chann.New[versionedTable](),
 		fileIndex:      make(map[versionedTable]uint64),
 		extension:      extension,
@@ -72,39 +71,52 @@ func newDMLWorker(
 	return d
 }
 
-func (d *dmlWorker) flushEvents(ctx context.Context,
-	readyTables []versionedTable,
-	handleErr func(err error),
-) {
-	if !atomic.CompareAndSwapUint64(&d.flushing, 0, 1) {
-		log.Debug("the previous flush run hasn't been finished yet")
-		return
-	}
+func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
+	d.backgroundDefragmentMsgs(ctx)
+	d.backgroundFlushMsgs(ctx)
+	d.backgroundDispatchMsgs(ctx, ch)
+}
 
+func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
+	d.wg.Add(1)
 	go func() {
-		defer atomic.StoreUint64(&d.flushing, 0)
+		defer d.wg.Done()
 
 		var buf bytes.Buffer
-		for _, tbl := range readyTables {
-			buf.Reset()
-			for msg := range d.msgChannels[tbl].Out() {
-				if msg == nil {
-					break
-				}
-				buf.Write(msg.Value)
-			}
-
-			err := d.storage.WriteFile(ctx, d.generateCloudStoragePath(tbl), buf.Bytes())
-			if err != nil {
-				handleErr(err)
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case task := <-d.flushNotifyCh:
+				fmt.Printf("get flush task:%v\n", task.activeTables)
+				for _, tbl := range task.activeTables {
+					buf.Reset()
+					for msg := range d.msgChannels[tbl].Out() {
+						if msg == nil {
+							break
+						}
+						buf.Write(msg.Value)
+					}
+
+					path := d.generateCloudStoragePath(tbl)
+					fmt.Printf("write content to path:%s time%s\n", path, time.Now())
+					err := d.storage.WriteFile(ctx, path, buf.Bytes())
+					if err != nil {
+						d.errCh <- err
+						return
+					}
+					log.Debug("write file to storage success", zap.String("path", path),
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.Namespace),
+						zap.String("changefeed", d.changeFeedID.ID))
+				}
 			}
 		}
 	}()
 
 }
 
-func (d *dmlWorker) backgroundDefragmenter(ctx context.Context) {
+func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
@@ -115,6 +127,12 @@ func (d *dmlWorker) backgroundDefragmenter(ctx context.Context) {
 			case table := <-d.activeTablesCh.Out():
 				_, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
 				if err != nil {
+					log.Error("dml worker failed to flush messages to cloud storage sink",
+						zap.Int("id", d.id),
+						zap.String("namespace", d.changeFeedID.ID),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Error(err))
+
 					d.errCh <- err
 					return
 				}
@@ -123,18 +141,13 @@ func (d *dmlWorker) backgroundDefragmenter(ctx context.Context) {
 	}()
 }
 
-func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
+func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	var readyTables []versionedTable
-	var err error
-
-	errCh := make(chan error, 1)
-	handleErr := func(err error) { errCh <- err }
-	d.backgroundDefragmenter(ctx)
 	ticker := time.NewTicker(defaultFlushInterval)
 
 	d.wg.Add(1)
 	go func() {
-		log.Debug("dml worker started", zap.Int("id", d.id),
+		log.Debug("dml worker started", zap.Int("workerID", d.id),
 			zap.String("namespace", d.changeFeedID.Namespace),
 			zap.String("changefeed", d.changeFeedID.ID))
 		defer d.wg.Done()
@@ -142,10 +155,20 @@ func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
 			select {
 			case <-ctx.Done():
 				return
-			case err = <-errCh:
 			case <-ticker.C:
-				d.flushEvents(ctx, readyTables, handleErr)
-				readyTables = nil
+				if len(readyTables) == 0 {
+					continue
+				}
+				task := flushTask{
+					activeTables: readyTables,
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case d.flushNotifyCh <- task:
+					readyTables = nil
+				default:
+				}
 			case frag := <-ch.Out():
 				table := versionedTable{
 					TableName:    frag.tableName,
@@ -161,17 +184,9 @@ func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
 					d.activeTablesCh.In() <- table
 				}
 			}
-
-			if err != nil {
-				break
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-		case d.errCh <- err:
 		}
 	}()
+
 }
 
 func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {

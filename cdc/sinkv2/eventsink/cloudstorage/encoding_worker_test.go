@@ -2,6 +2,7 @@ package cloudstorage
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 )
 
 func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
-	uri := "local:///tmp/test"
+	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolOpen,
@@ -35,16 +36,14 @@ func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
 
 	dmlWriter := newDMLWriter(ctx, changefeedID, storage, 1, ".json", errCh)
 	worker := newEncodingWorker(1, changefeedID, encoder, dmlWriter, errCh)
-
 	return worker
 }
 
 func TestEncodeEvents(t *testing.T) {
-	// math.Inf(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := testEncodingWorker(ctx, t)
 	err := worker.encodeEvents(ctx, eventFragment{
-		tableName: &model.TableName{
+		tableName: model.TableName{
 			Schema:  "test",
 			Table:   "table1",
 			TableID: 100,
@@ -95,13 +94,17 @@ func TestWorkerRun(t *testing.T) {
 	worker := testEncodingWorker(ctx, t)
 	msgCh := chann.New[eventFragment]()
 	worker.run(ctx, msgCh)
-	table := &model.TableName{
+	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
 		TableID: 100,
 	}
 	event := &model.SingleTableTxn{
-		Table: table,
+		Table: &model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 100,
+		},
 		Rows: []*model.RowChangedEvent{
 			{
 				Table: &model.TableName{

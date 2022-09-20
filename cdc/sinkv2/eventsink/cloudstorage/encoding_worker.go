@@ -14,6 +14,7 @@ package cloudstorage
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -51,7 +52,7 @@ func newEncodingWorker(
 func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFragment]) {
 	w.wg.Add(1)
 	go func() {
-		log.Debug("encoding worker started", zap.Int("id", w.id),
+		log.Debug("encoding worker started", zap.Int("workerID", w.id),
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 		defer w.wg.Done()
@@ -60,6 +61,7 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 			case <-ctx.Done():
 				return
 			case frag := <-msgChan.Out():
+				fmt.Printf("frag seq:%v\n", frag.seqNumber)
 				if frag.event == nil {
 					w.writer.dispatchFragToDMLWorker(frag)
 					continue

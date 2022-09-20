@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
@@ -50,7 +49,6 @@ func NewConfig() *Config {
 func (c *Config) Apply(
 	ctx context.Context,
 	sinkURI *url.URL,
-	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
 		return cerror.ErrCloudStorageInvalidConfig.GenWithStack("failed to open cloud storage sink, empty SinkURI")

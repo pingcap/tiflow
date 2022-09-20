@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +28,7 @@ func TestConfigApply(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	cfg := NewConfig()
-	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	err = cfg.Apply(context.TODO(), sinkURI)
 	require.Nil(t, err)
 	require.Equal(t, expected, cfg)
 }
@@ -81,7 +80,7 @@ func TestVerifySinkURIParams(t *testing.T) {
 		sinkURI, err := url.Parse(tc.uri)
 		require.Nil(t, err)
 		cfg := NewConfig()
-		err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+		err = cfg.Apply(context.TODO(), sinkURI)
 		if tc.expectedErr == "" {
 			require.Nil(t, err)
 			require.LessOrEqual(t, cfg.WorkerCount, maxWorkerCount)
