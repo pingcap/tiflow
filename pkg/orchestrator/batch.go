@@ -53,7 +53,10 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 				return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs(changedSize, etcdTxnMaxSize)
 			}
 			if len(changedState) > etcdTxnMaxOps {
-				log.Warn("etcd ops exceed the limit", zap.Any("changedState", changedState))
+				for k, v := range changedState {
+					log.Warn("etcd txn ops exceed the limit", zap.String("key", k.String()), zap.String("value", string(v)))
+				}
+				//log.Warn("etcd ops exceed the limit", zap.Any("changedState", changedState))
 				return nil, 0, 0, cerrors.ErrEtcdTxnOpsExceed.GenWithStackByArgs(len(changedState), etcdTxnMaxOps)
 			}
 		}
