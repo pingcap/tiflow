@@ -892,14 +892,19 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 		}
 	}
 	s.currentTs = currentTs
-	// TODO: is it necessary to print changes detailly?
-	// yes
+
 	log.Debug("adjust partition success",
 		zap.String("schema", tbInfo.TableName.Schema),
-		zap.String("table", tbInfo.TableName.Table))
+		zap.String("table", tbInfo.TableName.Table),
+		zap.Any("partitions", newPi.Definitions),
+	)
 	return nil
 }
 
+// exchangePartition find the partition's id in the old table info of targetTable,
+// and find the sourceTable's id in the new table info of targetTable.
+// Then set sourceTable's id to the partition's id, which make the exchange happen in snapshot.
+// Finally, update both the targetTable's info and the sourceTable's info in snapshot.
 func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uint64) error {
 	var sourceTable *model.TableInfo
 	oldTable, ok := s.physicalTableByID(targetTable.ID)
@@ -909,12 +914,14 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 
 	oldPartitions := oldTable.GetPartitionInfo().Definitions
 	if oldPartitions == nil {
-		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", oldTable.ID)
+		return cerror.ErrSnapshotTableNotFound.
+			GenWithStack("table %d is not a partition table", oldTable.ID)
 	}
 
 	newPartitions := targetTable.GetPartitionInfo().Definitions
 	if newPartitions == nil {
-		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", targetTable.ID)
+		return cerror.ErrSnapshotTableNotFound.
+			GenWithStack("table %d is not a partition table", targetTable.ID)
 	}
 
 	oldIDs := make(map[int64]struct{}, len(oldPartitions))
@@ -935,8 +942,8 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		}
 	}
 	if len(diff) != 1 {
-		// TODO(dongmen): refine this log.
-		return errors.New(fmt.Sprintf("new partition number not equal to 1, diff %v", diff))
+		return cerror.ErrExchangePartition.
+			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
 	}
 	sourceTable, ok = s.physicalTableByID(diff[0])
 	if !ok {
@@ -951,8 +958,8 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		}
 	}
 	if len(diff) != 1 {
-		// TODO(dongmen): refine this log.
-		return errors.New(fmt.Sprintf("old partition number not equal to 1, diff %v", diff))
+		return cerror.ErrExchangePartition.
+			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
 	}
 
 	exchangedPartitionID := diff[0]
