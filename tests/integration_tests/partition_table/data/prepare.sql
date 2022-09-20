@@ -26,3 +26,4 @@ ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2;
 insert into t2 values (100),(101),(102),(103),(104),(105); /*these values will be replicated to in downstream t2*/
 insert into t1 values (25),(29); /*these values will be replicated to in downstream t1.p3*/
 
+create table finish_mark (a int primary key);
