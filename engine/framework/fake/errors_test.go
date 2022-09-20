@@ -11,24 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package fake
 
 import (
-	"context"
+	"testing"
 
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
 )
 
-// backend indicates a transaction backend like MySQL, TiDB, ...
+func TestToFakeJobError(t *testing.T) {
+	t.Parallel()
 
-//go:generate mockery --name=Backend --inpackage
-type backend interface {
-	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
+	normalErr := errors.New("normal error")
+	fakeJobErr := NewJobUnRetryableError(normalErr)
+	errFromPlainText := errors.New(fakeJobErr.Error())
 
-	// Flush pending events in the backend.
-	Flush(ctx context.Context) error
-
-	// Close the backend.
-	Close() error
+	require.Equal(t, normalErr, ToFakeJobError(normalErr))
+	require.Equal(t, fakeJobErr, ToFakeJobError(fakeJobErr))
+	require.EqualError(t, ToFakeJobError(errFromPlainText), fakeJobErr.Error())
 }

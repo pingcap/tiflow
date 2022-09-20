@@ -275,7 +275,7 @@ func TestClose(t *testing.T) {
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be closed")
+	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
 func TestCloseCancellable(t *testing.T) {
@@ -300,4 +300,30 @@ func TestCloseCancellable(t *testing.T) {
 		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
+}
+
+func TestCloseReentrant(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+
+	tb.AppendRowChangedEvents(getTestRows()...)
+	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Len(t, sink.events, 7, "all events should be flushed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		err := tb.Close(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopping == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be stopping")
+	wg.Wait()
+	err := tb.Close(ctx)
+	require.Nil(t, err, "table should not be stopping again")
 }

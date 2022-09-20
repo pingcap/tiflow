@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -30,6 +32,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
+)
+
+const (
+	logInterval = 15 * time.Second
+	logBurst    = 5
 )
 
 type sinkNode struct {
@@ -48,7 +55,7 @@ type sinkNode struct {
 
 	flowController tableFlowController
 	redoManager    redo.LogManager
-
+	logLimiter     *rate.Limiter
 	enableOldValue bool
 	splitTxn       bool
 }
@@ -77,6 +84,7 @@ func newSinkNode(
 		redoManager:    redoManager,
 		enableOldValue: enableOldValue,
 		splitTxn:       splitTxn,
+		logLimiter:     rate.NewLimiter(rate.Every(logInterval), logBurst),
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
 	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
@@ -103,30 +111,11 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
+	n.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer n.state.Store(tablepb.TableStateStopped)
-	if n.sinkV1 != nil {
-		err = n.sinkV1.Close(ctx)
-		if err != nil {
-			return
-		}
-		log.Info("sinkV1 is closed",
-			zap.Int64("tableID", n.tableID),
-			zap.String("namespace", n.changefeed.Namespace),
-			zap.String("changefeed", n.changefeed.ID))
-		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-		return
-	}
-	err = n.sinkV2.Close(ctx)
-	if err != nil {
-		return
-	}
-	log.Info("sinkV2 is closed",
-		zap.Int64("tableID", n.tableID),
-		zap.String("namespace", n.changefeed.Namespace),
-		zap.String("changefeed", n.changefeed.ID))
-	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-	return
+	n.flowController.Abort()
+	return n.closeTableSink(ctx)
 }
 
 // flushSink emits all rows in rowBuffer to the backend sink and flushes
@@ -153,23 +142,24 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
 	}
 
-	// Flush sink with barrierTs, which is broadcasted by owner.
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
-	if resolved.Ts > currentBarrierTs {
-		resolved = model.NewResolvedTs(currentBarrierTs)
+	// Flush sink with barrierTs, which is broadcast by owner.
+	barrierTs := atomic.LoadUint64(&n.barrierTs)
+	if resolved.Ts > barrierTs {
+		resolved = model.NewResolvedTs(barrierTs)
 	}
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
-		if currentBarrierTs > redoFlushed {
-			// NOTE: How can barrierTs be greater than rodoTs?
+		if barrierTs > redoFlushed {
+			// NOTE: How can barrierTs be greater than redoFlushed?
 			// When scheduler moves a table from one place to another place, the table
 			// start position will be checkpointTs instead of resolvedTs, which means
 			// redoTs can be less than barrierTs.
-			log.Info("redo flushedTs is less than current barrierTs",
-				zap.Int64("tableID", n.tableID),
-				zap.Uint64("barrierTs", currentBarrierTs),
-				zap.Uint64("tableRedoFlushed", redoFlushed))
-
+			if n.logLimiter.Allow() {
+				log.Info("redo flushedTs is less than current barrierTs",
+					zap.Int64("tableID", n.tableID),
+					zap.Uint64("barrierTs", barrierTs),
+					zap.Uint64("tableRedoFlushed", redoFlushed))
+			}
 			// The latest above comment shows why barrierTs can be greater than redoTs.
 			// So here the aim is to avoid slow tables holding back the whole processor.
 			resolved = model.NewResolvedTs(redoFlushed)
@@ -200,10 +190,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	// fall back
 	n.flowController.Release(checkpoint)
 
-	// the checkpointTs may fall back in some situation such as:
-	//   1. This table is newly added to the processor
-	//   2. There is one table in the processor that has a smaller
-	//   checkpointTs than this one
+	// checkpointTs may fall back if this table is newly added to current processor.
 	if currentCheckpointTs.EqualOrGreater(checkpoint) {
 		return nil
 	}
@@ -396,12 +383,6 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func (n *sinkNode) releaseResource(ctx context.Context) error {
-	n.state.Store(tablepb.TableStateStopped)
-	n.flowController.Abort()
-	return n.closeTableSink(ctx)
 }
 
 func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
