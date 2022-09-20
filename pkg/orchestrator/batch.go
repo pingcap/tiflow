@@ -15,8 +15,10 @@ package orchestrator
 
 import (
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	"go.uber.org/zap"
 )
 
 const (
@@ -47,9 +49,11 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 		// we should return an error instantly
 		if i == 0 {
 			if changedSize > etcdTxnMaxSize {
+				log.Warn("etcd txn size exceed the limit", zap.Int("etcdTxnSize", changedSize))
 				return nil, 0, 0, cerrors.ErrEtcdTxnSizeExceed.GenWithStackByArgs(changedSize, etcdTxnMaxSize)
 			}
 			if len(changedState) > etcdTxnMaxOps {
+				log.Warn("etcd ops exceed the limit", zap.Any("changedState", changedState))
 				return nil, 0, 0, cerrors.ErrEtcdTxnOpsExceed.GenWithStackByArgs(len(changedState), etcdTxnMaxOps)
 			}
 		}
