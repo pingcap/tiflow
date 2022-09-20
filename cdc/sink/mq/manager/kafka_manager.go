@@ -236,7 +236,7 @@ func (m *kafkaTopicManager) listTopics() error {
 func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	topicMetaList, err := m.getMetadataOfTopics()
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+		return 0, errors.Trace(err)
 	}
 
 	// Now that we have access to the latest topics' information,
