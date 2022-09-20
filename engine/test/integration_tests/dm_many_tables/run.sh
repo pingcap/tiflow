@@ -31,7 +31,7 @@ function run() {
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_many_tables")
 	# check progress is forwarded gradually, not jump to "finished"
 	exec_with_retry --count 200 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
-	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 50 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
