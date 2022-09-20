@@ -90,8 +90,7 @@ func (s *testLogSuite) TestLogLevel(c *C) {
 	c.Assert(L().Check(zap.DebugLevel, "This is a debug log"), IsNil)
 }
 
-// CaptureStdout captures the stdout log and returns slice of log lines.
-func CaptureStdout(f func()) ([]string, error) {
+func captureStdout(f func()) ([]string, error) {
 	r, w, _ := os.Pipe()
 	stdout := os.Stdout
 	os.Stdout = w
@@ -119,7 +118,7 @@ func (s *testLogSuite) TestInitSlowQueryLoggerInDebugLevel(c *C) {
 	logLevel := "debug"
 	cfg := &Config{Level: logLevel, Format: "json"}
 	cfg.Adjust()
-	output, err := CaptureStdout(func() {
+	output, err := captureStdout(func() {
 		c.Assert(InitLogger(cfg), IsNil)
 		logutil.SlowQueryLogger.Debug("this is test info")
 		appLogger.Debug("this is from applogger")
@@ -141,7 +140,7 @@ func (s *testLogSuite) TestInitSlowQueryLoggerNotInDebugLevel(c *C) {
 	logLevel := "info"
 	cfg := &Config{Level: logLevel, Format: "json"}
 	cfg.Adjust()
-	output, err := CaptureStdout(func() {
+	output, err := captureStdout(func() {
 		c.Assert(InitLogger(cfg), IsNil)
 		logutil.SlowQueryLogger.Info("this is test info")
 		appLogger.Info("this is from applogger")
@@ -162,7 +161,7 @@ func (s *testLogSuite) TestWithCtx(c *C) {
 	ctx = AppendZapFieldToCtx(ctx, zap.String("key1", "value1"))
 	ctx = AppendZapFieldToCtx(ctx, zap.String("key2", "value2"))
 
-	output, err := CaptureStdout(func() {
+	output, err := captureStdout(func() {
 		c.Assert(InitLogger(cfg), IsNil)
 		WithCtx(ctx).Info("test1")
 	})
