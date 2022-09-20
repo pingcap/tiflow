@@ -18,6 +18,11 @@ import (
 	"sync"
 )
 
+type slot[E SlotNode[E]] struct {
+	nodes map[uint64]E
+	mu    sync.Mutex
+}
+
 // SlotNode describes objects that can be compared for equality.
 type SlotNode[T any] interface {
 	// NodeID tells the node's ID.
@@ -50,10 +55,7 @@ func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
 	}
 }
 
-// Add adds an elem to the slots and calls onConflict for each case
-// where elem is conflicting with an existing element.
-// Note that onConflict can be called multiple times with the same
-// dependee.
+// Add adds an elem to the slots and calls DependOn for elem.
 func (s *Slots[E]) Add(elem E, keys []uint64) {
 	dependOnList := make(map[int64]E, len(keys))
 	var lastSlot uint64 = math.MaxUint64
@@ -100,11 +102,6 @@ func (s *Slots[E]) Free(elem E, keys []uint64) {
 		}
 	}
 	elem.Free()
-}
-
-type slot[E SlotNode[E]] struct {
-	nodes map[uint64]E
-	mu    sync.Mutex
 }
 
 func getSlot(key, numSlots uint64) uint64 {
