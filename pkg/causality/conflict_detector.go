@@ -72,7 +72,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 // Add pushes a transaction to the ConflictDetector.
 //
 // NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
+func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	conflictKeys := txn.ConflictKeys(d.numSlots)
 	node := internal.NewNode()
 	node.OnResolved = func(workerID int64) {
@@ -84,7 +84,6 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
 	d.slots.Add(node, conflictKeys)
-	return nil
 }
 
 // Close closes the ConflictDetector.
