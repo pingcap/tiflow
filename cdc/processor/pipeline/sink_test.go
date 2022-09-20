@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -234,15 +233,12 @@ func TestStopStatus(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// This will block until sink Close returns
 		msg := pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop})
 		ok, err := node.HandleMessage(ctx, msg)
 		require.False(t, ok)
 		require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 		require.Equal(t, tablepb.TableStateStopped, node.State())
 	}()
-	// wait to ensure stop message is sent to the sink node
-	time.Sleep(time.Millisecond * 50)
 	require.Equal(t, tablepb.TableStateReplicating, node.State())
 	closeCh <- struct{}{}
 	wg.Wait()

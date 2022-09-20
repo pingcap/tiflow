@@ -206,8 +206,9 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 
 // these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
 const (
-	mysqlDBID = int64(1)
-	dummyTS   = uint64(1)
+	mysqlDBID      = int64(1)
+	dummyTS        = uint64(1)
+	mdlCreateTable = "create table mysql.tidb_mdl_info(job_id BIGINT NOT NULL PRIMARY KEY, version BIGINT NOT NULL, table_ids text(65535));"
 )
 
 // InitConcurrentDDLTables imitates the creating table logic for concurrent DDL.
@@ -235,6 +236,12 @@ func (s *Snapshot) InitConcurrentDDLTables() {
 		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
 		_ = s.inner.createTable(wrapped, dummyTS)
 	}
+	stmt, _ := p.ParseOneStmt(mdlCreateTable, "", "")
+	tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	tblInfo.State = timodel.StatePublic
+	tblInfo.ID = ddl.MDLTableID
+	wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
+	_ = s.inner.createTable(wrapped, dummyTS)
 }
 
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal

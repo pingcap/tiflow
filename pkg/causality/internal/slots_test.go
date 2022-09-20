@@ -23,7 +23,7 @@ type testElem struct {
 	id int
 }
 
-func (e *testElem) Equals(other *testElem) bool {
+func (e *testElem) NodeID(other *testElem) bool {
 	return e.id == other.id
 }
 
@@ -31,18 +31,23 @@ func TestSlotsTrivial(t *testing.T) {
 	t.Parallel()
 
 	const count = 1000
-	slots := NewSlots[*testElem](8)
+	slots := NewSlots[*Node](8)
+	nodes := make([]*Node, 0, 1000)
+
 	for i := 0; i < count; i++ {
-		slots.Add(&testElem{id: i}, []int64{1, 2, 3, 4, 5}, func(_ *testElem) {})
+		node := NewNode()
+		node.RandWorkerID = func() workerID { return 100 }
+		slots.Add(node, []uint64{1, 2, 3, 4, 5})
+		nodes = append(nodes, node)
 	}
 
 	for i := 0; i < count; i++ {
-		slots.Remove(&testElem{id: i}, []int64{1, 2, 3, 4, 5})
+		slots.Free(nodes[i], []uint64{1, 2, 3, 4, 5})
 	}
 
-	require.Equal(t, 0, slots.slots[1].Len())
-	require.Equal(t, 0, slots.slots[2].Len())
-	require.Equal(t, 0, slots.slots[3].Len())
-	require.Equal(t, 0, slots.slots[4].Len())
-	require.Equal(t, 0, slots.slots[5].Len())
+	require.Equal(t, (**Node)(nil), slots.slots[1].tail)
+	require.Equal(t, (**Node)(nil), slots.slots[2].tail)
+	require.Equal(t, (**Node)(nil), slots.slots[3].tail)
+	require.Equal(t, (**Node)(nil), slots.slots[4].tail)
+	require.Equal(t, (**Node)(nil), slots.slots[5].tail)
 }
