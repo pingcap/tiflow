@@ -981,7 +981,7 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 
 	log.Info("handle exchange partition success",
 		zap.String("sourceTable", sourceTable.TableName.String()),
-		zap.Int64("exchanged partition id", exchangedPartitionID),
+		zap.Int64("exchangedPartition", exchangedPartitionID),
 		zap.String("targetTable", targetTable.TableName.String()),
 		zap.Any("partition", targetTable.GetPartitionInfo().Definitions))
 	return nil
