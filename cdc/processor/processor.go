@@ -688,6 +688,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		log.Info("processor creates sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
@@ -1061,7 +1062,8 @@ func (p *processor) Close() error {
 		cancel()
 		log.Info("processor try to close the sinkV1",
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Any("sink", p.sinkV1))
 		start := time.Now()
 		if err := p.sinkV1.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Info("processor close sink failed",
