@@ -23,6 +23,7 @@ import (
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.RowChangedEvent] = (*Sink)(nil)
 
+// Sink is a black hole sink.
 type Sink struct{}
 
 // New create a black hole DML sink.
