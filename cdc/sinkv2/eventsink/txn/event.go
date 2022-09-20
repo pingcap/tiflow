@@ -47,13 +47,13 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 		return nil
 	}
 	hashRes := make(map[uint64]struct{}, len(txn.Rows))
-	hasher := fnv.New64a()
+	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
 		for _, key := range genRowKeys(row) {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
-			hashRes[hasher.Sum64()] = struct{}{}
+			hashRes[uint64(hasher.Sum32())] = struct{}{}
 			hasher.Reset()
 		}
 	}
