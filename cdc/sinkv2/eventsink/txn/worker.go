@@ -196,7 +196,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 
 // doFlush flushes the backend.
 // It returns true only if it can no longer be flushed.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) (canStop bool) {
+func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
