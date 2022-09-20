@@ -687,6 +687,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
+		// See: https://go.dev/play/p/sDlHncxO3Nz
 		if s != nil {
 			p.sinkV1 = s
 		}
