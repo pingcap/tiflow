@@ -19,6 +19,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 func benchmarkMessageHeartbeatResponse(
@@ -29,17 +30,17 @@ func benchmarkMessageHeartbeatResponse(
 		msg := Message{
 			MsgType: MsgHeartbeatResponse,
 			HeartbeatResponse: &HeartbeatResponse{
-				Tables:   make([]TableStatus, 0, total),
+				Tables:   make([]tablepb.TableStatus, 0, total),
 				Liveness: model.LivenessCaptureAlive,
 			},
 		}
 
 		for i := 0; i < total; i++ {
 			msg.HeartbeatResponse.Tables = append(msg.HeartbeatResponse.Tables,
-				TableStatus{
+				tablepb.TableStatus{
 					TableID: model.TableID(10000 + i),
-					State:   TableStateReplicating,
-					Checkpoint: Checkpoint{
+					State:   tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 433331421532337260,
 						ResolvedTs:   433331421532337261,
 					},
