@@ -32,7 +32,7 @@ import (
 
 const (
 	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots uint64 = 8 * 1024 * 1024
+	DefaultConflictDetectorSlots uint64 = 16 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
