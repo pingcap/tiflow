@@ -215,6 +215,7 @@ func (e *Elector) ensureCallbackIsRunning(ctx context.Context) {
 			defer func() {
 				e.callbackIsRunning.Store(false)
 				e.callbackWg.Done()
+				leaderCancel()
 			}()
 			log.Info("leader callback is called")
 			err := leaderCallback(leaderCtx)
