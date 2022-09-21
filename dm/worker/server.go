@@ -61,7 +61,7 @@ type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
 	closeMu    sync.Mutex
 	closed     atomic.Bool
-	inited     bool
+	callClosed bool
 	rootLis    net.Listener
 	svr        *grpc.Server
 	etcdClient *clientv3.Client
@@ -111,9 +111,9 @@ func (s *Server) Start() error {
 	startErr := func() error {
 		s.closeMu.Lock()
 		defer s.closeMu.Unlock()
-
-		if s.inited {
-			return terror.ErrWorkerServerClosed.Generate()
+		//If dm-worker received signal and finished close, start() not need to be executed
+		if s.callClosed {
+			return terror.ErrWorkerServerClosed
 		}
 
 		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
@@ -236,7 +236,6 @@ func (s *Server) Start() error {
 		}()
 
 		s.closed.Store(false)
-		s.inited = true
 		return nil
 	}()
 
@@ -245,6 +244,7 @@ func (s *Server) Start() error {
 	}
 
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
+
 	err := m.Serve()
 	if err != nil && common.IsErrNetClosing(err) {
 		err = nil
@@ -483,7 +483,6 @@ func (s *Server) doClose() {
 	s.httpWg.Wait()
 
 	s.closed.Store(true)
-	s.inited = true
 }
 
 // Close closes the RPC server, this function can be called multiple times.
@@ -492,9 +491,11 @@ func (s *Server) Close() {
 	defer s.closeMu.Unlock()
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
+
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
+	s.callClosed = true
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.

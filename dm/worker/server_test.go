@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -730,4 +731,36 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg
+}
+func (t *testServer) TestServerDataRace(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	defer s.Close()
+	go func() {
+		err1 := s.Start()
+		c.Assert(err1, IsNil)
+	}()
+
+	for i := 0; i < 10; i++ {
+		go func() {
+			fmt.Println("111")
+			s.Close()
+		}()
+	}
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return !s.closed.Load()
+	}), IsTrue)
 }

@@ -90,9 +90,14 @@ func main() {
 		s.Close()
 	}()
 	err = s.Start()
-	if err != nil {
+	switch errors.Cause(err) {
+	case nil:
+	case terror.ErrWorkerServerClosed:
+		log.L().Info("dm-worker already closed")
+	default:
 		log.L().Error("fail to start dm-worker", zap.Error(err))
 	}
+
 	s.Close() // wait until closed
 	log.L().Info("dm-worker exit")
 
