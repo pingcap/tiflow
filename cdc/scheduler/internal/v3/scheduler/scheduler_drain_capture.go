@@ -68,19 +68,6 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 	return true
 }
 
-func checkStoppingCapture(captures map[model.CaptureID]*member.CaptureStatus) model.CaptureID {
-	for id, cs := range captures {
-		if cs.IsOwner {
-			// Skip draining owner.
-			continue
-		}
-		if cs.State == member.CaptureStateStopping {
-			return id
-		}
-	}
-	return captureIDNotDraining
-}
-
 func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
@@ -94,16 +81,25 @@ func (d *drainCaptureScheduler) Schedule(
 		// There are two ways to make a capture "stopping",
 		// 1. PUT /api/v1/capture/drain
 		// 2. kill <TiCDC_PID>
-		stopping := checkStoppingCapture(captures)
-		if stopping == captureIDNotDraining {
+		for id, capture := range captures {
+			if capture.IsOwner {
+				// Skip draining owner.
+				continue
+			}
+			if capture.State == member.CaptureStateStopping {
+				d.target = id
+				break
+			}
+		}
+
+		if d.target == captureIDNotDraining {
 			return nil
 		}
-		// Find a stopping capture, drain it.
-		d.target = stopping
+
 		log.Info("schedulerv3: drain a stopping capture",
 			zap.String("namespace", d.changefeedID.Namespace),
 			zap.String("changefeed", d.changefeedID.ID),
-			zap.String("captureID", stopping))
+			zap.String("captureID", d.target))
 	}
 
 	// Currently, the workload is the number of tables in a capture.

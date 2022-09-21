@@ -40,44 +40,6 @@ func (n *Notifier) Notify() {
 	}
 }
 
-// Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
-type Receiver struct {
-	C       <-chan struct{}
-	c       chan struct{}
-	Stop    func()
-	ticker  *time.Ticker
-	closeCh chan struct{}
-}
-
-// returns true if the receiverCh should be closed
-func (r *Receiver) signalNonBlocking() bool {
-	select {
-	case <-r.closeCh:
-		return true
-	case r.c <- struct{}{}:
-	default:
-	}
-	return false
-}
-
-func (r *Receiver) signalTickLoop() {
-	go func() {
-	loop:
-		for {
-			select {
-			case <-r.closeCh:
-				break
-			case <-r.ticker.C:
-			}
-			exit := r.signalNonBlocking()
-			if exit {
-				break loop
-			}
-		}
-		close(r.c)
-	}()
-}
-
 // NewReceiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
 func (n *Notifier) NewReceiver(tickTime time.Duration) (*Receiver, error) {
@@ -135,11 +97,57 @@ func (n *Notifier) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for _, receiver := range n.receivers {
-		if receiver.rec.ticker != nil {
-			receiver.rec.ticker.Stop()
-		}
-		close(receiver.rec.closeCh)
+		receiver.rec.close()
 	}
 	n.receivers = nil
 	n.closed = true
+}
+
+// Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
+type Receiver struct {
+	C       <-chan struct{}
+	c       chan<- struct{}
+	Stop    func()
+	ticker  *time.Ticker
+	closeCh chan struct{}
+}
+
+// returns true if the receiverCh should be closed
+func (r *Receiver) signalNonBlocking() bool {
+	select {
+	case <-r.closeCh:
+		return true
+	case r.c <- struct{}{}:
+	default:
+	}
+	return false
+}
+
+func (r *Receiver) signalTickLoop() {
+	go func() {
+	loop:
+		for {
+			select {
+			case <-r.closeCh:
+				break loop
+			case <-r.ticker.C:
+			}
+			exit := r.signalNonBlocking()
+			if exit {
+				break loop
+			}
+		}
+		close(r.c)
+	}()
+}
+
+func (r *Receiver) close() {
+	if r.ticker != nil {
+		// in this case, r.c could be accessed by signalTickLoop goroutine, hence
+		// we should not close it here.
+		r.ticker.Stop()
+	} else {
+		close(r.c)
+	}
+	close(r.closeCh)
 }

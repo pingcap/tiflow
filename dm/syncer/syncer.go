@@ -1058,6 +1058,10 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 	switch job.tp {
 	case xid:
+		failpoint.Inject("SkipSaveGlobalPoint", func() {
+			s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
+			panic("SkipSaveGlobalPoint")
+		})
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
 		s.isTransactionEnd = true
@@ -1323,26 +1327,6 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			return
 		}
 
-		// set timezone
-		if ddlJob.timezone != "" {
-			s.timezoneLastTime = ddlJob.timezone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		} else if s.timezoneLastTime != "" {
-			// use last time's time zone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
-			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
-			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
-		}
-		// set timestamp
-		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
-		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
-		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
-		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
-
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
@@ -1377,6 +1361,30 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		})
 
 		if !ignore {
+			failpoint.Inject("SkipSaveGlobalPoint", func() {
+				s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
+				panic("SkipSaveGlobalPoint")
+			})
+			// set timezone
+			if ddlJob.timezone != "" {
+				s.timezoneLastTime = ddlJob.timezone
+				setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
+				ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+				setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+				ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+			} else if s.timezoneLastTime != "" {
+				// use last time's time zone
+				setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
+				ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+				setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
+				ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+			}
+			// set timestamp
+			setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
+			ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
+			setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
+			ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
+
 			var affected int
 			var ddlCreateTime int64 = -1 // default when scan failed
 			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
@@ -2200,6 +2208,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx); err != nil {
 					return err
 				}
+				s.tctx.L().Info("disable safe mode in exit point")
 				if err = s.safeMode.Add(s.runCtx, -1); err != nil {
 					return err
 				}
@@ -3119,6 +3128,17 @@ func (s *Syncer) Pause() {
 
 // Resume resumes the paused process.
 func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
+	var err error
+	defer func() {
+		if err != nil {
+			pr <- pb.ProcessResult{
+				IsCanceled: false,
+				Errors: []*pb.ProcessError{
+					unit.NewProcessError(err),
+				},
+			}
+		}
+	}()
 	if s.isClosed() {
 		s.tctx.L().Warn("try to resume, but already closed")
 		return
@@ -3127,16 +3147,11 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	// continue the processing
 	s.reset()
 	// reset database conns
-	err := s.resetDBs(s.tctx.WithContext(ctx))
+	err = s.resetDBs(s.tctx.WithContext(ctx))
 	if err != nil {
-		pr <- pb.ProcessResult{
-			IsCanceled: false,
-			Errors: []*pb.ProcessError{
-				unit.NewProcessError(err),
-			},
-		}
 		return
 	}
+
 	s.Process(ctx, pr)
 }
 

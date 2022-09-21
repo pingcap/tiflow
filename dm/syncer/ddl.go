@@ -255,12 +255,13 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
-		ddl.logger.Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+		ddl.logger.Warn("found error when getting sql_mode from binlog status_vars", zap.Error(err))
 	}
 
 	qec.timezone, err = event.GetTimezoneByStatusVars(ev.StatusVars, ddl.upstreamTZStr)
-	if err != nil {
-		ddl.logger.Warn("found error when get timezone from binlog status_vars", zap.Error(err))
+	// no timezone information retrieved and upstream timezone not previously set
+	if err != nil && ddl.upstreamTZStr == "" {
+		ddl.logger.Warn("found error when getting timezone from binlog status_vars", zap.Error(err))
 	}
 
 	qec.timestamp = ec.header.Timestamp

@@ -776,7 +776,8 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.cfg.CheckpointFlushInterval = 30
+	syncer.cfg.CheckpointFlushInterval = 30 // defaultCheckpointFlushInterval
+	syncer.cfg.SafeModeDuration = "60s"     // defaultCheckpointFlushInterval * 2
 	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),
@@ -1193,7 +1194,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	checkPointMock.ExpectExec(".*INSERT INTO .* VALUES.* ON DUPLICATE KEY UPDATE.*").WillReturnResult(sqlmock.NewResult(0, 1))
 	checkPointMock.ExpectCommit()
 	// disable 1-minute safe mode
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds", "return(0)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds", `return("10ms")`), IsNil)
 	go syncer.Process(ctx, resultCh)
 	go func() {
 		for r := range resultCh {

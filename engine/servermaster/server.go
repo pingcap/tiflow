@@ -43,7 +43,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -562,9 +561,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameworkMeta)); err != nil {
-			log.Warn("create schema for framework metastore fail, but it can be ignored.",
+			log.Error("create schema for framework metastore fail",
 				zap.String("schema", s.cfg.FrameworkMeta.Schema),
 				zap.Error(err))
+			return err
 		}
 	}
 	var err error
@@ -592,9 +592,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMeta)); err != nil {
-			log.Warn("create schema for business metastore fail, but it can be ignored.",
+			log.Error("create schema for business metastore fail",
 				zap.String("schema", s.cfg.BusinessMeta.Schema),
 				zap.Error(err))
+			return err
 		}
 	}
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMeta)
@@ -833,7 +834,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	masterMeta := &frameModel.MasterMeta{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Type:      framework.JobManager,
+		Type:      frameModel.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
