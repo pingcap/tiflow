@@ -82,6 +82,9 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 	}
 }
 
+// Add adds a txnEvent to the worker.
+// The worker will call unlock() when it's ready to receive more events.
+// In other words, it maybe advances the conflict detector.
 func (w *worker) Add(txn *txnEvent, unlock func()) {
 	w.txnCh.In() <- txnWithNotifier{txn, unlock}
 }
@@ -122,9 +125,9 @@ func (w *worker) runBackgroundLoop() {
 
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(time.Second)
-		startToWork := time.Now()
 		defer overseerTimer.Stop()
-	LOOP:
+		startToWork := time.Now()
+	Loop:
 		for {
 			if !w.hasPending {
 				// There is no pending events, so use a blocking `select`.
@@ -142,7 +145,7 @@ func (w *worker) runBackgroundLoop() {
 				case txn := <-w.txnCh.Out():
 					w.hasPending = true
 					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
+						break Loop
 					}
 				case now := <-overseerTimer.C:
 					totalTimeSlice = now.Sub(startToWork)
@@ -157,11 +160,11 @@ func (w *worker) runBackgroundLoop() {
 				case txn := <-w.txnCh.Out():
 					w.hasPending = true
 					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
+						break Loop
 					}
 				default:
 					if w.doFlush(&flushTimeSlice) {
-						break LOOP
+						break Loop
 					}
 				}
 			}
@@ -174,7 +177,7 @@ func (w *worker) runBackgroundLoop() {
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
-		// The table where the event comes from is in stopping so it's safe
+		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
 		// Still necessary to append the wantMore callback into the pending list.
@@ -191,8 +194,9 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 	return false
 }
 
-// doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
+// doFlush flushes the backend.
+// It returns true only if it can no longer be flushed.
+func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {

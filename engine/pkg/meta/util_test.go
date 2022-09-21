@@ -11,22 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package meta
 
 import (
 	"context"
+	"regexp"
+	"testing"
 
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/stretchr/testify/require"
 )
 
-// backend indicates a transaction backend like MySQL, TiDB, ...
-type backend interface {
-	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
-
-	// Flush pending events in the backend.
-	Flush(ctx context.Context) error
-
-	// Close the backend.
-	Close() error
+func TestCAError(t *testing.T) {
+	conf := model.DefaultStoreConfig()
+	conf.Security = &security.Credential{
+		CAPath:   "/xxxx.ca",
+		CertPath: "/xxx.ce",
+	}
+	err := CreateSchemaIfNotExists(context.TODO(), *conf)
+	require.Error(t, err)
+	require.Regexp(t, regexp.QuoteMeta("could not read ca certificate: open"), err)
 }
