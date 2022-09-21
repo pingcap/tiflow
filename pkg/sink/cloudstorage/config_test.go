@@ -60,6 +60,11 @@ func TestVerifySinkURIParams(t *testing.T) {
 			expectedErr: "",
 		},
 		{
+			name:        "sink uri with valid scheme, worker-count and flush-interval",
+			uri:         "s3://bucket/prefix?worker-count=64&flush-interval=1m30s",
+			expectedErr: "",
+		},
+		{
 			name:        "invalid sink uri with unknown storage scheme",
 			uri:         "xxx://tmp/test",
 			expectedErr: "can't create cloud storage sink with unsupported scheme",
@@ -67,11 +72,21 @@ func TestVerifySinkURIParams(t *testing.T) {
 		{
 			name:        "invalid sink uri with worker-count number less than lower limit",
 			uri:         "file://tmp/test?worker-count=-1",
-			expectedErr: "invalid worker-count -1, which must be greater than 0",
+			expectedErr: "invalid worker-count -1, it must be greater than 0",
 		},
 		{
 			name:        "invalid sink uri with worker-count number greater than upper limit",
 			uri:         "s3://bucket/prefix?worker-count=10000",
+			expectedErr: "",
+		},
+		{
+			name:        "invalid sink uri with flush-interval less than lower limit",
+			uri:         "s3://bucket/prefix?flush-interval=-10s",
+			expectedErr: "invalid flush-interval -10s, it must be greater than 0",
+		},
+		{
+			name:        "invalid sink uri with flush-interval greater than upper limit",
+			uri:         "s3://bucket/prefix?flush=interval=1h",
 			expectedErr: "",
 		},
 	}
@@ -84,6 +99,7 @@ func TestVerifySinkURIParams(t *testing.T) {
 		if tc.expectedErr == "" {
 			require.Nil(t, err)
 			require.LessOrEqual(t, cfg.WorkerCount, maxWorkerCount)
+			require.LessOrEqual(t, cfg.FlushInterval, maxFlushInterval)
 		} else {
 			require.Regexp(t, tc.expectedErr, err)
 		}

@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -29,19 +30,25 @@ import (
 const (
 	// defaultWorkerCount is the default number of workers.
 	defaultWorkerCount = 16
-	// The upper limit of max worker counts.
+	// the upper limit of max worker counts.
 	maxWorkerCount = 512
+	// defaultFlushInterval is the default flush interval for cloud storage sink.
+	defaultFlushInterval = time.Duration(5 * time.Second)
+	// the upper limit of flush interval.
+	maxFlushInterval = time.Duration(10 * time.Minute)
 )
 
 // Config is the configuration for cloud storage sink.
 type Config struct {
-	WorkerCount int
+	WorkerCount   int
+	FlushInterval time.Duration
 }
 
 // NewConfig returns the default cloud storage sink config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount: defaultWorkerCount,
+		WorkerCount:   defaultWorkerCount,
+		FlushInterval: defaultFlushInterval,
 	}
 }
 
@@ -62,6 +69,9 @@ func (c *Config) Apply(
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
 		return err
 	}
+	if err = getFlushInterval(query, &c.FlushInterval); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -78,14 +88,38 @@ func getWorkerCount(values url.Values, workerCount *int) error {
 	}
 	if c <= 0 {
 		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig,
-			fmt.Errorf("invalid worker-count %d, which must be greater than 0", c))
+			fmt.Errorf("invalid worker-count %d, it must be greater than 0", c))
 	}
 	if c > maxWorkerCount {
-		log.Warn("worker-count too large",
+		log.Warn("worker-count is too large",
 			zap.Int("original", c), zap.Int("override", maxWorkerCount))
 		c = maxWorkerCount
 	}
 
 	*workerCount = c
+	return nil
+}
+
+func getFlushInterval(values url.Values, flushInterval *time.Duration) error {
+	s := values.Get("flush-interval")
+	if len(s) == 0 {
+		return nil
+	}
+
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+	}
+	if d <= 0 {
+		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig,
+			fmt.Errorf("invalid flush-interval %s, it must be greater than 0", d))
+	}
+	if d > maxFlushInterval {
+		log.Warn("flush-interval is too large", zap.Duration("original", d),
+			zap.Duration("override", maxFlushInterval))
+		d = maxFlushInterval
+	}
+
+	*flushInterval = d
 	return nil
 }

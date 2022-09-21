@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,8 +34,8 @@ func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
 	require.Nil(t, err)
 	storage, err := storage.New(ctx, bs, nil)
 	require.Nil(t, err)
-
-	dmlWriter := newDMLWriter(ctx, changefeedID, storage, 1, ".json", errCh)
+	cfg := cloudstorage.NewConfig()
+	dmlWriter := newDMLWriter(ctx, changefeedID, storage, cfg, ".json", errCh)
 	worker := newEncodingWorker(1, changefeedID, encoder, dmlWriter, errCh)
 	return worker
 }
@@ -85,8 +86,7 @@ func TestEncodeEvents(t *testing.T) {
 	})
 	require.Nil(t, err)
 	cancel()
-
-	worker.writer.stop()
+	worker.writer.close()
 }
 
 func TestWorkerRun(t *testing.T) {
@@ -135,6 +135,6 @@ func TestWorkerRun(t *testing.T) {
 		tableName: table,
 	}
 	cancel()
-	worker.stop()
-	worker.writer.stop()
+	worker.close()
+	worker.writer.close()
 }

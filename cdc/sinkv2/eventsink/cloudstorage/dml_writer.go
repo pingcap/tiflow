@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
 type dmlWriter struct {
@@ -26,7 +27,7 @@ type dmlWriter struct {
 	workerChannels []*chann.Chann[eventFragment]
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
-	concurrency    int
+	config         *cloudstorage.Config
 	extension      string
 	errCh          chan<- error
 }
@@ -34,21 +35,21 @@ type dmlWriter struct {
 func newDMLWriter(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
-	concurrency int,
+	config *cloudstorage.Config,
 	extension string,
 	errCh chan<- error,
 ) *dmlWriter {
 	w := &dmlWriter{
 		storage:        storage,
-		workerChannels: make([]*chann.Chann[eventFragment], concurrency),
+		workerChannels: make([]*chann.Chann[eventFragment], config.WorkerCount),
 		hasher:         hash.NewPositionInertia(),
-		concurrency:    concurrency,
+		config:         config,
 		extension:      extension,
 		errCh:          errCh,
 	}
 
-	for i := 0; i < concurrency; i++ {
-		d := newDMLWorker(i+1, changefeedID, storage, extension, errCh)
+	for i := 0; i < config.WorkerCount; i++ {
+		d := newDMLWorker(i+1, changefeedID, storage, w.config.FlushInterval, extension, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)
@@ -61,13 +62,13 @@ func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
 	tableName := frag.tableName
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
-	workerID := d.hasher.Sum32() % uint32(d.concurrency)
+	workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
 	d.workerChannels[workerID].In() <- frag
 }
 
-func (d *dmlWriter) stop() {
+func (d *dmlWriter) close() {
 	for _, w := range d.workers {
-		w.stop()
+		w.close()
 	}
 
 	for _, ch := range d.workerChannels {

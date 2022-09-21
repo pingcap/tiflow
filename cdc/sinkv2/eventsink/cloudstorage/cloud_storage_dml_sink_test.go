@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -31,8 +30,7 @@ import (
 func TestCloudStorageWriteEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
-	uri := fmt.Sprintf("file:///%s", parentDir)
-	fmt.Println(parentDir)
+	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
@@ -45,7 +43,10 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
-	txns := make([]*eventsink.TxnCallbackableEvent, 0, 1000)
+	// assume we have a large transaction and it is splitted into 10 small transactions
+	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
+	cnt := 0
+	batch := 100
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
@@ -53,14 +54,17 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 				Table:        &model.TableName{Schema: "test", Table: "table1"},
 				TableVersion: 33,
 			},
+			Callback: func() {
+				cnt += batch
+			},
 		}
-		for j := 0; j < 100; j++ {
+		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
 				CommitTs:         100,
 				Table:            &model.TableName{Schema: "test", Table: "table1"},
 				TableInfoVersion: 33,
 				Columns: []*model.Column{
-					{Name: "c1", Value: i*100 + j},
+					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
 				},
 			}
@@ -72,13 +76,16 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	os.MkdirAll(tableDir, 0o755)
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(7 * time.Second)
-	files, err := ioutil.ReadDir(tableDir)
+	time.Sleep(4 * time.Second)
+
+	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 1)
-	content, err := ioutil.ReadFile(path.Join(tableDir, files[0].Name()))
+	content, err := os.ReadFile(path.Join(tableDir, files[0].Name()))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
+
+	require.Equal(t, 1000, cnt)
 	cancel()
 	err = s.Close()
 	require.Nil(t, err)

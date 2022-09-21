@@ -14,8 +14,8 @@ package cloudstorage
 
 import (
 	"context"
-	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,6 +30,7 @@ type encodingWorker struct {
 	wg           sync.WaitGroup
 	encoder      codec.EventBatchEncoder
 	writer       *dmlWriter
+	isClosed     uint64
 	errCh        chan<- error
 }
 
@@ -61,7 +62,9 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 			case <-ctx.Done():
 				return
 			case frag := <-msgChan.Out():
-				fmt.Printf("frag seq:%v\n", frag.seqNumber)
+				if atomic.LoadUint64(&w.isClosed) == 1 {
+					return
+				}
 				if frag.event == nil {
 					w.writer.dispatchFragToDMLWorker(frag)
 					continue
@@ -77,8 +80,18 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 }
 
 func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) error {
-	for _, event := range frag.event.Event.Rows {
-		err := w.encoder.AppendRowChangedEvent(ctx, "", event, nil)
+	var err error
+	length := len(frag.event.Event.Rows)
+
+	for idx, event := range frag.event.Event.Rows {
+		// because each TxnCallbackableEvent contains one Callback and multiple RowChangedEvents,
+		// we only append RowChangedEvent attached with a Callback to EventBatchEncoder for the
+		// last RowChangedEvent.
+		if idx != length-1 {
+			err = w.encoder.AppendRowChangedEvent(ctx, "", event, nil)
+		} else {
+			err = w.encoder.AppendRowChangedEvent(ctx, "", event, frag.event.Callback)
+		}
 		if err != nil {
 			return err
 		}
@@ -90,6 +103,9 @@ func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) e
 	return nil
 }
 
-func (w *encodingWorker) stop() {
+func (w *encodingWorker) close() {
+	if !atomic.CompareAndSwapUint64(&w.isClosed, 0, 1) {
+		return
+	}
 	w.wg.Wait()
 }

@@ -36,7 +36,8 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	storage, err := storage.New(ctx, bs, nil)
 	require.Nil(t, err)
 	errCh := make(chan error, 1)
-	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage, ".json", errCh)
+	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
+		time.Duration(2*time.Second), ".json", errCh)
 	return d
 }
 
@@ -167,7 +168,7 @@ func TestDMLWorkerRun(t *testing.T) {
 		tableVersion: 199,
 	}
 
-	time.Sleep(7 * time.Second)
+	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
 	files, err := ioutil.ReadDir(table1Dir)
 	require.Nil(t, err)
@@ -179,5 +180,5 @@ func TestDMLWorkerRun(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Equal(t, "CDC000001.json", files[0].Name())
 	cancel()
-	d.stop()
+	d.close()
 }

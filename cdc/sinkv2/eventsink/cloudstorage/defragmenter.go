@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -86,7 +85,6 @@ func (d *defragmenter) writeMsgsConsecutive(
 ) (uint64, error) {
 	var written uint64
 	for _, msg := range start.encodedMsgs {
-		fmt.Printf("write msg to dst channel:%v\n", string(msg.Value))
 		dst.In() <- msg
 	}
 

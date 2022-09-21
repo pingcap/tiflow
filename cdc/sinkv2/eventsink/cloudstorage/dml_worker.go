@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -27,22 +28,21 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultFlushInterval = 5 * time.Second
-
 type dmlWorker struct {
 	id             int
 	changeFeedID   model.ChangeFeedID
 	storage        storage.ExternalStorage
+	flushInterval  time.Duration
 	msgChannels    map[versionedTable]*chann.Chann[*common.Message]
 	flushNotifyCh  chan flushTask
 	defragmenters  map[versionedTable]*defragmenter
 	fileIndex      map[versionedTable]uint64
 	activeTablesCh *chann.Chann[versionedTable]
 	wg             sync.WaitGroup
+	isClosed       uint64
 	errCh          chan<- error
 	extension      string
 }
-
 
 type flushTask struct {
 	activeTables []versionedTable
@@ -52,6 +52,7 @@ func newDMLWorker(
 	id int,
 	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
+	flushInterval time.Duration,
 	extension string,
 	errCh chan<- error,
 ) *dmlWorker {
@@ -59,6 +60,7 @@ func newDMLWorker(
 		id:             id,
 		changeFeedID:   changefeedID,
 		storage:        storage,
+		flushInterval:  flushInterval,
 		msgChannels:    make(map[versionedTable]*chann.Chann[*common.Message]),
 		defragmenters:  make(map[versionedTable]*defragmenter),
 		flushNotifyCh:  make(chan flushTask, 1),
@@ -88,22 +90,31 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case task := <-d.flushNotifyCh:
-				fmt.Printf("get flush task:%v\n", task.activeTables)
+				if atomic.LoadUint64(&d.isClosed) == 1 {
+					return
+				}
 				for _, tbl := range task.activeTables {
 					buf.Reset()
+					var callbacks []func()
 					for msg := range d.msgChannels[tbl].Out() {
 						if msg == nil {
 							break
 						}
 						buf.Write(msg.Value)
+						callbacks = append(callbacks, msg.Callback)
 					}
 
 					path := d.generateCloudStoragePath(tbl)
-					fmt.Printf("write content to path:%s time%s\n", path, time.Now())
 					err := d.storage.WriteFile(ctx, path, buf.Bytes())
 					if err != nil {
 						d.errCh <- err
 						return
+					}
+
+					for _, cb := range callbacks {
+						if cb != nil {
+							cb()
+						}
 					}
 					log.Debug("write file to storage success", zap.String("path", path),
 						zap.Int("workerID", d.id),
@@ -125,6 +136,9 @@ func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case table := <-d.activeTablesCh.Out():
+				if atomic.LoadUint64(&d.isClosed) == 1 {
+					return
+				}
 				_, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
 				if err != nil {
 					log.Error("dml worker failed to flush messages to cloud storage sink",
@@ -143,7 +157,7 @@ func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 
 func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	var readyTables []versionedTable
-	ticker := time.NewTicker(defaultFlushInterval)
+	ticker := time.NewTicker(d.flushInterval)
 
 	d.wg.Add(1)
 	go func() {
@@ -156,6 +170,9 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if atomic.LoadUint64(&d.isClosed) == 1 {
+					return
+				}
 				if len(readyTables) == 0 {
 					continue
 				}
@@ -170,6 +187,9 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				default:
 				}
 			case frag := <-ch.Out():
+				if atomic.LoadUint64(&d.isClosed) == 1 {
+					return
+				}
 				table := versionedTable{
 					TableName:    frag.tableName,
 					TableVersion: frag.tableVersion,
@@ -195,7 +215,10 @@ func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
 		d.fileIndex[tbl], d.extension)
 }
 
-func (d *dmlWorker) stop() {
+func (d *dmlWorker) close() {
+	if !atomic.CompareAndSwapUint64(&d.isClosed, 0, 1) {
+		return
+	}
 	d.activeTablesCh.Close()
 	for range d.activeTablesCh.Out() {
 		// drain the activeTablesCh
