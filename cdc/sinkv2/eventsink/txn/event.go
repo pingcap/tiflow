@@ -36,13 +36,13 @@ func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
-	keys := genTxnKeys(e.TxnCallbackableEvent.Event, numSlots)
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
+	sort.Slice(keys, func(i, j int) bool { return keys[i]%numSlots < keys[j]%numSlots })
 	return keys
 }
 
 // genTxnKeys returns hash keys for `txn`.
-func genTxnKeys(txn *model.SingleTableTxn, numSlots uint64) []uint64 {
+func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
@@ -53,7 +53,7 @@ func genTxnKeys(txn *model.SingleTableTxn, numSlots uint64) []uint64 {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
-			hashRes[uint64(hasher.Sum32())%numSlots] = struct{}{}
+			hashRes[uint64(hasher.Sum32())] = struct{}{}
 			hasher.Reset()
 		}
 	}
