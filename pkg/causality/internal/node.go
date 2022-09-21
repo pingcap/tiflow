@@ -53,6 +53,8 @@ type Node struct {
 	OnResolved func(id workerID)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
+	// Set the callback that the node is notified.
+	OnNotified func(callback func())
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependees    int32
@@ -225,7 +227,11 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 		if workerNum < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
-		n.assignTo(workerNum)
+		if n.OnNotified != nil {
+			n.OnNotified(func() { n.assignTo(workerNum) })
+		} else {
+			n.assignTo(workerNum)
+		}
 	}
 	return
 }
