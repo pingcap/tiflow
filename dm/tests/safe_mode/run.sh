@@ -212,7 +212,7 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	# make sure worker1 enter to sync status, and complete one dml
-	check_log_contain_with_retry "alter table t1 add column age int" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "event=XID" $WORK_DIR/worker1/log/dm-worker.log
 	# restart workers
 	kill_dm_worker
 
@@ -345,7 +345,8 @@ function run() {
 cleanup_data safe_mode_target
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-run $*
+# run $*
+safe_mode_duration
 cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
