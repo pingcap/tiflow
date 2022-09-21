@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -60,6 +61,9 @@ type progressTracker struct {
 
 	// Internal Buffer size. Modified in tests only.
 	bufferSize uint64
+
+	// closed is used to indicate the progress tracker is closed.
+	closed atomic.Bool
 
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
@@ -196,7 +200,9 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
-				r.lastMinResolvedTs = cached.resolvedTs
+				if !r.closed.Load() {
+					r.lastMinResolvedTs = cached.resolvedTs
+				}
 				r.resolvedTsCache = r.resolvedTsCache[1:]
 				if len(r.resolvedTsCache) == 0 {
 					r.resolvedTsCache = nil
@@ -229,6 +235,7 @@ func (r *progressTracker) trackingCount() int {
 
 // close is used to close the progress tracker.
 func (r *progressTracker) close(ctx context.Context) error {
+	r.closed.Store(true)
 	blockTicker := time.NewTicker(warnDuration)
 	defer blockTicker.Stop()
 	// Used to block for loop for a while to prevent CPU spin.
