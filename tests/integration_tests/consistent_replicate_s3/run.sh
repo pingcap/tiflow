@@ -92,9 +92,9 @@ function run() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_sql "create table consistent_replicate_s3.USERTABLE2 like consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into t2 values (100),(101),(102),(103),(104),(105);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into t1 values (25),(29);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "ALTER TABLE consistent_replicate_s3.t1 EXCHANGE PARTITION p3 WITH TABLE consistent_replicate_s3.t2" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_s3.t2 values (100),(101),(102),(103),(104),(105);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_s3.t1 values (25),(29);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "insert into consistent_replicate_s3.USERTABLE2 select * from consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
