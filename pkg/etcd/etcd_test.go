@@ -186,30 +186,6 @@ func putChangeFeedStatus(
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
-func TestGetAllChangeFeedStatus(t *testing.T) {
-	s := &Tester{}
-	s.SetUpTest(t)
-	defer s.TearDownTest(t)
-
-	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
-		model.DefaultChangeFeedID("cf1"): {
-			ResolvedTs:   100,
-			CheckpointTs: 90,
-		},
-		model.DefaultChangeFeedID("cf2"): {
-			ResolvedTs:   100,
-			CheckpointTs: 70,
-		},
-	}
-	for id, cf := range changefeeds {
-		err := putChangeFeedStatus(context.Background(), s.client, id, cf)
-		require.NoError(t, err)
-	}
-	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, statuses, changefeeds)
-}
-
 func TestCheckMultipleCDCClusterExist(t *testing.T) {
 	s := &Tester{}
 	s.SetUpTest(t)
