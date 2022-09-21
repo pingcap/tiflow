@@ -65,4 +65,6 @@ cmd="${cmd} --default-character-set utf8mb4 -e \"${sql}\""
 if [[ ${quiet} -ne 1 ]]; then
 	echo "will execute: $cmd" >&2
 fi
+set -f
 eval $cmd
+set +f

@@ -63,5 +63,5 @@ function run() {
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
-# run $*
+run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
