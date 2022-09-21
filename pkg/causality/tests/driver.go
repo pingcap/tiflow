@@ -76,9 +76,7 @@ func (d *conflictTestDriver) Run(ctx context.Context, n int) error {
 		}
 
 		d.pendingCount.Add(1)
-		if err := d.conflictDetector.Add(txn); err != nil {
-			return err
-		}
+		d.conflictDetector.Add(txn)
 		counter++
 
 		if counter > n {
