@@ -21,14 +21,27 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// defragmenter is used to handle event fragments which can be registered
+// out of order. `writeMsgs` will decide whether an event fragment can be sent
+// to the destination channel or it must wait the previous fragments arrive in defragmenter.
+// e.g. five events numbered as 2,1,3,5,4 are registered to defragmenter.
+// - event 2 cannot be sent right away because event 1 doesn't arrive.
+// - event 1 arrives and it observes that event 2 is already there, so event 1~2 are sent.
+// - event 3 arrives and no subsequent event (i.e. event 4) arrives, so event 3 is sent immediately.
+// - event 5 cannot be sent right away because event 4 doesn't arrive.
+// - event 4 arrives and it observes that event 5 is already there, so event 4~5 are sent.
 type defragmenter struct {
-	lastWritten   uint64
+	// the last written sequence number.
+	lastWritten uint64
+	// lastSeqNumber is used to mark the end of a series of eventFragment.
 	lastSeqNumber uint64
-	written       uint64
-	future        map[uint64]eventFragment
-	registryCh    *chann.Chann[eventFragment]
+	// the total written bytes.
+	written    uint64
+	future     map[uint64]eventFragment
+	registryCh *chann.Chann[eventFragment]
 }
 
+// newDefragmenter creates a defragmenter.
 func newDefragmenter() *defragmenter {
 	return &defragmenter{
 		future:     make(map[uint64]eventFragment),
@@ -36,12 +49,16 @@ func newDefragmenter() *defragmenter {
 	}
 }
 
+// register pushes an eventFragment to registryCh.
 func (d *defragmenter) register(frag eventFragment) {
 	d.registryCh.In() <- frag
 }
 
+// writeMsgs write messages to desination channel in correct order.
 func (d *defragmenter) writeMsgs(ctx context.Context, dst *chann.Chann[*common.Message]) (uint64, error) {
 	for {
+		// if we encounter an ending mark, push nil to desination channel so that we can finish processing
+		// in the consumer side.
 		if d.lastWritten >= d.lastSeqNumber && d.lastSeqNumber > 0 {
 			dst.In() <- nil
 			break
@@ -52,13 +69,13 @@ func (d *defragmenter) writeMsgs(ctx context.Context, dst *chann.Chann[*common.M
 			d.future = nil
 			return 0, ctx.Err()
 		case frag := <-d.registryCh.Out():
-			// check whether we meet an ending mark
+			// check whether we meet an ending mark.
 			if frag.event == nil {
 				d.lastSeqNumber = frag.seqNumber
 				continue
 			}
 
-			// check whether to write messages to output channel right now
+			// check whether to write messages to destination channel right now.
 			next := d.lastWritten + 1
 			if frag.seqNumber == next {
 				n, err := d.writeMsgsConsecutive(ctx, dst, frag)
@@ -78,6 +95,7 @@ func (d *defragmenter) writeMsgs(ctx context.Context, dst *chann.Chann[*common.M
 	return d.written, nil
 }
 
+// writeMsgsConsecutive write consective messages as much as possible.
 func (d *defragmenter) writeMsgsConsecutive(
 	ctx context.Context,
 	dst *chann.Chann[*common.Message],

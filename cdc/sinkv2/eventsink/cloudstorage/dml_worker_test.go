@@ -37,7 +37,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	require.Nil(t, err)
 	errCh := make(chan error, 1)
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		time.Duration(2*time.Second), ".json", errCh)
+		2*time.Second, ".json", errCh)
 	return d
 }
 

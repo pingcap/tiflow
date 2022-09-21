@@ -33,9 +33,9 @@ const (
 	// the upper limit of max worker counts.
 	maxWorkerCount = 512
 	// defaultFlushInterval is the default flush interval for cloud storage sink.
-	defaultFlushInterval = time.Duration(5 * time.Second)
+	defaultFlushInterval = 5 * time.Second
 	// the upper limit of flush interval.
-	maxFlushInterval = time.Duration(10 * time.Minute)
+	maxFlushInterval = 10 * time.Minute
 )
 
 // Config is the configuration for cloud storage sink.
@@ -69,11 +69,9 @@ func (c *Config) Apply(
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
 		return err
 	}
-	if err = getFlushInterval(query, &c.FlushInterval); err != nil {
-		return err
-	}
+	err = getFlushInterval(query, &c.FlushInterval)
 
-	return nil
+	return err
 }
 
 func getWorkerCount(values url.Values, workerCount *int) error {

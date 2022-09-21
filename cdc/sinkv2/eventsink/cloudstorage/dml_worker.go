@@ -28,15 +28,24 @@ import (
 	"go.uber.org/zap"
 )
 
+// dmlWorker denotes a worker responsible for writing messages to cloud storage.
 type dmlWorker struct {
-	id             int
-	changeFeedID   model.ChangeFeedID
-	storage        storage.ExternalStorage
-	flushInterval  time.Duration
-	msgChannels    map[versionedTable]*chann.Chann[*common.Message]
-	flushNotifyCh  chan flushTask
-	defragmenters  map[versionedTable]*defragmenter
-	fileIndex      map[versionedTable]uint64
+	// worker id
+	id            int
+	changeFeedID  model.ChangeFeedID
+	storage       storage.ExternalStorage
+	flushInterval time.Duration
+	// msgChannels maintains a mapping of <table, unbounded message channel>.
+	msgChannels map[versionedTable]*chann.Chann[*common.Message]
+	// flushNotifyCh is used to notify that several tables can be flushed.
+	flushNotifyCh chan flushTask
+	// defragmenters maintains a mapping of <table, defragmenter>.
+	defragmenters map[versionedTable]*defragmenter
+	// fileIndex maintains a mapping of <table, index number>.
+	fileIndex map[versionedTable]uint64
+	// activeTablesCh is used to notify that a group of eventFragments are
+	// sent to the corresponding defragmenter and we can reap messages from
+	// the defragmenter right now.
 	activeTablesCh *chann.Chann[versionedTable]
 	wg             sync.WaitGroup
 	isClosed       uint64
@@ -44,6 +53,7 @@ type dmlWorker struct {
 	extension      string
 }
 
+// flushTask defines a task containing the tables to be flushed.
 type flushTask struct {
 	activeTables []versionedTable
 }
@@ -73,12 +83,15 @@ func newDMLWorker(
 	return d
 }
 
+// run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	d.backgroundDefragmentMsgs(ctx)
 	d.backgroundFlushMsgs(ctx)
 	d.backgroundDispatchMsgs(ctx, ch)
 }
 
+// backgroundFlushMsgs flush messages from active tables to cloud storage.
+// active means that a table has events since last flushing.
 func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 	d.wg.Add(1)
 	go func() {
@@ -116,17 +129,20 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 							cb()
 						}
 					}
-					log.Debug("write file to storage success", zap.String("path", path),
-						zap.Int("workerID", d.id),
+					log.Debug("write file to storage success", zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
-						zap.String("changefeed", d.changeFeedID.ID))
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("schema", tbl.Schema),
+						zap.String("table", tbl.Table),
+						zap.String("path", path),
+					)
 				}
 			}
 		}
 	}()
-
 }
 
+// backgroundDefragmentMsgs defragments eventFragments for each active table.
 func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 	d.wg.Add(1)
 	go func() {
@@ -139,22 +155,34 @@ func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				_, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
+				written, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
 				if err != nil {
-					log.Error("dml worker failed to flush messages to cloud storage sink",
-						zap.Int("id", d.id),
+					log.Error("dml worker failed to defragment messages",
+						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.ID),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("schema", table.Schema),
+						zap.String("table", table.Table),
 						zap.Error(err))
 
 					d.errCh <- err
 					return
 				}
+				log.Debug("dml worker defragments messages success",
+					zap.Int("workerID", d.id),
+					zap.String("namespace", d.changeFeedID.ID),
+					zap.String("changefeed", d.changeFeedID.ID),
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Table),
+					zap.Uint64("written", written),
+				)
 			}
 		}
 	}()
 }
 
+// backgroundDispatchMsgs dispatch eventFragment to each table's defragmenter,
+// and it periodically emits flush tasks.
 func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	var readyTables []versionedTable
 	ticker := time.NewTicker(d.flushInterval)
@@ -206,7 +234,6 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 			}
 		}
 	}()
-
 }
 
 func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {

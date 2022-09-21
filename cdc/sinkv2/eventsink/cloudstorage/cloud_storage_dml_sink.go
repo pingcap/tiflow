@@ -33,7 +33,7 @@ import (
 
 const (
 	defaultEncodingConcurrency = 8
-	defaultMaxMessageBytes     = 1073741824 //1GB
+	defaultMaxMessageBytes     = 1073741824 // 1GB
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -75,7 +75,7 @@ type sink struct {
 	tableSeqMap map[versionedTable]uint64
 }
 
-// New creates a cloud storage sink.
+// NewCloudStorageSink creates a cloud storage sink.
 func NewCloudStorageSink(ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
@@ -162,6 +162,7 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 	return nil
 }
 
+// Close closes the cloud storage sink.
 func (s *sink) Close() error {
 	s.msgChan.Close()
 	for range s.msgChan.Out() {

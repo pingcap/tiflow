@@ -53,7 +53,7 @@ const (
 	S3Scheme = "s3"
 	// FileScheme indicates the scheme is local fs or NFS.
 	FileScheme = "file"
-	// GCS indicates the scheme is gcs.
+	// GCSScheme indicates the scheme is gcs.
 	GCSScheme = "gcs"
 	// AzblobScheme indicates the scheme is azure blob storage.\
 	AzblobScheme = "azblob"

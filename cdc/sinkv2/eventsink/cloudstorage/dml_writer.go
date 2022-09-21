@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
+// dmlWriter manages a set of dmlWorkers and dispatches eventFragment to
+// the dmlWorker according to hash algorithm.
 type dmlWriter struct {
 	workers        []*dmlWorker
 	workerChannels []*chann.Chann[eventFragment]

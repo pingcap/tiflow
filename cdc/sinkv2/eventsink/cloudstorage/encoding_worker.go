@@ -24,6 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// encodingWorker denotes the worker responsible for encoding RowChangedEvents
+// to messages formatted in the specific protocol.
 type encodingWorker struct {
 	id           int
 	changeFeedID model.ChangeFeedID

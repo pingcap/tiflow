@@ -52,7 +52,7 @@ func TestDeframenter(t *testing.T) {
 					Table:   "table1",
 					TableID: 100,
 				},
-				seqNumber: uint64(seq),
+				seqNumber: seq,
 				event: &eventsink.TxnCallbackableEvent{
 					Event: &model.SingleTableTxn{},
 				},
