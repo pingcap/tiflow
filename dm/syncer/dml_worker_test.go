@@ -111,3 +111,21 @@ func TestGenSQL(t *testing.T) {
 		require.Equal(t, c.expectedArgs, args)
 	}
 }
+
+func TestJudgeKeyNotFound(t *testing.T) {
+	dmlWorker := &DMLWorker{
+		compact:      true,
+		multipleRows: true,
+	}
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	dmlWorker.compact = false
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	dmlWorker.multipleRows = false
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	jobs := []*job{{safeMode: false}, {safeMode: true}}
+	require.False(t, dmlWorker.judgeKeyNotFound(0, jobs))
+	jobs[1].safeMode = false
+	require.True(t, dmlWorker.judgeKeyNotFound(0, jobs))
+	require.False(t, dmlWorker.judgeKeyNotFound(2, jobs))
+	require.False(t, dmlWorker.judgeKeyNotFound(4, jobs))
+}

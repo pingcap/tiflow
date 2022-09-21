@@ -257,3 +257,35 @@ func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, key []byte,
 		}
 	}
 }
+
+// watchNewLeader is like watchLeader, but it uses the new elector interface.
+// TODO:
+//  1. Remove all the legacy code based on etcd.
+//  2. Integrate elector, masterRPCHook, masterCli, s.leader.
+func (s *Server) watchNewLeader(ctx context.Context) error {
+	ticker := time.NewTicker(time.Millisecond * 100)
+	defer ticker.Stop()
+
+	var leaderAddr string
+	for {
+		select {
+		case <-ticker.C:
+			leader, ok := s.elector.GetLeader()
+			if ok {
+				s.leader.Store(&rpcutil.Member{
+					Name:          leader.ID, // FIXME: rpcutil.Member.Name use id as name which is confusing.
+					AdvertiseAddr: leader.Address,
+					IsLeader:      true,
+				})
+				if leader.Address != leaderAddr {
+					leaderAddr = leader.Address
+					s.createLeaderClient(ctx, leaderAddr)
+				}
+			} else {
+				s.leader.Store(&rpcutil.Member{})
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
