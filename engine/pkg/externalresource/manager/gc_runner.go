@@ -23,8 +23,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/pkg/retry"
 )
@@ -49,15 +51,14 @@ type DefaultGCRunner struct {
 }
 
 // NewGCRunner returns a new GCRunner.
-func NewGCRunner(
-	client pkgOrm.ResourceClient,
-	gcHandlers map[resModel.ResourceType]GCHandlerFunc,
-) *DefaultGCRunner {
+func NewGCRunner(resClient pkgOrm.ResourceClient, executorClients client.ExecutorGroup) *DefaultGCRunner {
 	return &DefaultGCRunner{
-		client:     client,
-		gcHandlers: gcHandlers,
-		notifyCh:   make(chan struct{}, 1),
-		clock:      clock.New(),
+		client: resClient,
+		gcHandlers: map[resModel.ResourceType]GCHandlerFunc{
+			"local": local.NewFileResourceController(executorClients).GCHandler(),
+		},
+		notifyCh: make(chan struct{}, 1),
+		clock:    clock.New(),
 	}
 }
 
@@ -126,7 +127,7 @@ func (r *DefaultGCRunner) gcOnce(
 		log.Panic("unexpected gc_pending = false")
 	}
 
-	tp, _, err := resModel.ParseResourcePath(res.ID)
+	tp, _, err := resModel.GenResourcePath(res.ID)
 	if err != nil {
 		return err
 	}

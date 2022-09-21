@@ -15,7 +15,7 @@ package scheduler
 
 import (
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/label"
 )

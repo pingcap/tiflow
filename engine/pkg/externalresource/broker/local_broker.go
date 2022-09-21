@@ -27,11 +27,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
+
+var _ Broker = (*LocalBroker)(nil)
 
 // LocalBroker is a broker unit-testing other components
 // that depend on a Broker.
@@ -42,16 +45,16 @@ type LocalBroker struct {
 	client   *manager.MockClient
 
 	mu            sync.Mutex
-	persistedList []resourcemeta.ResourceID
+	persistedList []resModel.ResourceID
 }
 
 // NewBrokerForTesting creates a LocalBroker instance for testing only
-func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
+func NewBrokerForTesting(executorID resModel.ExecutorID) *LocalBroker {
 	dir, err := os.MkdirTemp("/tmp", "*-localfiles")
 	if err != nil {
 		log.Panic("failed to make tempdir")
 	}
-	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
+	cfg := &resModel.Config{Local: resModel.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewMockClient()
 	return &LocalBroker{
 		DefaultBroker: NewBroker(cfg, executorID, client),
@@ -63,9 +66,9 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 func (b *LocalBroker) OpenStorage(
 	ctx context.Context,
 	projectInfo tenant.ProjectInfo,
-	workerID resourcemeta.WorkerID,
-	jobID resourcemeta.JobID,
-	resourcePath resourcemeta.ResourceID,
+	workerID resModel.WorkerID,
+	jobID resModel.JobID,
+	resourcePath resModel.ResourceID,
 ) (Handle, error) {
 	b.clientMu.Lock()
 	defer b.clientMu.Unlock()
@@ -87,14 +90,14 @@ func (b *LocalBroker) OpenStorage(
 }
 
 // AssertPersisted checks resource is in persisted list
-func (b *LocalBroker) AssertPersisted(t *testing.T, id resourcemeta.ResourceID) {
+func (b *LocalBroker) AssertPersisted(t *testing.T, id resModel.ResourceID) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	require.Contains(t, b.persistedList, id)
 }
 
-func (b *LocalBroker) appendPersistRecord(id resourcemeta.ResourceID) {
+func (b *LocalBroker) appendPersistRecord(id resModel.ResourceID) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -104,12 +107,12 @@ func (b *LocalBroker) appendPersistRecord(id resourcemeta.ResourceID) {
 // AssertFileExists checks lock file exists
 func (b *LocalBroker) AssertFileExists(
 	t *testing.T,
-	workerID resourcemeta.WorkerID,
-	resourceID resourcemeta.ResourceID,
+	workerID resModel.WorkerID,
+	resourceID resModel.ResourceID,
 	fileName string,
 ) {
 	suffix := strings.TrimPrefix(resourceID, "/local/")
-	AssertLocalFileExists(t, b.config.Local.BaseDir, workerID, suffix, fileName)
+	local.AssertLocalFileExists(t, b.config.Local.BaseDir, workerID, suffix, fileName)
 }
 
 type brExternalStorageHandleForTesting struct {

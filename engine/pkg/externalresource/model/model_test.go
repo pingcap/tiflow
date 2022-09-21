@@ -19,9 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseResourcePath(t *testing.T) {
-	tp, suffix, err := ParseResourcePath("/local/my-local-resource/a/b/c")
+func TestParseResource(t *testing.T) {
+	tp, suffix, err := GenResourcePath("/local/my-local-resource/a/b/c")
 	require.NoError(t, err)
 	require.Equal(t, ResourceTypeLocalFile, tp)
 	require.Equal(t, "my-local-resource/a/b/c", suffix)
+
+	require.Equal(t, "/local/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
+
+	tp, suffix, err = GenResourcePath("/s3/my-local-resource/a/b/c")
+	require.NoError(t, err)
+	require.Equal(t, ResourceTypeS3, tp)
+	require.Equal(t, "my-local-resource/a/b/c", suffix)
+
+	require.Equal(t, "/s3/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
 }

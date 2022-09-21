@@ -133,8 +133,8 @@ const (
 	ResourceTypeS3        = ResourceType("s3")
 )
 
-// ParseResourcePath returns the ResourceType and the path suffix.
-func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
+// GenResourcePath returns the ResourceType and the path suffix.
+func GenResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
@@ -156,4 +156,9 @@ func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 
 	suffix := path.Join(segments[1:]...)
 	return resourceType, suffix, nil
+}
+
+// BuildResourceID returns an ResourceID based on given ResourceType and ResourceName.
+func BuildResourceID(rtype ResourceType, name ResourceName) ResourceID {
+	return path.Join("/"+string(rtype), name)
 }
