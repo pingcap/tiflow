@@ -713,7 +713,7 @@ func (s *snapshot) dropSchema(id int64, currentTs uint64) error {
 	return nil
 }
 
-// Create a new schema in the snapshot. `dbInfo` will be deep copied.
+// Create a new schema in the snapshot. `dbInfo` will be deeply copied.
 func (s *snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
 	x, ok := s.schemaByID(dbInfo.ID)
 	if ok {
@@ -728,7 +728,7 @@ func (s *snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error 
 	return nil
 }
 
-// Replace a schema. dbInfo will be deep copied.
+// Replace a schema. dbInfo will be deeply copied.
 // Callers should ensure `dbInfo` information not conflict with other schemas.
 func (s *snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
 	old, ok := s.schemaByID(dbInfo.ID)
@@ -801,7 +801,7 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 	return
 }
 
-// Create a new table in the snapshot. `tbInfo` will be deep copied.
+// Create a new table in the snapshot. `tbInfo` will be deeply copied.
 func (s *snapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error {
 	if _, ok := s.schemaByID(tbInfo.SchemaID); !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
@@ -971,13 +971,22 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 
 	exchangedPartitionID := diff[0]
 	// 4.update the targetTable
-	s.updatePartition(targetTable, currentTS)
+	err := s.updatePartition(targetTable, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	newSourceTable := sourceTable.Clone()
 	// 5.update the sourceTable
-	s.dropTable(sourceTable.ID, currentTS)
+	err = s.dropTable(sourceTable.ID, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	newSourceTable.ID = exchangedPartitionID
-	s.createTable(newSourceTable, currentTS)
+	err = s.createTable(newSourceTable, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	log.Info("handle exchange partition success",
 		zap.String("sourceTable", sourceTable.TableName.String()),
