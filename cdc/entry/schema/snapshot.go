@@ -919,25 +919,25 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
 	}
 
-	oldPartitions := oldTable.GetPartitionInfo().Definitions
+	oldPartitions := oldTable.GetPartitionInfo()
 	if oldPartitions == nil {
 		return cerror.ErrSnapshotTableNotFound.
-			GenWithStack("table %d is not a partition table", oldTable.ID)
+			GenWithStack("table %d is not a partitioned table", oldTable.ID)
 	}
 
-	newPartitions := targetTable.GetPartitionInfo().Definitions
+	newPartitions := targetTable.GetPartitionInfo()
 	if newPartitions == nil {
 		return cerror.ErrSnapshotTableNotFound.
-			GenWithStack("table %d is not a partition table", targetTable.ID)
+			GenWithStack("table %d is not a partitioned table", targetTable.ID)
 	}
 
-	oldIDs := make(map[int64]struct{}, len(oldPartitions))
-	for _, p := range oldPartitions {
+	oldIDs := make(map[int64]struct{}, len(oldPartitions.Definitions))
+	for _, p := range oldPartitions.Definitions {
 		oldIDs[p.ID] = struct{}{}
 	}
 
-	newIDs := make(map[int64]struct{}, len(oldPartitions))
-	for _, p := range newPartitions {
+	newIDs := make(map[int64]struct{}, len(oldPartitions.Definitions))
+	for _, p := range newPartitions.Definitions {
 		newIDs[p.ID] = struct{}{}
 	}
 
