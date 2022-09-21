@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -750,17 +749,25 @@ func (t *testServer) TestServerDataRace(c *C) {
 
 	s := NewServer(cfg)
 	defer s.Close()
-	go func() {
-		err1 := s.Start()
-		c.Assert(err1, IsNil)
-	}()
-	for i := 0; i < 100; i++ {
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
 		go func() {
-			fmt.Println("111")
-			s.Close()
+			err1 := s.Start()
+			switch errors.Cause(err1) {
+			case nil:
+			case terror.ErrWorkerServerClosed:
+				log.L().Info("server closed")
+			default:
+				c.Assert(err1, IsNil)
+			}
+			wg.Done()
 		}()
+		go func() {
+			s.Close()
+			wg.Done()
+		}()
+		wg.Wait()
 	}
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return !s.closed.Load()
-	}), IsTrue)
 }

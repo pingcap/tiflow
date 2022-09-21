@@ -59,12 +59,12 @@ var (
 // sends responses to RPC client.
 type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
-	closeMu    sync.Mutex
-	closed     atomic.Bool
-	callClosed bool
-	rootLis    net.Listener
-	svr        *grpc.Server
-	etcdClient *clientv3.Client
+	closeMu     sync.Mutex
+	closed      atomic.Bool
+	calledClose bool
+	rootLis     net.Listener
+	svr         *grpc.Server
+	etcdClient  *clientv3.Client
 	// end of closeMu
 
 	wg     sync.WaitGroup
@@ -112,7 +112,7 @@ func (s *Server) Start() error {
 		s.closeMu.Lock()
 		defer s.closeMu.Unlock()
 		//If dm-worker received signal and finished close, start() not need to be executed
-		if s.callClosed {
+		if s.calledClose {
 			return terror.ErrWorkerServerClosed
 		}
 
@@ -495,7 +495,7 @@ func (s *Server) Close() {
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
-	s.callClosed = true
+	s.calledClose = true
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
