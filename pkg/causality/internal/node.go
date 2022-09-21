@@ -152,23 +152,19 @@ func (n *Node) DependOn(others map[int64]*Node) {
 // Remove implements interface internal.SlotNode.
 func (n *Node) Remove() {
 	n.mu.Lock()
+    defer n.mu.Unlock()
+
 	n.removed = true
-
-	if n.dependers == nil || n.dependers.Len() == 0 {
-		n.mu.Unlock()
-		return
-	}
-
-	dependers := n.dependers
-	n.dependers = nil
-	n.mu.Unlock()
-
-	dependers.Ascend(func(node *Node) bool {
-		removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
-		node.maybeResolve(0, removedDependees)
-		return true
-	})
-	dependers.Clear(true)
+    if n.dependers != nil {
+        // The lock must be holded during accessing `dependers`.
+        n.dependers.Ascend(func(node *Node) bool {
+            removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
+            node.maybeResolve(0, removedDependees)
+            return true
+        })
+        n.dependers.Clear(true)
+        n.dependers = nil
+    }
 }
 
 // Free implements interface internal.SlotNode.
@@ -189,9 +185,9 @@ func (n *Node) Free() {
 // assignTo assigns a node to a worker. Returns `true` on success.
 func (n *Node) assignTo(workerID int64) bool {
 	n.mu.Lock()
+    defer n.mu.Unlock()
 	if n.assignedTo != unassigned {
 		// Already resolved by some other guys.
-		n.mu.Unlock()
 		return false
 	}
 
@@ -201,23 +197,15 @@ func (n *Node) assignTo(workerID int64) bool {
 		n.OnResolved = nil
 	}
 
-	if n.dependers == nil || n.dependers.Len() == 0 {
-		n.mu.Unlock()
-		return true
-	}
-
-	dependers := make([]*Node, 0, n.dependers.Len())
-	n.dependers.Ascend(func(node *Node) bool {
-		dependers = append(dependers, node)
-		return true
-	})
-	n.mu.Unlock()
-
-	for _, node := range dependers {
-		resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
-		stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
-		node.maybeResolve(resolvedDependees, 0)
-	}
+    if n.dependers != nil {
+        // The lock must be holded during accessing `dependers`.
+        n.dependers.Ascend(func(node *Node) bool {
+            resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
+            stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
+            node.maybeResolve(resolvedDependees, 0)
+            return true
+        })
+    }
 
 	return true
 }
