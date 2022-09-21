@@ -127,8 +127,8 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 	return w
 }
 
-// InitImpl implements lib.WorkerImpl.InitImpl
-func (w *dmWorker) InitImpl(ctx context.Context) error {
+// Init implements lib.WorkerImpl.Init
+func (w *dmWorker) Init(ctx context.Context) error {
 	w.Logger().Info("initializing the dm worker", zap.String("task-id", w.taskID))
 	w.messageAgent = dmpkg.NewMessageAgentImpl(w.taskID, w, w.messageHandlerManager, w.Logger())
 	// register jobmaster client
@@ -176,8 +176,8 @@ func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message
 	return nil
 }
 
-// CloseImpl implements lib.WorkerImpl.CloseImpl
-func (w *dmWorker) CloseImpl(ctx context.Context) error {
+// Close implements lib.WorkerImpl.Close
+func (w *dmWorker) Close(ctx context.Context) error {
 	w.Logger().Info("close the dm worker", zap.String("task-id", w.taskID))
 	var recordErr error
 	// unregister jobmaster client

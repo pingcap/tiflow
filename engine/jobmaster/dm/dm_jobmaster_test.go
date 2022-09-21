@@ -216,7 +216,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	mockBaseJobmaster.On("Exit").Return(exitError).Once()
-	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
+	require.EqualError(t.T(), jm.Init(context.Background()), exitError.Error())
 
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
@@ -226,7 +226,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		AddRow("version", "5.7.26-log"))
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
-	require.NoError(t.T(), jm.InitImpl(context.Background()))
+	require.NoError(t.T(), jm.Init(context.Background()))
 
 	// recover
 	jm = &JobMaster{
@@ -356,7 +356,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
-	require.NoError(t.T(), jm.CloseImpl(context.Background()))
+	require.NoError(t.T(), jm.Close(context.Background()))
 
 	// OnCancel
 	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()

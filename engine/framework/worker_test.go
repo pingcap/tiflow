@@ -63,7 +63,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
@@ -106,7 +106,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Status:      &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal},
 	}, statusMsg)
 
-	worker.On("CloseImpl").Return(nil).Once()
+	worker.On("Close").Return(nil).Once()
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }
@@ -131,7 +131,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
@@ -189,7 +189,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
@@ -248,13 +248,13 @@ func TestWorkerState(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State:    frameModel.WorkerStateNormal,
 		ExtBytes: fastMarshalDummyStatus(t, 1),
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
-	worker.On("CloseImpl", mock.Anything).Return(nil)
+	worker.On("Close", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -306,11 +306,11 @@ func TestWorkerSuicide(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
-	worker.On("CloseImpl", mock.Anything).Return(nil)
+	worker.On("Close", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -347,12 +347,12 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
-	worker.On("CloseImpl", mock.Anything).Return(nil)
+	worker.On("Close", mock.Anything).Return(nil)
 
 	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, clock.ToMono(submitTime))
 	err := worker.Init(ctx)
@@ -387,14 +387,14 @@ func TestWorkerGracefulExit(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
 	worker.On("Tick", mock.Anything).
 		Return(errors.New("fake error")).Once()
-	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
+	worker.On("Close", mock.Anything).Return(nil).Once()
 
 	err = worker.Poll(ctx)
 	require.Error(t, err)
@@ -456,14 +456,14 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
 	worker.On("Tick", mock.Anything).
 		Return(errors.New("fake error")).Once()
-	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
+	worker.On("Close", mock.Anything).Return(nil).Once()
 
 	err = worker.Poll(ctx)
 	require.Error(t, err)
@@ -513,7 +513,7 @@ func TestCloseBeforeInit(t *testing.T) {
 
 	worker := newMockWorkerImpl(workerID1, masterName)
 
-	worker.On("CloseImpl").Return(nil)
+	worker.On("Close").Return(nil)
 	err := worker.Close(ctx)
 	require.NoError(t, err)
 }
@@ -534,7 +534,7 @@ func TestExitWithoutReturn(t *testing.T) {
 		State:  frameModel.MasterStateInit,
 	})
 
-	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Init", mock.Anything).Return(nil)
 	worker.On("Status").Return(frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}, nil)
@@ -543,7 +543,7 @@ func TestExitWithoutReturn(t *testing.T) {
 	require.NoError(t, err)
 
 	worker.On("Tick", mock.Anything).Return(nil)
-	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
+	worker.On("Close", mock.Anything).Return(nil).Once()
 
 	_ = worker.DefaultBaseWorker.Exit(ctx, ExitReasonFailed, errors.New("Exit error"), nil)
 
@@ -634,7 +634,7 @@ func TestWorkerExit(t *testing.T) {
 			State:  frameModel.MasterStateInit,
 		})
 
-		worker.On("InitImpl", mock.Anything).Return(nil)
+		worker.On("Init", mock.Anything).Return(nil)
 		worker.On("Status").Return(frameModel.WorkerStatus{
 			State: frameModel.WorkerStateNormal,
 		}, nil)
@@ -643,7 +643,7 @@ func TestWorkerExit(t *testing.T) {
 		require.NoError(t, err)
 
 		worker.On("Tick", mock.Anything).Return(nil)
-		worker.On("CloseImpl", mock.Anything).Return(nil).Once()
+		worker.On("Close", mock.Anything).Return(nil).Once()
 
 		err = worker.DefaultBaseWorker.Exit(ctx, cs.exitReason, cs.err, cs.extMsg)
 		require.NoError(t, err)

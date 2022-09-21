@@ -56,7 +56,7 @@ type testJobMasterImpl struct {
 
 var _ JobMasterImpl = (*testJobMasterImpl)(nil)
 
-func (m *testJobMasterImpl) InitImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) Init(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -72,7 +72,7 @@ func (m *testJobMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -237,14 +237,14 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	defer cancel()
 
 	jobMaster.mu.Lock()
-	jobMaster.On("InitImpl", mock.Anything).Return(nil)
+	jobMaster.On("Init", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
 	err := jobMaster.base.Init(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
-	jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+	jobMaster.AssertNumberOfCalls(t, "Init", 1)
 
 	// clean status
 	jobMaster.ExpectedCalls = nil
@@ -263,7 +263,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
 
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("Close", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
 	status := jobMaster.Status()
@@ -274,7 +274,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
-	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.AssertNumberOfCalls(t, "Close", 1)
 	jobMaster.mu.Unlock()
 }
 
@@ -370,7 +370,7 @@ func TestJobMasterExit(t *testing.T) {
 		require.NoError(t, err)
 
 		jobMaster.mu.Lock()
-		jobMaster.On("InitImpl", mock.Anything).Return(nil)
+		jobMaster.On("Init", mock.Anything).Return(nil)
 		jobMaster.mu.Unlock()
 
 		err = jobMaster.base.Init(ctx)
@@ -381,7 +381,7 @@ func TestJobMasterExit(t *testing.T) {
 		require.Len(t, metas, 1)
 
 		jobMaster.mu.Lock()
-		jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+		jobMaster.AssertNumberOfCalls(t, "Init", 1)
 
 		// clean status
 		jobMaster.ExpectedCalls = nil
@@ -400,7 +400,7 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.ExpectedCalls = nil
 		jobMaster.Calls = nil
 
-		jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+		jobMaster.On("Close", mock.Anything).Return(nil)
 		jobMaster.mu.Unlock()
 
 		// test exit status
@@ -414,7 +414,7 @@ func TestJobMasterExit(t *testing.T) {
 		require.NoError(t, err)
 
 		jobMaster.mu.Lock()
-		jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+		jobMaster.AssertNumberOfCalls(t, "Close", 1)
 		jobMaster.mu.Unlock()
 	}
 }
@@ -431,7 +431,7 @@ func TestJobMasterInitReturnError(t *testing.T) {
 
 	initError := errors.New("init impl error")
 	jobMaster.mu.Lock()
-	jobMaster.On("InitImpl", mock.Anything).Return(initError)
+	jobMaster.On("Init", mock.Anything).Return(initError)
 	jobMaster.mu.Unlock()
 
 	err := jobMaster.base.Init(ctx)
@@ -442,14 +442,14 @@ func TestJobMasterInitReturnError(t *testing.T) {
 	// clean status
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("Close", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
 	err = jobMaster.base.Close(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
-	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.AssertNumberOfCalls(t, "Close", 1)
 	jobMaster.mu.Unlock()
 
 	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
@@ -469,14 +469,14 @@ func TestJobMasterPollReturnError(t *testing.T) {
 	defer cancel()
 
 	jobMaster.mu.Lock()
-	jobMaster.On("InitImpl", mock.Anything).Return(nil)
+	jobMaster.On("Init", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
 	err := jobMaster.base.Init(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
-	jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+	jobMaster.AssertNumberOfCalls(t, "Init", 1)
 	// clean status
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
@@ -495,14 +495,14 @@ func TestJobMasterPollReturnError(t *testing.T) {
 	// clean status
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("Close", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
 	err = jobMaster.base.Close(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
-	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.AssertNumberOfCalls(t, "Close", 1)
 	jobMaster.mu.Unlock()
 
 	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())

@@ -49,8 +49,8 @@ type exampleMaster struct {
 	tickCount int
 }
 
-func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
-	log.Info("InitImpl")
+func (e *exampleMaster) Init(ctx context.Context) (err error) {
+	log.Info("Init")
 	e.worker.mu.Lock()
 	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg, exampleWorkerCost)
 	e.worker.mu.Unlock()
@@ -105,8 +105,8 @@ func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p
 	return nil
 }
 
-func (e *exampleMaster) CloseImpl(ctx context.Context) error {
-	log.Info("CloseImpl")
+func (e *exampleMaster) Close(ctx context.Context) error {
+	log.Info("Close")
 	return nil
 }
 

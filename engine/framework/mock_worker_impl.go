@@ -66,7 +66,7 @@ func newMockWorkerImpl(workerID frameModel.WorkerID, masterID frameModel.MasterI
 	return ret
 }
 
-func (w *mockWorkerImpl) InitImpl(ctx context.Context) error {
+func (w *mockWorkerImpl) Init(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -76,7 +76,7 @@ func (w *mockWorkerImpl) InitImpl(ctx context.Context) error {
 
 func (w *mockWorkerImpl) Tick(ctx context.Context) error {
 	if w.closed.Load() {
-		panic("Tick called after CloseImpl is called")
+		panic("Tick called after Close is called")
 	}
 
 	w.mu.Lock()
@@ -102,9 +102,9 @@ func (w *mockWorkerImpl) OnMasterMessage(ctx context.Context, topic p2p.Topic, m
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
+func (w *mockWorkerImpl) Close(ctx context.Context) error {
 	if w.closed.Swap(true) {
-		panic("CloseImpl called twice")
+		panic("Close called twice")
 	}
 
 	w.mu.Lock()

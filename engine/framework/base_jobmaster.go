@@ -200,7 +200,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 	}
 
 	if isFirstStartUp {
-		if err := d.impl.InitImpl(ctx); err != nil {
+		if err := d.impl.Init(ctx); err != nil {
 			// Currently we only pass error to error center when calling busniess
 			// API returns error. Business API is also known as XxxImpl.
 			d.errCenter.OnError(err)
@@ -252,7 +252,7 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[frameModel.WorkerID]WorkerHandle
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
+		err := d.impl.Close(ctx)
 		if err != nil {
 			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
 		}
@@ -269,7 +269,7 @@ func (d *DefaultBaseJobMaster) Stop(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	if err := d.impl.StopImpl(ctx); err != nil {
+	if err := d.impl.Stop(ctx); err != nil {
 		d.Logger().Error("Failed to stop JobMasterImpl", zap.Error(err))
 	}
 	d.master.doClose()
@@ -280,14 +280,14 @@ func (d *DefaultBaseJobMaster) Stop(ctx context.Context) error {
 // NotifyExit implements BaseJobMaster interface
 func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (retErr error) {
 	if eventloop.IsTerminatedError(errIn) {
-		// In terminate scenario job master should call StopImpl, and we don't
-		// call NotifyExit to advance the calling of StopImpl. The drawback of
+		// In terminate scenario job master should call Stop, and we don't
+		// call NotifyExit to advance the calling of Stop. The drawback of
 		// this choice is job manager has to hearbeat timeout of this job master.
 		return nil
 	}
 
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
+		err := d.impl.Close(ctx)
 		if err != nil {
 			log.Error("Failed to close JobMasterImpl", zap.Error(err))
 		}
@@ -402,7 +402,7 @@ type jobMasterImplAsWorkerImpl struct {
 	onCancelCalled bool
 }
 
-func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
+func (j *jobMasterImplAsWorkerImpl) Init(ctx context.Context) error {
 	log.Panic("unexpected Init call")
 	return nil
 }
@@ -436,7 +436,7 @@ func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
 	return nil
 }
 
-func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsWorkerImpl) Close(ctx context.Context) error {
 	log.Panic("unexpected Close call")
 	return nil
 }
@@ -454,7 +454,7 @@ func (j *jobMasterImplAsMasterImpl) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (j *jobMasterImplAsMasterImpl) InitImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) Init(ctx context.Context) error {
 	log.Panic("unexpected init call")
 	return nil
 }
@@ -479,12 +479,12 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 	return j.inner.OnWorkerMessage(worker, topic, message)
 }
 
-func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) Close(ctx context.Context) error {
 	log.Panic("unexpected Close call")
 	return nil
 }
 
-func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) error {
-	log.Panic("unexpected StopImpl call")
+func (j *jobMasterImplAsMasterImpl) Stop(ctx context.Context) error {
+	log.Panic("unexpected Stop call")
 	return nil
 }

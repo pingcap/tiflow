@@ -67,9 +67,9 @@ type Master interface {
 // MasterImpl defines the interface to implement a master, business logic can be
 // added in the functions of this interface
 type MasterImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	// InitImpl will not be called if the master recovers from an error.
-	InitImpl(ctx context.Context) error
+	// Init provides customized logic for the business logic to initialize.
+	// Init will not be called if the master recovers from an error.
+	Init(ctx context.Context) error
 
 	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
@@ -93,11 +93,11 @@ type MasterImpl interface {
 	// OnWorkerStatusUpdated is called when a worker's status is updated.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
-	// CloseImpl is called when the master is being closed
-	CloseImpl(ctx context.Context) error
+	// Close is called when the master is being closed
+	Close(ctx context.Context) error
 
-	// StopImpl is called when the master is being canceled
-	StopImpl(ctx context.Context) error
+	// Stop is called when the master is being canceled
+	Stop(ctx context.Context) error
 }
 
 const (
@@ -348,7 +348,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	}
 
 	if isInit {
-		if err := m.Impl.InitImpl(ctx); err != nil {
+		if err := m.Impl.Init(ctx); err != nil {
 			m.errCenter.OnError(err)
 			return errors.Trace(err)
 		}
@@ -539,8 +539,8 @@ func (m *DefaultBaseMaster) doClose() {
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	err := m.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
+	err := m.Impl.Close(ctx)
+	// We don't return here if Close return error to ensure
 	// that we can close inner resources of the framework
 	if err != nil {
 		m.Logger().Error("Failed to close MasterImpl", zap.Error(err))
@@ -553,7 +553,7 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 
 // Stop implements Master.Stop
 func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
-	err := m.Impl.StopImpl(ctx)
+	err := m.Impl.Stop(ctx)
 	if err != nil {
 		m.Logger().Error("stop master impl failed", zap.Error(err))
 	}

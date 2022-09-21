@@ -104,9 +104,9 @@ func (j dmJobMasterFactory) IsRetryableError(err error) bool {
 }
 
 // initComponents initializes components of dm job master
-// it need to be called firstly in InitImpl and OnMasterRecovered
+// it need to be called firstly in Init and OnMasterRecovered
 // we should create all components if there is any error
-// CloseImpl/StopImpl will be called later to close components
+// Close/Stop will be called later to close components
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
@@ -118,8 +118,8 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 	return err
 }
 
-// InitImpl implements JobMasterImpl.InitImpl
-func (jm *JobMaster) InitImpl(ctx context.Context) error {
+// Init implements JobMasterImpl.Init
+func (jm *JobMaster) Init(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster")
 	if err := jm.initComponents(ctx); err != nil {
 		return err
@@ -262,8 +262,8 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 	return nil
 }
 
-// CloseImpl implements JobMasterImpl.CloseImpl
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
+// Close implements JobMasterImpl.Close
+func (jm *JobMaster) Close(ctx context.Context) error {
 	return jm.messageAgent.Close(ctx)
 }
 
@@ -273,12 +273,12 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 	return jm.cancel(ctx, frameModel.WorkerStateStopped)
 }
 
-// StopImpl implements JobMasterImpl.StopImpl
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
+// Stop implements JobMasterImpl.Stop
+func (jm *JobMaster) Stop(ctx context.Context) error {
 	jm.Logger().Info("stoping the dm jobmaster")
 
 	// close component
-	if err := jm.CloseImpl(ctx); err != nil {
+	if err := jm.Close(ctx); err != nil {
 		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
 		return err
 	}

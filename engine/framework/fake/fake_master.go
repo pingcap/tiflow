@@ -188,8 +188,8 @@ func (m *Master) Workload() model.RescUnit {
 	return 0
 }
 
-// InitImpl implements BaseJobMaster.InitImpl
-func (m *Master) InitImpl(ctx context.Context) error {
+// Init implements BaseJobMaster.Init
+func (m *Master) Init(ctx context.Context) error {
 	log.Info("FakeMaster: Init", zap.Any("config", m.config))
 	defer m.initialized.Store(true)
 	return m.initWorkers()
@@ -492,8 +492,8 @@ func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus 
 	return nil
 }
 
-// CloseImpl implements MasterImpl.CloseImpl
-func (m *Master) CloseImpl(ctx context.Context) error {
+// Close implements MasterImpl.Close
+func (m *Master) Close(ctx context.Context) error {
 	log.Info("FakeMaster: Close", zap.Stack("stack"))
 	return nil
 }

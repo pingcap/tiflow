@@ -100,7 +100,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
 	)
 
-	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
+	// worker may inject logger, metrics, etc. to config in Init, so postpone construction
 	switch u.tp {
 	case frameModel.WorkerDMDump:
 		u.unit = dumpling.NewDumpling(u.cfg)

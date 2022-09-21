@@ -111,8 +111,8 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, master
 	return jm
 }
 
-// InitImpl implements JobMasterImpl.InitImpl
-func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
+// Init implements JobMasterImpl.Init
+func (jm *JobMaster) Init(ctx context.Context) (err error) {
 	log.Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.setState(frameModel.WorkerStateInit)
 	filesNum := jm.jobStatus.Config.FileNum
@@ -336,8 +336,8 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 	return nil
 }
 
-// CloseImpl is called when the master is being closed
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
+// Close is called when the master is being closed
+func (jm *JobMaster) Close(ctx context.Context) error {
 	return nil
 }
 

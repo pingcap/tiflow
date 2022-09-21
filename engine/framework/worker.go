@@ -64,8 +64,8 @@ type Worker interface {
 // the implementation struct must embed the framework.BaseWorker interface, this
 // interface will be initialized by the framework.
 type WorkerImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	InitImpl(ctx context.Context) error
+	// Init provides customized logic for the business logic to initialize.
+	Init(ctx context.Context) error
 
 	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
 	Tick(ctx context.Context) error
@@ -76,8 +76,8 @@ type WorkerImpl interface {
 	// OnMasterMessage is called when worker receives master message
 	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
-	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
-	CloseImpl(ctx context.Context) error
+	// Close tells the WorkerImpl to quit running StatusWorker and release resources.
+	Close(ctx context.Context) error
 }
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
@@ -141,7 +141,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	closeImplOnce sync.Once
+	CloseOnce sync.Once
 
 	clock clock.Clock
 
@@ -234,7 +234,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := w.Impl.InitImpl(ctx); err != nil {
+	if err := w.Impl.Init(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -247,10 +247,10 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 
 // NotifyExit implements BaseWorker.NotifyExit
 func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
-	w.closeImplOnce.Do(func() {
+	w.CloseOnce.Do(func() {
 		// Must ensure that the business logic is
 		// notified before closing.
-		w.callCloseImpl()
+		w.callClose()
 	})
 
 	startTime := time.Now()
@@ -407,20 +407,20 @@ func (w *DefaultBaseWorker) doClose() {
 // Close implements BaseWorker.Close
 // TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	w.closeImplOnce.Do(func() {
-		w.callCloseImpl()
+	w.CloseOnce.Do(func() {
+		w.callClose()
 	})
 
 	w.doClose()
 	return nil
 }
 
-func (w *DefaultBaseWorker) callCloseImpl() {
+func (w *DefaultBaseWorker) callClose() {
 	closeCtx, cancel := context.WithTimeout(
 		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
 	defer cancel()
 
-	err := w.Impl.CloseImpl(closeCtx)
+	err := w.Impl.Close(closeCtx)
 	if err != nil {
 		w.Logger().Warn("Failed to close worker",
 			zap.String("worker-id", w.id),

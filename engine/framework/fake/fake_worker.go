@@ -112,10 +112,10 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
-func (d *dummyWorker) InitImpl(_ context.Context) error {
+func (d *dummyWorker) Init(_ context.Context) error {
 	if !d.init {
 		if d.config.EtcdWatchEnable {
-			// Don't use the ctx from the caller, because it may be canceled by the caller after InitImpl() returns.
+			// Don't use the ctx from the caller, because it may be canceled by the caller after Init() returns.
 			ctx, cancel := context.WithCancel(context.Background())
 			d.bgRunEtcdWatcher(ctx)
 			d.cancel = cancel
@@ -213,7 +213,7 @@ func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, mess
 	return nil
 }
 
-func (d *dummyWorker) CloseImpl(ctx context.Context) error {
+func (d *dummyWorker) Close(ctx context.Context) error {
 	if atomic.CompareAndSwapInt32(&d.closed, 0, 1) {
 		if d.cancel != nil {
 			d.cancel()

@@ -65,8 +65,8 @@ func (w *exampleWorker) run() {
 	_ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg, true)
 }
 
-func (w *exampleWorker) InitImpl(ctx context.Context) error {
-	log.Info("InitImpl")
+func (w *exampleWorker) Init(ctx context.Context) error {
+	log.Info("Init")
 	w.wg.Add(1)
 	go w.run()
 	return nil
@@ -117,8 +117,8 @@ func (w *exampleWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, me
 	return nil
 }
 
-func (w *exampleWorker) CloseImpl(ctx context.Context) error {
-	log.Info("CloseImpl")
+func (w *exampleWorker) Close(ctx context.Context) error {
+	log.Info("Close")
 	w.wg.Wait()
 	return nil
 }

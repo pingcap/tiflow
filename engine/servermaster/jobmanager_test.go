@@ -75,7 +75,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 
 	masterID := "create-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 	mockMaster.MasterClient().EXPECT().ScheduleTask(
 		gomock.Any(),
 		gomock.Any()).Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).Times(1)
@@ -172,7 +172,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 
 	masterID := "cancel-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 	mgr.jobOperator = jobop.NewJobOperatorImpl(mgr.frameMetaClient, mgr)
 
 	cancelWorkerID := "cancel-worker-id"
@@ -216,7 +216,7 @@ func TestJobManagerDeleteJob(t *testing.T) {
 
 	masterID := "delete-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:    "job-to-be-deleted",
@@ -322,7 +322,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 	mockMaster.MasterClient().EXPECT().ScheduleTask(gomock.Any(), gomock.Any()).
 		Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).MinTimes(0)
 	mgr := &JobManagerImpl{
@@ -434,7 +434,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 
 	masterID := "delete-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:    "job-to-be-deleted",
@@ -471,7 +471,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	ctx := context.TODO()
 	masterID := "get-job-detail"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -612,7 +612,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 
 	masterID := "job-fast-fail-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 
 	// simulate a job is created.
 	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
@@ -641,7 +641,7 @@ func TestJobOperatorBgLoop(t *testing.T) {
 
 	masterID := "job-operator-bg-loop-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.On("Init", mock.Anything).Return(nil)
 
 	mockJobOperator := jobopMock.NewMockJobOperator(gomock.NewController(t))
 	mgr.jobOperator = mockJobOperator
@@ -668,6 +668,6 @@ func TestJobOperatorBgLoop(t *testing.T) {
 		return tickCounter.Load() > 0
 	}, time.Second, time.Millisecond*100)
 
-	require.NoError(t, mgr.CloseImpl(ctx))
+	require.NoError(t, mgr.Close(ctx))
 	require.NoError(t, mgr.wg.Wait())
 }

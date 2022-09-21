@@ -52,7 +52,7 @@ func TestMasterInit(t *testing.T) {
 	master := NewMockMasterImpl(t, "", masterName)
 	MockMasterPrepareMeta(ctx, t, master)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
+	master.On("Init", mock.Anything).Return(nil)
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
@@ -60,7 +60,7 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("Close", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -73,7 +73,7 @@ func TestMasterInit(t *testing.T) {
 	err = master.Init(ctx)
 	require.NoError(t, err)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("Close", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -89,7 +89,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	master := NewMockMasterImpl(t, "", masterName)
 	MockMasterPrepareMeta(ctx, t, master)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
+	master.On("Init", mock.Anything).Return(nil)
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
@@ -113,7 +113,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		return master.TickCount() > 10
 	}, time.Millisecond*2000, time.Millisecond*10)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("Close", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -137,7 +137,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	epoch, err := master.MetaKVClient().GenEpoch(ctx)
 	require.NoError(t, err)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
+	master.On("Init", mock.Anything).Return(nil)
 	err = master.Init(ctx)
 	require.NoError(t, err)
 
@@ -245,7 +245,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	master.uuidGen = uuid.NewMock()
 	MockMasterPrepareMeta(ctx, t, master)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
+	master.On("Init", mock.Anything).Return(nil)
 	err := master.Init(ctx)
 	require.NoError(t, err)
 

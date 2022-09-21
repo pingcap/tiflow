@@ -127,11 +127,11 @@ func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID f
 	return task
 }
 
-// InitImpl implements WorkerImpl.InitImpl
-func (task *cvsTask) InitImpl(ctx context.Context) error {
+// Init implements WorkerImpl.Init
+func (task *cvsTask) Init(ctx context.Context) error {
 	log.Info("init the task  ", zap.Any("task id :", task.ID()))
 	task.setState(frameModel.WorkerStateNormal)
-	// Don't use the ctx from the caller. Caller may cancel the ctx after InitImpl returns.
+	// Don't use the ctx from the caller. Caller may cancel the ctx after Init returns.
 	ctx, task.cancelFn = context.WithCancel(context.Background())
 	go func() {
 		err := task.Receive(ctx)
@@ -224,8 +224,8 @@ func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 	return nil
 }
 
-// CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl(ctx context.Context) error {
+// Close tells the WorkerImpl to quitrunStatusWorker and release resources.
+func (task *cvsTask) Close(ctx context.Context) error {
 	if task.cancelFn != nil {
 		task.cancelFn()
 	}

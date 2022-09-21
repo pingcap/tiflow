@@ -576,8 +576,8 @@ func NewJobManagerImpl(
 	return impl, err
 }
 
-// InitImpl implements frame.MasterImpl.InitImpl
-func (jm *JobManagerImpl) InitImpl(ctx context.Context) error {
+// Init implements frame.MasterImpl.Init
+func (jm *JobManagerImpl) Init(ctx context.Context) error {
 	return nil
 }
 
@@ -747,8 +747,8 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 	return nil
 }
 
-// CloseImpl implements frame.MasterImpl.CloseImpl
-func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
+// Close implements frame.MasterImpl.Close
+func (jm *JobManagerImpl) Close(ctx context.Context) error {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
 	jm.jobOperatorNotifier.Close()
@@ -757,7 +757,7 @@ func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
 
 // StopImpl implements frame.MasterImpl.StopImpl
 func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
-	return jm.CloseImpl(ctx)
+	return jm.Close(ctx)
 }
 
 // WatchJobStatuses returns a snapshot of job statuses followed by a stream

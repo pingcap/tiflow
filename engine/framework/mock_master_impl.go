@@ -139,8 +139,8 @@ func (m *MockMasterImpl) TickCount() int64 {
 	return m.tickCount.Load()
 }
 
-// InitImpl implements MasterImpl.InitImpl
-func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
+// Init implements MasterImpl.Init
+func (m *MockMasterImpl) Init(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -227,8 +227,8 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 	return args.Error(0)
 }
 
-// CloseImpl implements MasterImpl.CloseImpl
-func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
+// Close implements MasterImpl.Close
+func (m *MockMasterImpl) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
