@@ -200,6 +200,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
+				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed.
 				if !r.closed.Load() {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
