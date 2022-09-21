@@ -80,6 +80,7 @@ function run() {
 	run_sql "CREATE table consistent_replicate_s3.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_s3.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "consistent_replicate_s3.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
+
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
@@ -89,10 +90,9 @@ function run() {
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_sql "create table consistent_replicate_s3.USERTABLE2 like consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "insert into consistent_replicate_s3.USERTABLE2 select * from consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
-	sleep 15
+	sleep 10
 
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 	ensure 50 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/redo/meta
