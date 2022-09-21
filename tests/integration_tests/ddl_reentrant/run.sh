@@ -25,6 +25,8 @@ ddls=("create database ddl_reentrant" false 'CREATE DATABASE `ddl_reentrant`'
 	"alter table ddl_reentrant.t3 add partition (partition p2 values less than (3000))" false 'ALTER TABLE `ddl_reentrant`.`t3` ADD PARTITION (PARTITION `p2` VALUES LESS THAN (3000))'
 	"alter table ddl_reentrant.t3 drop partition p2" false 'ALTER TABLE `ddl_reentrant`.`t3` DROP PARTITION `p2`'
 	"alter table ddl_reentrant.t3 truncate partition p0" true 'ALTER TABLE `ddl_reentrant`.`t3` TRUNCATE PARTITION `p0`'
+	"create table ddl_reentrant.t4 (a int primary key, b int)" false 'CREATE TABLE `ddl_reentrant`.`t4` (`a` INT PRIMARY KEY,`b` INT)'
+	"alter table ddl_reentrant.t3 exchange partition p0 with table ddl_reentrant.t4" true 'ALTER TABLE `ddl_reentrant`.`t3` EXCHANGE PARTITION `p0` WITH TABLE `ddl_reentrant`.`t4`'
 	"create view ddl_reentrant.t3_view as select a, b from ddl_reentrant.t3" false 'CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `ddl_reentrant`.`t3_view` AS SELECT `a`,`b` FROM `ddl_reentrant`.`t3`'
 	"drop view ddl_reentrant.t3_view" false 'DROP VIEW `ddl_reentrant`.`t3_view`'
 	"alter table ddl_reentrant.t3 default character set utf8mb4 default collate utf8mb4_unicode_ci" true 'ALTER TABLE `ddl_reentrant`.`t3` CHARACTER SET UTF8MB4 COLLATE UTF8MB4_UNICODE_CI'
@@ -130,8 +132,10 @@ function run() {
 	if [[ $tidb_build_branch =~ master ]]; then
 		# https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
 		# feature by default, turn it on first
+		run_sql "set @@global.tidb_enable_exchange_partition=on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 		run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 		# This must be set before cdc server starts
+		run_sql "set @@global.tidb_enable_exchange_partition=on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 		run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 		# TiDB global variables cache 2 seconds at most
 		sleep 2
