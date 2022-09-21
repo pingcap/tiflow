@@ -252,10 +252,7 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[frameModel.WorkerID]WorkerHandle
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
-		if err != nil {
-			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
-		}
+		d.impl.CloseImpl(ctx)
 	})
 
 	d.master.persistMetaError()
@@ -287,10 +284,7 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	}
 
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
-		if err != nil {
-			log.Error("Failed to close JobMasterImpl", zap.Error(err))
-		}
+		d.impl.CloseImpl(ctx)
 	})
 
 	startTime := time.Now()
@@ -436,9 +430,8 @@ func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
 	return nil
 }
 
-func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) {
 	log.Panic("unexpected Close call")
-	return nil
 }
 
 type jobMasterImplAsMasterImpl struct {
@@ -479,9 +472,9 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 	return j.inner.OnWorkerMessage(worker, topic, message)
 }
 
-func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) {
 	log.Panic("unexpected Close call")
-	return nil
+	return
 }
 
 func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) error {

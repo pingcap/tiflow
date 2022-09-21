@@ -228,12 +228,12 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 }
 
 // CloseImpl implements MasterImpl.CloseImpl
-func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *MockMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	args := m.Called(ctx)
-	return args.Error(0)
+	return
 }
 
 // StopImpl implements MasterImpl.StopImpl

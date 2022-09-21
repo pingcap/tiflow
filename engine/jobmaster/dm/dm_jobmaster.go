@@ -263,9 +263,7 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl implements JobMasterImpl.CloseImpl
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return jm.messageAgent.Close(ctx)
-}
+func (jm *JobMaster) CloseImpl(ctx context.Context) {}
 
 // OnCancel implements JobMasterImpl.OnCancel
 func (jm *JobMaster) OnCancel(ctx context.Context) error {
@@ -278,10 +276,7 @@ func (jm *JobMaster) StopImpl(ctx context.Context) error {
 	jm.Logger().Info("stoping the dm jobmaster")
 
 	// close component
-	if err := jm.CloseImpl(ctx); err != nil {
-		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
-		return err
-	}
+	jm.CloseImpl(ctx)
 
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {

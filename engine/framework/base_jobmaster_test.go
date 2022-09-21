@@ -72,12 +72,12 @@ func (m *testJobMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	args := m.Called(ctx)
-	return args.Error(0)
+	return
 }
 
 func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {

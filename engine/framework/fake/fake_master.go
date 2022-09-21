@@ -493,9 +493,8 @@ func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus 
 }
 
 // CloseImpl implements MasterImpl.CloseImpl
-func (m *Master) CloseImpl(ctx context.Context) error {
+func (m *Master) CloseImpl(ctx context.Context) {
 	log.Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
 }
 
 // StopImpl implements MasterImpl.StopImpl

@@ -94,7 +94,7 @@ type MasterImpl interface {
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed
-	CloseImpl(ctx context.Context) error
+	CloseImpl(ctx context.Context)
 
 	// StopImpl is called when the master is being canceled
 	StopImpl(ctx context.Context) error
@@ -539,16 +539,11 @@ func (m *DefaultBaseMaster) doClose() {
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	err := m.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		m.Logger().Error("Failed to close MasterImpl", zap.Error(err))
-	}
+	m.Impl.CloseImpl(ctx)
 
 	m.persistMetaError()
 	m.doClose()
-	return errors.Trace(err)
+	return nil
 }
 
 // Stop implements Master.Stop
