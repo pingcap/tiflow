@@ -76,8 +76,7 @@ func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return
+	m.Called(ctx)
 }
 
 func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {

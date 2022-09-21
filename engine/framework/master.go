@@ -67,15 +67,25 @@ type Master interface {
 // MasterImpl defines the interface to implement a master, business logic can be
 // added in the functions of this interface
 type MasterImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	// InitImpl will not be called if the master recovers from an error.
+	// InitImpl is called at the first time the MasterImpl instance is initialized
+	// after OnOpenAPIInitialized. That is to say, when MasterImpl failover, framework
+	// will call OnMasterRecovered rather than InitImpl.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
+
+	// OnMasterRecovered is called when the MasterImpl instance has failover from
+	// error by framework after OnOpenAPIInitialized.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is not concurrent with other callbacks.
+	OnMasterRecovered(ctx context.Context) error
 
 	// Tick is called on a fixed interval.
 	Tick(ctx context.Context) error
-
-	// OnMasterRecovered is called when the master has recovered from an error.
-	OnMasterRecovered(ctx context.Context) error
 
 	// OnWorkerDispatched is called when a request to launch a worker is finished.
 	OnWorkerDispatched(worker WorkerHandle, result error) error

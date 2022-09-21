@@ -232,8 +232,7 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return
+	m.Called(ctx)
 }
 
 // StopImpl implements MasterImpl.StopImpl

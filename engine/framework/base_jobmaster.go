@@ -130,11 +130,13 @@ type JobMasterImpl interface {
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
 	OnCancel(ctx context.Context) error
-	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
-	// This is used to for JobMaster to register its OpenAPI handler.
-	// The implementation must not retain the apiGroup. It must register
-	// its OpenAPI handler before this function returns.
+	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
+	// instance, the business logic should only register the OpenAPI handler in it.
+	// The implementation must not retain the apiGroup.
 	// Note: this function is called before Init().
+	// Concurrent safety:
+	// - this function is called as the first callback function of an JobMasterImpl
+	//   instance, and it's not concurrent with other callbacks.
 	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
