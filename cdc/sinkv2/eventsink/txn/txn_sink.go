@@ -32,7 +32,7 @@ import (
 
 const (
 	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots uint64 = 8 * 1024 * 1024
+	DefaultConflictDetectorSlots uint64 = 16 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -41,13 +41,13 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 // sink is the sink for SingleTableTxn.
 type sink struct {
 	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
-	statistics       *metrics.Statistics
 	workers          []*worker
 	cancel           func()
-
 	// set when the sink is closed explicitly. and then subsequence `WriteEvents` call
-	// should returns an error.
+	// should return an error.
 	closed int32
+
+	statistics *metrics.Statistics
 }
 
 func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
@@ -98,16 +98,13 @@ func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 
 	for _, row := range rows {
 		if row.GetTableSinkState() == state.TableSinkStopping {
-			// The table where the event comes from is in stopping so it's safe
+			// The table where the event comes from is in stopping, so it's safe
 			// to drop the event directly.
 			row.Callback()
 			continue
 		}
 
-		err := s.conflictDetector.Add(newTxnEvent(row))
-		if err != nil {
-			return err
-		}
+		s.conflictDetector.Add(newTxnEvent(row))
 	}
 	return nil
 }
