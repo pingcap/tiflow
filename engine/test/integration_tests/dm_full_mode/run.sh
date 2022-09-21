@@ -27,7 +27,6 @@ function run() {
 	cp $CUR_DIR/conf/job.yaml $WORK_DIR/job.yaml
 	sed -i "20,23d" $WORK_DIR/job.yaml
 	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_full_mode")
-	echo "job_id: $job_id"
 
 	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'route-rules global not exist in routes'"
 
@@ -40,7 +39,6 @@ function run() {
 	sed -i "s/root/wrong_user/g" $WORK_DIR/job.yaml
 
 	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_full_mode")
-	echo "job_id: $job_id"
 
 	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'Access denied'"
 

@@ -272,11 +272,6 @@ func convertMakeTaskErrorToRPCError(
 		return rpcerror.ToGRPCError(err)
 	}
 
-	switch tp {
-	case frameModel.DMJobMaster:
-		err = errors.ToDMError(err)
-	default:
-	}
 	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
 	if inErr != nil {
 		return inErr
