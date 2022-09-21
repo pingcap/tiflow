@@ -211,6 +211,8 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
+	# make sure worker1 enter to sync status, and complete one dml
+	check_log_contain_with_retry "event=XID" $WORK_DIR/worker1/log/dm-worker.log
 	# restart workers
 	kill_dm_worker
 
