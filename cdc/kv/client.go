@@ -622,7 +622,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			case <-ctx.Done():
 			}
 		case regionspan.LockRangeStatusStale:
-			log.Info("request expired",
+			log.Debug("request expired",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("regionID", sri.verID.GetID()),
