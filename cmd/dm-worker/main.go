@@ -93,7 +93,7 @@ func main() {
 	switch errors.Cause(err) {
 	case nil:
 	case terror.ErrWorkerServerClosed:
-		log.L().Info("dm-worker already closed")
+		log.L().Info("not need to start dm-worker")
 	default:
 		log.L().Error("fail to start dm-worker", zap.Error(err))
 	}

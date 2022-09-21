@@ -732,6 +732,7 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg
 }
+
 func (t *testServer) TestServerDataRace(c *C) {
 	var (
 		masterAddr   = tempurl.Alloc()[len("http://"):]
@@ -753,7 +754,6 @@ func (t *testServer) TestServerDataRace(c *C) {
 		err1 := s.Start()
 		c.Assert(err1, IsNil)
 	}()
-
 	for i := 0; i < 10; i++ {
 		go func() {
 			fmt.Println("111")
