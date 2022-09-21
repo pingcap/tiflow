@@ -238,7 +238,7 @@ func TestElectorRenewFailure(t *testing.T) {
 		Storage: s1,
 		LeaderCallback: func(ctx context.Context) error {
 			<-ctx.Done()
-			return nil
+			return ctx.Err()
 		},
 		LeaseDuration: leaseDuration,
 		RenewInterval: renewInterval,
@@ -269,7 +269,7 @@ func TestElectorRenewFailure(t *testing.T) {
 		Storage: s2,
 		LeaderCallback: func(ctx context.Context) error {
 			<-ctx.Done()
-			return nil
+			return ctx.Err()
 		},
 		LeaseDuration: leaseDuration,
 		RenewInterval: renewInterval,
@@ -300,6 +300,118 @@ func TestElectorRenewFailure(t *testing.T) {
 	require.False(t, e1.IsLeader())
 	_, ok := e1.GetLeader()
 	require.False(t, ok)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestLeaderCallbackUnexpectedExit(t *testing.T) {
+	t.Parallel()
+
+	s := mock.NewMockStorage(gomock.NewController(t))
+
+	var recordLock sync.RWMutex
+	record := &election.Record{}
+
+	s.EXPECT().Get(gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context) (*election.Record, error) {
+			recordLock.RLock()
+			defer recordLock.RUnlock()
+
+			return record.Clone(), nil
+		})
+
+	s.EXPECT().Update(gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context, r *election.Record) error {
+			recordLock.Lock()
+			defer recordLock.Unlock()
+
+			if r.Version != record.Version {
+				return election.ErrRecordConflict
+			}
+			record = r.Clone()
+			record.Version++
+			return nil
+		})
+
+	const (
+		leaseDuration = time.Second * 1
+		renewInterval = time.Millisecond * 100
+		renewDeadline = leaseDuration - renewInterval
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var e1CallbackErr atomic.Error
+
+	e1, err := election.NewElector(election.Config{
+		ID:      "e1",
+		Name:    "e1",
+		Address: "127.0.0.1:10241",
+		Storage: s,
+		LeaderCallback: func(ctx context.Context) error {
+			ticker := time.NewTicker(time.Millisecond)
+			for {
+				select {
+				case <-ticker.C:
+					if err := e1CallbackErr.Load(); err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		},
+		LeaseDuration: leaseDuration,
+		RenewInterval: renewInterval,
+		RenewDeadline: renewDeadline,
+	})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := e1.Run(ctx)
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}()
+
+	// Wait for leader to be elected.
+	require.Eventually(t, func() bool {
+		_, ok := e1.GetLeader()
+		return ok
+	}, time.Second, time.Millisecond*100, "leader not elected")
+
+	e2, err := election.NewElector(election.Config{
+		ID:      "e2",
+		Name:    "e2",
+		Address: "127.0.0.1:10242",
+		Storage: s,
+		LeaderCallback: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		LeaseDuration: leaseDuration,
+		RenewInterval: renewInterval,
+		RenewDeadline: renewDeadline,
+	})
+	require.NoError(t, err)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := e2.Run(ctx)
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}()
+
+	// Make elector 1 leader callback return error.
+	e1CallbackErr.Store(errors.New("callback error"))
+
+	require.Eventually(t, func() bool {
+		leader, ok := e1.GetLeader()
+		return ok && leader.ID == "e2"
+	}, time.Second*3, time.Millisecond*100, "e2 not elected")
 
 	cancel()
 	wg.Wait()

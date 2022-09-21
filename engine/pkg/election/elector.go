@@ -42,10 +42,19 @@ type Elector struct {
 	observedRenews map[string]time.Time
 
 	// resignCh is used to notify the elector to resign leadership.
-	// The value is the duration that the elector should not be leader.
-	resignCh chan time.Duration
+	resignCh chan *resignReq
 	// Elector will not be leader until this time.
 	resignUntil time.Time
+
+	callbackWg        sync.WaitGroup
+	callbackIsRunning atomic.Bool
+	callbackCancelFn  context.CancelFunc
+}
+
+type resignReq struct {
+	ctx      context.Context
+	duration time.Duration
+	errCh    chan error
 }
 
 // NewElector creates a new Elector.
@@ -56,73 +65,46 @@ func NewElector(config Config) (*Elector, error) {
 	return &Elector{
 		config:         config,
 		observedRenews: make(map[string]time.Time),
-		resignCh:       make(chan time.Duration),
+		resignCh:       make(chan *resignReq),
 	}, nil
 }
 
 // Run runs the elector to continuously campaign for leadership
 // until the context is canceled.
 func (e *Elector) Run(ctx context.Context) error {
-	leaderCallback := e.config.LeaderCallback
-
-	var (
-		callbackWg        sync.WaitGroup
-		callbackIsRunning atomic.Bool
-		cancelCallback    context.CancelFunc
-	)
-
 	for {
-		var (
-			shouldCancelCallback bool
-			cancelCallbackReason string
-		)
-
 		if err := e.renew(ctx); err != nil {
 			log.Warn("failed to renew lease after renew deadline", zap.Error(err),
 				zap.Duration("renew-deadline", e.config.RenewDeadline))
-			shouldCancelCallback = true
-			cancelCallbackReason = "renew lease failed"
+			e.cancelCallback("renew lease failed")
 		} else if e.IsLeader() {
-			if !callbackIsRunning.Load() {
-				leaderCtx, leaderCancel := context.WithCancel(ctx)
-				callbackWg.Add(1)
-				callbackIsRunning.Store(true)
-				go func() {
-					defer func() {
-						callbackIsRunning.Store(false)
-						callbackWg.Done()
-					}()
-					log.Info("leader callback is called")
-					err := leaderCallback(leaderCtx)
-					log.Info("leader callback returned", zap.Error(err))
-				}()
-				cancelCallback = leaderCancel
-			}
+			e.ensureCallbackIsRunning(ctx)
 		} else {
-			shouldCancelCallback = true
-			cancelCallbackReason = "not leader"
-		}
-
-		if shouldCancelCallback && callbackIsRunning.Load() {
-			log.Info("cancel leader callback", zap.String("reason", cancelCallbackReason))
-			start := time.Now()
-			cancelCallback()
-			callbackWg.Wait()
-			log.Info("leader callback is canceled", zap.Duration("took", time.Since(start)))
+			e.cancelCallback("not leader")
 		}
 
 		select {
 		case <-ctx.Done():
-			if err := e.release(context.Background()); err != nil {
+			if err := e.release(context.Background(), true /* removeSelf */); err != nil {
 				log.Warn("failed to release member lease", zap.Error(err))
 			}
-			if callbackIsRunning.Load() {
-				cancelCallback()
-				callbackWg.Wait()
-			}
+			e.cancelCallback(ctx.Err().Error())
 			return ctx.Err()
-		case duration := <-e.resignCh:
-			e.resignUntil = time.Now().Add(duration)
+		case req := <-e.resignCh:
+			if e.IsLeader() {
+				log.Info("try to resign leadership")
+				if err := e.release(req.ctx, false /* removeSelf */); err != nil {
+					log.Warn("failed to resign leadership", zap.Error(err))
+					req.errCh <- err
+				} else {
+					req.errCh <- nil
+					e.resignUntil = time.Now().Add(req.duration)
+					e.cancelCallback("leader resigned")
+				}
+			} else {
+				req.errCh <- nil
+				e.resignUntil = time.Now().Add(req.duration)
+			}
 		case <-time.After(e.config.RenewInterval):
 		}
 	}
@@ -203,7 +185,7 @@ func (e *Elector) tryRenew(ctx context.Context) (err error) {
 	if time.Now().Before(e.resignUntil) {
 		if record.LeaderID == e.config.ID {
 			record.LeaderID = ""
-			log.Info("resign the leadership")
+			log.Info("try to resign leadership")
 		}
 	} else if record.LeaderID == "" {
 		// Elect a new leader if no leader exists.
@@ -223,7 +205,44 @@ func (e *Elector) tryRenew(ctx context.Context) (err error) {
 	return nil
 }
 
-func (e *Elector) release(ctx context.Context) error {
+func (e *Elector) ensureCallbackIsRunning(ctx context.Context) {
+	if !e.callbackIsRunning.Load() {
+		leaderCallback := e.config.LeaderCallback
+		leaderCtx, leaderCancel := context.WithCancel(ctx)
+		e.callbackWg.Add(1)
+		e.callbackIsRunning.Store(true)
+		go func() {
+			defer func() {
+				e.callbackIsRunning.Store(false)
+				e.callbackWg.Done()
+			}()
+			log.Info("leader callback is called")
+			err := leaderCallback(leaderCtx)
+			if errors.Cause(err) != context.Canceled {
+				log.Warn("leader callback is unexpectedly exited", zap.Error(err))
+				if e.IsLeader() {
+					log.Info("try to resign leadership")
+					if err := e.release(context.Background(), false /* removeSelf */); err != nil {
+						log.Warn("failed to resign leadership", zap.Error(err))
+					}
+				}
+			}
+		}()
+		e.callbackCancelFn = leaderCancel
+	}
+}
+
+func (e *Elector) cancelCallback(reason string) {
+	if e.callbackIsRunning.Load() {
+		log.Info("cancel leader callback", zap.String("reason", reason))
+		start := time.Now()
+		e.callbackCancelFn()
+		e.callbackWg.Wait()
+		log.Info("leader callback is canceled", zap.Duration("took", time.Since(start)))
+	}
+}
+
+func (e *Elector) release(ctx context.Context, removeSelf bool) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultReleaseTimeout)
 	defer cancel()
 
@@ -235,14 +254,16 @@ func (e *Elector) release(ctx context.Context) error {
 	}
 	e.setObservedRecord(record)
 
-	for i, m := range record.Members {
-		if m.ID == e.config.ID {
-			record.Members = append(record.Members[:i], record.Members[i+1:]...)
-			break
-		}
-	}
 	if record.LeaderID == e.config.ID {
 		record.LeaderID = ""
+	}
+	if removeSelf {
+		for i, m := range record.Members {
+			if m.ID == e.config.ID {
+				record.Members = append(record.Members[:i], record.Members[i+1:]...)
+				break
+			}
+		}
 	}
 
 	if err := s.Update(ctx, record); err != nil {
@@ -347,10 +368,16 @@ func (e *Elector) ResignLeader(ctx context.Context, duration time.Duration) erro
 	ctx, cancel := context.WithTimeout(ctx, defaultResignTimeout)
 	defer cancel()
 
+	req := &resignReq{
+		ctx:      ctx,
+		duration: duration,
+		errCh:    make(chan error, 1),
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case e.resignCh <- duration:
-		return nil
+	case e.resignCh <- req:
+		return <-req.errCh
 	}
 }
