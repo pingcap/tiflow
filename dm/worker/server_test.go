@@ -754,7 +754,7 @@ func (t *testServer) TestServerDataRace(c *C) {
 		err1 := s.Start()
 		c.Assert(err1, IsNil)
 	}()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		go func() {
 			fmt.Println("111")
 			s.Close()
