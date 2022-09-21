@@ -27,7 +27,7 @@ function run() {
 	# copy auto-generated certificates from MySQL to bypass permission
 	mkdir -p $WORK_DIR/mysql1
 	mkdir -p $WORK_DIR/mysql2
-	
+
 	# sleep for a while to wait for the client-key.pem
 	sleep 30
 	docker cp dm_upstream_mysql:/var/lib/mysql/client-key.pem $WORK_DIR/mysql1/client-key.pem
@@ -47,7 +47,7 @@ function run() {
 	wait_mysql_online.sh --password 123456 --ssl-key $WORK_DIR/mysql1/client-key.pem --ssl-cert $WORK_DIR/mysql1/client-cert.pem
 	wait_mysql_online.sh --port 3307 --password 123456 --ssl-key $WORK_DIR/mysql2/client-key.pem --ssl-cert $WORK_DIR/mysql2/client-cert.pem
 
-	# comment this test. different client may have different behavior 
+	# comment this test. different client may have different behavior
 	#echo "verify can't connect to upstream without certificates"
 	#mysql -P3306 -h127.0.0.1 -uroot -p123456 -e "show databases" 2>&1 | grep -q "Connections using insecure transport are prohibited"
 
