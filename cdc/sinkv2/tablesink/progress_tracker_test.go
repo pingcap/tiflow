@@ -217,7 +217,9 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
-		return tracker.closed.Load()
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		return tracker.closed
 	}, 3*time.Second, 100*time.Millisecond, "state of tracker should be closed")
 	currentTs := tracker.advance()
 	cb1()
