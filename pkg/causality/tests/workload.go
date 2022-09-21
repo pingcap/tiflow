@@ -40,7 +40,7 @@ func newUniformGenerator(workingSetSize int64, batchSize int, numSlots uint64) *
 func (g *uniformGenerator) Next() []uint64 {
 	set := make(map[uint64]struct{}, g.batchSize)
 	for i := 0; i < g.batchSize; i++ {
-		key := uint64(rand.Int63n(g.workingSetSize)) % g.numSlots
+		key := uint64(rand.Int63n(g.workingSetSize))
 		set[key] = struct{}{}
 	}
 
@@ -49,6 +49,6 @@ func (g *uniformGenerator) Next() []uint64 {
 		ret = append(ret, key)
 	}
 
-	sort.Slice(ret, func(i, j int) bool { return ret[i] < ret[j] })
+	sort.Slice(ret, func(i, j int) bool { return ret[i]%g.numSlots < ret[j]%g.numSlots })
 	return ret
 }
