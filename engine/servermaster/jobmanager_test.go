@@ -616,10 +616,11 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 
 	// simulate a job is created.
 	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
+	errorMsg := "unit test fast fail error"
 	mockHandle := &framework.MockHandle{WorkerID: masterID}
 	nerr := pkgClient.ErrCreateWorkerTerminate.Gen(
 		&pkgClient.CreateWorkerTerminateError{
-			Details: "unit test fast fail error",
+			Details: errorMsg,
 		})
 	// OnWorkerDispatched callback on job manager, a terminated error will make
 	// job fast fail.
@@ -629,6 +630,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 		mockMaster.MasterMeta().ProjectID, int(frameModel.MasterStateFailed))
 	require.NoError(t, err)
 	require.Len(t, meta, 1)
+	require.Equal(t, errorMsg, meta[0].ErrorMsg)
 }
 
 func TestJobOperatorBgLoop(t *testing.T) {

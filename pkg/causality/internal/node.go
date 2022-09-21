@@ -230,7 +230,7 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 	return
 }
 
-// tryResolve must be called with n.mu locked.
+// tryResolve try to find a worker to assign the node to.
 // Returns (_, false) if there is a conflict,
 // returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
