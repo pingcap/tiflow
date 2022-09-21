@@ -24,7 +24,7 @@ function run() {
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
-	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
 
