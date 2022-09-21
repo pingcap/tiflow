@@ -132,8 +132,10 @@ function run() {
 	if [[ $tidb_build_branch =~ master ]]; then
 		# https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
 		# feature by default, turn it on first
+		run_sql "set @@global.tidb_enable_exchange_partition=on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 		run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 		# This must be set before cdc server starts
+		run_sql "set @@global.tidb_enable_exchange_partition=on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 		run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 		# TiDB global variables cache 2 seconds at most
 		sleep 2
