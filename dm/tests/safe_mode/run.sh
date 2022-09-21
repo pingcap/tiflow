@@ -206,6 +206,9 @@ function safe_mode_duration() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
+	# Worker1 need to start relay, so it is slow.
+	# It is possible that worker1 has not loaded before check diff.
+	sleep 3
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
