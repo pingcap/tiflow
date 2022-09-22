@@ -33,7 +33,6 @@ const (
 
 var (
 	nextNodeID = atomic.NewInt64(0)
-	nodePool   = &sync.Pool{}
 
 	// btreeFreeList is a shared free list used by all
 	// btrees in order to lessen the burden of GC.
@@ -53,6 +52,8 @@ type Node struct {
 	OnResolved func(id workerID)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
+	// Set the callback that the node is notified.
+	OnNotified func(callback func())
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependees    int32
@@ -94,11 +95,7 @@ func NewNode() (ret *Node) {
 		ret.removed = false
 	}()
 
-	if obj := nodePool.Get(); obj != nil {
-		ret = obj.(*Node)
-	} else {
-		ret = new(Node)
-	}
+	ret = new(Node)
 	return
 }
 
@@ -132,6 +129,10 @@ func (n *Node) DependOn(others map[int64]*Node) {
 			panic("should never exist")
 		}
 	}
+
+	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
+	// pending in slots after it's created.
+	n.id = nextNodeID.Add(1)
 
 	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependees = int32(len(others))
@@ -177,7 +178,10 @@ func (n *Node) Free() {
 	n.OnResolved = nil
 	n.RandWorkerID = nil
 
-	nodePool.Put(n)
+	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
+	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
+	// again. In the last `assignTo`, it can never know whether the node has been reused
+	// or not.
 }
 
 // assignTo assigns a node to a worker. Returns `true` on success.
@@ -214,7 +218,11 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 		if workerNum < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
-		n.assignTo(workerNum)
+		if n.OnNotified != nil {
+			n.OnNotified(func() { n.assignTo(workerNum) })
+		} else {
+			n.assignTo(workerNum)
+		}
 	}
 	return
 }
