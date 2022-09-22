@@ -81,7 +81,7 @@ func newMySQLSyncPointStore(
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
-		name := "cdc_mysql_tls" + "syncpoint" + id.Namespace + "_" + id.ID
+		name := "cdc_mysql_tls" + "syncpoint" + id.ID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
@@ -176,7 +176,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	query := `CREATE TABLE IF NOT EXISTS %s 
+	query := `CREATE TABLE IF NOT EXISTS %s
 	(
 		ticdc_cluster_id varchar (255),
 		changefeed varchar(255),
@@ -222,7 +222,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	// insert ts map
 	query := "insert ignore into " + schemaName + "." + syncPointTableName +
 		"(ticdc_cluster_id, changefeed, primary_ts, secondary_ts) VALUES (?,?,?,?)"
-	_, err = tx.Exec(query, s.clusterID, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
+	_, err = tx.Exec(query, s.clusterID, id.ID, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -237,8 +237,9 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			"DELETE IGNORE FROM "+
 				schemaName+"."+
 				syncPointTableName+
-				" WHERE changefeed like '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
-			id.Namespace+"_"+id.ID,
+				" WHERE ticdc_cluster_id = '%s' and changefeed = '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
+			s.clusterID,
+			id.ID,
 			s.syncPointRetention.Seconds())
 		_, err = tx.Exec(query)
 		if err != nil {
