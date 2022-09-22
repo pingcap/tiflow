@@ -787,7 +787,7 @@ func TestChangefeedInfoStringer(t *testing.T) {
 				SinkURI: "mysql://root@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://root:xxxxx@127.0.0.1:3306.*`,
+			`.*mysql://root@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
