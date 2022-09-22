@@ -47,7 +47,6 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
-	IsInitialized() bool
 }
 
 type pullerImpl struct {
@@ -58,7 +57,6 @@ type pullerImpl struct {
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
-	initialized  int64
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
@@ -101,7 +99,6 @@ func New(ctx context.Context,
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    tsTracker,
 		resolvedTs:   checkpointTs,
-		initialized:  0,
 		changefeed:   changefeed,
 		tableID:      tableID,
 		tableName:    tableName,
@@ -214,9 +211,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					p.tsTracker.Forward(resolvedSpan.Span, resolvedSpan.ResolvedTs)
 					resolvedTs := p.tsTracker.Frontier()
 					if resolvedTs > 0 && !initialized {
-						// Advancing to a non-zero value means the puller level
-						// resolved ts is initialized.
-						atomic.StoreInt64(&p.initialized, 1)
 						initialized = true
 
 						spans := make([]string, 0, len(p.spans))
@@ -254,8 +248,4 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
-}
-
-func (p *pullerImpl) IsInitialized() bool {
-	return atomic.LoadInt64(&p.initialized) > 0
 }
