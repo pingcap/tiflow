@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
