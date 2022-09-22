@@ -198,8 +198,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
+				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved)))
 				for _, resolvedSpan := range e.Resolved {
-					metricTxnCollectCounterResolved.Inc()
 					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
 						log.Panic("the resolved span is not in the total span",
 							zap.String("namespace", p.changefeed.Namespace),
