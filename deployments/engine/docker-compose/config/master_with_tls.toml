@@ -1,5 +1,3 @@
-etcd-endpoints = ["etcd-standalone:2379"]
-
 [framework-meta]
 endpoints = ["mysql-standalone:3306"]
 schema = "test_framework"
