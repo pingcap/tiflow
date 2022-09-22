@@ -68,6 +68,7 @@ import (
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
@@ -534,6 +535,23 @@ func (s *Server) Run(ctx context.Context) error {
 	return wg.Wait()
 }
 
+func retryWrapper(ctx context.Context, fn func(fnCtx context.Context) error) error {
+	retryInterval := 3 * time.Second
+	retryDuration := 9 * time.Second
+	ctx, cancel := context.WithTimeout(ctx, retryDuration)
+	defer cancel()
+	err := retry.Do(ctx, func() error {
+		fnCtx, cancel := context.WithTimeout(ctx, retryInterval)
+		defer cancel()
+		return fn(fnCtx)
+	},
+		retry.WithBackoffBaseDelay(int64(retryInterval/time.Millisecond)),
+		retry.WithBackoffMaxDelay(int64(retryInterval/time.Millisecond)),
+		retry.WithMaxTries(uint64(retryDuration/retryInterval)),
+	)
+	return err
+}
+
 func (s *Server) registerMetaStore(ctx context.Context) error {
 	// register metastore for framework
 	cfg := s.cfg
@@ -543,12 +561,16 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if cfg.FrameworkMeta.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for framework meta. Just for easy test here. Ignore any error.
-		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameworkMeta)); err != nil {
-			log.Error("create schema for framework metastore fail",
-				zap.String("schema", s.cfg.FrameworkMeta.Schema),
-				zap.Error(err))
+		err := retryWrapper(ctx, func(fnCtx context.Context) error {
+			if err := meta.CreateSchemaIfNotExists(fnCtx, *(s.cfg.FrameworkMeta)); err != nil {
+				log.Error("create schema for framework metastore fail",
+					zap.String("schema", s.cfg.FrameworkMeta.Schema),
+					zap.Error(err))
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}
@@ -574,12 +596,16 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if cfg.BusinessMeta.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance, and we may have no privilege
 		// to create schema for business meta. Just for easy test here. Ignore any error.
-		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMeta)); err != nil {
-			log.Error("create schema for business metastore fail",
-				zap.String("schema", s.cfg.BusinessMeta.Schema),
-				zap.Error(err))
+		err := retryWrapper(ctx, func(fnCtx context.Context) error {
+			if err := meta.CreateSchemaIfNotExists(fnCtx, *(s.cfg.BusinessMeta)); err != nil {
+				log.Error("create schema for business metastore fail",
+					zap.String("schema", s.cfg.FrameworkMeta.Schema),
+					zap.Error(err))
+				return err
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}
