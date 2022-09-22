@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/simulator/internal/config"
-	"github.com/pingcap/tiflow/dm/simulator/internal/mcp"
+	"github.com/pingcap/tiflow/dm/simulator/config"
+	"github.com/pingcap/tiflow/dm/simulator/mcp"
 )
 
 type testSQLGenImplSuite struct {

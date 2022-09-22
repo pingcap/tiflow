@@ -26,8 +26,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/simulator/internal/config"
-	"github.com/pingcap/tiflow/dm/simulator/internal/mcp"
+	"github.com/pingcap/tiflow/dm/simulator/config"
+	"github.com/pingcap/tiflow/dm/simulator/mcp"
 )
 
 type sqlGeneratorImpl struct {
@@ -269,4 +269,8 @@ func (g *sqlGeneratorImpl) GenLoadUniqueKeySQL() (string, []*config.ColumnDefini
 		return "", nil, errors.Annotate(err, "output SELECT AST into SQL string error")
 	}
 	return sql, cols, nil
+}
+
+func (g *sqlGeneratorImpl) GenCreateTable() string {
+	return g.tableConfig.GenCreateTable()
 }
