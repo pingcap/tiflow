@@ -25,11 +25,8 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/stretchr/testify/require"
->>>>>>> 750f0e4dd (syncer(dm): fix collation compatibility behaviour (#6833))
 	"go.uber.org/zap"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -766,23 +763,13 @@ func TestAdjustCollation(t *testing.T) {
 			targetTables: []*filter.Table{tab},
 		}
 		stmt, err := p.ParseOneStmt(sql, "", "")
-<<<<<<< HEAD
-		c.Assert(err, IsNil)
-		c.Assert(stmt, NotNil)
+		require.NoError(t, err)
+		require.NotNil(t, stmt)
 		ddlInfo.originStmt = stmt
 		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
-		c.Assert(err, IsNil)
-		c.Assert(routedDDL, Equals, expectedSQLs[i])
-=======
-		require.NoError(t, err)
-		require.NotNil(t, stmt)
-		ddlInfo.stmtCache = stmt
-		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		require.NoError(t, err)
 		require.Equal(t, expectedSQLs[i], routedDDL)
->>>>>>> 750f0e4dd (syncer(dm): fix collation compatibility behaviour (#6833))
 	}
 }
 
