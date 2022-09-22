@@ -178,7 +178,6 @@ func TestPullerResolvedForward(t *testing.T) {
 	ev := <-plr.Output()
 	require.Equal(t, model.OpTypeResolved, ev.OpType)
 	require.Equal(t, uint64(1000), ev.CRTs)
-	require.True(t, plr.IsInitialized())
 	err := retry.Do(context.Background(), func() error {
 		ts := plr.GetResolvedTs()
 		if ts != uint64(1000) {
