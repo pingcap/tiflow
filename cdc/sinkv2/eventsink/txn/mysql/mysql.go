@@ -40,6 +40,9 @@ import (
 )
 
 const (
+	// Max interval for flushing transactions to the downstream.
+	maxFlushInterval = 50 * time.Millisecond
+
 	defaultDMLMaxRetry uint64 = 8
 )
 
@@ -171,6 +174,11 @@ func (s *mysqlBackend) Close() (err error) {
 		s.db = nil
 	}
 	return
+}
+
+// MaxFlushInterval implements interface backend.
+func (s *mysqlBackend) MaxFlushInterval() time.Duration {
+	return maxFlushInterval
 }
 
 type preparedDMLs struct {
