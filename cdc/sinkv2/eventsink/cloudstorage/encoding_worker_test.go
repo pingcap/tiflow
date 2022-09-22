@@ -101,7 +101,7 @@ func TestEncodeEvents(t *testing.T) {
 	worker.writer.close()
 }
 
-func TestWorkerRun(t *testing.T) {
+func TestEncodingWorkerRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := testEncodingWorker(ctx, t)
 	msgCh := chann.New[eventFragment]()

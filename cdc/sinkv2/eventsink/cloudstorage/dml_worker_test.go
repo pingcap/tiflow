@@ -44,7 +44,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 func TestGenerateCloudStoragePath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d := testDMLWorker(ctx, t, t.TempDir())
+	w := testDMLWorker(ctx, t, t.TempDir())
 	table := versionedTable{
 		TableName: model.TableName{
 			Schema: "test",
@@ -52,10 +52,11 @@ func TestGenerateCloudStoragePath(t *testing.T) {
 		},
 		TableVersion: 5,
 	}
-	path := d.generateCloudStoragePath(table)
+	path := w.generateCloudStoragePath(table)
 	require.Equal(t, "test/table1/5/CDC000001.json", path)
-	path = d.generateCloudStoragePath(table)
+	path = w.generateCloudStoragePath(table)
 	require.Equal(t, "test/table1/5/CDC000002.json", path)
+	w.close()
 }
 
 func TestDMLWorkerRun(t *testing.T) {
