@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	v2 "github.com/pingcap/tiflow/cdc/scheduler/internal/v2"
 	v3 "github.com/pingcap/tiflow/cdc/scheduler/internal/v3"
 	v3agent "github.com/pingcap/tiflow/cdc/scheduler/internal/v3/agent"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -58,36 +57,6 @@ type Agent internal.Agent
 // CheckpointCannotProceed is a placeholder indicating that the
 // Owner should not advance the global checkpoint TS just yet.
 const CheckpointCannotProceed = internal.CheckpointCannotProceed
-
-// NewAgent returns processor agent.
-func NewAgent(
-	ctx context.Context,
-	captureID model.CaptureID,
-	liveness *model.Liveness,
-	messageServer *p2p.MessageServer,
-	messageRouter p2p.MessageRouter,
-	etcdClient etcd.CDCEtcdClient,
-	executor TableExecutor,
-	changefeedID model.ChangeFeedID,
-) (Agent, error) {
-	return v2.NewAgent(
-		ctx, messageServer, messageRouter, etcdClient, executor, changefeedID)
-}
-
-// NewScheduler returns owner scheduler.
-func NewScheduler(
-	ctx context.Context,
-	captureID model.CaptureID,
-	changeFeedID model.ChangeFeedID,
-	checkpointTs model.Ts,
-	messageServer *p2p.MessageServer,
-	messageRouter p2p.MessageRouter,
-	ownerRevision int64,
-	cfg *config.SchedulerConfig,
-) (Scheduler, error) {
-	return v2.NewSchedulerV2(
-		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
-}
 
 // NewAgentV3 returns two-phase agent.
 func NewAgentV3(

@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -269,10 +268,6 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-
-	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
-	// is only support by `SchedulerV3`, enable it.
-	config.GetGlobalServerConfig().Debug.EnableSchedulerV3 = true
 
 	var err error
 	// init tick

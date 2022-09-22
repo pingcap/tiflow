@@ -205,7 +205,6 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
 				MaxTaskConcurrency:   10,
@@ -361,7 +360,6 @@ check-balance-interval = "10s"
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
 				MaxTaskConcurrency:   11,
@@ -509,7 +507,6 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
 				MaxTaskConcurrency:   10,
@@ -574,7 +571,6 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 		},
-		EnableSchedulerV3: true,
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,
 			MaxTaskConcurrency:   10,

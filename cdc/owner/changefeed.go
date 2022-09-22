@@ -52,15 +52,9 @@ func newSchedulerV2FromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableSchedulerV3 {
-		ret, err = scheduler.NewSchedulerV3(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	} else {
-		ret, err = scheduler.NewScheduler(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	}
+	ret, err = scheduler.NewSchedulerV3(
+		ctx, captureID, changeFeedID, startTs,
+		messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	return ret, errors.Trace(err)
 }
 
