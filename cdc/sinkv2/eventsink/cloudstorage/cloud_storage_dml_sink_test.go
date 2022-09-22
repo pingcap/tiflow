@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 
 	// assume we have a large transaction and it is splitted into 10 small transactions
 	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
-	cnt := 0
+	var cnt uint64 = 0
 	batch := 100
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
@@ -55,7 +56,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 				TableVersion: 33,
 			},
 			Callback: func() {
-				cnt += batch
+				atomic.AddUint64(&cnt, uint64(batch))
 			},
 		}
 		for j := 0; j < batch; j++ {
@@ -85,7 +86,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	require.Equal(t, 1000, cnt)
+	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 	cancel()
 	err = s.Close()
 	require.Nil(t, err)
