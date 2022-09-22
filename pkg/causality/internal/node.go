@@ -84,6 +84,7 @@ type Node struct {
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
+		ret.id = nextNodeID.Add(1)
 		ret.OnResolved = nil
 		ret.RandWorkerID = nil
 		ret.totalDependees = 0
@@ -94,13 +95,8 @@ func NewNode() (ret *Node) {
 		ret.removed = false
 	}()
 
-    ret = new(Node)
+	ret = new(Node)
 	return
-}
-
-// AllocID implements interface internal.SlotNode.
-func (n *Node) AllocID() {
-    n.id = nextNodeID.Add(1)
 }
 
 // NodeID implements interface internal.SlotNode.
@@ -133,6 +129,10 @@ func (n *Node) DependOn(others map[int64]*Node) {
 			panic("should never exist")
 		}
 	}
+
+	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
+	// pending in slots after it's created.
+	n.id = nextNodeID.Add(1)
 
 	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependees = int32(len(others))
@@ -177,6 +177,11 @@ func (n *Node) Free() {
 	n.id = invalidNodeID
 	n.OnResolved = nil
 	n.RandWorkerID = nil
+
+	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
+	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
+	// again. In the last `assignTo`, it can never know whether the node has been reused
+	// or not.
 }
 
 // assignTo assigns a node to a worker. Returns `true` on success.

@@ -25,8 +25,6 @@ type slot[E SlotNode[E]] struct {
 
 // SlotNode describes objects that can be compared for equality.
 type SlotNode[T any] interface {
-    // AllocID allocates an ID for the node.
-    AllocID()
 	// NodeID tells the node's ID.
 	NodeID() int64
 	// Construct a dependency on `others`.
@@ -73,7 +71,6 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 		}
 		s.slots[slotIdx].nodes[key] = elem
 	}
-    elem.AllocID()
 	elem.DependOn(dependOnList)
 
 	// Lock those slots one by one and then unlock them one by one, so that
