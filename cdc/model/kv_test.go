@@ -38,8 +38,8 @@ func TestRegionFeedEvent(t *testing.T) {
 	ev = &RegionFeedEvent{Val: raw}
 	require.Equal(t, raw, ev.GetValue())
 
-	ev = &RegionFeedEvent{Resolved: resolved}
-	require.Equal(t, resolved, ev.GetValue())
+	ev = &RegionFeedEvent{Resolved: []*ResolvedSpan{resolved}}
+	require.Equal(t, resolved, ev.GetValue().([]*ResolvedSpan)[0])
 
 	require.Equal(t, "span: [61, 62), resolved-ts: 111", resolved.String())
 }
