@@ -141,7 +141,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	CloseOnce sync.Once
+	closeOnce sync.Once
 
 	clock clock.Clock
 
@@ -247,7 +247,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 
 // NotifyExit implements BaseWorker.NotifyExit
 func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
-	w.CloseOnce.Do(func() {
+	w.closeOnce.Do(func() {
 		// Must ensure that the business logic is
 		// notified before closing.
 		w.callClose()
@@ -407,7 +407,7 @@ func (w *DefaultBaseWorker) doClose() {
 // Close implements BaseWorker.Close
 // TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	w.CloseOnce.Do(func() {
+	w.closeOnce.Do(func() {
 		w.callClose()
 	})
 
