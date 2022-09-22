@@ -659,7 +659,7 @@ func (m *ManagerImpl) bgGC(ctx context.Context) {
 			if ckpt == 0 {
 				continue
 			}
-			log.Info("redo manager GC is triggered",
+			log.Debug("redo manager GC is triggered",
 				zap.Uint64("checkpointTs", ckpt),
 				zap.String("namespace", m.changeFeedID.Namespace),
 				zap.String("changefeed", m.changeFeedID.ID))

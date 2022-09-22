@@ -6,6 +6,8 @@ port=3306
 user="root"
 password=""
 file=""
+ssl_key=""
+ssl_cert=""
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -25,6 +27,14 @@ while [[ ${1} ]]; do
 		password=${2}
 		shift
 		;;
+	--ssl-key)
+		ssl_key=${2}
+		shift
+		;;
+	--ssl-cert)
+		ssl_cert=${2}
+		shift
+		;;
 	*)
 		file=${1}
 		;;
@@ -36,11 +46,17 @@ while [[ ${1} ]]; do
 	fi
 done
 
-if [ -z ${password} ]; then
-	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 <${file}"
-else
-	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 <${file}"
+cmd="mysql -u${user} -h${host} -P${port}"
+if [[ -n ${password} ]]; then
+	cmd="${cmd} -p${password}"
 fi
+if [[ -n ${ssl_key} ]]; then
+	cmd="${cmd} --ssl-key=${ssl_key}"
+fi
+if [[ -n ${ssl_cert} ]]; then
+	cmd="${cmd} --ssl-cert=${ssl_cert}"
+fi
+cmd="${cmd} --default-character-set utf8mb4 <${file}"
 
 echo "will execute: $cmd"
 eval $cmd

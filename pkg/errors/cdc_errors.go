@@ -271,14 +271,6 @@ var (
 	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
 		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
 	)
-	ErrPulsarNewProducer = errors.Normalize(
-		"new pulsar producer",
-		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
-	)
-	ErrPulsarSendMessage = errors.Normalize(
-		"pulsar send message failed",
-		errors.RFCCodeText("CDC:ErrPulsarSendMessage"),
-	)
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
 		errors.RFCCodeText("CDC:ErrRedoConfigInvalid"),
@@ -564,6 +556,10 @@ var (
 		"invalid ddl job(%d)",
 		errors.RFCCodeText("CDC:ErrInvalidDDLJob"),
 	)
+	ErrExchangePartition = errors.Normalize(
+		"exchange partition failed, %s",
+		errors.RFCCodeText("CDC:ErrExchangePartition"),
+	)
 
 	// puller related errors
 	ErrBufferReachLimit = errors.Normalize(
@@ -791,6 +787,11 @@ var (
 	ErrEtcdMigrateFailed = errors.Normalize(
 		"etcd meta data migrate failed:%s",
 		errors.RFCCodeText("CDC:ErrEtcdMigrateFailed"),
+	)
+	ErrChangefeedUnretryable = errors.Normalize(
+		"changefeed is in unretryable state, please check the error message"+
+			", and you should manually handle it",
+		errors.RFCCodeText("CDC:ErrChangefeedUnretryable"),
 	)
 
 	// pipeline errors

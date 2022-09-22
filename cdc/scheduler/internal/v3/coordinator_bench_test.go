@@ -21,10 +21,11 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -140,10 +141,10 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)
 			rep, err := replication.NewReplicationSet(
-				tableID, 0, map[string]*schedulepb.TableStatus{
+				tableID, 0, map[string]*tablepb.TableStatus{
 					captureID: {
 						TableID: tableID,
-						State:   schedulepb.TableStateReplicating,
+						State:   tablepb.TableStateReplicating,
 					},
 				}, model.ChangeFeedID{})
 			if err != nil {
@@ -161,9 +162,9 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			}
 			heartbeatResp[captureID].HeartbeatResponse.Tables = append(
 				heartbeatResp[captureID].HeartbeatResponse.Tables,
-				schedulepb.TableStatus{
+				tablepb.TableStatus{
 					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
+					State:   tablepb.TableStateReplicating,
 				})
 		}
 		recvMsgs := make([]*schedulepb.Message, 0, len(heartbeatResp))

@@ -25,11 +25,7 @@ function run() {
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 
 	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_collation")
 
 	# TODO: blocked by https://github.com/pingcap/tiflow/issues/6856
 	#	# utf8mb4_0900_as_cs is not supported, should display error message
@@ -67,5 +63,5 @@ function run() {
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
-# run $*
+run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
