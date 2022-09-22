@@ -16,7 +16,7 @@ package transport
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 // MockTrans mocks transport, used in tests.
