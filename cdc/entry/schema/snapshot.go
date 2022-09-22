@@ -481,8 +481,15 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+	case timodel.ActionTruncateTablePartition,
+		timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition:
 		err := s.inner.updatePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case timodel.ActionExchangeTablePartition:
+		err := s.inner.exchangePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -706,7 +713,7 @@ func (s *snapshot) dropSchema(id int64, currentTs uint64) error {
 	return nil
 }
 
-// Create a new schema in the snapshot. `dbInfo` will be deep copied.
+// Create a new schema in the snapshot. `dbInfo` will be deeply copied.
 func (s *snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
 	x, ok := s.schemaByID(dbInfo.ID)
 	if ok {
@@ -721,7 +728,7 @@ func (s *snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error 
 	return nil
 }
 
-// Replace a schema. dbInfo will be deep copied.
+// Replace a schema. dbInfo will be deeply copied.
 // Callers should ensure `dbInfo` information not conflict with other schemas.
 func (s *snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
 	old, ok := s.schemaByID(dbInfo.ID)
@@ -794,7 +801,7 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 	return
 }
 
-// Create a new table in the snapshot. `tbInfo` will be deep copied.
+// Create a new table in the snapshot. `tbInfo` will be deeply copied.
 func (s *snapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error {
 	if _, ok := s.schemaByID(tbInfo.SchemaID); !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
@@ -892,10 +899,100 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 		}
 	}
 	s.currentTs = currentTs
-	// TODO: is it necessary to print changes detailly?
+
 	log.Debug("adjust partition success",
 		zap.String("schema", tbInfo.TableName.Schema),
-		zap.String("table", tbInfo.TableName.Table))
+		zap.String("table", tbInfo.TableName.Table),
+		zap.Any("partitions", newPi.Definitions),
+	)
+	return nil
+}
+
+// exchangePartition find the partition's id in the old table info of targetTable,
+// and find the sourceTable's id in the new table info of targetTable.
+// Then set sourceTable's id to the partition's id, which make the exchange happen in snapshot.
+// Finally, update both the targetTable's info and the sourceTable's info in snapshot.
+func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uint64) error {
+	var sourceTable *model.TableInfo
+	oldTable, ok := s.physicalTableByID(targetTable.ID)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
+	}
+
+	oldPartitions := oldTable.GetPartitionInfo()
+	if oldPartitions == nil {
+		return cerror.ErrSnapshotTableNotFound.
+			GenWithStack("table %d is not a partitioned table", oldTable.ID)
+	}
+
+	newPartitions := targetTable.GetPartitionInfo()
+	if newPartitions == nil {
+		return cerror.ErrSnapshotTableNotFound.
+			GenWithStack("table %d is not a partitioned table", targetTable.ID)
+	}
+
+	oldIDs := make(map[int64]struct{}, len(oldPartitions.Definitions))
+	for _, p := range oldPartitions.Definitions {
+		oldIDs[p.ID] = struct{}{}
+	}
+
+	newIDs := make(map[int64]struct{}, len(oldPartitions.Definitions))
+	for _, p := range newPartitions.Definitions {
+		newIDs[p.ID] = struct{}{}
+	}
+
+	// 1. find the source table info
+	var diff []int64
+	for id := range newIDs {
+		if _, ok := oldIDs[id]; !ok {
+			diff = append(diff, id)
+		}
+	}
+	if len(diff) != 1 {
+		return cerror.ErrExchangePartition.
+			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
+	}
+	sourceTable, ok = s.physicalTableByID(diff[0])
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(diff[0])
+	}
+
+	// 3.find the exchanged partition info
+	diff = diff[:0]
+	for id := range oldIDs {
+		if _, ok := newIDs[id]; !ok {
+			diff = append(diff, id)
+		}
+	}
+	if len(diff) != 1 {
+		return cerror.ErrExchangePartition.
+			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
+	}
+
+	exchangedPartitionID := diff[0]
+	// 4.update the targetTable
+	err := s.updatePartition(targetTable, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	newSourceTable := sourceTable.Clone()
+	// 5.update the sourceTable
+	err = s.dropTable(sourceTable.ID, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	newSourceTable.ID = exchangedPartitionID
+	err = s.createTable(newSourceTable, currentTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("handle exchange partition success",
+		zap.String("sourceTable", sourceTable.TableName.String()),
+		zap.Int64("exchangedPartition", exchangedPartitionID),
+		zap.String("targetTable", targetTable.TableName.String()),
+		zap.Any("partition", targetTable.GetPartitionInfo().Definitions))
 	return nil
 }
 

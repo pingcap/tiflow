@@ -85,6 +85,9 @@ func NewSQLDB(storeConf *model.StoreConfig) (*sql.DB, error) {
 	pairs := map[string]string{
 		"sql_mode": strconv.Quote(dbutil.GetSQLStrictMode()),
 	}
-	dsn := model.GenerateDSNByParams(storeConf, pairs)
+	dsn, err := model.GenerateDSNByParams(storeConf, pairs)
+	if err != nil {
+		return nil, err
+	}
 	return dbutil.NewSQLDB("mysql", dsn, storeConf.DBConf)
 }
