@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -96,14 +95,8 @@ type Server struct {
 
 	cfg     *Config
 	metrics *serverMasterMetric
-	// Notify the server to resign leadership.
-	resignCh chan struct{}
 
-	// TODO: remove it.
-	etcdClient *clientv3.Client
-
-	elector *election.Elector
-
+	elector   *election.Elector
 	leader    atomic.Value
 	masterCli *rpcutil.LeaderClientWithLock[multiClient]
 
@@ -175,7 +168,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	server := &Server{
 		id:                id,
 		cfg:               cfg,
-		resignCh:          make(chan struct{}),
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
