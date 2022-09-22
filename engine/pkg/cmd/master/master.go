@@ -52,7 +52,6 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.masterConfig.Addr, "addr", o.masterConfig.Addr, "Set the listening address for server master")
 	cmd.Flags().StringVar(&o.masterConfig.AdvertiseAddr, "advertise-addr", o.masterConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
-	cmd.Flags().StringSliceVar(&o.masterConfig.ETCDEndpoints, "etcd-endpoints", o.masterConfig.ETCDEndpoints, "etcd endpoints")
 	cmd.Flags().StringSliceVar(&o.masterConfig.FrameworkMeta.Endpoints, "framework-meta-endpoints", o.masterConfig.FrameworkMeta.Endpoints, "framework metastore endpoint")
 	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMeta.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMeta.Endpoints, "business metastore endpoint")
 
@@ -112,8 +111,6 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.Addr = o.masterConfig.Addr
 		case "advertise-addr":
 			cfg.AdvertiseAddr = o.masterConfig.AdvertiseAddr
-		case "etcd-endpoints":
-			cfg.ETCDEndpoints = o.masterConfig.ETCDEndpoints
 		case "framework-meta-endpoints":
 			cfg.FrameworkMeta.Endpoints = o.masterConfig.FrameworkMeta.Endpoints
 		case "business-meta-endpoints":

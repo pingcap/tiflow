@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -95,16 +94,9 @@ type Server struct {
 	id string // Server id, randomly generated when server is created.
 
 	cfg     *Config
-	info    *model.NodeInfo
 	metrics *serverMasterMetric
-	// Notify the server to resign leadership.
-	resignCh chan struct{}
 
-	// TODO: remove it.
-	etcdClient *clientv3.Client
-
-	elector *election.Elector
-
+	elector   *election.Elector
 	leader    atomic.Value
 	masterCli *rpcutil.LeaderClientWithLock[multiClient]
 
@@ -170,19 +162,12 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
 	id := "server-master-" + uuid.New().String()
-	info := &model.NodeInfo{
-		Name: cfg.Name,
-		ID:   model.DeployNodeID(id),
-		Addr: cfg.AdvertiseAddr,
-	}
 	msgService := p2p.NewMessageRPCServiceWithRPCServer(id, nil, nil)
-	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
+	p2pMsgRouter := p2p.NewMessageRouter(id, cfg.AdvertiseAddr)
 
 	server := &Server{
 		id:                id,
 		cfg:               cfg,
-		info:              info,
-		resignCh:          make(chan struct{}),
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
@@ -543,7 +528,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		return s.watchNewLeader(ctx)
+		return s.watchLeader(ctx)
 	})
 
 	return wg.Wait()
