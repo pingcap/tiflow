@@ -237,7 +237,8 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			"DELETE IGNORE FROM "+
 				schemaName+"."+
 				syncPointTableName+
-				" WHERE changefeed like '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
+				" WHERE ticdc_cluster_id = '%s' and changefeed = '%s' and created_at < (NOW() - INTERVAL %.2f SECOND)",
+			s.clusterID,
 			id.ID,
 			s.syncPointRetention.Seconds())
 		_, err = tx.Exec(query)
