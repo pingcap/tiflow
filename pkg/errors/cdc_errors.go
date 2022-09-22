@@ -556,6 +556,10 @@ var (
 		"invalid ddl job(%d)",
 		errors.RFCCodeText("CDC:ErrInvalidDDLJob"),
 	)
+	ErrExchangePartition = errors.Normalize(
+		"exchange partition failed, %s",
+		errors.RFCCodeText("CDC:ErrExchangePartition"),
+	)
 
 	// puller related errors
 	ErrBufferReachLimit = errors.Normalize(
