@@ -309,7 +309,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case rtsUpdate := <-w.rtsUpdateCh:
-			w.rtsManager.Upsert(rtsUpdate)
+			w.rtsManager.Upsert(rtsUpdate.regionID, rtsUpdate.ts.resolvedTs, rtsUpdate.ts.eventTime)
 		case <-advanceCheckTicker.C:
 			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
@@ -325,7 +325,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
 				// region does not reach resolve lock boundary, put it back
 				if sinceLastResolvedTs < resolveLockInterval {
-					w.rtsManager.Upsert(item)
+					w.rtsManager.Insert(item)
 					break
 				}
 				expired = append(expired, item)
@@ -364,7 +364,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							rts.ts.eventTime = time.Now()
 							rts.ts.penalty = 0
 						}
-						w.rtsManager.Upsert(rts)
+						w.rtsManager.Insert(rts)
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
@@ -388,7 +388,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					rts.ts.penalty = 0
 				}
 				rts.ts.resolvedTs = lastResolvedTs
-				w.rtsManager.Upsert(rts)
+				w.rtsManager.Insert(rts)
 			}
 		}
 	}
