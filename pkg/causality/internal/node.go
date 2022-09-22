@@ -33,7 +33,6 @@ const (
 
 var (
 	nextNodeID = atomic.NewInt64(0)
-	nodePool   = &sync.Pool{}
 
 	// btreeFreeList is a shared free list used by all
 	// btrees in order to lessen the burden of GC.
@@ -96,11 +95,7 @@ func NewNode() (ret *Node) {
 		ret.removed = false
 	}()
 
-	if obj := nodePool.Get(); obj != nil {
-		ret = obj.(*Node)
-	} else {
-		ret = new(Node)
-	}
+    ret = new(Node)
 	return
 }
 
@@ -178,8 +173,6 @@ func (n *Node) Free() {
 	n.id = invalidNodeID
 	n.OnResolved = nil
 	n.RandWorkerID = nil
-
-	nodePool.Put(n)
 }
 
 // assignTo assigns a node to a worker. Returns `true` on success.
