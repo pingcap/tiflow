@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -169,21 +168,6 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 		require.Equal(t, item.info.SinkURI, obtained.SinkURI)
 		require.Equal(t, item.info.SortDir, obtained.SortDir)
 	}
-}
-
-func putChangeFeedStatus(
-	ctx context.Context,
-	c CDCEtcdClient,
-	changefeedID model.ChangeFeedID,
-	status *model.ChangeFeedStatus,
-) error {
-	key := GetEtcdKeyJob(DefaultCDCClusterID, changefeedID)
-	value, err := status.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	_, err = c.GetEtcdClient().Put(ctx, key, value)
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 func TestCheckMultipleCDCClusterExist(t *testing.T) {
