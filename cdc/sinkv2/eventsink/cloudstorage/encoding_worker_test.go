@@ -149,4 +149,8 @@ func TestWorkerRun(t *testing.T) {
 	cancel()
 	worker.close()
 	worker.writer.close()
+	msgCh.Close()
+	for range msgCh.Out() {
+		// drain the msgCh
+	}
 }

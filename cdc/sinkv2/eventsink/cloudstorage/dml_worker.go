@@ -285,5 +285,20 @@ func (d *dmlWorker) close() {
 	for range d.activeTablesCh.Out() {
 		// drain the activeTablesCh
 	}
+	// close the unbounded channel for defragmenter properly.
+	d.defragmenters.Range(func(key, value any) bool {
+		defrag := value.(*defragmenter)
+		defrag.close()
+		return true
+	})
+	// close the unbounded message channel properly.
+	d.msgChannels.Range(func(key, value any) bool {
+		msgCh := value.(*chann.Chann[*common.Message])
+		msgCh.Close()
+		for range msgCh.Out() {
+			// drain the msgCh
+		}
+		return true
+	})
 	d.wg.Wait()
 }

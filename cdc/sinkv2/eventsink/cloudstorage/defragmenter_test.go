@@ -32,6 +32,7 @@ import (
 
 func TestDeframenter(t *testing.T) {
 	defrag := newDefragmenter()
+	defer defrag.close()
 	uri := "file:///tmp/test"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
@@ -97,5 +98,9 @@ func TestDeframenter(t *testing.T) {
 		require.Nil(t, err)
 		require.GreaterOrEqual(t, curSeq, prevSeq)
 		prevSeq = curSeq
+	}
+	dstCh.Close()
+	for range dstCh.Out() {
+		// drain dstCh
 	}
 }

@@ -128,3 +128,10 @@ func (d *defragmenter) writeMsgsConsecutive(
 		}
 	}
 }
+
+func (d *defragmenter) close() {
+	d.registryCh.Close()
+	for range d.registryCh.Out() {
+		// drain the registryCh
+	}
+}

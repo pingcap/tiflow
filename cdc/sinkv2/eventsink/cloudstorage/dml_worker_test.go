@@ -181,4 +181,8 @@ func TestDMLWorkerRun(t *testing.T) {
 	require.Equal(t, "CDC000001.json", files[0].Name())
 	cancel()
 	d.close()
+	fragCh.Close()
+	for range fragCh.Out() {
+		// drain the fragCh
+	}
 }
