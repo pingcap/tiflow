@@ -119,17 +119,20 @@ type MasterImpl interface {
 	// Business logic is expected to release resources here, but business developer
 	// should be aware that when the runtime is crashed, CloseImpl has no time to
 	// be called.
-	// TODO: no other callbacks will be called after CloseImpl
+	// TODO: no other callbacks will be called after and concurrent with CloseImpl
 	// Concurrent safety:
-	// - this function may be concurrently called with OnWorkerMessage or OnCancel.
+	// - this function may be concurrently called with OnWorkerMessage, OnCancel,
+	//   OnWorkerDispatched, OnWorkerOnline, OnWorkerOffline, OnWorkerStatusUpdated.
 	CloseImpl(ctx context.Context)
 
 	// StopImpl is called the consequence of business logic calls Exit. Tick will
 	// be stopped after entering this function, and framework will treat this MasterImpl
 	// as non-recoverable,
-	// TODO: crash-safe?
+	// There's at most one invocation to StopImpl after Exit. If the runtime is
+	// crashed, StopImpl has no time to be called.
 	// Concurrent safety:
-	// - this function may be concurrently called with OnWorkerMessage or OnCancel.
+	// - this function may be concurrently called with OnWorkerMessage, OnCancel,
+	//   OnWorkerDispatched, OnWorkerOnline, OnWorkerOffline, OnWorkerStatusUpdated.
 	StopImpl(ctx context.Context)
 }
 
