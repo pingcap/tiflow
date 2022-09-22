@@ -58,7 +58,7 @@ type common struct {
 
 // reportError notifies Sorter to return an error and close.
 func (c *common) reportError(msg string, err error) {
-	if errors.Cause(err) != context.Canceled {
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.L().WithOptions(zap.AddCallerSkip(1)).
 			Warn(msg, zap.Uint64("tableID", c.tableID), zap.Error(err))
 	}
