@@ -41,7 +41,7 @@ import (
 
 const (
 	// Max interval for flushing transactions to the downstream.
-	maxFlushInterval = 50 * time.Millisecond
+	maxFlushInterval = 10 * time.Millisecond
 
 	defaultDMLMaxRetry uint64 = 8
 )
