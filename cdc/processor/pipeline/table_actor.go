@@ -38,6 +38,7 @@ import (
 	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -417,16 +418,21 @@ func (t *tableActor) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
+// if the actor system is slow, too many warn log will be printed add rate limit
+var updateBarrierTsLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*500), 1)
+
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	msg := pmessage.BarrierMessage(ts)
 	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
-		log.Warn("send fails",
-			zap.Any("msg", msg),
-			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
-			zap.Error(err))
+		if updateBarrierTsLogRateLimiter.Allow() {
+			log.Warn("send fails",
+				zap.Any("msg", msg),
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID),
+				zap.Error(err))
+		}
 	}
 }
 
