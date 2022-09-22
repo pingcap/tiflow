@@ -136,7 +136,7 @@ func testSimpleAllModeTask(
 	// full phase
 	noError(mysql.Exec("create database " + db))
 	noError(mysql.Exec("create table " + db + ".t1(c int primary key)"))
-	noError(mysql.Exec("insert into " + db + ".t1 values(1)"))
+	noError(mysql.Exec("INSERT INTO " + db + ".t1 values(1)"))
 
 	dmJobCfg, err := os.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func testSimpleAllModeTask(
 	// check full phase
 	waitRow := func(where string, db string) {
 		require.Eventually(t, func() bool {
-			rs, err := tidb.Query("select 1 from " + db + ".t1 where " + where)
+			rs, err := tidb.Query("SELECT 1 FROM " + db + ".t1 where " + where)
 			if err != nil {
 				t.Logf("query error: %v", err)
 				return false
@@ -174,7 +174,7 @@ func testSimpleAllModeTask(
 
 	// load finished and job exits
 	// TODO: check load status after framework supports it
-	// TODO: check checkpoint deleted after frameworker support StopImpl
+	// TODO: check checkpoint deleted after frameworker support Stop
 	require.Eventually(t, func() bool {
 		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
 		return err == nil && job.State == pb.Job_Finished
@@ -197,12 +197,12 @@ func testSimpleAllModeTask(
 	}, time.Second*5, time.Millisecond*100)
 
 	// incremental phase
-	noError(mysql.Exec("insert into " + db + ".t1 values(2)"))
+	noError(mysql.Exec("INSERT INTO " + db + ".t1 values(2)"))
 	waitRow("c = 2", db)
 
 	// imitate an error that can auto resume
-	noError(tidb.Exec("drop table " + db + ".t1"))
-	noError(mysql.Exec("insert into " + db + ".t1 values(3)"))
+	noError(tidb.Exec("DROP TABLE " + db + ".t1"))
+	noError(mysql.Exec("INSERT INTO " + db + ".t1 values(3)"))
 	time.Sleep(time.Second)
 	noError(tidb.Exec("create table " + db + ".t1(c int primary key)"))
 	time.Sleep(time.Second)
@@ -254,8 +254,8 @@ func testSimpleAllModeTask(
 	require.Contains(t, jobCfg, `flavor: mysql`)
 	require.Contains(t, jobCfg, `tidb_txn_mode: optimistic`)
 
-	noError(mysql.Exec("alter table " + db + ".t1 add column new_col int unique"))
-	noError(mysql.Exec("insert into " + db + ".t1 values(4,4)"))
+	noError(mysql.Exec("ALTER TABLE " + db + ".t1 add column new_col int unique"))
+	noError(mysql.Exec("INSERT INTO " + db + ".t1 values(4,4)"))
 
 	// eventually error
 	require.Eventually(t, func() bool {
@@ -270,8 +270,8 @@ func testSimpleAllModeTask(
 	binlogReq := &openapi.SetBinlogOperatorRequest{
 		Op: openapi.SetBinlogOperatorRequestOpReplace,
 		Sqls: &[]string{
-			"alter table " + db + ".t1 add column new_col int;",
-			"alter table " + db + ".t1 add unique(new_col);",
+			"ALTER TABLE " + db + ".t1 add column new_col int;",
+			"ALTER TABLE " + db + ".t1 add unique(new_col);",
 		},
 	}
 	binlogResp, err := setBinlogOperator(httpClient, jobID, source1, binlogReq)
@@ -362,7 +362,7 @@ func testSimpleAllModeTask(
 
 	noError(mysql.Exec("create database " + newDB))
 	noError(mysql.Exec("create table " + newDB + ".t1(c int primary key)"))
-	noError(mysql.Exec("insert into " + newDB + ".t1 values(1)"))
+	noError(mysql.Exec("INSERT INTO " + newDB + ".t1 values(1)"))
 	waitRow("c = 1", newDB)
 }
 

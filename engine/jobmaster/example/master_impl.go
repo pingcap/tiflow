@@ -110,8 +110,8 @@ func (e *exampleMaster) Close(ctx context.Context) error {
 	return nil
 }
 
-func (e *exampleMaster) StopImpl(ctx context.Context) error {
-	log.Info("StopImpl")
+func (e *exampleMaster) Stop(ctx context.Context) error {
+	log.Info("Stop")
 	return nil
 }
 

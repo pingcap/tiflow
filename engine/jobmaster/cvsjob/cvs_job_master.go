@@ -341,8 +341,8 @@ func (jm *JobMaster) Close(ctx context.Context) error {
 	return nil
 }
 
-// StopImpl is called when the master is being canceled
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
+// Stop is called when the master is being canceled
+func (jm *JobMaster) Stop(ctx context.Context) error {
 	return nil
 }
 

@@ -80,7 +80,7 @@ func (m *testJobMasterImpl) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

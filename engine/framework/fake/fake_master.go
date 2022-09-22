@@ -498,8 +498,8 @@ func (m *Master) Close(ctx context.Context) error {
 	return nil
 }
 
-// StopImpl implements MasterImpl.StopImpl
-func (m *Master) StopImpl(ctx context.Context) error {
+// Stop implements MasterImpl.Stop
+func (m *Master) Stop(ctx context.Context) error {
 	log.Info("FakeMaster: Stop", zap.Stack("stack"))
 	return nil
 }

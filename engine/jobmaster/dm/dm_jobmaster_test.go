@@ -385,7 +385,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	wg.Wait()
 
 	// Stop
-	require.NoError(t.T(), jm.StopImpl(context.Background()))
+	require.NoError(t.T(), jm.Stop(context.Background()))
 
 	mockBaseJobmaster.AssertExpectations(t.T())
 	workerHandle1.AssertExpectations(t.T())

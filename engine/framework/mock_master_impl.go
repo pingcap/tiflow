@@ -236,8 +236,8 @@ func (m *MockMasterImpl) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
-// StopImpl implements MasterImpl.StopImpl
-func (m *MockMasterImpl) StopImpl(ctx context.Context) error {
+// Stop implements MasterImpl.Stop
+func (m *MockMasterImpl) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

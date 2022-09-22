@@ -755,8 +755,8 @@ func (jm *JobManagerImpl) Close(ctx context.Context) error {
 	return jm.wg.Wait()
 }
 
-// StopImpl implements frame.MasterImpl.StopImpl
-func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
+// Stop implements frame.MasterImpl.Stop
+func (jm *JobManagerImpl) Stop(ctx context.Context) error {
 	return jm.Close(ctx)
 }
 
