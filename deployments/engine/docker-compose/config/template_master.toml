@@ -2,7 +2,6 @@
 name = "master-test"                 # Corresponding command line:  --name
 addr = "127.0.0.1:10240"             # Corresponding command line:  --addr
 advertise-addr = "127.0.0.1:10240"   # Corresponding command line:  --advertise-addr
-etcd-endpoints = ["127.0.0.1:2379"]  # Corresponding command line:  ---etcd-endpoints
 
 [log] 
 level = "info"            # Corresponding command line:  --log-level
