@@ -84,7 +84,6 @@ type Node struct {
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
-		ret.id = nextNodeID.Add(1)
 		ret.OnResolved = nil
 		ret.RandWorkerID = nil
 		ret.totalDependees = 0
@@ -97,6 +96,11 @@ func NewNode() (ret *Node) {
 
     ret = new(Node)
 	return
+}
+
+// AllocID implements interface internal.SlotNode.
+func (n *Node) AllocID() {
+    n.id = nextNodeID.Add(1)
 }
 
 // NodeID implements interface internal.SlotNode.
