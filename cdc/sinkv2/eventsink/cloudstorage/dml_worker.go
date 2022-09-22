@@ -36,11 +36,11 @@ type dmlWorker struct {
 	storage       storage.ExternalStorage
 	flushInterval time.Duration
 	// msgChannels maintains a mapping of <table, unbounded message channel>.
-	msgChannels map[versionedTable]*chann.Chann[*common.Message]
+	msgChannels sync.Map
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
 	// defragmenters maintains a mapping of <table, defragmenter>.
-	defragmenters map[versionedTable]*defragmenter
+	defragmenters sync.Map
 	// fileIndex maintains a mapping of <table, index number>.
 	fileIndex map[versionedTable]uint64
 	// activeTablesCh is used to notify that a group of eventFragments are
@@ -71,8 +71,6 @@ func newDMLWorker(
 		changeFeedID:   changefeedID,
 		storage:        storage,
 		flushInterval:  flushInterval,
-		msgChannels:    make(map[versionedTable]*chann.Chann[*common.Message]),
-		defragmenters:  make(map[versionedTable]*defragmenter),
 		flushNotifyCh:  make(chan flushTask, 1),
 		activeTablesCh: chann.New[versionedTable](),
 		fileIndex:      make(map[versionedTable]uint64),
@@ -109,7 +107,18 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 				for _, tbl := range task.activeTables {
 					buf.Reset()
 					var callbacks []func()
-					for msg := range d.msgChannels[tbl].Out() {
+					v, ok := d.msgChannels.Load(tbl)
+					if !ok {
+						log.Panic("failed to load msg channel for table",
+							zap.Int("workerID", d.id),
+							zap.String("namespace", d.changeFeedID.ID),
+							zap.String("changefeed", d.changeFeedID.ID),
+							zap.String("schema", tbl.Schema),
+							zap.String("table", tbl.Table),
+						)
+					}
+					ch := v.(*chann.Chann[*common.Message])
+					for msg := range ch.Out() {
 						if msg == nil {
 							break
 						}
@@ -155,7 +164,29 @@ func (d *dmlWorker) backgroundDefragmentMsgs(ctx context.Context) {
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				written, err := d.defragmenters[table].writeMsgs(ctx, d.msgChannels[table])
+				v, ok := d.defragmenters.Load(table)
+				if !ok {
+					log.Panic("failed to load defragmenter for table",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.ID),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("schema", table.Schema),
+						zap.String("table", table.Table),
+					)
+				}
+				defrag := v.(*defragmenter)
+				v, ok = d.msgChannels.Load(table)
+				if !ok {
+					log.Panic("failed to load msg channel for table",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.ID),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("schema", table.Schema),
+						zap.String("table", table.Table),
+					)
+				}
+				msgChan := v.(*chann.Chann[*common.Message])
+				written, err := defrag.writeMsgs(ctx, msgChan)
 				if err != nil {
 					log.Error("dml worker failed to defragment messages",
 						zap.Int("workerID", d.id),
@@ -222,11 +253,15 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 					TableName:    frag.tableName,
 					TableVersion: frag.tableVersion,
 				}
-				if _, ok := d.defragmenters[table]; !ok {
-					d.defragmenters[table] = newDefragmenter()
-					d.msgChannels[table] = chann.New[*common.Message]()
+
+				if _, ok := d.defragmenters.Load(table); !ok {
+					d.defragmenters.Store(table, newDefragmenter())
+					d.msgChannels.Store(table, chann.New[*common.Message]())
 				}
-				d.defragmenters[table].register(frag)
+				v, _ := d.defragmenters.Load(table)
+				defrag := v.(*defragmenter)
+				defrag.register(frag)
+
 				if frag.event == nil {
 					readyTables = append(readyTables, table)
 					d.activeTablesCh.In() <- table

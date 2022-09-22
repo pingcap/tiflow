@@ -14,6 +14,7 @@ package cloudstorage
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,6 +31,7 @@ type dmlWriter struct {
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
 	config         *cloudstorage.Config
+	mu             sync.Mutex
 	extension      string
 	errCh          chan<- error
 }
@@ -61,6 +63,8 @@ func newDMLWriter(ctx context.Context,
 }
 
 func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	tableName := frag.tableName
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
