@@ -127,10 +127,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		})
 		if err := p.Tick(ctx); err != nil {
 			m.closeProcessor(changefeedID)
-			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
-				continue
-			}
-			return state, errors.Trace(err)
 		}
 	}
 	// check if the processors in memory is leaked
