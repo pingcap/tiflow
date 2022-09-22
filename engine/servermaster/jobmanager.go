@@ -756,9 +756,8 @@ func (jm *JobManagerImpl) CloseImpl(ctx context.Context) {
 }
 
 // StopImpl implements frame.MasterImpl.StopImpl
-func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
+func (jm *JobManagerImpl) StopImpl(ctx context.Context) {
 	jm.CloseImpl(ctx)
-	return nil
 }
 
 // WatchJobStatuses returns a snapshot of job statuses followed by a stream

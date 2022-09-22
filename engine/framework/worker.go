@@ -89,10 +89,12 @@ type WorkerImpl interface {
 	// TODO: move it out of WorkerImpl and should not be concurrent with CloseImpl.
 	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
-	// CloseImpl is called as the consequence of returning error from InitImpl and
+	// CloseImpl is called as the consequence of returning error from InitImpl or
 	// Tick, the Tick will be stopped after entering this function. Business logic
 	// is expected to release resources here, but business developer should be aware
 	// that when the runtime is crashed, CloseImpl has no time to be called.
+	// CloseImpl will only be called for once.
+	// TODO: no other callbacks will be called after CloseImpl
 	// Concurrent safety:
 	// - this function may be concurrently called with OnMasterMessage.
 	CloseImpl(ctx context.Context)

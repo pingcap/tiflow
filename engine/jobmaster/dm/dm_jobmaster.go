@@ -136,6 +136,16 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
 }
 
+// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
+// When it is called, the jobCfg may not be in the metadata, and we should not report an error
+func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
+	jm.Logger().Info("recovering the dm jobmaster")
+	if err := jm.initComponents(ctx); err != nil {
+		return err
+	}
+	return jm.bootstrap(ctx)
+}
+
 // Tick implements JobMasterImpl.Tick
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
@@ -147,16 +157,6 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		return jm.cancel(ctx, frameModel.WorkerStateFinished)
 	}
 	return nil
-}
-
-// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
-// When it is called, the jobCfg may not be in the metadata, and we should not report an error
-func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
-	jm.Logger().Info("recovering the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
-		return err
-	}
-	return jm.bootstrap(ctx)
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
@@ -272,7 +272,7 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
+func (jm *JobMaster) StopImpl(ctx context.Context) {
 	jm.Logger().Info("stoping the dm jobmaster")
 
 	// close component
@@ -283,7 +283,6 @@ func (jm *JobMaster) StopImpl(ctx context.Context) error {
 		// log and ignore the error.
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
 }
 
 // Workload implements JobMasterImpl.Workload

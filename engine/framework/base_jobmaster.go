@@ -268,9 +268,7 @@ func (d *DefaultBaseJobMaster) Stop(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	if err := d.impl.StopImpl(ctx); err != nil {
-		d.Logger().Error("Failed to stop JobMasterImpl", zap.Error(err))
-	}
+	d.impl.StopImpl(ctx)
 	d.master.doClose()
 	d.worker.doClose()
 	return nil
@@ -479,7 +477,6 @@ func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) {
 	return
 }
 
-func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) {
 	log.Panic("unexpected StopImpl call")
-	return nil
 }

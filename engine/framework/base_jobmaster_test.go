@@ -79,12 +79,11 @@ func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.Called(ctx)
 }
 
-func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) StopImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.Called(ctx)
 }
 
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {

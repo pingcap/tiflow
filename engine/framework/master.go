@@ -68,10 +68,13 @@ type Master interface {
 // added in the functions of this interface
 type MasterImpl interface {
 	// InitImpl is called at the first time the MasterImpl instance is initialized
-	// after OnOpenAPIInitialized. That is to say, when MasterImpl failover, framework
-	// will call OnMasterRecovered rather than InitImpl.
+	// after OnOpenAPIInitialized. When InitImpl returns without error, framework
+	// will try to persist a internal state so further failover will call OnMasterRecovered
+	// rather than InitImpl.
 	// Return:
-	// - error to let the framework call CloseImpl.
+	// - error to let the framework call CloseImpl, and framework may retry InitImpl
+	//   later for some times. For non-retryable failure, business logic should
+	//   call Exit.
 	// Concurrent safety:
 	// - this function is not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
@@ -84,7 +87,14 @@ type MasterImpl interface {
 	// - this function is not concurrent with other callbacks.
 	OnMasterRecovered(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
+	// Tick is called on a fixed interval after MasterImpl's InitImpl or OnMasterRecovered,
+	// business logic can do some periodic tasks here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with other callbacks except for
+	//   Tick itself, OnOpenAPIInitialized, InitImpl, OnMasterRecovered, CloseImpl,
+	//   StopImpl.
 	Tick(ctx context.Context) error
 
 	// OnWorkerDispatched is called when a request to launch a worker is finished.
@@ -103,11 +113,24 @@ type MasterImpl interface {
 	// OnWorkerStatusUpdated is called when a worker's status is updated.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
-	// CloseImpl is called when the master is being closed
+	// CloseImpl is called as the consequence of returning error from InitImpl,
+	// OnMasterRecovered or Tick, the Tick will be stopped after entering this function.
+	// And framework may try to create a new masterImpl instance afterwards.
+	// Business logic is expected to release resources here, but business developer
+	// should be aware that when the runtime is crashed, CloseImpl has no time to
+	// be called.
+	// TODO: no other callbacks will be called after CloseImpl
+	// Concurrent safety:
+	// - this function may be concurrently called with OnWorkerMessage or OnCancel.
 	CloseImpl(ctx context.Context)
 
-	// StopImpl is called when the master is being canceled
-	StopImpl(ctx context.Context) error
+	// StopImpl is called the consequence of business logic calls Exit. Tick will
+	// be stopped after entering this function, and framework will treat this MasterImpl
+	// as non-recoverable,
+	// TODO: crash-safe?
+	// Concurrent safety:
+	// - this function may be concurrently called with OnWorkerMessage or OnCancel.
+	StopImpl(ctx context.Context)
 }
 
 const (
@@ -558,11 +581,8 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 
 // Stop implements Master.Stop
 func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
-	err := m.Impl.StopImpl(ctx)
-	if err != nil {
-		m.Logger().Error("stop master impl failed", zap.Error(err))
-	}
-	return err
+	m.Impl.StopImpl(ctx)
+	return nil
 }
 
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
