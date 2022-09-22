@@ -711,6 +711,46 @@ function DM_MULTIPLE_ROWS() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 }
 
+function DM_KEY_NOT_FOUND_CASE() {
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_tidb "delete from ${shardddl}.${tb} where id=1;"
+	run_sql_tidb "delete from ${shardddl}.${tb} where id=2;"
+	run_sql_source1 "update ${shardddl1}.${tb1} set id=3 where id=1;"
+	run_sql_source2 "update ${shardddl1}.${tb1} set id=4 where id=2;"
+	run_sql_source1 "delete from ${shardddl1}.${tb1} where id=3;"
+	run_sql_source2 "delete from ${shardddl1}.${tb1} where id=4;"
+	check_log_contain_with_retry "no matching record is found to update/delete, ER_KEY_NOT_FOUND" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "no matching record is found to update/delete, ER_KEY_NOT_FOUND" $WORK_DIR/worker2/log/dm-worker.log
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+}
+
+function DM_KEY_NOT_FOUND() {
+	kill_process dm-worker
+	check_process_exit worker1 20
+	check_process_exit worker2 20
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"0s\")"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case KEY_NOT_FOUND "double-source-optimistic" \
+		"init_table 111 211; \
+	 run_sql_source1 \"insert into ${shardddl1}.${tb1} values(1);\"; \
+     run_sql_source2 \"insert into ${shardddl1}.${tb1} values(2);\"" \
+		"clean_table" ""
+
+	kill_process dm-worker
+	check_process_exit worker1 20
+	check_process_exit worker2 20
+	export GO_FAILPOINTS=''
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+}
+
 function DM_CAUSALITY_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,2)"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(2,3)"
@@ -799,6 +839,7 @@ function run() {
 	DM_ADD_DROP_COLUMNS
 	DM_COLUMN_INDEX
 	DM_DML_EXECUTE_ERROR
+	DM_KEY_NOT_FOUND
 	start=1
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do

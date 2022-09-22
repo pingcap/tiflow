@@ -64,6 +64,9 @@ type progressTracker struct {
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
 
+	// closed is used to indicate the progress tracker is closed.
+	closed bool
+
 	// Used to generate the next eventID.
 	nextEventID uint64
 
@@ -196,7 +199,10 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
-				r.lastMinResolvedTs = cached.resolvedTs
+				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed.
+				if !r.closed {
+					r.lastMinResolvedTs = cached.resolvedTs
+				}
 				r.resolvedTsCache = r.resolvedTsCache[1:]
 				if len(r.resolvedTsCache) == 0 {
 					r.resolvedTsCache = nil
@@ -229,6 +235,9 @@ func (r *progressTracker) trackingCount() int {
 
 // close is used to close the progress tracker.
 func (r *progressTracker) close(ctx context.Context) error {
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
 	blockTicker := time.NewTicker(warnDuration)
 	defer blockTicker.Stop()
 	// Used to block for loop for a while to prevent CPU spin.
