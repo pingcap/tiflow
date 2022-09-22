@@ -30,8 +30,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/servermaster/cluster"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -140,69 +138,6 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	_, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
-}
-
-// Server master requires etcd/gRPC service as the minimum running environment,
-// this case
-//   - starts an embed etcd with gRPC service, including message service and
-//     server master pb service.
-//   - campaigns to be leader and then runs leader service.
-//
-// Disable parallel run for this case, because prometheus http handler will meet
-// data race if parallel run is enabled
-// FIXME: disable this test temporary for no proper mock of frame metastore
-// nolint: deadcode
-func testRunLeaderService(t *testing.T) {
-	cfg := prepareServerEnv(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s, err := NewServer(cfg, nil)
-	require.NoError(t, err)
-
-	_ = s.registerMetaStore(ctx)
-
-	s.initResourceManagerService()
-	s.scheduler = scheduler.NewScheduler(
-		s.executorManager,
-		s.resourceManagerService)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = s.serve(ctx)
-	}()
-
-	sessionCfg, err := s.generateSessionConfig()
-	require.NoError(t, err)
-	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
-	require.NoError(t, err)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		s.msgService.GetMessageServer().Run(ctx)
-	}()
-
-	_, _, err = session.Campaign(ctx, time.Second)
-	require.NoError(t, err)
-
-	ctx1, cancel1 := context.WithTimeout(ctx, time.Second)
-	defer cancel1()
-	err = s.runLeaderService(ctx1)
-	require.EqualError(t, err, context.DeadlineExceeded.Error())
-
-	// runLeaderService exits, try to campaign to be leader and run leader servcie again
-	_, _, err = session.Campaign(ctx, time.Second)
-	require.NoError(t, err)
-	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
-	defer cancel2()
-	err = s.runLeaderService(ctx2)
-	require.EqualError(t, err, context.DeadlineExceeded.Error())
-
-	cancel()
-	wg.Wait()
 }
 
 type mockJobManager struct {
