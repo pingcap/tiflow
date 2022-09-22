@@ -23,10 +23,14 @@ func TestMaskSinkURI(t *testing.T) {
 		uri    string
 		masked string
 	}{
-		{"mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai",
-			"mysql://root:xxxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai"},
-		{"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-user=ticdc&sasl-password=verysecure",
-			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-password=xxxxx&sasl-user=ticdc"},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai",
+			"mysql://root:xxxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai",
+		},
+		{
+			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-user=ticdc&sasl-password=verysecure",
+			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-password=xxxxx&sasl-user=ticdc",
+		},
 	}
 
 	for _, tt := range tests {
