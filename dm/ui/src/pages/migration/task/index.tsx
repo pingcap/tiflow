@@ -512,7 +512,7 @@ const TaskList: React.FC = () => {
   }, [data])
 
   useEffect(() => {
-    if (!isCreateTaskModalVisible) {
+    if (!isStartTaskModalVisible) {
       form.resetFields()
     }
   }, [isStartTaskModalVisible])

@@ -151,12 +151,11 @@ func TestNodeFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		newLeaderAddr, err := cli.GetLeaderAddr(ctx)
-		if err == e2e.ErrLeaderNotFound {
-			return false
+		if err != nil {
+			log.Warn("get leader addr failed", zap.Error(err))
 		}
-		require.NotEqual(t, leaderAddr, newLeaderAddr, "leader is not changed")
-		return true
-	}, time.Second*10, time.Second)
+		return newLeaderAddr != leaderAddr
+	}, time.Second*10, time.Second, "leader is not changed")
 
 	log.Info("restart all executors and check fake job is running normally")
 	for i := 0; i < nodeCount; i++ {

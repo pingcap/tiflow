@@ -196,3 +196,38 @@ func TestTrackerBufferBoundary(t *testing.T) {
 	}
 	require.Equal(t, 0, len(tracker.pendingEvents))
 }
+
+func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1, defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		err := tracker.close(context.Background())
+		require.Nil(t, err, "close should not return error")
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		return tracker.closed
+	}, 3*time.Second, 100*time.Millisecond, "state of tracker should be closed")
+	currentTs := tracker.advance()
+	cb1()
+	cb2()
+	cb3()
+	wg.Wait()
+	require.Eventually(t, func() bool {
+		return tracker.trackingCount() == 0
+	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
+	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
+}

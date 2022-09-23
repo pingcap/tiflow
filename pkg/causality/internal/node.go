@@ -33,7 +33,6 @@ const (
 
 var (
 	nextNodeID = atomic.NewInt64(0)
-	nodePool   = &sync.Pool{}
 
 	// btreeFreeList is a shared free list used by all
 	// btrees in order to lessen the burden of GC.
@@ -53,6 +52,8 @@ type Node struct {
 	OnResolved func(id workerID)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
+	// Set the callback that the node is notified.
+	OnNotified func(callback func())
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependees    int32
@@ -94,11 +95,7 @@ func NewNode() (ret *Node) {
 		ret.removed = false
 	}()
 
-	if obj := nodePool.Get(); obj != nil {
-		ret = obj.(*Node)
-	} else {
-		ret = new(Node)
-	}
+	ret = new(Node)
 	return
 }
 
@@ -133,6 +130,10 @@ func (n *Node) DependOn(others map[int64]*Node) {
 		}
 	}
 
+	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
+	// pending in slots after it's created.
+	n.id = nextNodeID.Add(1)
+
 	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependees = int32(len(others))
 	n.resolvedList = make([]int64, 0, n.totalDependees)
@@ -150,23 +151,19 @@ func (n *Node) DependOn(others map[int64]*Node) {
 // Remove implements interface internal.SlotNode.
 func (n *Node) Remove() {
 	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	n.removed = true
-
-	if n.dependers == nil || n.dependers.Len() == 0 {
-		n.mu.Unlock()
-		return
+	if n.dependers != nil {
+		// `mu` must be holded during accessing dependers.
+		n.dependers.Ascend(func(node *Node) bool {
+			removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
+			node.maybeResolve(0, removedDependees)
+			return true
+		})
+		n.dependers.Clear(true)
+		n.dependers = nil
 	}
-
-	dependers := n.dependers
-	n.dependers = nil
-	n.mu.Unlock()
-
-	dependers.Ascend(func(node *Node) bool {
-		removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
-		node.maybeResolve(0, removedDependees)
-		return true
-	})
-	dependers.Clear(true)
 }
 
 // Free implements interface internal.SlotNode.
@@ -181,15 +178,19 @@ func (n *Node) Free() {
 	n.OnResolved = nil
 	n.RandWorkerID = nil
 
-	nodePool.Put(n)
+	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
+	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
+	// again. In the last `assignTo`, it can never know whether the node has been reused
+	// or not.
 }
 
 // assignTo assigns a node to a worker. Returns `true` on success.
 func (n *Node) assignTo(workerID int64) bool {
 	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	if n.assignedTo != unassigned {
 		// Already resolved by some other guys.
-		n.mu.Unlock()
 		return false
 	}
 
@@ -199,22 +200,14 @@ func (n *Node) assignTo(workerID int64) bool {
 		n.OnResolved = nil
 	}
 
-	if n.dependers == nil || n.dependers.Len() == 0 {
-		n.mu.Unlock()
-		return true
-	}
-
-	dependers := make([]*Node, 0, n.dependers.Len())
-	n.dependers.Ascend(func(node *Node) bool {
-		dependers = append(dependers, node)
-		return true
-	})
-	n.mu.Unlock()
-
-	for _, node := range dependers {
-		resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
-		stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
-		node.maybeResolve(resolvedDependees, 0)
+	if n.dependers != nil {
+		// `mu` must be holded during accessing dependers.
+		n.dependers.Ascend(func(node *Node) bool {
+			resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
+			stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
+			node.maybeResolve(resolvedDependees, 0)
+			return true
+		})
 	}
 
 	return true
@@ -225,12 +218,16 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 		if workerNum < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
-		n.assignTo(workerNum)
+		if n.OnNotified != nil {
+			n.OnNotified(func() { n.assignTo(workerNum) })
+		} else {
+			n.assignTo(workerNum)
+		}
 	}
 	return
 }
 
-// tryResolve must be called with n.mu locked.
+// tryResolve try to find a worker to assign the node to.
 // Returns (_, false) if there is a conflict,
 // returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.

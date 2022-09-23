@@ -331,6 +331,11 @@ error = '''
 eventfeed returns event error
 '''
 
+["CDC:ErrExchangePartition"]
+error = '''
+exchange partition failed, %s
+'''
+
 ["CDC:ErrExecDDLFailed"]
 error = '''
 exec DDL failed
