@@ -238,8 +238,6 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
 				zap.String("arguments", utils.TruncateInterface(args, -1)),
 				log.ShortError(err))
-			tctx.L().Warn("execute sql failed by retryable error", zap.Int("retry", retryTime),
-				zap.Error(err))
 			return true
 		}
 		return false
