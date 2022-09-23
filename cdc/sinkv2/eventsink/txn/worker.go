@@ -127,47 +127,8 @@ func (w *worker) runBackgroundLoop() {
 		overseerTimer := time.NewTicker(time.Second)
 		startToWork := time.Now()
 		defer overseerTimer.Stop()
-	LOOP:
+	Loop:
 		for {
-<<<<<<< HEAD
-			if !w.hasPending {
-				// There is no pending events, so use a blocking `select`.
-				select {
-				case <-w.ctx.Done():
-					log.Info("Transaction sink worker exits as canceled",
-						zap.String("changefeedID", w.changefeed),
-						zap.Int("workerID", w.ID))
-					return
-				case <-w.stopped:
-					log.Info("Transaction sink worker exits as closed",
-						zap.String("changefeedID", w.changefeed),
-						zap.Int("workerID", w.ID))
-					return
-				case txn := <-w.txnCh.Out():
-					w.hasPending = true
-					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
-				case now := <-overseerTimer.C:
-					totalTimeSlice = now.Sub(startToWork)
-					busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
-					w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
-					startToWork = now
-					flushTimeSlice = 0
-				}
-			} else {
-				// Have fetched some events so that do a nonblocking `select`.
-				select {
-				case txn := <-w.txnCh.Out():
-					w.hasPending = true
-					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
-				default:
-					if w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
-=======
 			// There is no pending events, so use a blocking `select`.
 			select {
 			case <-w.ctx.Done():
@@ -188,7 +149,6 @@ func (w *worker) runBackgroundLoop() {
 			case <-timer.C:
 				if w.doFlush(&flushTimeSlice) {
 					break Loop
->>>>>>> 65dd8d4e1 (sinkv2(ticdc): flush interval conflict detector bfs (#7192))
 				}
 			case now := <-overseerTimer.C:
 				totalTimeSlice = now.Sub(startToWork)
