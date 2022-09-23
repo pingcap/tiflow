@@ -14,12 +14,13 @@
 package internal
 
 import (
+	"math"
 	"sync"
 )
 
 type slot[E SlotNode[E]] struct {
-	tail *E // `tail` points to the last node in the slot.
-	mu   sync.Mutex
+	nodes map[uint64]E
+	mu    sync.Mutex
 }
 
 // SlotNode describes objects that can be compared for equality.
@@ -44,8 +45,12 @@ type Slots[E SlotNode[E]] struct {
 
 // NewSlots creates a new Slots.
 func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
+	slots := make([]slot[E], numSlots)
+	for i := uint64(0); i < numSlots; i++ {
+		slots[i].nodes = make(map[uint64]E, 8)
+	}
 	return &Slots[E]{
-		slots:    make([]slot[E], numSlots),
+		slots:    slots,
 		numSlots: numSlots,
 	}
 }
@@ -53,32 +58,52 @@ func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
 // Add adds an elem to the slots and calls DependOn for elem.
 func (s *Slots[E]) Add(elem E, keys []uint64) {
 	dependOnList := make(map[int64]E, len(keys))
+	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		s.slots[key].mu.Lock()
-		if s.slots[key].tail == nil {
-			s.slots[key].tail = new(E)
-		} else {
-			prevID := (*s.slots[key].tail).NodeID()
-			dependOnList[prevID] = *s.slots[key].tail
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Lock()
+			lastSlot = slotIdx
 		}
-		*s.slots[key].tail = elem
+		if tail, ok := s.slots[slotIdx].nodes[key]; ok {
+			prevID := tail.NodeID()
+			dependOnList[prevID] = tail
+		}
+		s.slots[slotIdx].nodes[key] = elem
 	}
 	elem.DependOn(dependOnList)
+
 	// Lock those slots one by one and then unlock them one by one, so that
 	// we can avoid 2 transactions get executed interleaved.
+	lastSlot = math.MaxUint64
 	for _, key := range keys {
-		s.slots[key].mu.Unlock()
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Unlock()
+			lastSlot = slotIdx
+		}
 	}
 }
 
 // Free removes an element from the Slots.
 func (s *Slots[E]) Free(elem E, keys []uint64) {
+	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		s.slots[key].mu.Lock()
-		if s.slots[key].tail != nil && (*s.slots[key].tail).NodeID() == elem.NodeID() {
-			s.slots[key].tail = nil
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Lock()
 		}
-		s.slots[key].mu.Unlock()
+		if tail, ok := s.slots[slotIdx].nodes[key]; ok && tail.NodeID() == elem.NodeID() {
+			delete(s.slots[slotIdx].nodes, key)
+		}
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Unlock()
+			lastSlot = slotIdx
+		}
 	}
 	elem.Free()
+}
+
+func getSlot(key, numSlots uint64) uint64 {
+	return key % numSlots
 }

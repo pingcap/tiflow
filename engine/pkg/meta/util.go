@@ -27,7 +27,11 @@ func CreateSchemaIfNotExists(ctx context.Context, storeConf model.StoreConfig) e
 	schema := storeConf.Schema
 	// clear the schema to open a connection without any schema
 	storeConf.Schema = ""
-	db, err := dbutil.NewSQLDB("mysql", model.GenerateDSNByParams(&storeConf, nil), nil /*DBConfig*/)
+	dsn, err := model.GenerateDSNByParams(&storeConf, nil)
+	if err != nil {
+		return err
+	}
+	db, err := dbutil.NewSQLDB("mysql", dsn, nil /*DBConfig*/)
 	if err != nil {
 		return nil
 	}

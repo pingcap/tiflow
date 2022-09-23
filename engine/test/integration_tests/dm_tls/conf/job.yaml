@@ -2,7 +2,7 @@ task-mode: all
 target-database:
   host: host.docker.internal
   port: 4000
-  user: root
+  user: dm_user
   password: ''
   security:
     ssl-key-base64: '<downstream-key>'

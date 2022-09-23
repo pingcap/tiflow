@@ -12,6 +12,7 @@ upstreams:
       password: ''
     source-id: mysql-01
     block-allow-list: balist-01
+    loader-thread: 1
 block-allow-list:
   balist-01:
     do-dbs:
