@@ -1051,6 +1051,9 @@ var doc = `{
         "model.ServerStatus": {
             "type": "object",
             "properties": {
+                "cluster_id": {
+                    "type": "string"
+                },
                 "git_hash": {
                     "type": "string"
                 },

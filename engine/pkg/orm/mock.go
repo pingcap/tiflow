@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func randomDBFile() string {
@@ -34,28 +34,48 @@ func randomDBFile() string {
 func NewMockClient() (Client, error) {
 	// ref:https://www.sqlite.org/inmemorydb.html
 	// using dsn(file:%s?mode=memory&cache=shared) format here to
-	// 1. Create different DB for different TestXXX()
+	// 1. Create different DB for different TestXXX() to enable concurrent execution
 	// 2. Enable DB shared for different connection
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		SkipDefaultTransaction: true,
-		// TODO: logger
-	})
+	cc, err := mock.NewClientConnForSQLite(dsn)
 	if err != nil {
-		log.Error("create gorm client fail", zap.Error(err))
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
-	}
-
-	cli := &metaOpsClient{
-		db: db,
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := cli.Initialize(ctx); err != nil {
-		cli.Close()
+	if err := InitAllFrameworkModels(ctx, cc); err != nil {
+		log.Error("initialize all framework models fail", zap.Error(err))
+		cc.Close()
 		return nil, err
 	}
 
-	return cli, nil
+	cli, err := NewClient(cc)
+	if err != nil {
+		log.Error("new mock client fail", zap.Error(err))
+		cc.Close()
+		return nil, err
+	}
+
+	return &sqliteClient{
+		Client: cli,
+		conn:   cc,
+	}, nil
+}
+
+type sqliteClient struct {
+	Client
+	conn metaModel.ClientConn
+}
+
+func (c *sqliteClient) Close() error {
+	if c.Client != nil {
+		c.Client.Close()
+	}
+
+	if c.conn != nil {
+		c.conn.Close()
+	}
+
+	return nil
 }

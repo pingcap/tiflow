@@ -19,7 +19,6 @@ import (
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 )
 
 func TestClientConnImpl(t *testing.T) {
@@ -30,45 +29,25 @@ func TestClientConnImpl(t *testing.T) {
 	defer CloseEmbededEtcd(svr)
 
 	// normal case
-	cc := NewClientConnImpl()
-	require.NotNil(t, cc)
-	defer cc.Close()
-
-	err = cc.Initialize(&metaModel.StoreConfig{
+	cc, err := NewClientConnImpl(&metaModel.StoreConfig{
 		StoreType: metaModel.StoreTypeEtcd,
 		Endpoints: []string{endpoints},
 	})
-	require.NoError(t, err)
-	require.Equal(t, metaModel.EtcdKVClientType, cc.ClientType())
+	require.Nil(t, err)
+	defer cc.Close()
+
+	require.Equal(t, metaModel.StoreTypeEtcd, cc.StoreType())
 	_, err = cc.GetConn()
 	require.NoError(t, err)
-	err = cc.Initialize(&metaModel.StoreConfig{
-		StoreType: metaModel.StoreTypeEtcd,
-	})
-	require.Regexp(t, regexp.QuoteMeta("already initialized"), err.Error())
 	require.Nil(t, cc.Close())
-	require.Equal(t, atomic.NewBool(false), cc.isInitialized)
 }
 
 func TestClientConnImplError(t *testing.T) {
 	t.Parallel()
 
-	cc := NewClientConnImpl()
-	require.NotNil(t, cc)
-
-	// abnormal cases
-	err := cc.Initialize(&metaModel.StoreConfig{
-		StoreType: metaModel.StoreTypeSQL,
+	_, err := NewClientConnImpl(&metaModel.StoreConfig{
+		StoreType: metaModel.StoreTypeMySQL,
 	})
 	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaParamsInvalid]"+
-		"meta params invalid:etcd conn but get unmatch type"), err.Error())
-
-	err = cc.Initialize(&metaModel.StoreConfig{
-		StoreType: metaModel.StoreTypeEtcd,
-	})
-	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaNewClientFail]create meta client fail: "+
-		"etcdclient: no available endpoints"), err.Error())
-
-	_, err = cc.GetConn()
-	require.Regexp(t, regexp.QuoteMeta("connection is uninitialized"), err.Error())
+		"etcd conn but get unmatch type"), err.Error())
 }

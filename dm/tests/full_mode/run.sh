@@ -7,7 +7,7 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function fail_acquire_global_lock() {
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -21,7 +21,7 @@ function fail_acquire_global_lock() {
 	cp $cur/data/db2.prepare.user.sql $WORK_DIR/db2.prepare.user.sql
 	sed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db2.prepare.user.sql
 	run_sql_file $WORK_DIR/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 8
+	check_count 'Query OK, 0 rows affected' 11
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -53,7 +53,8 @@ function fail_acquire_global_lock() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 2 \
-		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
+		"LOCK TABLES \`full_mode\`.\`t1\` READ: Error 1044: Access denied" 1 \
+		"LOCK TABLES \`full_mode\`.\`t2\` READ: Error 1044: Access denied" 1
 
 	cleanup_process $*
 	cleanup_data full_mode
@@ -80,7 +81,7 @@ function escape_schema() {
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_count 'Query OK, 0 rows affected' 7
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 10
 
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SleepBeforeDumplingClose=return(3)'
 
@@ -178,7 +179,7 @@ function run() {
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_count 'Query OK, 0 rows affected' 7
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_count 'Query OK, 0 rows affected' 7
+	check_count 'Query OK, 0 rows affected' 10
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT

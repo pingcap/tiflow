@@ -16,63 +16,119 @@ package model
 import (
 	"context"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 const (
-	defaultEpochPK  = 1
 	defaultMinEpoch = 1
 )
 
 // LogicEpoch is used to generate increasing epoch
+// We use union columns <JobID, Epoch> as uk to achieve job-level isolation
 type LogicEpoch struct {
 	Model
-	Epoch int64 `gorm:"type:bigint not null default 1"`
+	JobID string `gorm:"type:varchar(128) not null;uniqueIndex:uidx_jk"`
+	Epoch int64  `gorm:"type:bigint not null default 1"`
 }
 
-// InitializeEpoch insert the only record into the backend table `logic_epoches`
-func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
+// TODO: after we split the orm model, move this client out of the file
+
+// EpochClient defines the client to generate epoch
+type EpochClient interface {
+	// GenEpoch increases the backend epoch by 1 and return the new epoch
+	// Guarantee to be thread-safe
+	GenEpoch(ctx context.Context) (int64, error)
+
+	// Close releases some inner resources
+	Close() error
+}
+
+// NewEpochClient news a EpochClient
+// Make Sure to call 'InitEpochModel' to create backend table before
+// calling 'NewEpochClient'
+func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
+	if db == nil {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
+	}
+
+	return &epochClient{
+		jobID: jobID,
+		db:    db,
+	}, nil
+}
+
+type epochClient struct {
+	// isInitialized is for lazy initialization
+	isInitialized atomic.Bool
+	jobID         string
+	db            *gorm.DB
+}
+
+func (e *epochClient) initialize(ctx context.Context) error {
 	// Do nothing on conflict
-	// INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES
-	// ('2022-05-04 14:02:08.624','2022-05-04 14:02:08.624',1,1) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`
-	return db.WithContext(ctx).
-		Clauses(clause.OnConflict{DoNothing: true}).
+	if err := e.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&LogicEpoch{
-			Model: Model{
-				SeqID: defaultEpochPK,
-			},
+			JobID: e.jobID,
 			Epoch: defaultMinEpoch,
-		}).Error
+		}).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
 }
 
-// GenEpoch will increasing the backend epoch by 1 and return the new epoch
-func GenEpoch(ctx context.Context, db *gorm.DB) (int64, error) {
+// GenEpoch implements GenEpoch of EpochClient
+// Guarantee to be thread-safe
+func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
+	// we make lazy initialization for two reasons:
+	// 1. Not all kinds of client need calling GenEpoch
+	// 2. Some components depend on framework meta client before initializing the backend meta table
+	if !e.isInitialized.Load() {
+		if err := e.initialize(ctx); err != nil {
+			return int64(0), err
+		}
+		e.isInitialized.Store(true)
+	}
+
+	failpoint.InjectContext(ctx, "genEpochDelay", nil)
+	if e.db == nil {
+		return int64(0), errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
+	}
+
 	var epoch int64
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		//(1)update epoch = epoch + 1
-		if err := tx.Model(&LogicEpoch{
-			Model: Model{
-				SeqID: defaultEpochPK,
-			},
-		}).Update("epoch", gorm.Expr("epoch + ?", 1)).Error; err != nil {
-			// return any error will rollback
-			return err
-		}
+	// every job owns its logic epoch
+	err := e.db.WithContext(ctx).
+		Where("job_id = ?", e.jobID).
+		Transaction(func(tx *gorm.DB) error {
+			//(1)update epoch = epoch + 1
+			if err := tx.Model(&LogicEpoch{}).
+				Update("epoch", gorm.Expr("epoch + ?", 1)).Error; err != nil {
+				// return any error will rollback
+				return err
+			}
 
-		//(2)select epoch
-		var logicEp LogicEpoch
-		if err := tx.First(&logicEp, defaultEpochPK).Error; err != nil {
-			return err
-		}
-		epoch = logicEp.Epoch
+			//(2)select epoch
+			var logicEp LogicEpoch
+			if err := tx.First(&logicEp).Error; err != nil {
+				return err
+			}
+			epoch = logicEp.Epoch
 
-		// return nil will commit the whole transaction
-		return nil
-	})
+			// return nil will commit the whole transaction
+			return nil
+		})
 	if err != nil {
-		return 0, err
+		return int64(0), err
 	}
 
 	return epoch, nil
+}
+
+// Close implements Close of EpochClient
+func (e *epochClient) Close() error {
+	return nil
 }

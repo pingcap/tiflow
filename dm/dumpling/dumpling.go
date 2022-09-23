@@ -25,23 +25,21 @@ import (
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
 // Dumpling dumps full data from a MySQL-compatible database.
@@ -81,8 +79,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		// will register and deregister metrics, so we must use NoopRegistry
 		// to avoid duplicated registration.
 		m.metricProxies = &metricProxies{}
-		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
-			m.cfg.MetricsFactory,
+		m.metricProxies.dumplingExitWithErrorCounter = m.cfg.MetricsFactory.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "dm",
 				Subsystem: "dumpling",
@@ -146,15 +143,18 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
-	if err != nil {
-		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
-		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
-		pr <- pb.ProcessResult{
-			IsCanceled: false,
-			Errors:     errs,
+	// when engine has opened an ExternalStorage, we can assume it's empty.
+	if m.cfg.ExtStorage == nil {
+		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
+		if err != nil {
+			m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
+			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
+			pr <- pb.ProcessResult{
+				IsCanceled: false,
+				Errors:     errs,
+			}
+			return
 		}
-		return
 	}
 
 	failpoint.Inject("dumpUnitProcessCancel", func() {
@@ -163,8 +163,10 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	})
 
 	newCtx, cancel := context.WithCancel(ctx)
-	var dumpling *export.Dumper
-
+	var (
+		dumpling *export.Dumper
+		err      error
+	)
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling
@@ -269,13 +271,13 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 }
 
 func (m *Dumpling) status() *pb.DumpStatus {
-	mid := m.core.GetParameters()
+	dumpStatus := m.core.GetStatus()
 	s := &pb.DumpStatus{
-		TotalTables:       mid.TotalTables,
-		CompletedTables:   mid.CompletedTables,
-		FinishedBytes:     mid.FinishedBytes,
-		FinishedRows:      mid.FinishedRows,
-		EstimateTotalRows: mid.EstimateTotalRows,
+		TotalTables:       dumpStatus.TotalTables,
+		CompletedTables:   dumpStatus.CompletedTables,
+		FinishedBytes:     dumpStatus.FinishedBytes,
+		FinishedRows:      dumpStatus.FinishedRows,
+		EstimateTotalRows: dumpStatus.EstimateTotalRows,
 	}
 	var estimateProgress string
 	if s.FinishedRows >= s.EstimateTotalRows {
@@ -372,7 +374,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 
 		dumpConfig.Security.SSLCABytes = db.Security.SSLCABytes
 		dumpConfig.Security.SSLCertBytes = db.Security.SSLCertBytes
-		dumpConfig.Security.SSLKEYBytes = db.Security.SSLKEYBytes
+		dumpConfig.Security.SSLKeyBytes = db.Security.SSLKeyBytes
 	}
 
 	// `true` means dumpling will release lock after working connection established

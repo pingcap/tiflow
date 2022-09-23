@@ -35,9 +35,9 @@ const (
 
 var initLogger sync.Once
 
-func newExampleMaster() *exampleMaster {
+func newExampleMaster(t *testing.T) *exampleMaster {
 	self := &exampleMaster{}
-	self.DefaultBaseMaster = framework.MockBaseMaster(masterID, self)
+	self.DefaultBaseMaster = framework.MockBaseMaster(t, masterID, self)
 	return self
 }
 
@@ -50,8 +50,14 @@ func TestExampleMaster(t *testing.T) {
 		})
 	})
 
-	master := newExampleMaster()
+	master := newExampleMaster(t)
 	// master.Init will call CreateWorker, so we mock it first
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	epoch, err := master.MetaKVClient().GenEpoch(ctx)
+	require.NoError(t, err)
+
 	framework.MockBaseMasterCreateWorker(
 		t,
 		master.DefaultBaseMaster,
@@ -62,10 +68,12 @@ func TestExampleMaster(t *testing.T) {
 		workerID,
 		executorNodeID,
 		nil,
+		// call GenEpoch three times, including create master meta, master init
+		// refresh meta, create worker.
+		epoch+3,
 	)
 
-	ctx := context.Background()
-	err := master.Init(ctx)
+	err = master.Init(ctx)
 	require.NoError(t, err)
 
 	// worker is online
@@ -73,7 +81,12 @@ func TestExampleMaster(t *testing.T) {
 		err = master.Poll(ctx)
 		require.NoError(t, err)
 
-		framework.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+		err = framework.MockBaseMasterWorkerHeartbeat(t,
+			master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+		if err != nil {
+			t.Logf("mock worker heartbeat failed: %s", err)
+			return false
+		}
 
 		master.worker.mu.Lock()
 		online := master.worker.online
@@ -89,7 +102,7 @@ func TestExampleMaster(t *testing.T) {
 	require.Equal(t, master.worker.handle, handle)
 
 	framework.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusInit,
+		State: frameModel.WorkerStateInit,
 	})
 
 	require.Eventually(t, func() bool {
@@ -100,7 +113,7 @@ func TestExampleMaster(t *testing.T) {
 		code := master.worker.statusCode
 		master.worker.mu.Unlock()
 
-		return code == frameModel.WorkerStatusInit
+		return code == frameModel.WorkerStateInit
 	}, time.Second, time.Millisecond*10)
 
 	err = master.Close(ctx)

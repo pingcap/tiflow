@@ -14,8 +14,6 @@
 package etcdkv
 
 import (
-	"fmt"
-
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -41,10 +39,10 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 
 	etcdCli, ok := cli.(*clientv3.Client)
 	if !ok {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf("invalid ClientConn for etcd kvclient builder,"+
-			" client type:%d", cc.ClientType()))
+		return nil, cerrors.ErrMetaParamsInvalid.GenWithStack("invalid ClientConn type for etcd kvclient builder,"+
+			" conn type:%s", cc.StoreType())
 	}
-	impl, err := NewEtcdImpl(etcdCli)
+	impl, err := NewEtcdKVClientImpl(etcdCli)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +55,7 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 
 // etcdKVClient is the implement of kv interface based on etcd
 // Support namespace isolation and all kv ability
-// etcdImpl -> kvPrefix+Closer -> etcdKVClient
+// etcdKVClientImpl -> kvPrefix+Closer -> etcdKVClient
 type etcdKVClient struct {
 	metaModel.Client
 	metaModel.KV

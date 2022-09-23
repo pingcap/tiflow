@@ -27,6 +27,8 @@ type MockMessageAgent struct {
 	mock.Mock
 }
 
+var _ MessageAgent = &MockMessageAgent{}
+
 // GenerateTopic generate mock message topic.
 func GenerateTopic(senderID, receiverID string) string {
 	return generateTopic(senderID, receiverID)
@@ -43,26 +45,26 @@ func GenerateResponse(id messageID, command string, msg interface{}) interface{}
 	return &resp2
 }
 
-// Init implement MessageAgent.Init
-func (m *MockMessageAgent) Init(ctx context.Context) error { return nil }
-
-// Tick implement MessageAgent.Tick
+// Tick implement MessageAgent.Tick.
 func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
 
-// Close implement MessageAgent.Close
+// Close implement MessageAgent.Close.
 func (m *MockMessageAgent) Close(ctx context.Context) error { return nil }
 
-// UpdateClient implement MessageAgent.UpdateClient
+// UpdateClient implement MessageAgent.UpdateClient.
 func (m *MockMessageAgent) UpdateClient(clientID string, client client) error { return nil }
 
-// SendMessage implement MessageAgent.SendMessage
+// RemoveClient implement MessageAgent.RemoveClient.
+func (m *MockMessageAgent) RemoveClient(clientID string) error { return nil }
+
+// SendMessage implement MessageAgent.SendMessage.
 func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	return m.Called().Error(0)
 }
 
-// SendRequest implement MessageAgent.SendRequest
+// SendRequest implement MessageAgent.SendRequest.
 func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()

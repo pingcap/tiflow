@@ -19,7 +19,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
@@ -30,53 +35,23 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-type mockTrans struct {
-	sendBuffer []*schedulepb.Message
-	recvBuffer []*schedulepb.Message
-
-	keepRecvBuffer bool
-}
-
-func newMockTrans() *mockTrans {
-	return &mockTrans{
-		sendBuffer: make([]*schedulepb.Message, 0),
-		recvBuffer: make([]*schedulepb.Message, 0),
-	}
-}
-
-func (m *mockTrans) Close() error {
-	return nil
-}
-
-func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
-	m.sendBuffer = append(m.sendBuffer, msgs...)
-	return nil
-}
-
-func (m *mockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
-	if m.keepRecvBuffer {
-		return m.recvBuffer, nil
-	}
-	messages := m.recvBuffer[:len(m.recvBuffer)]
-	m.recvBuffer = make([]*schedulepb.Message, 0)
-	return messages, nil
-}
-
 func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	trans := newMockTrans()
+	trans := transport.NewMockTrans()
 	coord := coordinator{
 		version:   "6.2.0",
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "0",
 		trans:     trans,
 	}
-	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
-	coord.captureM.Captures["1"] = &CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
+	coord.captureM.Captures["1"] = &member.CaptureStatus{
+		Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
+	}
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -93,14 +68,14 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
 		},
 		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
-	}}, trans.sendBuffer)
+	}}, trans.SendBuffer)
 }
 
 func TestCoordinatorRecvMsgs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord := coordinator{
 		version:   "6.2.0",
 		revision:  schedulepb.OwnerRevision{Revision: 3},
@@ -108,21 +83,21 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 		trans:     trans,
 	}
 
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: coord.revision,
 			},
 			From: "1", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
 		})
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: schedulepb.OwnerRevision{Revision: 4},
 			},
 			From: "2", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
 		})
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: coord.revision,
@@ -146,8 +121,9 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
@@ -158,13 +134,13 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs := trans.sendBuffer
+	msgs := trans.SendBuffer
 	require.Len(t, msgs, 2)
 	require.NotNil(t, msgs[0].Heartbeat, msgs[0])
 	require.NotNil(t, msgs[1].Heartbeat, msgs[1])
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -173,7 +149,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -181,21 +157,21 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		From:    "a",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{
-				{TableID: 1, State: schedulepb.TableStateReplicating},
-				{TableID: 2, State: schedulepb.TableStateReplicating},
+			Tables: []tablepb.TableStatus{
+				{TableID: 1, State: tablepb.TableStateReplicating},
+				{TableID: 2, State: tablepb.TableStateReplicating},
 			},
 		},
 	})
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.SendBuffer = []*schedulepb.Message{}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 }
 
 func TestCoordinatorAddCapture(t *testing.T) {
@@ -204,27 +180,26 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
 	// Two captures "a".
 	// Three tables 1 2 3.
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.initialized = true
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs, err := coord.replicationM.HandleCaptureChanges(&captureChanges{
-		Init: map[string][]schedulepb.TableStatus{
-			"a": {
-				{TableID: 1, State: schedulepb.TableStateReplicating},
-				{TableID: 2, State: schedulepb.TableStateReplicating},
-				{TableID: 3, State: schedulepb.TableStateReplicating},
-			},
+	init := map[string][]tablepb.TableStatus{
+		"a": {
+			{TableID: 1, State: tablepb.TableStateReplicating},
+			{TableID: 2, State: tablepb.TableStateReplicating},
+			{TableID: 3, State: tablepb.TableStateReplicating},
 		},
-	}, 0)
+	}
+	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 
 	// Capture "b" is online, heartbeat, and then move one table to capture "b".
 	ctx := context.Background()
@@ -232,11 +207,11 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].Heartbeat, msgs[0])
 
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -245,10 +220,10 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.SendBuffer = []*schedulepb.Message{}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].DispatchTableRequest.GetAddTable(), msgs[0])
 	require.True(t, msgs[0].DispatchTableRequest.GetAddTable().IsSecondary)
@@ -260,28 +235,28 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
 	// Three captures "a" "b" "c".
 	// Three tables 1 2 3.
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.Captures["c"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.initialized = true
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.Captures["c"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs, err := coord.replicationM.HandleCaptureChanges(&captureChanges{
-		Init: map[string][]schedulepb.TableStatus{
-			"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
-			"b": {{TableID: 2, State: schedulepb.TableStateReplicating}},
-			"c": {{TableID: 3, State: schedulepb.TableStateReplicating}},
-		},
-	}, 0)
+	init := map[string][]tablepb.TableStatus{
+		"a": {{TableID: 1, State: tablepb.TableStateReplicating}},
+		"b": {{TableID: 2, State: tablepb.TableStateReplicating}},
+		"c": {{TableID: 3, State: tablepb.TableStateReplicating}},
+	}
+	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 
 	// Capture "c" is removed, add table 3 to another capture.
 	ctx := context.Background()
@@ -289,7 +264,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].DispatchTableRequest.GetAddTable(), msgs[0])
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
@@ -303,43 +278,137 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "a",
 	}
-	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 
-	coord.captureM.initialized = true
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateUninitialized}
+	coord.captureM.SetInitializedForTests(true)
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
 	count, err := coord.DrainCapture("a")
 	require.ErrorIs(t, err, cerror.ErrSchedulerRequestFailed)
 	require.Equal(t, 0, count)
 
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.replicationM = newReplicationManager(10, model.ChangeFeedID{})
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.replicationM = replication.NewReplicationManager(10, model.ChangeFeedID{})
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 
-	coord.replicationM.tables[1] = &ReplicationSet{
+	coord.replicationM.SetReplicationSetForTests(&replication.ReplicationSet{
 		TableID: 1,
-		State:   ReplicationSetStateReplicating,
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "a",
-	}
+	})
 
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.replicationM.tables[2] = &ReplicationSet{
+	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.replicationM.SetReplicationSetForTests(&replication.ReplicationSet{
 		TableID: 2,
-		State:   ReplicationSetStateReplicating,
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "b",
-	}
+	})
 
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.schedulerM = newSchedulerManager(model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
+	coord.schedulerM = scheduler.NewSchedulerManager(
+		model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
 	count, err = coord.DrainCapture("b")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+}
+
+func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
+	trans := transport.NewMockTrans()
+	coord.trans = trans
+
+	// Prepare captureM and replicationM.
+	// Two captures "a", "b".
+	// Three tables 1 2.
+	ctx := context.Background()
+	currentTables := []model.TableID{1, 2}
+	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+
+	// Initialize captures.
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:                "a",
+		From:              "b",
+		MsgType:           schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
+	})
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:      "a",
+		From:    "a",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []tablepb.TableStatus{
+				{
+					TableID: 1, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 2, ResolvedTs: 4,
+					},
+				},
+				{
+					TableID: 2, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 2, ResolvedTs: 4,
+					},
+				},
+			},
+		},
+	})
+	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+	require.True(t, coord.captureM.CheckAllCaptureInitialized())
+	require.EqualValues(t, 2, cts)
+	require.EqualValues(t, 4, rts)
+
+	// Checkpoint should be advanced even if there is an uninitialized capture.
+	aliveCaptures["c"] = &model.CaptureInfo{}
+	trans.RecvBuffer = nil
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:      "a",
+		From:    "a",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []tablepb.TableStatus{
+				{
+					TableID: 1, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 3, ResolvedTs: 5,
+					},
+				},
+				{
+					TableID: 2, State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 4, ResolvedTs: 5,
+					},
+				},
+			},
+		},
+	})
+	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+	require.False(t, coord.captureM.CheckAllCaptureInitialized())
+	require.EqualValues(t, 3, cts)
+	require.EqualValues(t, 5, rts)
 }

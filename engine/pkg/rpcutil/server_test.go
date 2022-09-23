@@ -33,10 +33,10 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 
 	serverID := "server1"
 	ctx := context.Background()
-	h := &PreRPCHook[int]{
+	h := &preRPCHookImpl[*FailoverRPCClients[int]]{
 		id:        serverID,
 		leader:    &atomic.Value{},
-		leaderCli: &LeaderClientWithLock[int]{},
+		leaderCli: &LeaderClientWithLock[*FailoverRPCClients[int]]{},
 	}
 
 	isLeader, needForward := h.isLeaderAndNeedForward(ctx)
@@ -66,7 +66,10 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 		require.True(t, needForward)
 	}()
 	time.Sleep(time.Second)
-	h.leaderCli.Set(&FailoverRPCClients[int]{})
+	cli := &FailoverRPCClients[int]{}
+	h.leaderCli.Set(cli, func() {
+		_ = cli.Close()
+	})
 	h.leader.Store(&Member{Name: serverID})
 	wg.Wait()
 }
@@ -106,10 +109,10 @@ func (m *mockRPCClientImpl) MockRPCWithErrField(ctx context.Context, req *mockRP
 }
 
 type mockRPCServer struct {
-	hook *PreRPCHook[mockRPCClientIface]
+	hook *preRPCHookImpl[mockRPCClientIface]
 }
 
-// MockRPC is an example usage for PreRPCHook.PreRPC.
+// MockRPC is an example usage for preRPCHookImpl.PreRPC.
 func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error) {
 	resp2 := &mockRPCResp{}
 	shouldRet, err := s.hook.PreRPC(ctx, req, &resp2)
@@ -131,12 +134,13 @@ func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq
 // newMockRPCServer returns a mockRPCServer that is ready to use.
 func newMockRPCServer() *mockRPCServer {
 	serverID := "server1"
-	h := &PreRPCHook[mockRPCClientIface]{
+	rpcLim := newRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
+	h := &preRPCHookImpl[mockRPCClientIface]{
 		id:          serverID,
 		leader:      &atomic.Value{},
 		leaderCli:   &LeaderClientWithLock[mockRPCClientIface]{},
 		initialized: atomic.NewBool(true),
-		limiter:     rate.NewLimiter(rate.Every(time.Second*5), 3),
+		limiter:     rpcLim,
 	}
 	h.leader.Store(&Member{Name: serverID})
 	return &mockRPCServer{hook: h}
@@ -155,9 +159,8 @@ func TestForwardToLeader(t *testing.T) {
 	// the server is not leader, and cluster has another leader
 
 	s.hook.leader.Store(&Member{Name: "another"})
-	s.hook.leaderCli.Set(NewFailoverRPCClientsForTest[mockRPCClientIface](
-		&mockRPCClientImpl{},
-	))
+	cli := &mockRPCClientImpl{}
+	s.hook.leaderCli.Set(cli, func() {})
 	resp, err = s.MockRPC(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 2, resp.id)
@@ -182,10 +185,8 @@ func TestForwardToLeader(t *testing.T) {
 	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
 
 	// forwarding returns error
-
-	s.hook.leaderCli.Set(NewFailoverRPCClientsForTest[mockRPCClientIface](
-		&mockRPCClientImpl{fail: true},
-	))
+	cli = &mockRPCClientImpl{fail: true}
+	s.hook.leaderCli.Set(cli, func() {})
 	resp, err = s.MockRPC(ctx, req)
 	require.ErrorContains(t, err, "mock failed")
 }
@@ -204,4 +205,20 @@ func TestCheckInitialized(t *testing.T) {
 	resp, err := s.MockRPCWithErrField(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, pb.ErrorCode_MasterNotReady, resp.Err.Code)
+}
+
+func TestRPCLimiter(t *testing.T) {
+	t.Parallel()
+
+	allowList := []string{"submit", "cancel"}
+	rl := rate.NewLimiter(rate.Every(time.Minute*10), 1)
+	rpcLim := newRPCLimiter(rl, allowList)
+	require.True(t, rpcLim.Allow(allowList[0]))
+	require.True(t, rpcLim.Allow(allowList[1]))
+	require.True(t, rpcLim.Allow("query"))
+	require.False(t, rpcLim.Allow("query"))
+	require.True(t, rpcLim.Allow(allowList[0]))
+	require.True(t, rpcLim.Allow(allowList[1]))
+	require.False(t, rpcLim.Allow("query"))
+	require.False(t, rpcLim.Allow("query"))
 }

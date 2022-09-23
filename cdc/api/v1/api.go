@@ -30,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -238,12 +239,16 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 				})
 		}
 	}
+	sinkURI, err := util.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink URI", zap.Error(err))
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
 		UpstreamID:     info.UpstreamID,
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
-		SinkURI:        info.SinkURI,
+		SinkURI:        sinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
@@ -846,12 +851,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		return
 	}
 	status := model.ServerStatus{
-		Version:  version.ReleaseVersion,
-		GitHash:  version.GitHash,
-		Pid:      os.Getpid(),
-		ID:       info.ID,
-		IsOwner:  h.capture.IsOwner(),
-		Liveness: h.capture.Liveness(),
+		Version:   version.ReleaseVersion,
+		GitHash:   version.GitHash,
+		Pid:       os.Getpid(),
+		ID:        info.ID,
+		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
+		IsOwner:   h.capture.IsOwner(),
+		Liveness:  h.capture.Liveness(),
 	}
 	c.IndentedJSON(http.StatusOK, status)
 }
@@ -866,9 +872,19 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
-	ctx := c.Request.Context()
+	if !h.capture.IsOwner() {
+		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+		return
+	}
 
-	if _, err := h.capture.GetOwnerCaptureInfo(ctx); err != nil {
+	ctx := c.Request.Context()
+	health, err := h.statusProvider().IsHealthy(ctx)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	if !health {
+		err = cerror.ErrClusterIsUnhealthy.FastGenByArgs()
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}

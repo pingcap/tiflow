@@ -42,6 +42,7 @@ type HeartbeatPingMessage struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromWorkerID WorkerID            `json:"from-worker-id"`
 	Epoch        Epoch               `json:"epoch"`
+	WorkerEpoch  Epoch               `json:"worker-epoch"`
 	IsFinished   bool                `json:"is-finished"`
 }
 
@@ -59,5 +60,5 @@ type StatusChangeRequest struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromMasterID MasterID            `json:"from-master-id"`
 	Epoch        Epoch               `json:"epoch"`
-	ExpectState  WorkerStatusCode    `json:"expect-state"`
+	ExpectState  WorkerState         `json:"expect-state"`
 }

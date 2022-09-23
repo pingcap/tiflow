@@ -17,13 +17,18 @@ import (
 	"context"
 	"time"
 
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/pkg/errors"
 )
+
+// defaultMasterAddr is the default master address.
+const defaultMasterAddr = "127.0.0.1:10240"
 
 // jobGeneralOptions defines some general options of job management
 type jobGeneralOptions struct {
@@ -35,8 +40,8 @@ type jobGeneralOptions struct {
 	// TODO: add tls support
 
 	// Following fields are generated from options
-	masterClient client.MasterClient
-	tenant       tenant.ProjectInfo
+	jobManagerCli enginepb.JobManagerClient
+	tenant        tenant.ProjectInfo
 }
 
 func newJobGeneralOptions() *jobGeneralOptions {
@@ -59,17 +64,17 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 // validate checks that the provided job options are valid.
 func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if len(o.masterAddrs) == 0 {
-		return errors.ErrInvalidCliParameter.GenWithStack("master-addrs can't be nil")
+		o.masterAddrs = []string{defaultMasterAddr}
+		log.Warn("the master-addrs are not assigned, use default addr: " + defaultMasterAddr)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, o.rpcTimeout)
-	defer cancel()
-	cliManager := client.NewClientManager()
-	if err := cliManager.AddMasterClient(ctx, o.masterAddrs); err != nil {
-		return err
+	// TODO support https.
+	dialURL := o.masterAddrs[0]
+	grpcConn, err := grpc.Dial(dialURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return perrors.Trace(err)
 	}
-	o.masterClient = cliManager.MasterClient()
-
+	o.jobManagerCli = enginepb.NewJobManagerClient(grpcConn)
 	o.tenant = o.getProjectInfo()
 
 	return nil
@@ -105,7 +110,7 @@ func newCmdJob() *cobra.Command {
 	o.addFlags(cmds)
 	cmds.AddCommand(newCmdJobCreate(o))
 	cmds.AddCommand(newCmdJobQuery(o))
-	cmds.AddCommand(newCmdJobPause(o))
+	cmds.AddCommand(newCmdJobCancel(o))
 
 	return cmds
 }

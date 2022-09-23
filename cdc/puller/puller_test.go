@@ -61,8 +61,10 @@ func newMockCDCKVClient(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
+	tableName string,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -74,7 +76,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	span regionspan.ComparableSpan,
 	ts uint64,
 	lockResolver txnutil.LockResolver,
-	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	for {
@@ -88,6 +89,10 @@ func (mc *mockCDCKVClient) EventFeed(
 			eventCh <- ev
 		}
 	}
+}
+
+func (mc *mockCDCKVClient) RegionCount() uint64 {
+	return 0
 }
 
 func (mc *mockCDCKVClient) Close() error {
@@ -128,7 +133,7 @@ func newPullerForTest(
 	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient,
-		model.DefaultChangeFeedID("changefeed-id-test"))
+		model.DefaultChangeFeedID("changefeed-id-test"), 0, "table-test")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -153,27 +158,26 @@ func TestPullerResolvedForward(t *testing.T) {
 	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)
 
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
+		Resolved: []*model.ResolvedSpan{{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
 			ResolvedTs: uint64(1001),
-		},
+		}},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
+		Resolved: []*model.ResolvedSpan{{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
 			ResolvedTs: uint64(1002),
-		},
+		}},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
+		Resolved: []*model.ResolvedSpan{{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
 			ResolvedTs: uint64(1000),
-		},
+		}},
 	})
 	ev := <-plr.Output()
 	require.Equal(t, model.OpTypeResolved, ev.OpType)
 	require.Equal(t, uint64(1000), ev.CRTs)
-	require.True(t, plr.IsInitialized())
 	err := retry.Do(context.Background(), func() error {
 		ts := plr.GetResolvedTs()
 		if ts != uint64(1000) {

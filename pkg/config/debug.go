@@ -35,6 +35,10 @@ type DebugConfig struct {
 	EnableSchedulerV3 bool `toml:"enable-scheduler-v3" json:"enable-scheduler-v3"`
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+
+	// EnableNewSink enables the new sink.
+	// The default value is true.
+	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

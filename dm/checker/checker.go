@@ -25,9 +25,8 @@ import (
 	"time"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -39,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	"github.com/pingcap/tiflow/dm/unit"
 	"golang.org/x/sync/errgroup"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
@@ -88,6 +88,8 @@ type Checker struct {
 	warnCnt int64
 
 	onlineDDL onlineddl.OnlinePlugin
+
+	stCfgs []*config.SubTaskConfig
 }
 
 // NewChecker returns a checker.
@@ -97,6 +99,7 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 		checkingItems: checkingItems,
 		errCnt:        errCnt,
 		warnCnt:       warnCnt,
+		stCfgs:        cfgs,
 	}
 
 	for _, cfg := range cfgs {
@@ -143,6 +146,28 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 	if egErr := eg.Wait(); egErr != nil {
 		return egErr
+	}
+	// check connections
+	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
+		if len(c.stCfgs) > 0 {
+			// only check the first subtask's config
+			// because the Mode is the same across all the subtasks
+			// as long as they are derived from the same task config.
+			switch c.stCfgs[0].Mode {
+			case config.ModeAll:
+				// TODO: check the connections for syncer
+				// TODO: check for incremental mode
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
+			case config.ModeFull:
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
+			}
+		}
 	}
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)

@@ -17,30 +17,38 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/stretchr/testify/require"
 )
 
-func getMockCapacityDataForScheduler() CapacityProvider {
-	return &MockCapacityProvider{
-		Capacities: map[model.ExecutorID]*schedModel.ExecutorResourceStatus{
+func getMockDataForScheduler() *mockExecutorInfoProvider {
+	return &mockExecutorInfoProvider{
+		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
-				Capacity: 100,
-				Reserved: 40,
-				Used:     60,
+				ID: "executor-1",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 40,
+					Used:     60,
+				},
 			}, // available = 40
 			"executor-2": {
-				Capacity: 100,
-				Reserved: 30,
-				Used:     70,
+				ID: "executor-2",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 30,
+					Used:     70,
+				},
 			}, // available = 30
 			"executor-3": {
-				Capacity: 100,
-				Reserved: 70,
-				Used:     30,
+				ID: "executor-3",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 70,
+					Used:     30,
+				},
 			}, // available = 30
 		},
 	}
@@ -57,7 +65,7 @@ func getMockResourceConstraintForScheduler() PlacementConstrainer {
 
 func TestSchedulerByCost(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -69,7 +77,7 @@ func TestSchedulerByCost(t *testing.T) {
 
 func TestSchedulerByConstraint(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -82,7 +90,7 @@ func TestSchedulerByConstraint(t *testing.T) {
 
 func TestSchedulerNoConstraint(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -96,7 +104,7 @@ func TestSchedulerNoConstraint(t *testing.T) {
 
 func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -105,12 +113,12 @@ func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-3"}},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	require.Regexp(t, "CapacityNotEnoughError", err)
 }
 
 func TestSchedulerResourceNotFound(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -119,12 +127,14 @@ func TestSchedulerResourceNotFound(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-blah"}},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*Scheduler could not find resource resource-blah.*", err)
+	info, ok := ErrResourceNotFound.Convert(err)
+	require.True(t, ok)
+	require.Equal(t, "resource-blah", info.ResourceID)
 }
 
 func TestSchedulerByCostNoCapacity(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -132,12 +142,12 @@ func TestSchedulerByCostNoCapacity(t *testing.T) {
 		Cost: 50,
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	require.Regexp(t, "CapacityNotEnoughError", err)
 }
 
 func TestSchedulerConstraintConflict(t *testing.T) {
 	sched := NewScheduler(
-		getMockCapacityDataForScheduler(),
+		getMockDataForScheduler(),
 		getMockResourceConstraintForScheduler())
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
@@ -154,5 +164,5 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*Scheduler could not assign executor due to conflicting.*", err)
+	require.Regexp(t, "ResourceConflictError", err)
 }

@@ -19,11 +19,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // CapRescMgr implements ResourceMgr interface, and it uses node capacity as
@@ -79,30 +78,7 @@ func (m *CapRescMgr) Update(id model.ExecutorID, used, reserved model.RescUnit, 
 	return nil
 }
 
-// CapacitiesForAllExecutors implements scheduler.CapacityProvider.
-// The returned value is a deep copy, so there is no risk of accidental sharing.
-// Note the O(n) complexity.
-func (m *CapRescMgr) CapacitiesForAllExecutors() map[model.ExecutorID]*schedModel.ExecutorResourceStatus {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	ret := make(map[model.ExecutorID]*schedModel.ExecutorResourceStatus, len(m.executors))
-	// Note the complexity O(n), where n = count(executors).
-	// Currently this complexity does not seem to be a problem, because
-	// scheduling happens only sporadically, and the number of executors
-	// is limited to <= 100.
-	for executorID, resc := range m.executors {
-		resourceStatus := &schedModel.ExecutorResourceStatus{
-			Capacity: resc.Capacity,
-			Reserved: resc.Reserved,
-			Used:     resc.Used,
-		}
-		ret[executorID] = resourceStatus
-	}
-	return ret
-}
-
-// CapacityForExecutor implements scheduler.CapacityProvider.
+// CapacityForExecutor returns the resource status for the given executor.
 func (m *CapRescMgr) CapacityForExecutor(executor model.ExecutorID) (*schedModel.ExecutorResourceStatus, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

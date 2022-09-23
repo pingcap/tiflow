@@ -1,0 +1,19 @@
+[framework-meta]
+endpoints = ["mysql-standalone:3306"]
+schema = "test_framework"
+user = "root"
+password = ""
+
+[business-meta]
+endpoints = ["mysql-standalone:3306"]
+schema = "test_business"
+user = "root"
+password = ""
+
+[log]
+level = "debug"
+
+[job-backoff]
+reset-interval = "2s"
+initial-interval = "1s"
+max-interval = "15s"

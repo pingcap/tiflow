@@ -63,7 +63,21 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	require.Equal(t, &fake.WorkerConfig{TargetTick: 100}, config)
 
 	ctx := makeCtxWithMockDeps(t)
+	metaCli, err := ctx.Deps().Construct(
+		func(cli pkgOrm.Client) (pkgOrm.Client, error) {
+			return cli, nil
+		},
+	)
+	require.NoError(t, err)
+	defer metaCli.(pkgOrm.Client).Close()
 	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &fake.WorkerConfig{TargetTick: 100})
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, newWorker)
+}
+
+func TestDeserializeConfigError(t *testing.T) {
+	fac := NewSimpleWorkerFactory(fake.NewDummyWorker)
+	_, err := fac.DeserializeConfig([]byte(`{target-tick:100}`))
+	require.Error(t, err)
+	require.False(t, fac.IsRetryableError(err))
 }

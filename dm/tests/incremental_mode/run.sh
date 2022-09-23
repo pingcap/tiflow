@@ -30,7 +30,7 @@ function run() {
 	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1))
 	binlog_name=($(get_binlog_name $MYSQL_HOST2 $MYSQL_PORT2))
 
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/defaultKeepAliveTTL=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/worker/defaultKeepAliveTTL=return(1)"
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -171,6 +171,9 @@ function run() {
 	# check reset binlog puller success
 	grep -Fq "reset replication binlog puller" $WORK_DIR/worker1/log/dm-worker.log
 	grep -Fq "reset replication binlog puller" $WORK_DIR/worker2/log/dm-worker.log
+
+	check_log_contain_with_retry 'finish to handle ddls in normal mode.*create table t2' $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+
 	# we use failpoint to let worker sleep 8 second when executeSQLs, to increase possibility of
 	# meeting an error of context cancel.
 	# when below check pass, it means we filter out that error, or that error doesn't happen.
@@ -200,7 +203,7 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml"
 
-	# the task should paused by `FlushCheckpointStage` failpont before flush old checkpoint.
+	# the task should paused by `FlushCheckpointStage` failpoint before flush old checkpoint.
 	# `db2.increment.sql` has no DDL, so we check count of content as `1`.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \

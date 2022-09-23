@@ -18,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -39,7 +41,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -64,6 +66,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	cluster.jobInfo.RemoveJob("job-1")
 	require.Eventually(t, func() bool {
 		_, err := cluster.meta.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"})
+		log.Warn("GetResourceByID", zap.Error(err))
 		return err != nil && pkgOrm.IsNotFoundError(err)
 	}, 1*time.Second, 5*time.Millisecond)
 	broker.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
@@ -82,7 +85,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -115,7 +118,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	_ = cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStateInit)
 	err := cluster.meta.CreateResource(ctx, &resModel.ResourceMeta{
 		ID:        "/local/resource-2",
 		Job:       "job-1",

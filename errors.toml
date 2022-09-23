@@ -151,6 +151,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedUnretryable"]
+error = '''
+changefeed is in unretryable state, please check the error message, and you should manually handle it
+'''
+
 ["CDC:ErrChangefeedUpdateFailed"]
 error = '''
 changefeed update failed due to unexpected etcd transaction failure: %s
@@ -186,6 +191,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrCliAborted"]
+error = '''
+command '%s' is aborted by user
+'''
+
 ["CDC:ErrCliCheckpointTsIsInFuture"]
 error = '''
 the overwrite-checkpoint-ts %d must be smaller than current TSO
@@ -193,7 +203,7 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
-invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or number
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
 ["CDC:ErrClusterIDMismatch"]
@@ -201,9 +211,19 @@ error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
 '''
 
+["CDC:ErrClusterIsUnhealthy"]
+error = '''
+TiCDC cluster is unhealthy
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
+'''
+
+["CDC:ErrCodecInvalidConfig"]
+error = '''
+Codec invalid config
 '''
 
 ["CDC:ErrConsistentLevel"]
@@ -231,9 +251,19 @@ error = '''
 create mark table failed
 '''
 
+["CDC:ErrDBSorterError"]
+error = '''
+db error: %s
+'''
+
 ["CDC:ErrDDLEventIgnored"]
 error = '''
 ddl event is ignored
+'''
+
+["CDC:ErrDDLSchemaNotFound"]
+error = '''
+cannot find mysql.tidb_ddl_job schema
 '''
 
 ["CDC:ErrDatumUnflatten"]
@@ -301,6 +331,11 @@ error = '''
 eventfeed returns event error
 '''
 
+["CDC:ErrExchangePartition"]
+error = '''
+exchange partition failed, %s
+'''
+
 ["CDC:ErrExecDDLFailed"]
 error = '''
 exec DDL failed
@@ -308,7 +343,7 @@ exec DDL failed
 
 ["CDC:ErrExpressionColumnNotFound"]
 error = '''
-invalid filter expressions. Can not found column '%s' from table '%s' in: %s
+invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s
 '''
 
 ["CDC:ErrFailedToFilterDDL"]
@@ -446,6 +481,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
+'''
+
 ["CDC:ErrInvalidS3URI"]
 error = '''
 invalid s3 uri: %s
@@ -526,6 +566,11 @@ error = '''
 new sarama producer
 '''
 
+["CDC:ErrKafkaProducerClosed"]
+error = '''
+kafka producer closed
+'''
+
 ["CDC:ErrKafkaSendMessage"]
 error = '''
 kafka send message failed
@@ -551,11 +596,6 @@ error = '''
 owner lease timeout
 '''
 
-["CDC:ErrLevelDBSorterError"]
-error = '''
-leveldb error: %s
-'''
-
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
@@ -564,16 +604,6 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
-'''
-
-["CDC:ErrMQCodecInvalidConfig"]
-error = '''
-MQ Codec invalid config
-'''
-
-["CDC:ErrMQSinkUnknownProtocol"]
-error = '''
-unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -866,16 +896,6 @@ error = '''
 processor running unknown error
 '''
 
-["CDC:ErrPulsarNewProducer"]
-error = '''
-new pulsar producer
-'''
-
-["CDC:ErrPulsarSendMessage"]
-error = '''
-pulsar send message failed
-'''
-
 ["CDC:ErrReachMaxTry"]
 error = '''
 reach maximum try: %s, error: %s
@@ -1018,7 +1038,12 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
+'''
+
+["CDC:ErrSinkUnknownProtocol"]
+error = '''
+unknown '%s' message protocol for sink
 '''
 
 ["CDC:ErrSnapshotLostByGC"]
@@ -1051,14 +1076,14 @@ error = '''
 sorter is closed
 '''
 
-["CDC:ErrStartAStoppedLevelDBSystem"]
+["CDC:ErrStartAStoppedDBSystem"]
 error = '''
-start a stopped leveldb system
+start a stopped db system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]
@@ -1069,6 +1094,11 @@ this api supports GET method only
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrSyncRenameTableFailed"]
+error = '''
+table's old name is not in filter rule, and its new name in filter rule table id '%d', ddl query: [%s], it's an unexpected behavior, if you want to replicate this table, please add its old name to filter rule.
 '''
 
 ["CDC:ErrTCPServerClosed"]
@@ -1271,11 +1301,6 @@ error = '''
 etcd api returns error
 '''
 
-["DFLOW:ErrEtcdLeaderChanged"]
-error = '''
-etcd leader has changed
-'''
-
 ["DFLOW:ErrExecutorConfigInvalidFlag"]
 error = '''
 '%s' is an invalid flag
@@ -1301,11 +1326,6 @@ error = '''
 decode config file failed
 '''
 
-["DFLOW:ErrExecutorDupRegister"]
-error = '''
-executor %s has been registered
-'''
-
 ["DFLOW:ErrExecutorEtcdConnFail"]
 error = '''
 executor conn inner etcd fail
@@ -1324,6 +1344,11 @@ PreDispatchTask failed
 ["DFLOW:ErrExecutorSessionDone"]
 error = '''
 executor %s session done
+'''
+
+["DFLOW:ErrExecutorWatcherClosed"]
+error = '''
+executor watcher is closed
 '''
 
 ["DFLOW:ErrFailToCreateExternalStorage"]
@@ -1386,9 +1411,39 @@ error = '''
 invalid worker type: %s
 '''
 
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job is already canceled: %s
+'''
+
+["DFLOW:ErrJobManagerGetJobDetailFail"]
+error = '''
+failed to get job detail from job master
+'''
+
+["DFLOW:ErrJobManagerReadRespBodyFail"]
+error = '''
+failed to read response body
+'''
+
+["DFLOW:ErrJobManagerRespStatusCode404"]
+error = '''
+get job detail response status code is 404
+'''
+
+["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
+error = '''
+get job detail response status code is not 2XX
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
+'''
+
+["DFLOW:ErrLeaderResigned"]
+error = '''
+leader has resigned
 '''
 
 ["DFLOW:ErrLocalFileDirNotWritable"]
@@ -1424,6 +1479,11 @@ parse config flag set failed
 ["DFLOW:ErrMasterConfigUnknownItem"]
 error = '''
 master config contains unknown configuration options: %s
+'''
+
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]
@@ -1523,7 +1583,7 @@ peer message client is not found for worker: worker ID %s
 
 ["DFLOW:ErrMetaClientTypeNotSupport"]
 error = '''
-meta client type not support:%d
+meta client type not support:%s
 '''
 
 ["DFLOW:ErrMetaCommittedTxn"]
@@ -1686,6 +1746,16 @@ error = '''
 cannot find executor ID: %s
 '''
 
+["DFLOW:ErrWorkerCancel"]
+error = '''
+worker is canceled
+'''
+
+["DFLOW:ErrWorkerFailed"]
+error = '''
+worker is failed permanently
+'''
+
 ["DFLOW:ErrWorkerFinish"]
 error = '''
 worker finished and exited
@@ -1709,11 +1779,6 @@ worker is not found: worker ID %s
 ["DFLOW:ErrWorkerOffline"]
 error = '''
 worker is offline: workerID: %s, error message: %s
-'''
-
-["DFLOW:ErrWorkerStop"]
-error = '''
-worker is stopped
 '''
 
 ["DFLOW:ErrWorkerSuicide"]

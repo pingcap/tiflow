@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
@@ -32,9 +32,11 @@ import (
 func TestWorkerExit(t *testing.T) {
 	// TODO: make the following variables configurable
 	var (
-		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
+		masterAddrs           = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs     = []string{"127.0.0.1:3336"}
+		etcdAddrs             = []string{"127.0.0.1:12479"}
+		etcdAddrsInContainer  = []string{"etcd-standalone:2379"}
+		defaultTimeoutForTest = 3 * time.Second
 	)
 
 	ctx := context.Background()
@@ -44,7 +46,7 @@ func TestWorkerExit(t *testing.T) {
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
-		EtcdEndpoints:   businessMetaAddrsInContainer,
+		EtcdEndpoints:   etcdAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 
 		InjectErrorInterval: time.Second * 3,
@@ -53,7 +55,7 @@ func TestWorkerExit(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
+		EtcdEndpoints: etcdAddrs,
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
@@ -62,18 +64,22 @@ func TestWorkerExit(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeoutForTest)
+	defer cancel()
+	jobID, err := cli.CreateJob(ctx1, pb.Job_FakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	err = cli.InitializeMetaClient(jobID)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, defaultTimeoutForTest)
+		defer cancel()
 		// check tick increases to ensure all workers are online
 		// TODO modify the test case to use a "restart-count" as a terminating condition.
 		targetTick := int64(1000)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
+			err := cli.CheckFakeJobTick(ctx1, jobID, jobIdx, targetTick)
 			if err != nil {
 				log.Warn("check fake job tick failed", zap.Error(err))
 				return false
@@ -82,6 +88,8 @@ func TestWorkerExit(t *testing.T) {
 		return true
 	}, time.Second*300, time.Second*2)
 
-	err = cli.PauseJob(ctx, jobID)
+	ctx1, cancel = context.WithTimeout(ctx, defaultTimeoutForTest)
+	defer cancel()
+	err = cli.CancelJob(ctx1, jobID)
 	require.NoError(t, err)
 }

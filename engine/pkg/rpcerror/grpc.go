@@ -14,15 +14,18 @@
 package rpcerror
 
 import (
+	"context"
 	gerrors "errors"
 	"fmt"
 	"reflect"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
-	"google.golang.org/grpc/codes"
-
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func tryUnwrapNormalizedError(errIn error) (typeErasedNormalizedError, bool) {
@@ -37,9 +40,13 @@ func tryUnwrapNormalizedError(errIn error) (typeErasedNormalizedError, bool) {
 // an error containing status information recognizable
 // by the grpc-go library.
 func ToGRPCError(errIn error) error {
+	var stackTrace errors.StackTrace
+	if tracer := errors.GetStackTracer(errIn); tracer != nil {
+		stackTrace = tracer.StackTrace()
+	}
 	if normalized, ok := tryUnwrapNormalizedError(errIn); ok {
 		st, err := status.New(normalized.statusCode(), normalized.message()).
-			WithDetails(normalized.toPB())
+			WithDetails(normalized.toPB(stackTrace))
 		if err != nil {
 			return errIn
 		}
@@ -89,6 +96,9 @@ func FromGRPCError(errIn error) error {
 		return errors.Annotatef(err, "decode error type %s", errPB.Name)
 	}
 
+	if len(errPB.StackTrace) > 0 {
+		errOut.setServerStackTrace(errPB.StackTrace)
+	}
 	return errors.Trace(errOut)
 }
 
@@ -103,14 +113,47 @@ func IsRetryable(errIn error) bool {
 	return normalized.isRetryable()
 }
 
+// IsManagedError returns whether the error is managed by the rpcerror library.
+func IsManagedError(errIn error) bool {
+	_, ok := tryUnwrapNormalizedError(errIn)
+	return ok
+}
+
 // GRPCStatusCode extracts the grpc status code from an error.
 func GRPCStatusCode(errIn error) (codes.Code, bool) {
 	if err, ok := tryUnwrapNormalizedError(errIn); ok {
 		return err.statusCode(), true
 	}
-	if st, ok := status.FromError(errors.Unwrap(errIn)); ok {
+
+	if errors.HasStack(errIn) {
+		errIn = errors.Unwrap(errIn)
+	}
+	if st, ok := status.FromError(errIn); ok {
 		// errIn is a raw gRPC error
 		return st.Code(), true
 	}
 	return codes.Unknown, false
+}
+
+// UnaryServerInterceptor is a gRPC server-side interceptor that tries to convert errors to the standard grpc error.
+func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	if err != nil {
+		errOut := ToGRPCError(err)
+		logger := log.With(zap.String("method", info.FullMethod), zap.Error(errOut), zap.Any("request", req))
+		s, ok := status.FromError(errOut)
+		if !ok {
+			s = status.FromContextError(err)
+		}
+		switch s.Code() {
+		case codes.Unknown:
+			logger.Warn("request handled with an unknown error")
+		case codes.Internal:
+			logger.Warn("request handled with an internal error")
+		default:
+			logger.Debug("request handled with an error")
+		}
+		return nil, errOut
+	}
+	return resp, nil
 }

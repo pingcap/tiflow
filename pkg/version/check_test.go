@@ -34,7 +34,7 @@ import (
 type mockPDClient struct {
 	pd.Client
 	getAllStores  func() []*metapb.Store
-	getVersion    func() string
+	getPDVersion  func() string
 	getStatusCode func() int
 }
 
@@ -51,8 +51,8 @@ func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
 		resp.WriteHeader(m.getStatusCode())
 	}
 
-	if m.getVersion != nil {
-		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getVersion())))
+	if m.getPDVersion != nil {
+		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getPDVersion())))
 	}
 }
 
@@ -86,8 +86,9 @@ func TestCheckClusterVersion(t *testing.T) {
 		}
 	}
 
+	// Check min pd / tikv version
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return minPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
@@ -97,9 +98,21 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// check pd / tikv with the maximum allowed version
+	{
+		mock.getPDVersion = func() string {
+			return "7.9.9"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "v7.9.9"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
 	// Check invalid PD/TiKV version.
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return "testPD"
 		}
 		mock.getAllStores = func() []*metapb.Store {
@@ -110,7 +123,7 @@ func TestCheckClusterVersion(t *testing.T) {
 	}
 
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return minPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
@@ -120,8 +133,9 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Regexp(t, ".*invalid TiKV version.*", err)
 	}
 
+	// pd version lower than the min supported
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return `v1.0.0-alpha-271-g824ae7fd`
 		}
 		mock.getAllStores = func() []*metapb.Store {
@@ -131,10 +145,9 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Regexp(t, ".*PD .* is not supported.*", err)
 	}
 
-	// Check maximum compatible PD.
 	{
-		mock.getVersion = func() string {
-			return `v10000.0.0`
+		mock.getPDVersion = func() string {
+			return maxPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
@@ -143,8 +156,9 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Regexp(t, ".*PD .* is not supported.*", err)
 	}
 
+	// tikv version lower than the min supported
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return minPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
@@ -157,14 +171,14 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	// Check maximum compatible TiKV.
+	// Check maximum supported TiKV version
 	{
-		mock.getVersion = func() string {
+		mock.getPDVersion = func() string {
 			return minPDVersion.String()
 		}
+
 		mock.getAllStores = func() []*metapb.Store {
-			// TiKV does not include 'v'.
-			return []*metapb.Store{{Version: `10000.0.0`}}
+			return []*metapb.Store{{Version: maxTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		require.Regexp(t, ".*TiKV .* is not supported.*", err)
@@ -181,21 +195,22 @@ func TestCheckClusterVersion(t *testing.T) {
 }
 
 func TestCompareVersion(t *testing.T) {
-	require.Equal(t, semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
+	// build on master branch, `vx.y.z-master`
+	masterVersion := semver.New(removeVAndHash("v6.3.0-master"))
+	require.Equal(t, 1, masterVersion.Compare(*MinTiCDCVersion))
 
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
-		Compare(*semver.New("3.0.0-beta")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.5-dirty")).
-		Compare(*semver.New("3.0.5")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
-		Compare(*semver.New("3.0.5-beta.12")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
-		Compare(*semver.New("2.1.0-rc.1")), 0)
+	// pre-release version, `vx.y.z-alpha-nightly-yyyymmdd`
+	alphaVersion := semver.New(removeVAndHash("v6.3.0-alpha-nightly-20220202"))
+	require.Equal(t, 1, alphaVersion.Compare(*MinTiCDCVersion))
+
+	// release version, `vx.y.z.`
+	releaseVersion := semver.New(removeVAndHash("v6.3.0"))
+	require.Equal(t, 1, releaseVersion.Compare(*MinTiCDCVersion))
+
+	// build with uncommitted changes, `vx.y.z-dirty`
+	dirtyVersion := semver.New(removeVAndHash("v6.3.0-dirty"))
+	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
+	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
 }
 
 func TestReleaseSemver(t *testing.T) {
@@ -220,7 +235,7 @@ func TestGetTiCDCClusterVersion(t *testing.T) {
 	}{
 		{
 			captureVersions: []string{},
-			expected:        TiCDCClusterVersionUnknown,
+			expected:        ticdcClusterVersionUnknown,
 		},
 		{
 			captureVersions: []string{
@@ -277,7 +292,7 @@ func TestGetTiCDCClusterVersion(t *testing.T) {
 			"",
 			"testCDC",
 		},
-		expected: TiCDCClusterVersionUnknown,
+		expected: ticdcClusterVersionUnknown,
 	}
 	_, err := GetTiCDCClusterVersion(invalidTestCase.captureVersions)
 	require.Regexp(t, ".*invalid CDC cluster version.*", err)
@@ -325,46 +340,8 @@ func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
 	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
-	require.Equal(t, TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
-}
-
-func TestCheckTiCDCClusterVersion(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		cdcClusterVersion TiCDCClusterVersion
-		expectedErr       string
-		expectedUnknown   bool
-	}{
-		{
-			cdcClusterVersion: TiCDCClusterVersionUnknown,
-			expectedErr:       "",
-			expectedUnknown:   true,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: MinTiCDCVersion},
-			expectedErr:       "",
-			expectedUnknown:   false,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("1.0.0")},
-			expectedErr:       ".*minimal compatible version.*",
-			expectedUnknown:   false,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("10000.0.0")},
-			expectedErr:       ".*maximum compatible version.*",
-			expectedUnknown:   false,
-		},
-	}
-
-	for _, tc := range testCases {
-		isUnknown, err := CheckTiCDCClusterVersion(tc.cdcClusterVersion)
-		require.Equal(t, isUnknown, tc.expectedUnknown)
-		if len(tc.expectedErr) != 0 {
-			require.Regexp(t, tc.expectedErr, err)
-		}
-	}
+	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
 }
 
 func TestCheckPDVersionError(t *testing.T) {
@@ -379,7 +356,74 @@ func TestCheckPDVersionError(t *testing.T) {
 	resp = func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-	require.Contains(t, CheckPDVersion(context.TODO(), ts.URL, nil).Error(),
+	require.Contains(t, checkPDVersion(context.TODO(), ts.URL, nil).Error(),
 		"[CDC:ErrCheckClusterVersionFromPD]failed to request PD 500 Internal Server Error , please try again later",
 	)
+}
+
+func TestCheckTiCDCVersion(t *testing.T) {
+	t.Parallel()
+
+	// all captures in the cluster in the same version which is the minimum supported one.
+	versions := map[string]struct{}{
+		"v6.3.0": {},
+	}
+	require.NoError(t, CheckTiCDCVersion(versions))
+
+	// 2  different versions both within the range, it's ok
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.4.0": {},
+	}
+	require.NoError(t, CheckTiCDCVersion(versions))
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v7.9.9": {},
+	}
+	err := CheckTiCDCVersion(versions)
+	require.NoError(t, err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.4.0": {},
+		"v6.5.0": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, ".*all running cdc instance belong to 3 different versions.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0":       {},
+		"v8.0.0-alpha": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0":        {},
+		"v8.0.0-master": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v8.0.0": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.2.9": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, the minimal compatible version.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0-master": {},
+		"v7.0.0":        {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.NoError(t, err)
 }

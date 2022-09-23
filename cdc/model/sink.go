@@ -269,6 +269,8 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
+	// ReplicatingTs is ts when a table starts replicating events to downstream.
+	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
 // GetCommitTs returns the commit timestamp of this event.
@@ -504,9 +506,9 @@ type RedoDDLEvent struct {
 	Type byte      `msg:"type"`
 }
 
-// FromJob fills the values of DDLEvent from DDL job
+// FromJob fills the values with DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	// populating DDLEvent of a rename tables job is handled in `FromRenameTablesJob()`
+	// populating DDLEvent of an `rename tables` job is handled in `FromRenameTablesJob()`
 	if d.Type == model.ActionRenameTables {
 		return
 	}
@@ -600,14 +602,14 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
+//
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table     *TableName
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
-	ReplicaID uint64
+	Table    *TableName
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
@@ -630,4 +632,9 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
+}
+
+// ToWaitFlush indicates whether to wait flushing after the txn is processed or not.
+func (t *SingleTableTxn) ToWaitFlush() bool {
+	return t.FinishWg != nil
 }

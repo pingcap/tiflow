@@ -15,7 +15,11 @@ package util
 
 import (
 	"net"
+	"net/url"
 	"strings"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // IsValidIPv6AddressFormatInURI reports whether hostPort is a valid IPv6 address in URI.
@@ -60,4 +64,19 @@ func validOptionalPort(port string) bool {
 		}
 	}
 	return true
+}
+
+// MaskSinkURI returns a sink uri that sensitive infos has been masked.
+func MaskSinkURI(uri string) (string, error) {
+	uriParsed, err := url.Parse(uri)
+	if err != nil {
+		log.Error("failed to parse sink URI", zap.Error(err))
+		return "", err
+	}
+	queries := uriParsed.Query()
+	if queries.Has("sasl-password") {
+		queries.Set("sasl-password", "xxxxx")
+		uriParsed.RawQuery = queries.Encode()
+	}
+	return uriParsed.Redacted(), nil
 }

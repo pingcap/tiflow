@@ -14,23 +14,33 @@
 package cli
 
 import (
+	"bytes"
+	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	mock_v1 "github.com/pingcap/tiflow/pkg/api/v1/mock"
+	mock_v2 "github.com/pingcap/tiflow/pkg/api/v2/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestChangefeedQueryCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	cf := mock.NewMockChangefeedInterface(ctrl)
-	f := &mockFactory{changefeeds: cf}
+	cfV1 := mock_v1.NewMockChangefeedInterface(ctrl)
+	cfV2 := mock_v2.NewMockChangefeedInterface(ctrl)
+
+	f := &mockFactory{changefeeds: cfV1, changefeedsv2: cfV2}
+
+	o := newQueryChangefeedOptions()
+	o.complete(f)
 	cmd := newCmdQueryChangefeed(f)
-	cf.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
+
+	cfV1.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -39,9 +49,11 @@ func TestChangefeedQueryCli(t *testing.T) {
 			RunningError:   nil,
 		},
 	}, nil)
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abc"}
-	require.Nil(t, cmd.Execute())
-	cf.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
+
+	o.simplified = true
+	o.changefeedID = "abc"
+	require.Nil(t, o.run(cmd))
+	cfV1.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -50,18 +62,34 @@ func TestChangefeedQueryCli(t *testing.T) {
 			RunningError:   nil,
 		},
 	}, nil)
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abcd"}
-	require.NotNil(t, cmd.Execute())
 
-	cf.EXPECT().List(gomock.Any(), "all").Return(nil, errors.New("test"))
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abcd"}
-	require.NotNil(t, cmd.Execute())
+	o.simplified = true
+	o.changefeedID = "abcd"
+	require.NotNil(t, o.run(cmd))
 
-	cf.EXPECT().Get(gomock.Any(), "bcd").Return(&model.ChangefeedDetail{}, nil)
+	cfV1.EXPECT().List(gomock.Any(), "all").Return(nil, errors.New("test"))
+	o.simplified = true
+	o.changefeedID = "abcd"
+	require.NotNil(t, o.run(cmd))
+
+	// query success
+	cfV1.EXPECT().Get(gomock.Any(), "bcd").Return(&model.ChangefeedDetail{}, nil)
+	cfV2.EXPECT().GetInfo(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{
+		Config: v2.GetDefaultReplicaConfig(),
+	}, nil)
+
+	o.simplified = false
+	o.changefeedID = "bcd"
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+	require.Nil(t, o.run(cmd))
+	out, err := ioutil.ReadAll(b)
+	require.Nil(t, err)
+	// make sure config is printed
+	require.Contains(t, string(out), "config")
+
+	// query failed
+	cfV1.EXPECT().Get(gomock.Any(), "bcd").Return(nil, errors.New("test"))
 	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
-	require.Nil(t, cmd.Execute())
-
-	cf.EXPECT().Get(gomock.Any(), "bcd").Return(nil, errors.New("test"))
-	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
-	require.NotNil(t, cmd.Execute())
+	require.NotNil(t, o.run(cmd))
 }

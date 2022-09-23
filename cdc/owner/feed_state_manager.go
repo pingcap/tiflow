@@ -27,8 +27,8 @@ import (
 
 const (
 	// When errors occurred, and we need to do backoff, we start an exponential backoff
-	// with an interval from 10s to 60min (10s, 20s, 40s, 80s, 160s, 320s,
-	//	 640s, 1280s, 2560s, 3600s, ...).
+	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s,
+	//	 640s, 1280s, 1800s, ...).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
@@ -67,6 +67,8 @@ func newFeedStateManager() *feedStateManager {
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	// MaxElapsedTime=0 means the backoff never stops
+	f.errBackoff.MaxElapsedTime = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -75,13 +77,19 @@ func newFeedStateManager() *feedStateManager {
 }
 
 // newFeedStateManager4Test creates feedStateManager for test
-func newFeedStateManager4Test() *feedStateManager {
+func newFeedStateManager4Test(
+	initialIntervalInMs time.Duration,
+	maxIntervalInMs time.Duration,
+	maxElapsedTimeInMs time.Duration,
+	multiplier float64,
+) *feedStateManager {
 	f := new(feedStateManager)
 
 	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = 200 * time.Millisecond
-	f.errBackoff.MaxInterval = 1600 * time.Millisecond
-	f.errBackoff.Multiplier = 2.0
+	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
+	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
+	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrBackoff()
@@ -141,7 +149,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 		m.shouldBeRunning = false
 		return
 	case model.StateError:
-		if m.state.Info.Error.IsChangefeedNotRetryError() {
+		if m.state.Info.Error.IsChangefeedUnRetryableError() {
 			m.shouldBeRunning = false
 			return
 		}
@@ -190,7 +198,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 	}
 	log.Info("handle admin job",
 		zap.String("namespace", m.state.ID.Namespace),
-		zap.String("changefeed", m.state.ID.ID), zap.Reflect("job", job))
+		zap.String("changefeed", m.state.ID.ID), zap.Any("job", job))
 	switch job.Type {
 	case model.AdminStop:
 		switch m.state.Info.State {
@@ -423,6 +431,24 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 	}
 
+	// we need to patch changefeed unretryable error to the changefeed info,
+	// so we have to iterate all errs here to check wether it is a unretryable
+	// error in errs
+	for _, err := range errs {
+		if err.IsChangefeedUnRetryableError() {
+			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
+				info.Error = err
+				return info, true, nil
+			})
+			m.shouldBeRunning = false
+			m.patchState(model.StateError)
+			return
+		}
+	}
+
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
 			return nil, false, nil
@@ -459,6 +485,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
+		// NextBackOff will never return -1 because the backoff never stops
+		// with `MaxElapsedTime=0`
+		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 

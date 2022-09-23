@@ -15,10 +15,12 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
+	"github.com/pingcap/log"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -50,14 +52,16 @@ func TestJobStore(t *testing.T) {
 	)
 	t.Parallel()
 
-	jobStore := NewJobStore("job_test", mock.NewMetaMock())
+	jobStore := NewJobStore(mock.NewMetaMock(), log.L())
 	key := jobStore.Key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
-	require.Equal(t, keys[0], "job_test")
+	require.Equal(t, keys[0], "")
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{}, StageRunning))
+	require.Error(t, jobStore.UpdateConfig(context.Background(), nil))
+	require.Error(t, jobStore.MarkDeleting(context.Background()))
 
 	state := jobStore.CreateState()
 	require.IsType(t, &Job{}, state)
@@ -78,6 +82,8 @@ func TestJobStore(t *testing.T) {
 	require.Contains(t, job.Tasks, source1)
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source1].Cfg.ModRevision, uint64(0))
+	require.Equal(t, job.Tasks[source2].Cfg.ModRevision, uint64(0))
 
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{"task-not-exist"}, StageRunning))
 	require.Error(t, jobStore.UpdateStages(context.Background(), []string{source1, "task-not-exist"}, StageRunning))
@@ -99,4 +105,49 @@ func TestJobStore(t *testing.T) {
 	job = state.(*Job)
 	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+
+	require.NoError(t, jobStore.UpdateConfig(context.Background(), jobCfg))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t, err)
+	job = state.(*Job)
+	require.Equal(t, job.Tasks[source1].Stage, StagePaused)
+	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
+	require.Equal(t, job.Tasks[source1].Cfg.ModRevision, uint64(1))
+	require.Equal(t, job.Tasks[source2].Cfg.ModRevision, uint64(1))
+	require.False(t, job.Deleting)
+
+	require.NoError(t, jobStore.MarkDeleting(context.Background()))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t, err)
+	job = state.(*Job)
+	require.True(t, job.Deleting)
+
+	require.EqualError(t, jobStore.UpdateStages(context.Background(), []string{source2}, StagePaused), "failed to update stages because job is being deleted")
+	require.EqualError(t, jobStore.UpdateConfig(context.Background(), jobCfg), "failed to update config because job is being deleted")
+
+	require.Len(t, jobStore.UpgradeFuncs(), 0)
+}
+
+func TestTaskStage(t *testing.T) {
+	t.Parallel()
+	for i, s := range typesStringify {
+		ts, ok := toTaskStage[s]
+		require.True(t, ok)
+		bs, err := json.Marshal(ts)
+		require.NoError(t, err)
+		var ts2 TaskStage
+		require.NoError(t, json.Unmarshal(bs, &ts2))
+		require.Equal(t, ts, ts2)
+		require.Equal(t, ts, TaskStage(i))
+	}
+
+	ts := TaskStage(-1)
+	require.Equal(t, "Unknown TaskStage -1", ts.String())
+	ts = TaskStage(1000)
+	require.Equal(t, "Unknown TaskStage 1000", ts.String())
+	bs, err := json.Marshal(ts)
+	require.NoError(t, err)
+	var ts2 TaskStage
+	require.EqualError(t, json.Unmarshal(bs, &ts2), "Unknown TaskStage Unknown TaskStage 1000")
+	require.Equal(t, TaskStage(0), ts2)
 }

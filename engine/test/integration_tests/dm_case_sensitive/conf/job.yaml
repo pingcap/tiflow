@@ -1,0 +1,47 @@
+task-mode: full
+target-database:
+  host: host.docker.internal
+  port: 4000
+  user: root
+  password: ''
+upstreams:
+  - db-config:
+      host: host.docker.internal
+      port: 3306
+      user: root
+      password: ''
+    source-id: mysql-01
+    block-allow-list: global
+    route-rules: [ "global" ]
+    filter-rules: [ "global" ]
+  - db-config:
+      host: host.docker.internal
+      port: 3307
+      user: root
+      password: ''
+    source-id: mysql-02
+    block-allow-list: global
+    route-rules: [ "global" ]
+    filter-rules: [ "global" ]
+block-allow-list:
+  global:
+    do-dbs: [ "Upper_DB*", "lower_db" ]
+    do-tables:
+      - db-name: "Upper_DB*"
+        tbl-name: "Do_Table*"
+      - db-name: "Upper_DB"
+        tbl-name: "lower_table*"
+      - db-name: "lower_db"
+        tbl-name: "Upper_Table*"
+routes:
+  global:
+    schema-pattern: "Upper_DB"
+    table-pattern: "Do_Table"
+    target-schema: "UPPER_DB_ROUTE"
+    target-table: "do_table_route"
+filters:
+  global:
+    schema-pattern: "Upper_DB*"
+    table-pattern: "Do_Table*"
+    events: ["truncate table"]
+    action: Ignore

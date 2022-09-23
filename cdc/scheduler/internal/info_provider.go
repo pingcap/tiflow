@@ -20,6 +20,10 @@ import (
 // InfoProvider is the interface to get information about the internal states of the scheduler.
 // We need this interface so that we can provide the information through HTTP API.
 type InfoProvider interface {
+	// IsInitialized returns a boolean indicates whether the scheduler is
+	// initialized.
+	IsInitialized() bool
+
 	// GetTaskStatuses returns the task statuses.
 	GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error)
 

@@ -14,11 +14,14 @@
 package dm
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -32,15 +35,17 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	status := w.unitHolder.Status(ctx)
 	stage, result := w.unitHolder.Stage()
 	// copy status via json
-	statusBytes, err := json.Marshal(status)
+	mar := jsonpb.Marshaler{EmitDefaults: true}
+	var buf bytes.Buffer
+	err := mar.Marshal(&buf, status.(proto.Message))
 	if err != nil {
 		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
 	return &dmpkg.QueryStatusResponse{
 		Unit:   w.workerType,
 		Stage:  stage,
-		Result: result,
-		Status: statusBytes,
+		Result: dmpkg.NewProcessResultFromPB(result),
+		Status: buf.Bytes(),
 	}
 }
 
@@ -50,7 +55,9 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 	if w.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
-	return w.Exit(ctx, w.workerStatus(), nil)
+
+	workerStatus := w.workerStatus(ctx)
+	return w.Exit(ctx, framework.ExitReasonCanceled, nil, workerStatus.ExtBytes)
 }
 
 // OperateTask implements the api of operate task message.

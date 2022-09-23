@@ -35,18 +35,19 @@ func TestMasterMetadata(t *testing.T) {
 	ctx := context.Background()
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
-	meta := []*frameModel.MasterMetaKVData{
+	defer metaClient.Close()
+	meta := []*frameModel.MasterMeta{
 		{
-			ID: JobManagerUUID,
-			Tp: jobManager,
+			ID:   JobManagerUUID,
+			Type: jobManager,
 		},
 		{
-			ID: "master-1",
-			Tp: fakeJobMaster,
+			ID:   "master-1",
+			Type: fakeJobMaster,
 		},
 		{
-			ID: "master-2",
-			Tp: fakeJobMaster,
+			ID:   "master-2",
+			Type: fakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -59,28 +60,28 @@ func TestMasterMetadata(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, masters, 3)
 	require.Equal(t,
-		&frameModel.MasterMetaKVData{
-			ID: masters[0].ID,
-			Tp: masters[0].Tp,
-		}, &frameModel.MasterMetaKVData{
-			ID: JobManagerUUID,
-			Tp: jobManager,
+		&frameModel.MasterMeta{
+			ID:   masters[0].ID,
+			Type: masters[0].Type,
+		}, &frameModel.MasterMeta{
+			ID:   JobManagerUUID,
+			Type: jobManager,
 		})
 	require.Equal(t,
-		&frameModel.MasterMetaKVData{
-			ID: masters[1].ID,
-			Tp: masters[1].Tp,
-		}, &frameModel.MasterMetaKVData{
-			ID: "master-1",
-			Tp: fakeJobMaster,
+		&frameModel.MasterMeta{
+			ID:   masters[1].ID,
+			Type: masters[1].Type,
+		}, &frameModel.MasterMeta{
+			ID:   "master-1",
+			Type: fakeJobMaster,
 		})
 	require.Equal(t,
-		&frameModel.MasterMetaKVData{
-			ID: masters[2].ID,
-			Tp: masters[2].Tp,
-		}, &frameModel.MasterMetaKVData{
-			ID: "master-2",
-			Tp: fakeJobMaster,
+		&frameModel.MasterMeta{
+			ID:   masters[2].ID,
+			Type: masters[2].Type,
+		}, &frameModel.MasterMeta{
+			ID:   "master-2",
+			Type: fakeJobMaster,
 		})
 }
 
@@ -90,17 +91,18 @@ func TestOperateMasterMetadata(t *testing.T) {
 		ctx   = context.Background()
 		addr1 = "127.0.0.1:10000"
 		addr2 = "127.0.0.1:10001"
-		meta  = &frameModel.MasterMetaKVData{
-			ID:         "master-1",
-			Tp:         fakeJobMaster,
-			Addr:       addr1,
-			StatusCode: frameModel.MasterStatusInit,
+		meta  = &frameModel.MasterMeta{
+			ID:    "master-1",
+			Type:  fakeJobMaster,
+			Addr:  addr1,
+			State: frameModel.MasterStateInit,
 		}
 	)
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
+	defer metaClient.Close()
 
-	loadMeta := func() *frameModel.MasterMetaKVData {
+	loadMeta := func() *frameModel.MasterMeta {
 		cli := NewMasterMetadataClient(meta.ID, metaClient)
 		meta, err := cli.Load(ctx)
 		require.NoError(t, err)
@@ -122,7 +124,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 	require.NoError(t, err)
 	// meta is not found in metastore, load meta will return a new master meta
 	require.Equal(t, "", loadMeta().Addr)
-	require.Equal(t, frameModel.MasterStatusUninit, loadMeta().StatusCode)
+	require.Equal(t, frameModel.MasterStateUninit, loadMeta().State)
 }
 
 func TestLoadAllWorkers(t *testing.T) {
@@ -130,34 +132,35 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
-	workerMetaClient := NewWorkerMetadataClient("master-1", metaClient)
+	defer metaClient.Close()
+	workerMetaClient := NewWorkerStatusClient("master-1", metaClient)
 
 	// Using context.Background() since there is no risk that
 	// the mock KV might time out.
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-1",
-		Code:         frameModel.WorkerStatusInit,
-		ErrorMessage: "test-1",
-		ExtBytes:     []byte("ext-bytes-1"),
+		JobID:    "master-1",
+		ID:       "worker-1",
+		State:    frameModel.WorkerStateInit,
+		ErrorMsg: "test-1",
+		ExtBytes: []byte("ext-bytes-1"),
 	})
 	require.NoError(t, err)
 
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-2",
-		Code:         frameModel.WorkerStatusNormal,
-		ErrorMessage: "test-2",
-		ExtBytes:     []byte("ext-bytes-2"),
+		JobID:    "master-1",
+		ID:       "worker-2",
+		State:    frameModel.WorkerStateNormal,
+		ErrorMsg: "test-2",
+		ExtBytes: []byte("ext-bytes-2"),
 	})
 	require.NoError(t, err)
 
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-3",
-		Code:         frameModel.WorkerStatusFinished,
-		ErrorMessage: "test-3",
-		ExtBytes:     []byte("ext-bytes-3"),
+		JobID:    "master-1",
+		ID:       "worker-3",
+		State:    frameModel.WorkerStateFinished,
+		ErrorMsg: "test-3",
+		ExtBytes: []byte("ext-bytes-3"),
 	})
 	require.NoError(t, err)
 
@@ -167,36 +170,36 @@ func TestLoadAllWorkers(t *testing.T) {
 	require.Equal(t,
 		map[frameModel.WorkerID]*frameModel.WorkerStatus{
 			"worker-1": {
-				Code:         frameModel.WorkerStatusInit,
-				ErrorMessage: "test-1",
-				ExtBytes:     []byte("ext-bytes-1"),
+				State:    frameModel.WorkerStateInit,
+				ErrorMsg: "test-1",
+				ExtBytes: []byte("ext-bytes-1"),
 			},
 			"worker-2": {
-				Code:         frameModel.WorkerStatusNormal,
-				ErrorMessage: "test-2",
-				ExtBytes:     []byte("ext-bytes-2"),
+				State:    frameModel.WorkerStateNormal,
+				ErrorMsg: "test-2",
+				ExtBytes: []byte("ext-bytes-2"),
 			},
 			"worker-3": {
-				Code:         frameModel.WorkerStatusFinished,
-				ErrorMessage: "test-3",
-				ExtBytes:     []byte("ext-bytes-3"),
+				State:    frameModel.WorkerStateFinished,
+				ErrorMsg: "test-3",
+				ExtBytes: []byte("ext-bytes-3"),
 			},
 		},
 		map[frameModel.WorkerID]*frameModel.WorkerStatus{
 			workerStatuses["worker-1"].ID: {
-				Code:         workerStatuses["worker-1"].Code,
-				ErrorMessage: workerStatuses["worker-1"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-1"].ExtBytes,
+				State:    workerStatuses["worker-1"].State,
+				ErrorMsg: workerStatuses["worker-1"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-1"].ExtBytes,
 			},
 			workerStatuses["worker-2"].ID: {
-				Code:         workerStatuses["worker-2"].Code,
-				ErrorMessage: workerStatuses["worker-2"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-2"].ExtBytes,
+				State:    workerStatuses["worker-2"].State,
+				ErrorMsg: workerStatuses["worker-2"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-2"].ExtBytes,
 			},
 			workerStatuses["worker-3"].ID: {
-				Code:         workerStatuses["worker-3"].Code,
-				ErrorMessage: workerStatuses["worker-3"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-3"].ExtBytes,
+				State:    workerStatuses["worker-3"].State,
+				ErrorMsg: workerStatuses["worker-3"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-3"].ExtBytes,
 			},
 		},
 	)

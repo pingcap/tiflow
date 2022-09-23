@@ -52,24 +52,24 @@ func (mr *MockCaptureMockRecorder) AsyncClose() *gomock.Call {
 }
 
 // Drain mocks base method.
-func (m *MockCapture) Drain(ctx context.Context) <-chan struct{} {
+func (m *MockCapture) Drain() <-chan struct{} {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Drain", ctx)
+	ret := m.ctrl.Call(m, "Drain")
 	ret0, _ := ret[0].(<-chan struct{})
 	return ret0
 }
 
 // Drain indicates an expected call of Drain.
-func (mr *MockCaptureMockRecorder) Drain(ctx interface{}) *gomock.Call {
+func (mr *MockCaptureMockRecorder) Drain() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Drain", reflect.TypeOf((*MockCapture)(nil).Drain), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Drain", reflect.TypeOf((*MockCapture)(nil).Drain))
 }
 
 // GetEtcdClient mocks base method.
-func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClientForAPI {
+func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEtcdClient")
-	ret0, _ := ret[0].(etcd.CDCEtcdClientForAPI)
+	ret0, _ := ret[0].(etcd.CDCEtcdClient)
 	return ret0
 }
 

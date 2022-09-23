@@ -34,7 +34,7 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
+	commandTpUnknown commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
 	// Query the number of tables in the manager.
@@ -59,19 +59,31 @@ type Manager interface {
 
 // managerImpl is a manager of processor, which maintains the state and behavior of processors
 type managerImpl struct {
+	captureInfo     *model.CaptureInfo
 	liveness        *model.Liveness
 	processors      map[model.ChangeFeedID]*processor
 	commandQueue    chan *command
 	upstreamManager *upstream.Manager
 
-	newProcessor func(cdcContext.Context, *upstream.Upstream, *model.Liveness) *processor
+	newProcessor func(
+		*orchestrator.ChangefeedReactorState,
+		*model.CaptureInfo,
+		model.ChangeFeedID,
+		*upstream.Upstream,
+		*model.Liveness,
+	) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
 }
 
 // NewManager creates a new processor manager
-func NewManager(upstreamManager *upstream.Manager, liveness *model.Liveness) Manager {
+func NewManager(
+	captureInfo *model.CaptureInfo,
+	upstreamManager *upstream.Manager,
+	liveness *model.Liveness,
+) Manager {
 	return &managerImpl{
+		captureInfo:                  captureInfo,
 		liveness:                     liveness,
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
@@ -91,30 +103,29 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		return state, err
 	}
 
-	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active(captureID) {
+		if !changefeedState.Active(m.captureInfo.ID) {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
+		}
+		p, exist := m.processors[changefeedID]
+		if !exist {
+			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
+				up = m.upstreamManager.AddUpstream(upstreamInfo)
+			}
+			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
+			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
-		processor, exist := m.processors[changefeedID]
-		if !exist {
-			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
-			if !ok {
-				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
-				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
-			}
-			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx, up, m.liveness)
-			m.processors[changefeedID] = processor
-		}
-		if _, err := processor.Tick(ctx, changefeedState); err != nil {
+		if err := p.Tick(ctx); err != nil {
 			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue
@@ -141,14 +152,14 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		startTime := time.Now()
-		captureID := processor.captureInfo.ID
 		err := processor.Close()
 		costTime := time.Since(startTime)
 		if costTime > processorLogsWarnDuration {
 			log.Warn("processor close took too long",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
-				zap.String("capture", captureID), zap.Duration("duration", costTime))
+				zap.String("capture", m.captureInfo.ID),
+				zap.Duration("duration", costTime))
 		}
 		m.metricProcessorCloseDuration.Observe(costTime.Seconds())
 		if err != nil {

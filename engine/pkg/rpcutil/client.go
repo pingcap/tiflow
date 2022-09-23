@@ -19,10 +19,11 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 const defaultDialRetry = 3
@@ -203,7 +204,18 @@ func DoFailoverRPC[
 		return resp, errors.ErrNoRPCClient.GenWithStack("rpc: %#v, request: %#v", rpc, req)
 	}
 
-	for _, cli := range clients.clients {
+	// As long as len(clients.clients) > 0, leaderCli is impossible to be nil.
+	leaderCli := clients.GetLeaderClient()
+	resp, err = rpc(leaderCli, ctx, req)
+	if err == nil {
+		return resp, nil
+	}
+
+	for k, cli := range clients.clients {
+		// Skip the leader since we've already tried it.
+		if k == clients.leader {
+			continue
+		}
 		resp, err = rpc(cli.client, ctx, req)
 		if err == nil {
 			return resp, nil

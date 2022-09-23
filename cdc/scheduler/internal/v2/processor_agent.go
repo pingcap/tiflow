@@ -50,7 +50,7 @@ type agentImpl struct {
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
 	ownerRevision  int64
-	etcdClient     *etcd.CDCEtcdClient
+	etcdClient     etcd.CDCEtcdClient
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -68,7 +68,7 @@ func NewAgent(
 	ctx context.Context,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor internal.TableExecutor,
 	changeFeedID model.ChangeFeedID,
 ) (retVal internal.Agent, err error) {
@@ -159,7 +159,7 @@ func NewAgent(
 	return ret, nil
 }
 
-func (a *agentImpl) Tick(ctx context.Context, liveness model.Liveness) error {
+func (a *agentImpl) Tick(ctx context.Context) error {
 	for _, errCh := range a.handlerErrChs {
 		select {
 		case <-ctx.Done():

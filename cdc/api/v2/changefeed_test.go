@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -50,7 +51,7 @@ func TestCreateChangefeed(t *testing.T) {
 	pdClient := &mockPDClient{}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
@@ -211,6 +212,8 @@ func TestCreateChangefeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, cfConfig.ID, resp.ID)
+	mysqlSink, err = util.MaskSinkURI(mysqlSink)
+	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
 	require.Equal(t, http.StatusCreated, w.Code)
 }
@@ -276,7 +279,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	// case 4: changefeed stopped, but get upstream failed: not found
 	oldCfInfo.UpstreamID = 100
 	oldCfInfo.State = "stopped"
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
@@ -331,10 +334,17 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).AnyTimes()
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		AnyTimes()
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
+	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+		CheckpointTs: 1,
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
 		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
@@ -347,7 +357,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 7: update transaction failed
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().
@@ -366,7 +376,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 8: success
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().
@@ -546,7 +556,7 @@ func TestResumeChangefeed(t *testing.T) {
 	router := newRouter(apiV2)
 
 	pdClient := &mockPDClient{}
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 

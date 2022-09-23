@@ -19,19 +19,21 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
@@ -89,26 +91,36 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.processMu.Lock()
 	defer u.processMu.Unlock()
 
-	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
-	switch u.tp {
-	case framework.WorkerDMDump:
-		u.unit = dumpling.NewDumpling(u.cfg)
-	case framework.WorkerDMLoad:
-		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
-	case framework.WorkerDMSync:
-		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
-	}
-
 	var err error
-	if err = u.unit.Init(ctx); err != nil {
+	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
+	if err != nil {
 		return err
 	}
-
 	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
 		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
 	)
-	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
-	if err != nil {
+
+	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
+	switch u.tp {
+	case frameModel.WorkerDMDump:
+		u.unit = dumpling.NewDumpling(u.cfg)
+	case frameModel.WorkerDMLoad:
+		sqlMode, err2 := utils.GetGlobalVariable(ctx, u.upstreamDB.DB, "sql_mode")
+		if err2 != nil {
+			u.logger.Error("get global sql_mode from upstream failed",
+				zap.String("db", u.cfg.From.Host),
+				zap.Int("port", u.cfg.From.Port),
+				zap.String("user", u.cfg.From.User),
+				zap.Error(err))
+			return err2
+		}
+		u.cfg.LoaderConfig.SQLMode = sqlMode
+		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
+	case frameModel.WorkerDMSync:
+		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
+	}
+
+	if err = u.unit.Init(ctx); err != nil {
 		return err
 	}
 
@@ -133,7 +145,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 
 	stage, _ := u.Stage()
 	if stage != metadata.StageRunning && stage != metadata.StageError {
-		return errors.Errorf("failed to pause unit with stage %d", stage)
+		return errors.Errorf("failed to pause unit with stage %s", stage)
 	}
 
 	// cancel process
@@ -153,7 +165,7 @@ func (u *unitHolderImpl) Resume(ctx context.Context) error {
 
 	stage, _ := u.Stage()
 	if stage != metadata.StagePaused && stage != metadata.StageError {
-		return errors.Errorf("failed to resume unit with stage %d", stage)
+		return errors.Errorf("failed to resume unit with stage %s", stage)
 	}
 
 	runCtx, runCancel := context.WithCancel(context.Background())
@@ -230,7 +242,7 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 		u.cfg.Flavor,
 	)
 	if err != nil {
-		u.logger.Error("failed to get source status", zap.Error(err))
+		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
 	u.sourceStatusMu.Lock()
 	u.sourceStatus = sourceStatus
@@ -279,7 +291,7 @@ func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSche
 
 	stage, _ := u.Stage()
 	if (stage != metadata.StagePaused && stage != metadata.StageError) && req.Op != pb.SchemaOp_ListMigrateTargets {
-		return "", errors.Errorf("current stage is %d but not paused, invalid", stage)
+		return "", errors.Errorf("current stage is %s but not paused, invalid", stage)
 	}
 
 	return syncUnit.OperateSchema(ctx, (*pb.OperateWorkerSchemaRequest)(req))

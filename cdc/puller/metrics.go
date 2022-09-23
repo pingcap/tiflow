@@ -18,13 +18,6 @@ import (
 )
 
 var (
-	kvEventCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "kv_event_count",
-			Help:      "The number of events received from kv client event channel",
-		}, []string{"namespace", "changefeed", "type"})
 	txnCollectCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -62,14 +55,21 @@ var (
 			Help:      "Puller event channel size",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
 		}, []string{"namespace", "changefeed"})
+	discardedDDLCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "discarded_ddl_count",
+			Help:      "The total count of ddl job that are discarded in ddl puller.",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(kvEventCounter)
 	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(pullerResolvedTsGauge)
 	registry.MustRegister(memBufferSizeGauge)
 	registry.MustRegister(outputChanSizeHistogram)
 	registry.MustRegister(eventChanSizeHistogram)
+	registry.MustRegister(discardedDDLCounter)
 }

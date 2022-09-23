@@ -24,18 +24,26 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/executor/server"
+	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/executor/server"
-	"github.com/pingcap/tiflow/engine/executor/worker"
-	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func init() {
@@ -52,7 +60,7 @@ func TestStartTCPSrv(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
@@ -111,7 +119,7 @@ func TestCollectMetric(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
@@ -142,12 +150,12 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 }
 
 type registerExecutorReturnValue struct {
-	resp *pb.RegisterExecutorResponse
-	err  error
+	executor *pb.Executor
+	err      error
 }
 
 type mockRegisterMasterClient struct {
-	client.MasterClient
+	client.ServerMasterClient
 	respChan chan *registerExecutorReturnValue
 }
 
@@ -158,10 +166,13 @@ func newMockRegisterMasterClient(chanBufferSize int) *mockRegisterMasterClient {
 }
 
 func (c *mockRegisterMasterClient) RegisterExecutor(
-	ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration,
-) (resp *pb.RegisterExecutorResponse, err error) {
+	ctx context.Context, req *pb.RegisterExecutorRequest,
+) (nodeID model.ExecutorID, err error) {
 	value := <-c.respChan
-	return value.resp, value.err
+	if value.err != nil {
+		return "", value.err
+	}
+	return model.ExecutorID(value.executor.Id), nil
 }
 
 func TestSelfRegister(t *testing.T) {
@@ -186,13 +197,8 @@ func TestSelfRegister(t *testing.T) {
 	executorID := uuid.NewGenerator().NewString()
 	returnValues := []*registerExecutorReturnValue{
 		{
-			&pb.RegisterExecutorResponse{
-				Err: &pb.Error{Code: pb.ErrorCode_MasterNotReady},
-			}, nil,
-		},
-		{
-			&pb.RegisterExecutorResponse{
-				ExecutorId: executorID,
+			&pb.Executor{
+				Id: executorID,
 			}, nil,
 		},
 	}
@@ -201,7 +207,7 @@ func TestSelfRegister(t *testing.T) {
 	}
 	err = s.selfRegister(ctx)
 	require.NoError(t, err)
-	require.Equal(t, executorID, string(s.info.ID))
+	require.Equal(t, executorID, string(s.selfID))
 }
 
 func TestRPCCallBeforeInitialized(t *testing.T) {
@@ -216,4 +222,85 @@ func TestRPCCallBeforeInitialized(t *testing.T) {
 	_, err = svr.ConfirmDispatchTask(context.Background(), &pb.ConfirmDispatchTaskRequest{})
 	require.Error(t, err)
 	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
+}
+
+func TestConvertMakeTaskError(t *testing.T) {
+	t.Parallel()
+
+	register := registry.NewRegistry()
+	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
+		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	testCases := []struct {
+		err         error
+		isRetryable bool
+	}{
+		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
+		{errors.New("normal error"), true},
+	}
+
+	for _, tc := range testCases {
+		err := convertMakeTaskErrorToRPCError(register, tc.err, frameModel.FakeJobMaster)
+		require.Error(t, err)
+		errIn := rpcerror.FromGRPCError(err)
+		if tc.isRetryable {
+			require.True(t, client.ErrCreateWorkerNonTerminate.Is(errIn))
+		} else {
+			require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
+		}
+	}
+}
+
+func TestPrecheckMasterMeta(t *testing.T) {
+	t.Parallel()
+
+	register := registry.NewRegistry()
+	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
+		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+	require.True(t, ok)
+
+	ormCli, err := pkgOrm.NewMockClient()
+	require.NoError(t, err)
+
+	masterID := "precheck-master-id"
+	dp := deps.NewDeps()
+	err = dp.Provide(func() pkgOrm.Client {
+		return ormCli
+	})
+	require.NoError(t, err)
+
+	ctx := dcontext.Background().WithDeps(dp)
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		ID:        masterID,
+		Type:      frameModel.FakeJobMaster,
+		State:     frameModel.MasterStateUninit,
+	}
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	// normal master meta, no error message
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.NoError(t, err)
+
+	// failover on retryable error
+	masterMeta.State = frameModel.MasterStateInit
+	masterMeta.ErrorMsg = "normal error"
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.NoError(t, err)
+
+	// no retry on unretryable error
+	fakeJobErr := fake.NewJobUnRetryableError(errors.New("inner error"))
+	masterMeta.ErrorMsg = fakeJobErr.Error()
+	err = ormCli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+	err = precheckMasterMeta(ctx, register, masterID, frameModel.FakeJobMaster)
+	require.Error(t, err)
+	require.EqualError(t, err, fakeJobErr.Error())
+	err = convertMakeTaskErrorToRPCError(register, err, frameModel.FakeJobMaster)
+	errIn := rpcerror.FromGRPCError(err)
+	require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
 }

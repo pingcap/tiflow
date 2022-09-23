@@ -47,7 +47,7 @@ type WorkerManager struct {
 	workerEntries map[frameModel.WorkerID]*workerEntry
 	state         workerManagerState
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	messageSender    p2p.MessageSender
 
 	masterID frameModel.MasterID
@@ -103,7 +103,7 @@ func NewWorkerManager(
 		workerEntries: make(map[frameModel.WorkerID]*workerEntry),
 		state:         state,
 
-		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+		workerMetaClient: metadata.NewWorkerStatusClient(masterID, meta),
 		messageSender:    messageSender,
 
 		masterID: masterID,
@@ -171,7 +171,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	for workerID, status := range allPersistedWorkers {
 		entry := newWaitingWorkerEntry(workerID, status)
 		// TODO: refine mapping from worker status to worker entry state
-		if status.Code == frameModel.WorkerStatusFinished {
+		if status.State == frameModel.WorkerStateFinished {
 			continue
 		}
 		m.workerEntries[workerID] = entry
@@ -234,6 +234,11 @@ func (m *WorkerManager) HandleHeartbeat(msg *frameModel.HeartbeatPingMessage, fr
 			zap.String("master-id", m.masterID),
 			zap.Any("message", msg),
 			zap.String("from-node", fromNode))
+		return
+	}
+
+	epoch := entry.Status().Epoch
+	if !m.checkWorkerEpochMatch(epoch, msg.WorkerEpoch) {
 		return
 	}
 
@@ -341,7 +346,9 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 
 // BeforeStartingWorker is called by the BaseMaster BEFORE the executor runs the worker,
 // but after the executor records the time at which the worker is submitted.
-func (m *WorkerManager) BeforeStartingWorker(workerID frameModel.WorkerID, executorID model.ExecutorID) {
+func (m *WorkerManager) BeforeStartingWorker(
+	workerID frameModel.WorkerID, executorID model.ExecutorID, epoch frameModel.Epoch,
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -355,8 +362,10 @@ func (m *WorkerManager) BeforeStartingWorker(workerID frameModel.WorkerID, execu
 		m.nextExpireTime(),
 		workerEntryCreated,
 		&frameModel.WorkerStatus{
-			Code: frameModel.WorkerStatusCreated,
-		})
+			State: frameModel.WorkerStateCreated,
+			Epoch: epoch,
+		},
+	)
 }
 
 // AbortCreatingWorker is called by BaseMaster if starting the worker has failed for sure.
@@ -495,11 +504,13 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 
 		var offlineError error
 		if status := entry.Status(); status != nil {
-			switch status.Code {
-			case frameModel.WorkerStatusFinished:
+			switch status.State {
+			case frameModel.WorkerStateFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case frameModel.WorkerStatusStopped:
-				offlineError = derror.ErrWorkerStop.FastGenByArgs()
+			case frameModel.WorkerStateStopped:
+				offlineError = derror.ErrWorkerCancel.FastGenByArgs()
+			case frameModel.WorkerStateError:
+				offlineError = derror.ErrWorkerFailed.FastGenByArgs()
 			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
 			}
@@ -564,6 +575,25 @@ func (m *WorkerManager) checkMasterEpochMatch(msgEpoch frameModel.Epoch) (ok boo
 			zap.String("master-id", m.masterID),
 			zap.Int64("msg-epoch", msgEpoch),
 			zap.Int64("own-epoch", m.epoch))
+		return false
+	}
+	return true
+}
+
+func (m *WorkerManager) checkWorkerEpochMatch(curEpoch, msgEpoch frameModel.Epoch) bool {
+	if msgEpoch > curEpoch {
+		log.Panic("We are a stale master still running",
+			zap.String("master-id", m.masterID), zap.Int64("own-epoch", m.epoch),
+			zap.Int64("own-worker-epoch", curEpoch),
+			zap.Int64("msg-worker-epoch", msgEpoch),
+		)
+	}
+	if msgEpoch < curEpoch {
+		log.Info("Message from small worker epoch dropped",
+			zap.String("master-id", m.masterID),
+			zap.Int64("own-worker-epoch", curEpoch),
+			zap.Int64("msg-worker-epoch", msgEpoch),
+		)
 		return false
 	}
 	return true

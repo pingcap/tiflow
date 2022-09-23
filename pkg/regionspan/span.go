@@ -19,12 +19,21 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
+
+const (
+	// JobTableID is the id of `tidb_ddl_job`.
+	JobTableID = ddl.JobTableID
+)
+
+// UpperBoundKey represents the maximum value.
+var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
 // Span represents an arbitrary kv range
 type Span struct {
@@ -37,8 +46,19 @@ func (s Span) String() string {
 	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
 }
 
-// UpperBoundKey represents the maximum value.
-var UpperBoundKey = []byte{255, 255, 255, 255, 255}
+func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
+	start = originStart
+	end = originEnd
+
+	if start == nil {
+		start = []byte{}
+	}
+
+	if end == nil {
+		end = UpperBoundKey
+	}
+	return
+}
 
 // ComparableSpan represents an arbitrary kv range which is comparable
 type ComparableSpan Span
@@ -54,39 +74,12 @@ func (s ComparableSpan) Hack() ComparableSpan {
 	return s
 }
 
-// Clone clones a ComparableSpan
-func (s ComparableSpan) Clone() ComparableSpan {
-	return ComparableSpan{
-		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
-		End:   append(make([]byte, 0, len(s.End)), s.End...),
-	}
-}
-
-// Hack will set End as UpperBoundKey if End is Nil.
-func (s Span) Hack() Span {
-	s.Start, s.End = hackSpan(s.Start, s.End)
-	return s
-}
-
-func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
-	start = originStart
-	end = originEnd
-
-	if originStart == nil {
-		start = []byte{}
-	}
-
-	if originEnd == nil {
-		end = UpperBoundKey
-	}
-	return
-}
-
 // GetTableSpan returns the span to watch for the specified table
 func GetTableSpan(tableID int64) Span {
+	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	sep := byte('_')
 	recordMarker := byte('r')
-	tablePrefix := tablecodec.GenTablePrefix(tableID)
+
 	var start, end kv.Key
 	// ignore index keys.
 	start = append(tablePrefix, sep, recordMarker)
@@ -109,7 +102,7 @@ func getAddIndexDDLSpan() Span {
 
 // GetAllDDLSpan return all cdc interested spans for DDL.
 func GetAllDDLSpan() []Span {
-	return []Span{getDDLSpan(), getAddIndexDDLSpan()}
+	return []Span{getDDLSpan(), getAddIndexDDLSpan(), GetTableSpan(JobTableID)}
 }
 
 func getMetaListKey(key string) Span {
@@ -129,16 +122,6 @@ func getMetaListKey(key string) Span {
 	}
 }
 
-// KeyInSpans check if k in the range of spans.
-func KeyInSpans(k []byte, spans []ComparableSpan) bool {
-	for _, span := range spans {
-		if KeyInSpan(k, span) {
-			return true
-		}
-	}
-	return false
-}
-
 // KeyInSpan check if k in the span range.
 func KeyInSpan(k []byte, span ComparableSpan) bool {
 	if StartCompare(k, span.Start) >= 0 &&
@@ -150,13 +133,14 @@ func KeyInSpan(k []byte, span ComparableSpan) bool {
 }
 
 // StartCompare compares two start keys.
-// Nil means Negative infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
 	}
 
+	// Nil means Negative infinity.
+	// It's difference with EndCompare.
 	if lhs == nil {
 		return -1
 	}
@@ -169,13 +153,14 @@ func StartCompare(lhs []byte, rhs []byte) int {
 }
 
 // EndCompare compares two end keys.
-// Nil means Positive infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func EndCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
 	}
 
+	// Nil means Positive infinity.
+	// It's difference with StartCompare.
 	if lhs == nil {
 		return 1
 	}
@@ -187,7 +172,7 @@ func EndCompare(lhs []byte, rhs []byte) int {
 	return bytes.Compare(lhs, rhs)
 }
 
-// Intersect return the intersect part of lhs and rhs span.
+// Intersect return to intersect part of lhs and rhs span.
 // Return error if there's no intersect part
 func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
@@ -224,7 +209,8 @@ func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	return false
 }
 
-// ToComparableSpan returns a memcomparable span
+// ToComparableSpan returns a memcomparable span.
+// See: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format
 func ToComparableSpan(span Span) ComparableSpan {
 	return ComparableSpan{
 		Start: codec.EncodeBytes(nil, span.Start),

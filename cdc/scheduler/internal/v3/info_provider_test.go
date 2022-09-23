@@ -18,8 +18,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -31,13 +32,13 @@ func TestInfoProvider(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	coord.captureM.Captures = map[model.CaptureID]*CaptureStatus{
-		"a": {Tables: []schedulepb.TableStatus{{
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
+		"a": {Tables: []tablepb.TableStatus{{
 			TableID:    1,
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}, {
 			TableID:    2,
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}}},
 		"b": {},
 	}
@@ -58,4 +59,31 @@ func TestInfoProvider(t *testing.T) {
 	require.Len(t, pos, 2)
 	require.Len(t, ip.GetTotalTableCounts(), 2)
 	require.Empty(t, ip.GetPendingTableCounts())
+}
+
+func TestInfoProviderIsInitialized(t *testing.T) {
+	t.Parallel()
+
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
+	var ip internal.InfoProvider = coord
+
+	// Has not initialized yet.
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateUninitialized},
+		"b": {State: member.CaptureStateInitialized},
+	}
+	require.False(t, ip.IsInitialized())
+	// Has not initialized yet.
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateInitialized},
+		"b": {State: member.CaptureStateInitialized},
+	}
+	require.False(t, ip.IsInitialized())
+
+	// SetInitializedForTests
+	coord.captureM.SetInitializedForTests(true)
+	require.True(t, ip.IsInitialized())
 }

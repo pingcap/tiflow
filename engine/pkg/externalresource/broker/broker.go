@@ -17,23 +17,23 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/status"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to
 // the resource manager (which is part of the Servermaster).
-type ResourceManagerClient = *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+type ResourceManagerClient = client.ResourceManagerClient
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
@@ -50,6 +50,10 @@ func NewBroker(
 	executorID resModel.ExecutorID,
 	client ResourceManagerClient,
 ) *DefaultBroker {
+	log.Info("Create new resource broker",
+		zap.String("executor-id", string(executorID)),
+		zap.Any("config", config))
+
 	fm := NewLocalFileManager(config.Local)
 	return &DefaultBroker{
 		config:      config,
@@ -182,12 +186,13 @@ func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (*resModel.ResourceMeta, bool, error) {
-	resp, err := rpcutil.DoFailoverRPC(
-		ctx,
-		b.client,
-		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: resourceKey.JobID, ResourceId: resourceKey.ID}},
-		pb.ResourceManagerClient.QueryResource,
-	)
+	request := &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId:      resourceKey.JobID,
+			ResourceId: resourceKey.ID,
+		},
+	}
+	resp, err := b.client.QueryResource(ctx, request)
 	if err == nil {
 		return &resModel.ResourceMeta{
 			ID:       resourceKey.ID,
@@ -198,14 +203,13 @@ func (b *DefaultBroker) checkForExistingResource(
 		}, true, nil
 	}
 
-	// TODO perhaps we need a grpcutil package to put all this stuff?
-	st, ok := status.FromError(err)
+	code, ok := rpcerror.GRPCStatusCode(err)
 	if !ok {
 		// If the error is not derived from a grpc status, we should throw it.
 		return nil, false, errors.Trace(err)
 	}
 
-	switch st.Code() {
+	switch code {
 	case codes.NotFound:
 		// Indicates that there is no existing resource with the same name.
 		return nil, false, nil

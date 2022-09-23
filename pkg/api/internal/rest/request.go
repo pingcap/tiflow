@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -204,8 +205,8 @@ func (r *Request) WithMaxRetries(maxRetries uint64) *Request {
 
 // WithBody makes http request use obj as its body.
 // only supports two types now:
-//   1. io.Reader
-//   2. type which can be json marshalled
+//  1. io.Reader
+//  2. type which can be json marshalled
 func (r *Request) WithBody(obj interface{}) *Request {
 	if r.err != nil {
 		return r
@@ -359,6 +360,12 @@ func (r *Request) checkResponse(resp *http.Response) *Result {
 		err := json.Unmarshal(body, &jsonErr)
 		if err == nil {
 			err = errors.New(jsonErr.Error)
+		} else {
+			err = fmt.Errorf(
+				"call cdc api failed, url=%s, "+
+					"code=%d, contentType=%s, response=%s",
+				r.URL().String(),
+				resp.StatusCode, contentType, string(body))
 		}
 
 		return &Result{

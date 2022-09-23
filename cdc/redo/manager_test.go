@@ -22,7 +22,11 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -288,25 +292,131 @@ func TestManagerRtsMap(t *testing.T) {
 
 	// Remove a table.
 	logMgr.RemoveTable(model.TableID(1))
-	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 1, len(tables))
-	require.Equal(t, uint64(20), minTs)
-	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
+	// Add the table back, GetMinResolvedTs can regress.
+	logMgr.AddTable(model.TableID(1), model.Ts(10))
+	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
+
 	// Received some timestamps, some tables may not be updated.
-	logMgr.AddTable(model.TableID(3), model.Ts(20))
-	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
+	logMgr.onResolvedTsMsg(model.TableID(1), model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
 	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
-	// GetMinResolvedTs can never regress.
+	// Remove all tables.
+	logMgr.RemoveTable(model.TableID(1))
 	logMgr.RemoveTable(model.TableID(2))
-	logMgr.RemoveTable(model.TableID(3))
-	tables, minTs = logMgr.prepareForFlush()
-	logMgr.postFlush(tables, minTs)
-	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
+	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
+}
+
+// TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
+func TestManagerError(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "blackhole://",
+	}
+
+	errCh := make(chan error, 1)
+	opts := newMockManagerOptions(errCh)
+	opts.EnableBgRunner = false
+	opts.EnableGCRunner = false
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
+	logMgr.logBuffer = chann.New[cacheEvents]()
+	go logMgr.bgUpdateLog(ctx, errCh)
+
+	testCases := []struct {
+		tableID model.TableID
+		rows    []*model.RowChangedEvent
+	}{
+		{
+			tableID: 53,
+			rows: []*model.RowChangedEvent{
+				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
+				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
+				{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		require.Nil(t, err)
+	}
+
+	// bgUpdateLog exists because of writer.WriteLog failure.
+	select {
+	case <-ctx.Done():
+		t.Fatal("bgUpdateLog should return error before context is done")
+	case err := <-errCh:
+		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*WriteLog.*", err)
+	}
+
+	logMgr, err = NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
+	logMgr.logBuffer = chann.New[cacheEvents]()
+	go logMgr.bgUpdateLog(ctx, errCh)
+
+	// bgUpdateLog exists because of writer.FlushLog failure.
+	select {
+	case <-ctx.Done():
+		t.Fatal("bgUpdateLog should return error before context is done")
+	case err := <-errCh:
+		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*FlushLog.*", err)
+	}
+}
+
+func TestReuseWritter(t *testing.T) {
+	ctxs := make([]context.Context, 0, 2)
+	cancels := make([]func(), 0, 2)
+	mgrs := make([]*ManagerImpl, 0, 2)
+
+	dir := t.TempDir()
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "local://" + dir,
+	}
+
+	errCh := make(chan error, 1)
+	opts := newMockManagerOptions(errCh)
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		ctx = contextutil.PutChangefeedIDInCtx(ctx, model.ChangeFeedID{
+			Namespace: "default", ID: "test-reuse-writter",
+		})
+		mgr, err := NewManager(ctx, cfg, opts)
+		require.Nil(t, err)
+
+		ctxs = append(ctxs, ctx)
+		cancels = append(cancels, cancel)
+		mgrs = append(mgrs, mgr)
+	}
+
+	// Cancel one redo manager and wait for a while.
+	cancels[0]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	// The another redo manager shouldn't be influenced.
+	mgrs[1].flushLog(ctxs[1], func(err error) { opts.ErrCh <- err })
+	select {
+	case x := <-errCh:
+		log.Panic("shouldn't get an error", zap.Error(x))
+	case <-time.NewTicker(time.Duration(100) * time.Millisecond).C:
+	}
+
+	// After the manager is closed, APIs can return errors instead of panic.
+	cancels[1]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	err := mgrs[1].UpdateResolvedTs(context.Background(), 1, 1)
+	require.Error(t, err)
 }

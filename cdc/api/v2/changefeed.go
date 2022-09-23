@@ -26,8 +26,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -126,7 +128,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusCreated, toAPIModel(info))
+	c.JSON(http.StatusCreated, toAPIModel(info, true))
 }
 
 // verifyTable verify table, return ineligibleTables and EligibleTables.
@@ -202,6 +204,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
+	cfStatus, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	upInfo, err := h.capture.GetEtcdClient().
 		GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
@@ -210,7 +218,6 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	}
 
 	updateCfConfig := &ChangefeedConfig{}
-	updateCfConfig.SyncPointEnabled = cfInfo.SyncPointEnabled
 	updateCfConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
 	if err = c.BindJSON(updateCfConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
@@ -226,8 +233,28 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
+	var pdAddrs []string
+	var credentials *security.Credential
+	if upInfo != nil {
+		pdAddrs = strings.Split(upInfo.PDEndpoints, ",")
+		credentials = &security.Credential{
+			CAPath:        upInfo.CAPath,
+			CertPath:      upInfo.CertPath,
+			KeyPath:       upInfo.KeyPath,
+			CertAllowedCN: upInfo.CertAllowedCN,
+		}
+	}
+	if len(updateCfConfig.PDAddrs) != 0 {
+		pdAddrs = updateCfConfig.PDAddrs
+		credentials = updateCfConfig.PDConfig.toCredential()
+	}
+
+	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+	}
 	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo)
+		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
@@ -243,7 +270,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(errors.Trace(err))
 		return
 	}
-	c.JSON(http.StatusOK, toAPIModel(newCfInfo))
+	c.JSON(http.StatusOK, toAPIModel(newCfInfo, true))
 }
 
 // getChangeFeedMetaInfo returns the metaInfo of a changefeed
@@ -261,7 +288,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, toAPIModel(info))
+	c.JSON(http.StatusOK, toAPIModel(info, false))
 }
 
 // resumeChangefeed handles update changefeed request.
@@ -348,7 +375,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
+func toAPIModel(info *model.ChangeFeedInfo, maskSinkURI bool) *ChangeFeedInfo {
 	var runningError *RunningError
 	if info.Error != nil {
 		runningError = &RunningError{
@@ -357,22 +384,30 @@ func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 			Message: info.Error.Message,
 		}
 	}
+
+	sinkURI := info.SinkURI
+	var err error
+	if maskSinkURI {
+		sinkURI, err = util.MaskSinkURI(sinkURI)
+		if err != nil {
+			log.Error("failed to mask sink URI", zap.Error(err))
+		}
+	}
+
 	apiInfoModel := &ChangeFeedInfo{
-		UpstreamID:        info.UpstreamID,
-		Namespace:         info.Namespace,
-		ID:                info.ID,
-		SinkURI:           info.SinkURI,
-		CreateTime:        info.CreateTime,
-		StartTs:           info.StartTs,
-		TargetTs:          info.TargetTs,
-		AdminJobType:      info.AdminJobType,
-		Engine:            info.Engine,
-		Config:            ToAPIReplicaConfig(info.Config),
-		State:             info.State,
-		Error:             runningError,
-		SyncPointEnabled:  info.SyncPointEnabled,
-		SyncPointInterval: info.SyncPointInterval,
-		CreatorVersion:    info.CreatorVersion,
+		UpstreamID:     info.UpstreamID,
+		Namespace:      info.Namespace,
+		ID:             info.ID,
+		SinkURI:        sinkURI,
+		CreateTime:     info.CreateTime,
+		StartTs:        info.StartTs,
+		TargetTs:       info.TargetTs,
+		AdminJobType:   info.AdminJobType,
+		Engine:         info.Engine,
+		Config:         ToAPIReplicaConfig(info.Config),
+		State:          info.State,
+		Error:          runningError,
+		CreatorVersion: info.CreatorVersion,
 	}
 	return apiInfoModel
 }

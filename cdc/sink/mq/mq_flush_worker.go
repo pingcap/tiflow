@@ -20,23 +20,24 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
 
 const (
-	// flushBatchSize is the batch size of the flush worker.
-	flushBatchSize = 2048
-	// flushInterval is the interval of the flush worker.
-	flushInterval = 500 * time.Millisecond
+	// FlushBatchSize is the batch size of the flush worker.
+	FlushBatchSize = 2048
+	// FlushInterval is the interval of the flush worker.
+	FlushInterval = 500 * time.Millisecond
 )
 
-type topicPartitionKey struct {
-	topic     string
-	partition int32
+// TopicPartitionKey contains the topic and partition key of the message.
+type TopicPartitionKey struct {
+	Topic     string
+	Partition int32
 }
 
 type flushEvent struct {
@@ -48,7 +49,7 @@ type flushEvent struct {
 // It carries the partition information of the message,
 // and it is also used to flush all events.
 type mqEvent struct {
-	key   topicPartitionKey
+	key   TopicPartitionKey
 	row   *model.RowChangedEvent
 	flush *flushEvent
 }
@@ -74,7 +75,7 @@ func newFlushWorker(
 ) *flushWorker {
 	w := &flushWorker{
 		msgChan:    chann.New[mqEvent](),
-		ticker:     time.NewTicker(flushInterval),
+		ticker:     time.NewTicker(FlushInterval),
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,
@@ -112,7 +113,7 @@ func (w *flushWorker) batch(
 	}
 
 	// Start a new tick to flush the batch.
-	w.ticker.Reset(flushInterval)
+	w.ticker.Reset(FlushInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -144,8 +145,8 @@ func (w *flushWorker) batch(
 }
 
 // group is responsible for grouping messages by the partition.
-func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.RowChangedEvent {
-	partitionedRows := make(map[topicPartitionKey][]*model.RowChangedEvent)
+func (w *flushWorker) group(events []mqEvent) map[TopicPartitionKey][]*model.RowChangedEvent {
+	partitionedRows := make(map[TopicPartitionKey][]*model.RowChangedEvent)
 	for _, event := range events {
 		if _, ok := partitionedRows[event.key]; !ok {
 			partitionedRows[event.key] = make([]*model.RowChangedEvent, 0)
@@ -158,11 +159,11 @@ func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.Row
 // asyncSend is responsible for sending messages to the Kafka producer.
 func (w *flushWorker) asyncSend(
 	ctx context.Context,
-	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
+	partitionedRows map[TopicPartitionKey][]*model.RowChangedEvent,
 ) error {
 	for key, events := range partitionedRows {
 		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event, nil)
+			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event, nil)
 			if err != nil {
 				return err
 			}
@@ -171,7 +172,7 @@ func (w *flushWorker) asyncSend(
 		err := w.statistics.RecordBatchExecution(func() (int, error) {
 			thisBatchSize := 0
 			for _, message := range w.encoder.Build() {
-				err := w.producer.AsyncSendMessage(ctx, key.topic, key.partition, message)
+				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
 				if err != nil {
 					return 0, err
 				}
@@ -204,7 +205,7 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		// TODO: log changefeed ID here
 		log.Info("flushWorker exited", zap.Error(retErr))
 	}()
-	eventsBuf := make([]mqEvent, flushBatchSize)
+	eventsBuf := make([]mqEvent, FlushBatchSize)
 	for {
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {

@@ -132,25 +132,30 @@ func verifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
-		UpstreamID:        up.ID,
-		SinkURI:           changefeedConfig.SinkURI,
-		CreateTime:        time.Now(),
-		StartTs:           changefeedConfig.StartTS,
-		TargetTs:          changefeedConfig.TargetTS,
-		Config:            replicaConfig,
-		Engine:            sortEngine,
-		State:             model.StateNormal,
-		SyncPointEnabled:  false,
-		SyncPointInterval: 10 * time.Minute,
-		CreatorVersion:    version.ReleaseVersion,
+		UpstreamID:     up.ID,
+		SinkURI:        changefeedConfig.SinkURI,
+		CreateTime:     time.Now(),
+		StartTs:        changefeedConfig.StartTS,
+		TargetTs:       changefeedConfig.TargetTS,
+		Config:         replicaConfig,
+		Engine:         sortEngine,
+		State:          model.StateNormal,
+		CreatorVersion: version.ReleaseVersion,
 	}
-
+	f, err := filter.NewFilter(replicaConfig, "")
+	if err != nil {
+		return nil, err
+	}
+	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
+		up.KVStorage, changefeedConfig.StartTS)
+	if err != nil {
+		return nil, err
+	}
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, err
+	}
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := entry.VerifyTables(replicaConfig,
-			up.KVStorage, changefeedConfig.StartTS)
-		if err != nil {
-			return nil, err
-		}
 		if len(ineligibleTables) != 0 {
 			return nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
 		}
@@ -188,7 +193,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	// verify rules
 	if len(changefeedConfig.FilterRules) != 0 {
 		newInfo.Config.Filter.Rules = changefeedConfig.FilterRules
-		_, err = filter.VerifyRules(newInfo.Config.Filter)
+		_, err = filter.VerifyTableRules(newInfo.Config.Filter)
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 		}

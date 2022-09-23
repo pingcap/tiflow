@@ -235,7 +235,7 @@ function test_fail_job_between_event() {
 
 	# worker1 will be bound to source1 and fail when see the second row change in an event
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneEvent=return()"
 		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
@@ -247,7 +247,7 @@ function test_fail_job_between_event() {
 
 	# worker2 will be bound to source2 and fail when see the second event in a GTID
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneGTID=return()"
 		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
@@ -375,11 +375,44 @@ function test_regexpr_router() {
 	echo "[$(date)] <<<<<< finish test_regexpr_router $1 >>>>>>"
 }
 
+function test_json_expression() {
+	echo "[$(date)] <<<<<< start test_json_expression >>>>>>"
+	run_sql_file $cur/data/db3.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	dmctl_start_task "$cur/conf/dm-task-expression-filter.yaml" "--remove-meta"
+
+	run_sql_file $cur/data/db3.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	cleanup_process
+	cleanup_data all_mode
+	echo "[$(date)] <<<<<< finish test_json_expression >>>>>>"
+}
+
 function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
 	test_expression_filter
+	test_json_expression
 	test_fail_job_between_event
 	test_session_config
 	test_query_timeout
@@ -388,7 +421,7 @@ function run() {
 	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"

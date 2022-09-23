@@ -36,6 +36,7 @@ type KV interface {
 	// an immutable representation of that bytes array.
 	// To get a string of bytes, do string([]byte{0x10, 0x20}).
 	// or do nothing on vice verse.
+	// Length of key is restricted to 2KB
 	Put(ctx context.Context, key, val string) (*PutResponse, Error)
 
 	// Get retrieves keys with newest revision.
@@ -79,15 +80,13 @@ type KVClient interface {
 // ClientConn is the common method for different connection
 // HOPE to reuse the common underlying connection pool
 type ClientConn interface {
-	// Initialize initializes the underlying connection for specific store type
-	Initialize(*StoreConfig) error
-
-	// ClientType returns the client type of connection
-	ClientType() ClientType
+	// StoreType returns the type of connection
+	StoreType() StoreType
 
 	// GetConn gets the underlying connection object
-	// We will return *clientv3.Client for storeTypeEtcd,
-	// and *sql.DB for storeTypeSQL
+	// For the fisrt return param if no error happens:
+	// For StoreTypeEtcd, it returns *clientv3.Client
+	// For StoreTypeMySQL/StoreTypeSQLite, it returns *sql.DB
 	GetConn() (interface{}, error)
 
 	// Close closes the underlying connection and releases some resources

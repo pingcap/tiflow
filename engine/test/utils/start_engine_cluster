@@ -1,18 +1,18 @@
 #!/bin/bash
 
+if [ $# -eq 0 ]; then
+	echo "<<<<<< can not deploy engine cluster using empty config >>>>>>"
+	exit 1
+fi
 echo "start deploying engine cluster..."
 
 retry_times=3
 i=1
 while [ $i -le $retry_times ]; do
 	echo "The ${i} times to try to start engine cluster..."
-
-	run_engine.sh deploy $*
-
-	if [ $? -eq 0 ]; then
-		break
-	fi
-	let i++
+	run_engine.sh deploy "$@" && break
+	((i++)) || true
+	run_engine.sh stop "$@" || true
 	echo "start engine cluster failed"
 done
 
@@ -20,7 +20,6 @@ if [ $i -gt $retry_times ]; then
 	echo -e "\n\n[$(date)] <<<<<< fail to start engine cluster after $retry_times times >>>>>>"
 	exit 1
 else
-	# TODO: add check logic
-	# wait cluster ready
-	sleep 20
+	# TODO: add check logic to wait cluster ready
+	sleep 5
 fi

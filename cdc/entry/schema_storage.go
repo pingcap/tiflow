@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -52,12 +51,12 @@ type SchemaStorage interface {
 }
 
 type schemaStorageImpl struct {
-	snaps      []*schema.Snapshot
-	snapsMu    sync.RWMutex
-	gcTs       uint64
-	resolvedTs uint64
+	snaps         []*schema.Snapshot
+	snapsMu       sync.RWMutex
+	gcTs          uint64
+	resolvedTs    uint64
+	schemaVersion int64
 
-	filter         *filter.Filter
 	forceReplicate bool
 
 	id model.ChangeFeedID
@@ -65,15 +64,26 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64, filter *filter.Filter,
+	meta *timeta.Meta, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
-	var snap *schema.Snapshot
-	var err error
+	var (
+		snap    *schema.Snapshot
+		err     error
+		version int64
+	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
+		snap.InitConcurrentDDLTables()
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -81,9 +91,9 @@ func NewSchemaStorage(
 	schema := &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
-		filter:         filter,
 		forceReplicate: forceReplicate,
 		id:             id,
+		schemaVersion:  version,
 	}
 	return schema, nil
 }
@@ -152,6 +162,7 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
+		s.schemaVersion = job.BinlogInfo.SchemaVersion
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
@@ -160,32 +171,43 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
-		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
-			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
-				zap.String("DDL", job.Query),
+		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
+		// Unexecuted DDL jobs should have largest schemaVersions.
+		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
+			log.Info("ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+				zap.String("DDL", job.Query),
+				zap.Int64("jobID", job.ID),
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Int64("schemaVersion", s.schemaVersion),
+				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+			)
 			return nil
 		}
 		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
+		snap.InitConcurrentDDLTables()
 	}
 	if err := snap.HandleDDL(job); err != nil {
-		log.Error("handle DDL failed", zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
+		log.Error("handle DDL failed",
 			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.String("changefeed", s.id.ID),
+			zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
+	log.Info("handle DDL",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
+		zap.String("DDL", job.Query),
+		zap.Stringer("job", job),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
 }
@@ -248,12 +270,5 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID))
-	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
-		log.Info("discard DDL",
-			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),
-			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID))
-		return true
-	}
 	return !job.IsSynced() && !job.IsDone()
 }

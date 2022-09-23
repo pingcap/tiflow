@@ -14,8 +14,11 @@
 package runtime
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
@@ -24,49 +27,99 @@ import (
 // TODO: expose this config in lib
 var HeartbeatInterval = 3 * time.Second
 
+/*
+         ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
+         │WorkerCreating│      │WorkerOnline│      │WorkerOffline│     │WorkerFinished│
+         `──────┬───────'      `─────┬──────'      `──────┬──────'     `──────┬───────'
+                │                    │                    │                   │
+  CreateWorker  │                    │                    │                   │
+───────────────►│                    │                    │                   │
+                │  OnWorkerOnline    │                    │                   │
+                ├───────────────────►│                    │                   │
+                │                    │  OnWorkerOffline   │                   │
+                │                    ├───────────────────►│                   │
+                │                    │                    │                   │
+                │                    │                    │                   │
+                │                    │  OnWorkerFinished  │                   │
+                │                    ├────────────────────┼──────────────────►│
+                │                    │                    │                   │
+                │  OnWorkerOffline/OnWorkerDispacth       │                   │
+                ├────────────────────┬───────────────────►│                   │
+                │                    │                    │                   │
+                │                    │                    │                   │
+                │                    │                    │                   │
+                │                    │                    │                   │
+                │  OnWorkerFinished  │                    │                   │
+                ├────────────────────┼────────────────────┼──────────────────►│
+                │                    │                    │                   │
+                │                    │                    │                   │
+*/
+
 // WorkerStage represents the stage of a worker.
-//          ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
-//          │WorkerCreating│      │WorkerOnline│      │WorkerOffline│     │WorkerFinished│
-//          `──────┬───────'      `─────┬──────'      `──────┬──────'     `──────┬───────'
-//                 │                    │                    │                   │
-//   CreateWorker  │                    │                    │                   │
-// ───────────────►│                    │                    │                   │
-//                 │  OnWorkerOnline    │                    │                   │
-//                 ├───────────────────►│                    │                   │
-//                 │                    │  OnWorkerOffline   │                   │
-//                 │                    ├───────────────────►│                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │  OnWorkerFinished  │                   │
-//                 │                    ├────────────────────┼──────────────────►│
-//                 │                    │                    │                   │
-//                 │  OnWorkerOffline/OnWorkerDispacth       │                   │
-//                 ├────────────────────┬───────────────────►│                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │  OnWorkerFinished  │                    │                   │
-//                 ├────────────────────┼────────────────────┼──────────────────►│
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
 type WorkerStage int
 
 // All available WorkerStage
 const (
-	WorkerCreating WorkerStage = iota
+	WorkerCreating WorkerStage = iota + 1
 	WorkerOnline
 	WorkerFinished
 	WorkerOffline
 	// WorkerDestroying
 )
 
+var typesStringify = [...]string{
+	0:              "",
+	WorkerCreating: "Creating",
+	WorkerOnline:   "Online",
+	WorkerFinished: "Finished",
+	WorkerOffline:  "Offline",
+}
+
+var toWorkerStage map[string]WorkerStage
+
+func init() {
+	toWorkerStage = make(map[string]WorkerStage, len(typesStringify))
+	for i, s := range typesStringify {
+		toWorkerStage[s] = WorkerStage(i)
+	}
+}
+
+// String implements fmt.Stringer interface
+func (ws WorkerStage) String() string {
+	if int(ws) >= len(typesStringify) || ws < 0 {
+		return fmt.Sprintf("Unknown WorkerStage %d", ws)
+	}
+	return typesStringify[ws]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (ws WorkerStage) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ws.String())
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (ws *WorkerStage) UnmarshalJSON(b []byte) error {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
+		return err
+	}
+	*ws, ok = toWorkerStage[j]
+	if !ok {
+		return errors.Errorf("Unknown WorkerStage %s", j)
+	}
+	return nil
+}
+
 // WorkerStatus manages worker state machine
 type WorkerStatus struct {
-	TaskID string
-	ID     frameModel.WorkerID
-	Unit   framework.WorkerType
-	Stage  WorkerStage
+	TaskID         string
+	ID             frameModel.WorkerID
+	Unit           framework.WorkerType
+	Stage          WorkerStage
+	CfgModRevision uint64
 	// only use when creating, change to updatedTime if needed.
 	createdTime time.Time
 }
@@ -74,6 +127,11 @@ type WorkerStatus struct {
 // IsOffline checks whether worker stage is offline
 func (w *WorkerStatus) IsOffline() bool {
 	return w.Stage == WorkerOffline
+}
+
+// IsTombStone returns whether the worker is tombstone, which means we don't need to stop it.
+func (w *WorkerStatus) IsTombStone() bool {
+	return w.Stage == WorkerOffline || w.Stage == WorkerFinished || w.CreateFailed()
 }
 
 // CreateFailed checks whether the worker creation is failed
@@ -89,17 +147,18 @@ func (w *WorkerStatus) RunAsExpected() bool {
 
 // InitWorkerStatus creates a new worker status and initializes it
 func InitWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID) WorkerStatus {
-	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating)
+	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating, 0)
 	workerStatus.createdTime = time.Now()
 	return workerStatus
 }
 
 // NewWorkerStatus creates a new WorkerStatus instance
-func NewWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID, stage WorkerStage) WorkerStatus {
+func NewWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID, stage WorkerStage, cfgModRevision uint64) WorkerStatus {
 	return WorkerStatus{
-		TaskID: taskID,
-		ID:     id,
-		Unit:   unit,
-		Stage:  stage,
+		TaskID:         taskID,
+		ID:             id,
+		Unit:           unit,
+		Stage:          stage,
+		CfgModRevision: cfgModRevision,
 	}
 }

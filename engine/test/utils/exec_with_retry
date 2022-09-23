@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+set -o pipefail
+
+count=10
+interval_sec=1
+cmd=""
+
+while [[ ${1} ]]; do
+	case "${1}" in
+	--count)
+		count=${2}
+		shift
+		;;
+	--interval_sec)
+		interval_sec=${2}
+		shift
+		;;
+	*)
+		cmd="$cmd ${1}"
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+echo "will execute with retry, cmd: $cmd"
+i=0
+while ! eval $cmd; do
+	i=$((i + 1))
+	if [ "$i" -gt "$count" ]; then
+		echo "failed to execute cmd: $cmd"
+		exit 2
+	fi
+	sleep $interval_sec
+	echo "retry $i time(s), cmd: $cmd"
+done

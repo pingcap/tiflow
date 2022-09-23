@@ -3,28 +3,25 @@
 set -eu
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-DOCKER_COMPOSE_DIR=$(cd $CUR_DIR/../../deployments/docker-compose/ && pwd)
+export DOCKER_COMPOSE_DIR=$(cd $CUR_DIR/../../../deployments/engine/docker-compose/ && pwd)
 export PATH=$PATH:$CUR_DIR/../utils
-
-OUT_DIR=/tmp/tiflow_engine_test
+export OUT_DIR=/tmp/tiflow_engine_test
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = 'debug' ]; then
 	shift
-	if [[ ${1} ]]; then
+	if [[ $# -gt 0 ]]; then
 		cnf=$*
 	else
 		cnf="$DOCKER_COMPOSE_DIR/1m1e.yaml"
+		echo "got empty file, use default config: ${cnf}"
 	fi
 
-	trap "stop_engine_cluster $cnf" EXIT
-	WORK_DIR=$OUT_DIR/debug
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
-	PATH="$PATH:$CUR_DIR/../utils" \
-		TEST_NAME="debug" \
-		DOCKER_COMPOSE_DIR=$DOCKER_COMPOSE_DIR \
-		start_engine_cluster $cnf
+	TEST_NAME=debug
+	WORK_DIR=$OUT_DIR/$TEST_NAME
+	CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $cnf)
+	trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
+	start_engine_cluster $CONFIG
 
 	echo 'You may now debug from another terminal. Press [ENTER] to exit.'
 	read line
@@ -37,6 +34,10 @@ run_case() {
 	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true
 	local case=$1
 	local script=$2
+
+	# validate the case script
+	check_case.sh
+
 	echo "=================>> Running test $script... <<================="
 	PATH="$PATH:$CUR_DIR/../utils" \
 		OUT_DIR=$OUT_DIR \

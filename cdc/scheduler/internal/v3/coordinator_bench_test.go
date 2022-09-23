@@ -21,7 +21,11 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -66,10 +70,10 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		coord = &coordinator{
-			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
+			trans:        transport.NewMockTrans(),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
-			captureM: newCaptureManager(
+			captureM: member.NewCaptureManager(
 				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
@@ -87,20 +91,22 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Always heartbeat.
-		captureM := newCaptureManager(
+		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
-		captureM.initialized = true
+		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
+				State: member.CaptureStateInitialized,
+			}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		coord = &coordinator{
-			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
+			trans:        transport.NewMockTrans(),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
@@ -118,30 +124,33 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Disable heartbeat.
-		captureM := newCaptureManager(
+		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
-		captureM.initialized = true
+		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
+				State: member.CaptureStateInitialized,
+			}
 		}
-		replicationM := newReplicationManager(10, model.ChangeFeedID{})
+		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
 		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
 		for i := 0; i < total; i++ {
 			tableID := int64(10000 + i)
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)
-			rep, err := newReplicationSet(tableID, 0, map[string]*schedulepb.TableStatus{
-				captureID: {
-					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
-				},
-			})
+			rep, err := replication.NewReplicationSet(
+				tableID, 0, map[string]*tablepb.TableStatus{
+					captureID: {
+						TableID: tableID,
+						State:   tablepb.TableStateReplicating,
+					},
+				}, model.ChangeFeedID{})
 			if err != nil {
 				b.Fatal(err)
 			}
-			replicationM.tables[tableID] = rep
+			replicationM.SetReplicationSetForTests(rep)
 			_, ok := heartbeatResp[captureID]
 			if !ok {
 				heartbeatResp[captureID] = &schedulepb.Message{
@@ -153,18 +162,18 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			}
 			heartbeatResp[captureID].HeartbeatResponse.Tables = append(
 				heartbeatResp[captureID].HeartbeatResponse.Tables,
-				schedulepb.TableStatus{
+				tablepb.TableStatus{
 					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
+					State:   tablepb.TableStateReplicating,
 				})
 		}
 		recvMsgs := make([]*schedulepb.Message, 0, len(heartbeatResp))
 		for _, resp := range heartbeatResp {
 			recvMsgs = append(recvMsgs, resp)
 		}
-		trans := &mockTrans{
-			recvBuffer:     recvMsgs,
-			keepRecvBuffer: true,
+		trans := &transport.MockTrans{
+			RecvBuffer:     recvMsgs,
+			KeepRecvBuffer: true,
 		}
 		coord = &coordinator{
 			trans:        trans,

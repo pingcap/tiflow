@@ -26,26 +26,36 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot         *schema.Snapshot
-	filter                 *filter.Filter
-	config                 *config.ReplicaConfig
-	allPhysicalTablesCache []model.TableID
-	ddlHandledTs           model.Ts
-	id                     model.ChangeFeedID
+	schemaSnapshot              *schema.Snapshot
+	filter                      filter.Filter
+	config                      *config.ReplicaConfig
+	allPhysicalTablesCache      []model.TableID
+	ddlHandledTs                model.Ts
+	schemaVersion               int64
+	id                          model.ChangeFeedID
+	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
 ) (*schemaWrap4Owner, error) {
-	var meta *timeta.Meta
+	var (
+		meta    *timeta.Meta
+		version int64
+	)
 	if kvStorage != nil {
 		var err error
 		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -54,7 +64,9 @@ func newSchemaWrap4Owner(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	f, err := filter.NewFilter(config)
+	// It is no matter to use an empty as timezone here because schemaWrap4Owner
+	// doesn't use expression filter's method.
+	f, err := filter.NewFilter(config, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -63,7 +75,10 @@ func newSchemaWrap4Owner(
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		schemaVersion:  version,
 		id:             id,
+		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
+			WithLabelValues(id.Namespace, id.ID),
 	}, nil
 }
 
@@ -72,7 +87,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
-	// NOTE: it's better to pre-allocate the vector. However in the current implementation
+	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
 	// we can't know how many valid tables in the snapshot.
 	s.allPhysicalTablesCache = make([]model.TableID, 0)
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
@@ -102,32 +117,27 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
-		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
-			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID),
-			zap.Stringer("job", job),
-			zap.Any("ddlHandledTs", s.ddlHandledTs))
-		return nil
-	}
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
-		log.Error("handle DDL failed",
+		log.Error("owner update schema failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
+			zap.Stringer("job", job),
+			zap.Error(err),
 			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL",
+	log.Info("owner update schema snapshot",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.String("DDL", job.Query),
+		zap.Stringer("job", job),
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 
@@ -166,8 +176,8 @@ func (s *schemaWrap4Owner) parseRenameTables(
 			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
 				newSchemaIDs[i])
 		}
-		newSchemaName := newSchema.Name.L
-		oldSchemaName := oldSchemaNames[i].L
+		newSchemaName := newSchema.Name.O
+		oldSchemaName := oldSchemaNames[i].O
 		event := new(model.DDLEvent)
 		preTableInfo, ok := s.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
 		if !ok {
@@ -189,8 +199,8 @@ func (s *schemaWrap4Owner) parseRenameTables(
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	var preTableInfo *model.TableInfo
 	var err error
+	var preTableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -203,7 +213,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		preTableInfo, err = s.schemaSnapshot.PreTableInfo(job)
 		if err != nil {
 			log.Error("build DDL event fail",
-				zap.Reflect("job", job), zap.Error(err))
+				zap.Any("job", job), zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 		err = s.schemaSnapshot.FillSchemaName(job)
@@ -216,14 +226,19 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	// filter out ddl here
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		if s.filter.ShouldIgnoreDDLEvent(event) {
+		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ignored {
+			s.metricIgnoreDDLEventCounter.Inc()
 			log.Info(
 				"DDL event ignored",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
 				zap.String("query", event.Query),
 				zap.Uint64("startTs", event.StartTs),
 				zap.Uint64("commitTs", event.CommitTs),
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
 			)
 			continue
 		}
@@ -243,10 +258,12 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 		// Skip Warn to avoid confusion.
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if !t.IsSequence() {
-			log.Warn("skip ineligible table", zap.Int64("tableID", t.ID),
-				zap.Stringer("tableName", t.TableName),
+			log.Warn("skip ineligible table",
 				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID))
+				zap.String("changefeed", s.id.ID),
+				zap.Int64("tableID", t.ID),
+				zap.Stringer("tableName", t.TableName),
+			)
 		}
 		return true
 	}

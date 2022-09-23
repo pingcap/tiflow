@@ -15,12 +15,11 @@ package dm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -30,17 +29,17 @@ import (
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage metadata.TaskStage
-	WorkerID      frameModel.WorkerID
-	Status        *dmpkg.QueryStatusResponse
+	ExpectedStage  metadata.TaskStage         `json:"expected_stage"`
+	WorkerID       frameModel.WorkerID        `json:"worker_id"`
+	ConfigOutdated bool                       `json:"config_outdated"`
+	Status         *dmpkg.QueryStatusResponse `json:"status"`
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID frameModel.MasterID
-	WorkerID    frameModel.WorkerID
+	JobID frameModel.MasterID `json:"job_id"`
 	// taskID -> Status
-	TaskStatus map[string]TaskStatus
+	TaskStatus map[string]TaskStatus `json:"task_status"`
 }
 
 // QueryJobStatus is the api of query job status.
@@ -57,14 +56,19 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}
 	}
 
+	var expectedCfgModRevsion uint64
+	for _, task := range job.Tasks {
+		expectedCfgModRevsion = task.Cfg.ModRevision
+		break
+	}
+
 	var (
 		workerStatusMap = jm.workerManager.WorkerStatus()
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID: jm.JobMasterID(),
-			WorkerID:    jm.ID(),
-			TaskStatus:  make(map[string]TaskStatus),
+			JobID:      jm.ID(),
+			TaskStatus: make(map[string]TaskStatus),
 		}
 	)
 
@@ -77,6 +81,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
+				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
 			)
 
@@ -92,18 +97,36 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				} else if workerStatus.Stage == runtime.WorkerFinished {
 					// task finished
 					workerID = workerStatus.ID
-					queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished}
+					cfgModRevision = workerStatus.CfgModRevision
+					finishedStatus, ok := jm.finishedStatus.Load(taskID)
+					if !ok {
+						queryStatusResp = &dmpkg.QueryStatusResponse{
+							Unit:     workerStatus.Unit,
+							Stage:    metadata.StageFinished,
+							ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID),
+						}
+					} else {
+						s := finishedStatus.(runtime.FinishedTaskStatus)
+						queryStatusResp = &dmpkg.QueryStatusResponse{
+							Unit:   workerStatus.Unit,
+							Stage:  metadata.StageFinished,
+							Result: dmpkg.NewProcessResultFromPB(s.Result),
+							Status: s.Status,
+						}
+					}
 				} else {
 					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = jm.QueryStatus(ctx, taskID)
 				}
 			}
 
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
-				ExpectedStage: expectedStage,
-				WorkerID:      workerID,
-				Status:        queryStatusResp,
+				ExpectedStage:  expectedStage,
+				WorkerID:       workerID,
+				Status:         queryStatusResp,
+				ConfigOutdated: cfgModRevision != expectedCfgModRevsion,
 			}
 			mu.Unlock()
 		}()
@@ -124,10 +147,10 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 	return resp.(*dmpkg.QueryStatusResponse)
 }
 
-// OperateTask operate task.
-func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+// operateTask operate task.
+func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
 	switch op {
-	case dmpkg.Resume, dmpkg.Pause:
+	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
 	default:
 		return errors.Errorf("unsupport op type %d for operate task", op)
@@ -147,6 +170,24 @@ func (jm *JobMaster) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
 		taskCfgs = append(taskCfgs, task.Cfg)
 	}
 	return config.FromTaskCfgs(taskCfgs), nil
+}
+
+// UpdateJobCfg updates job config.
+func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error {
+	if err := jm.preCheck(ctx, cfg); err != nil {
+		return err
+	}
+	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
+		return err
+	}
+	// we don't know whether we can remove the old checkpoint, so we just create new checkpoint when update.
+	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
+		return err
+	}
+	// reset finished status, all tasks will be restarted now.
+	jm.finishedStatus = sync.Map{}
+	jm.workerManager.SetNextCheckTime(time.Now())
+	return nil
 }
 
 // Binlog implements the api of binlog request.
@@ -246,73 +287,4 @@ func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *d
 		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
 	return resp.(*dmpkg.CommonTaskResponse)
-}
-
-// DebugJob debugs job.
-func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
-	var (
-		resp interface{}
-		err  error
-	)
-	switch req.Command {
-	case dmpkg.QueryStatus:
-		var jsonArg struct {
-			Tasks []string
-		}
-		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
-	case dmpkg.OperateTask:
-		var jsonArg struct {
-			Tasks []string
-			Op    dmpkg.OperateType
-		}
-		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		err = jm.OperateTask(ctx, jsonArg.Op, nil, jsonArg.Tasks)
-	case dmpkg.GetJobCfg:
-		resp, err = jm.GetJobCfg(ctx)
-	case dmpkg.Binlog:
-		var binlogReq dmpkg.BinlogRequest
-		if err := json.Unmarshal([]byte(req.JsonArg), &binlogReq); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp, err = jm.Binlog(ctx, &binlogReq)
-	case dmpkg.BinlogSchema:
-		var binlogSchemaReq dmpkg.BinlogSchemaRequest
-		if err := json.Unmarshal([]byte(req.JsonArg), &binlogSchemaReq); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp = jm.BinlogSchema(ctx, &binlogSchemaReq)
-	default:
-	}
-
-	if err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	jsonRet, err := json.Marshal(resp)
-	if err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	return &pb.DebugJobResponse{JsonRet: string(jsonRet)}
 }

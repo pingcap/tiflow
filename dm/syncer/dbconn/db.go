@@ -20,13 +20,13 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -216,7 +216,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			var histProxy *metricsproxy.HistogramVecProxy
+			var histProxy *prometheus.HistogramVec
 			if metricProxies != nil {
 				histProxy = metricProxies.StmtHistogram
 			}

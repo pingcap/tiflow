@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -43,24 +43,29 @@ type managerTester struct {
 // NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	t *testing.T,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
 ) *managerImpl {
-	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
+	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
-		ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+		state *orchestrator.ChangefeedReactorState,
+		captureInfo *model.CaptureInfo,
+		changefeedID model.ChangeFeedID,
+		up *upstream.Upstream,
+		liveness *model.Liveness,
 	) *processor {
-		return newProcessor4Test(ctx, t, createTablePipeline, m.liveness)
+		return newProcessor4Test(t, state, captureInfo, createTablePipeline, m.liveness)
 	}
 	return m
 }
 
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
-	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			state:        tablepipeline.TableStateReplicating,
+			state:        tablepb.TableStateReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
@@ -226,7 +231,7 @@ func TestClose(t *testing.T) {
 
 func TestSendCommandError(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(nil, &liveness).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -288,11 +293,11 @@ func TestManagerLiveness(t *testing.T) {
 
 func TestQueryTableCount(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(nil, &liveness).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
 	ctx := context.TODO()
 	// Add some tables to processor.
 	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{
-		tables: map[model.TableID]tablepipeline.TablePipeline{1: nil, 2: nil},
+		tables: map[model.TableID]tablepb.TablePipeline{1: nil, 2: nil},
 	}
 
 	done := make(chan error, 1)

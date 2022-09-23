@@ -32,9 +32,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
@@ -49,11 +49,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	case pb.SchemaOp_ListMigrateTargets:
 		return s.listMigrateTargets(req)
 	case pb.SchemaOp_ListSchema:
-		allSchema := s.schemaTracker.AllSchemas()
-		schemaList := make([]string, len(allSchema))
-		for i, schema := range allSchema {
-			schemaList[i] = schema.Name.String()
-		}
+		schemaList := s.schemaTracker.AllSchemas()
 		schemaListJSON, err := json.Marshal(schemaList)
 		if err != nil {
 			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, schemaList)
@@ -180,14 +176,12 @@ func (s *Syncer) listMigrateTargets(req *pb.OperateWorkerSchemaRequest) (string,
 			return "", err
 		}
 		for _, schema := range s.schemaTracker.AllSchemas() {
-			if schemaR.MatchString(schema.Name.String()) {
-				schemaList = append(schemaList, schema.Name.String())
+			if schemaR.MatchString(schema) {
+				schemaList = append(schemaList, schema)
 			}
 		}
 	} else {
-		for _, schema := range s.schemaTracker.AllSchemas() {
-			schemaList = append(schemaList, schema.Name.String())
-		}
+		schemaList = s.schemaTracker.AllSchemas()
 	}
 
 	var targets []openapi.TaskMigrateTarget

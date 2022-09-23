@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	v2 "github.com/pingcap/tiflow/cdc/scheduler/internal/v2"
 	v3 "github.com/pingcap/tiflow/cdc/scheduler/internal/v3"
+	v3agent "github.com/pingcap/tiflow/cdc/scheduler/internal/v3/agent"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -62,9 +63,10 @@ const CheckpointCannotProceed = internal.CheckpointCannotProceed
 func NewAgent(
 	ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
@@ -91,14 +93,17 @@ func NewScheduler(
 func NewAgentV3(
 	ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
-	return v3.NewAgent(
-		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
+	return v3agent.NewAgent(
+		ctx, captureID, liveness, changefeedID,
+		messageServer, messageRouter, etcdClient, executor,
+	)
 }
 
 // NewSchedulerV3 returns two-phase scheduler.

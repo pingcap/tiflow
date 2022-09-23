@@ -16,10 +16,10 @@ package model
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -72,8 +72,7 @@ func TestFillV1(t *testing.T) {
             "ignore-txn-start-ts":[
                 1,
                 2
-            ],
-            "ddl-allow-list":"AQI="
+            ]
         },
         "mounter":{
             "worker-num":64
@@ -125,7 +124,6 @@ func TestFillV1(t *testing.T) {
 					IgnoreDBs: []string{"test", "sys"},
 				},
 				IgnoreTxnStartTs: []uint64{1, 2},
-				DDLAllowlist:     []model.ActionType{1, 2},
 			},
 			Mounter: &config.MounterConfig{
 				WorkerNum: 64,
@@ -147,9 +145,11 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			CaseSensitive:    true,
-			EnableOldValue:   true,
-			CheckGCSafePoint: true,
+			CaseSensitive:      true,
+			EnableOldValue:     true,
+			CheckGCSafePoint:   true,
+			SyncPointInterval:  time.Minute * 10,
+			SyncPointRetention: time.Hour * 24,
 		},
 	}
 
@@ -223,10 +223,12 @@ func TestFixStateIncompatible(t *testing.T) {
 func TestFixSinkProtocolIncompatible(t *testing.T) {
 	t.Parallel()
 
+	emptyProtocolStr := ""
 	// Test to fix incompatible protocols.
 	configTestCases := []struct {
-		info             *ChangeFeedInfo
-		expectedProtocol config.Protocol
+		info                *ChangeFeedInfo
+		expectedProtocol    config.Protocol
+		expectedProtocolStr string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -293,19 +295,54 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 			},
 			expectedProtocol: config.ProtocolOpen,
 		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "default"},
+				},
+			},
+			expectedProtocolStr: emptyProtocolStr,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "tidb://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "random"},
+				},
+			},
+			expectedProtocolStr: emptyProtocolStr,
+		},
 	}
 
 	for _, tc := range configTestCases {
 		tc.info.FixIncompatible()
-		var protocol config.Protocol
-		err := protocol.FromString(tc.info.Config.Sink.Protocol)
-		require.Nil(t, err)
-		require.Equal(t, tc.expectedProtocol, protocol)
+		if tc.expectedProtocolStr != "" {
+			require.Equal(t, tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
+		} else {
+			var protocol config.Protocol
+			err := protocol.FromString(tc.info.Config.Sink.Protocol)
+			if strings.Contains(tc.info.SinkURI, "kafka") {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "ErrSinkUnknownProtocol")
+			}
+		}
 	}
 
 	sinkURITestCases := []struct {
-		info            *ChangeFeedInfo
-		expectedSinkURI string
+		info                *ChangeFeedInfo
+		expectedSinkURI     string
+		expectedProtocolStr *string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -359,11 +396,42 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol",
 		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI:     "mysql://127.0.0.1:9092/ticdc-test2",
+			expectedProtocolStr: &emptyProtocolStr,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2?protocol=default",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolAvro.String()},
+				},
+			},
+			expectedSinkURI:     "mysql://127.0.0.1:9092/ticdc-test2",
+			expectedProtocolStr: &emptyProtocolStr,
+		},
 	}
 
 	for _, tc := range sinkURITestCases {
 		tc.info.FixIncompatible()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+		if tc.expectedProtocolStr != nil {
+			require.Equal(t, *tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
+		}
 	}
 }
 
@@ -470,13 +538,12 @@ func TestFixState(t *testing.T) {
 	}
 }
 
-func TestFixSinkProtocol(t *testing.T) {
+func TestFixMysqlSinkProtocol(t *testing.T) {
 	t.Parallel()
-
 	// Test fixing the protocol in the configuration.
 	configTestCases := []struct {
 		info             *ChangeFeedInfo
-		expectedProtocol config.Protocol
+		expectedProtocol string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -485,8 +552,62 @@ func TestFixSinkProtocol(t *testing.T) {
 					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
 				},
 			},
-			expectedProtocol: config.ProtocolOpen,
+			expectedProtocol: "",
 		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "whatever"},
+				},
+			},
+			expectedProtocol: "",
+		},
+	}
+
+	for _, tc := range configTestCases {
+		tc.info.fixMySQLSinkProtocol()
+		require.Equal(t, tc.expectedProtocol, tc.info.Config.Sink.Protocol)
+	}
+
+	sinkURITestCases := []struct {
+		info            *ChangeFeedInfo
+		expectedSinkURI string
+	}{
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/?protocol=open-protocol",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/?protocol=default",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: ""},
+				},
+			},
+			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
+		},
+	}
+
+	for _, tc := range sinkURITestCases {
+		tc.info.fixMySQLSinkProtocol()
+		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+	}
+}
+
+func TestFixMQSinkProtocol(t *testing.T) {
+	t.Parallel()
+
+	// Test fixing the protocol in the configuration.
+	configTestCases := []struct {
+		info             *ChangeFeedInfo
+		expectedProtocol config.Protocol
+	}{
 		{
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
@@ -517,7 +638,7 @@ func TestFixSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range configTestCases {
-		tc.info.fixSinkProtocol()
+		tc.info.fixMQSinkProtocol()
 		var protocol config.Protocol
 		err := protocol.FromString(tc.info.Config.Sink.Protocol)
 		require.Nil(t, err)
@@ -529,15 +650,6 @@ func TestFixSinkProtocol(t *testing.T) {
 		info            *ChangeFeedInfo
 		expectedSinkURI string
 	}{
-		{
-			info: &ChangeFeedInfo{
-				SinkURI: "mysql://root:test@127.0.0.1:3306/",
-				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
-				},
-			},
-			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
-		},
 		{
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
@@ -586,7 +698,7 @@ func TestFixSinkProtocol(t *testing.T) {
 	}
 
 	for _, tc := range sinkURITestCases {
-		tc.info.fixSinkProtocol()
+		tc.info.fixMQSinkProtocol()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
 	}
 }
@@ -634,28 +746,28 @@ func TestChangefeedInfoStringer(t *testing.T) {
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				StartTs: 418881574869139457,
 			},
-			`.*kafka://\*\*\*/ticdc-test2.*`,
+			`.*kafka://.*ticdc-test2.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxxx@127.0.0.1:3306/.*`,
 		},
 	}
 

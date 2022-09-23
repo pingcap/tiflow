@@ -21,7 +21,7 @@ function run() {
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_sql "CREATE DATABASE sink_retry;"
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/mysql/MySQLSinkTxnRandomError=25%return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkTxnRandomError=25%return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
@@ -34,10 +34,15 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-	check_table_exists "sink_retry.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE TABLE sink_retry.finish_mark_1 (a int primary key);"
+	sleep 30
+	check_table_exists "sink_retry.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
+	run_sql "CREATE TABLE sink_retry.finish_mark_2 (a int primary key);"
+	sleep 30
+	check_table_exists "sink_retry.finish_mark_2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

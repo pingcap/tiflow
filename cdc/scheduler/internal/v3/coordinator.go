@@ -22,7 +22,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -45,10 +49,10 @@ type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
-	trans        transport
-	replicationM *replicationManager
-	captureM     *captureManager
-	schedulerM   *schedulerManager
+	trans        transport.Transport
+	replicationM *replication.Manager
+	captureM     *member.CaptureManager
+	schedulerM   *scheduler.Manager
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -65,7 +69,8 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changefeedID, schedulerRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(
+		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -83,12 +88,14 @@ func newCoordinator(
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 
 	return &coordinator{
-		version:      version.ReleaseSemver(),
-		revision:     revision,
-		captureID:    captureID,
-		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     newCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   newSchedulerManager(changefeedID, cfg),
+		version:   version.ReleaseSemver(),
+		revision:  revision,
+		captureID: captureID,
+		replicationM: replication.NewReplicationManager(
+			cfg.MaxTaskConcurrency, changefeedID),
+		captureM: member.NewCaptureManager(
+			captureID, changefeedID, revision, cfg.HeartbeatTick),
+		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
 }
@@ -117,6 +124,8 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("schedulerv3: manual move table task ignored, "+
 			"since not all captures initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 		return
@@ -131,8 +140,10 @@ func (c *coordinator) Rebalance() {
 	defer c.mu.Unlock()
 
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Info("schedulerv3: manual rebalance task ignored, " +
-			"since not all captures initialized")
+		log.Info("schedulerv3: manual rebalance task ignored, "+
+			"since not all captures initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID))
 		return
 	}
 
@@ -148,7 +159,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"since not all captures initialized",
-			zap.String("target", target))
+			zap.String("target", target),
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID))
 		// return false to let client retry.
 		return 0, cerror.ErrSchedulerRequestFailed.
 			GenWithStack("not all captures initialized")
@@ -164,6 +177,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if count == 0 {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"the target capture has no replicating table",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target))
 		return count, nil
 	}
@@ -173,6 +188,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if len(c.captureM.Captures) <= 1 {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"only one captures alive",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 		return count, nil
@@ -183,6 +200,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if target == c.captureID {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"the target is the owner",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target), zap.Int("tableCount", count))
 		return count, nil
 	}
@@ -190,6 +209,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if !c.schedulerM.DrainCapture(target) {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"since there is capture draining",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 	}
@@ -209,7 +230,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	log.Info("schedulerv3: coordinator closed",
 		zap.Any("ownerRev", c.captureM.OwnerRev),
 		zap.String("namespace", c.changefeedID.Namespace),
-		zap.String("name", c.changefeedID.ID))
+		zap.String("changefeed", c.changefeedID.ID))
 }
 
 // ===========
@@ -218,6 +239,8 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.maybeCollectMetrics()
+
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
@@ -229,20 +252,6 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
-	if !c.captureM.CheckAllCaptureInitialized() {
-		// Skip handling messages and tasks for replication manager,
-		// as not all capture are initialized.
-		return checkpointCannotProceed, checkpointCannotProceed, c.sendMsgs(ctx, msgBuf)
-	}
-
-	// Handle capture membership changes.
-	if changes := c.captureM.TakeChanges(); changes != nil {
-		msgs, err = c.replicationM.HandleCaptureChanges(changes, checkpointTs)
-		if err != nil {
-			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
-		}
-		msgBuf = append(msgBuf, msgs...)
-	}
 
 	// Handle received messages to advance replication set.
 	msgs, err = c.replicationM.HandleMessage(recvMsgs)
@@ -250,6 +259,23 @@ func (c *coordinator) poll(
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
+
+	if !c.captureM.CheckAllCaptureInitialized() {
+		// Skip generating schedule tasks for replication manager,
+		// as not all capture are initialized.
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
+	}
+
+	// Handle capture membership changes.
+	if changes := c.captureM.TakeChanges(); changes != nil {
+		msgs, err = c.replicationM.HandleCaptureChanges(
+			changes.Init, changes.Removed, checkpointTs)
+		if err != nil {
+			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
+		}
+		msgBuf = append(msgBuf, msgs...)
+	}
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
@@ -269,8 +295,6 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
-
-	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
@@ -300,6 +324,8 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
+				zap.String("namespace", c.changefeedID.Namespace),
+				zap.String("changefeed", c.changefeedID.ID),
 				zap.Any("message", m))
 		}
 

@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -69,7 +69,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 	}
 
 	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ec := &eventContext{startLocation: location, endLocation: location, lastLocation: location}
 	p := parser.New()
 	se := mock.NewContext()
 	sourceTable := &cdcmodel.TableName{Schema: "test", Table: "tb1"}

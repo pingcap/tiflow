@@ -27,7 +27,7 @@ import (
 func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
 		// use `SinkTypeDB` to record metrics
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),
 	}
 }
 
@@ -46,7 +46,8 @@ func (b *blackHoleSink) AddTable(tableID model.TableID) error {
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
+		// NOTE: don't change the log, some tests depend on it.
+		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row))
 	}
 	rowsCount := len(rows)
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))

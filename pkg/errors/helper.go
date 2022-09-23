@@ -68,13 +68,17 @@ func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	return false
 }
 
-var changefeedNotRetryErrors = []*errors.Error{
-	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
+var changefeedUnRetryableErrors = []*errors.Error{
+	ErrExpressionColumnNotFound,
+	ErrExpressionParseFailed,
+	ErrSchemaSnapshotNotFound,
+	ErrSyncRenameTableFailed,
+	ErrChangefeedUnretryable,
 }
 
-// IsChangefeedNotRetryError returns true if a error is a changefeed not retry error.
-func IsChangefeedNotRetryError(err error) bool {
-	for _, e := range changefeedNotRetryErrors {
+// IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
+func IsChangefeedUnRetryableError(err error) bool {
+	for _, e := range changefeedUnRetryableErrors {
 		if e.Equal(err) {
 			return true
 		}
@@ -152,4 +156,24 @@ func ToPBError(err error) *pb.Error {
 	}
 	pbErr.Message = err.Error()
 	return pbErr
+}
+
+var cliUnprintableError = []*errors.Error{ErrCliAborted}
+
+// IsCliUnprintableError returns true if the error should not be printed in cli.
+func IsCliUnprintableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, e := range cliUnprintableError {
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
+			return true
+		}
+	}
+	return false
+}
+
+// WrapChangefeedUnretryableErr wraps an error into ErrChangefeedUnRetryable.
+func WrapChangefeedUnretryableErr(err error, args ...interface{}) error {
+	return WrapError(ErrChangefeedUnretryable, err, args...)
 }

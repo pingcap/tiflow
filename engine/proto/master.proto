@@ -2,44 +2,42 @@ syntax = "proto3";
 
 package enginepb;
 
-import "error.proto";
-import "metastore.proto";
-import "projects.proto";
-import "resources.proto";
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/protobuf/empty.proto";
 
-// I'm trying to phase out the communication protocal.
-// - system level
-//   - Register Executor. After a executor bootstrapped, it has to register itself to join the cluster.
+import "engine/proto/error.proto";
+import "engine/proto/metastore.proto";
+import "engine/proto/resources.proto";
 
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
-service Master {
-    rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
-
-    rpc SubmitJob(SubmitJobRequest) returns(SubmitJobResponse) {
-        // TODO: Support HTTP api
-        //option (google.api.http) = {
-        //    post: "/apis/v1/jobs"
-        //    body: "*"
-        //};
+service Discovery {
+    rpc RegisterExecutor(RegisterExecutorRequest) returns(Executor) {
+        option (google.api.http) = {
+            post: "/api/v1/executors/register"
+            body: "executor"
+        };
     }
 
-    rpc QueryJob(QueryJobRequest) returns(QueryJobResponse) {}
+    // ListExecutors lists all executors.
+    // Executors will use this API to discover other executors.
+    // Currently, we assume that there aren't too many executors.
+    // If the number of executors becomes very large in the future,
+    // we can consider a mechanism to watch the changes of the executors.
+    rpc ListExecutors(ListExecutorsRequest) returns(ListExecutorsResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/executors"
+        };
+    }
 
-    rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
-
-    rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
-
-    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
-
-    //GetMembers returns the available master members
-    //rpc GetMembers(GetMembersRequest) {}
+    rpc ListMasters(ListMastersRequest) returns(ListMastersResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/masters"
+        };
+    }
 
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
-    // TODO: Support more interface.
-
-    // - PutClusterConfig
-
-    rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
 
     /* Metastore manager API */
     // RegisterMetaStore is called from backend metastore and
@@ -50,20 +48,82 @@ service Master {
     // the information of a matching metastore
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
 
+    rpc GetLeader(GetLeaderRequest) returns(GetLeaderResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/leader"
+        };
+    }
+
+    rpc ResignLeader(ResignLeaderRequest) returns(google.protobuf.Empty) {
+        option (google.api.http) = {
+            post: "/api/v1/leader/resign"
+        };
+    }
+}
+
+service TaskScheduler {
+    rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
+
     // ReportExecutorWorkload is called from executor to server master to report
     // resource usage in executor.
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
+}
 
-    // PersistResource is called from executor to indicate some workers on it wants
-    // to persist resource files.
-    rpc PersistResource(PersistResourceRequest) returns(PersistResourceResponse) {}
+// Refer to: https://cloud.google.com/apis/design/standard_methods 
+service JobManager {
+    rpc CreateJob(CreateJobRequest) returns (Job){
+        option (google.api.http) = {
+            post: "/api/v1/jobs"
+            body: "job"
+        };
+    };
+
+    rpc GetJob(GetJobRequest) returns (Job){
+        option (google.api.http) = {
+            get: "/api/v1/jobs/{id=*}"
+        };
+    };
+
+    rpc ListJobs(ListJobsRequest) returns (ListJobsResponse){
+        option (google.api.http) = {
+            get: "/api/v1/jobs"
+        };
+    };
+
+    // NOTE: for the compability of existing openapi(ticdc) format, 
+    // we use `/cancel` but not `:cancel`(google api suggested) 
+    // refer to: https://cloud.google.com/apis/design/custom_methods
+    rpc CancelJob(CancelJobRequest) returns (Job){
+        option (google.api.http) = {
+            post: "/api/v1/jobs/{id=*}/cancel"
+        };
+    };
+
+    rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty){
+        option (google.api.http) = {
+            delete: "/api/v1/jobs/{id=*}"
+        };
+    }
+}
+
+message Selector {
+    enum Op {
+        TypeUnknown = 0;
+        Eq = 1;
+        Neq = 2;
+        Regex = 3;
+    }
+
+    string label = 1;
+    string target = 2;
+    Op op = 3;
 }
 
 message HeartbeatRequest {
     string executor_id = 1;
     int32 resource_usage = 2;
     int32 status = 3;
-    
+
     uint64 timestamp = 4;
     uint64 ttl = 5;
 }
@@ -74,84 +134,47 @@ message HeartbeatResponse {
     repeated string addrs = 3;
 }
 
-message SubmitJobRequest {
-    int32 tp = 1;
-    bytes config = 2;
-    ProjectInfo project_info = 3;
-    // TODO: Resource Limit
-}
-
-message QueryJobRequest {
-    string job_id = 1;
-    ProjectInfo project_info = 2;
-}
-
-message WorkerInfo {
-    string id = 1;
-    string executor_id = 2;
-    bytes  status = 3;
-    bytes  config = 4;
-    bool  is_tombstone = 5;
-    int64  last_hb_time = 6;
-    int64  workload = 7;
-}
-
-message QueryJobResponse {
-    enum JobStatus {
-        init = 0;
-        pending = 1;
-        online = 2;
-        dispatched = 3;
-        finished = 4;
-        stopped = 5;
-    }
-    int32   tp = 1;
-    bytes config = 2;
-    JobStatus status = 3;
-    WorkerInfo job_master_info = 4;
-    Error err = 5;
-}
-
-message CancelJobRequest {
-    string job_id = 1;
-    ProjectInfo project_info = 2;
-}
-
-message PauseJobRequest {
-    string job_id = 1 ;
-    ProjectInfo project_info = 2;
-}
-
-message SubmitJobResponse {
-    Error err = 1;
-    string  job_id = 2;
-}
-
-message PauseJobResponse {
-    Error err = 1;
-}
-
-message CancelJobResponse {
-    Error err = 1;
+message Executor {
+    string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // name is the readable name of the executor.
+    string name = 2;
+    string address = 3;
+    int64  capability = 4;
+    map<string, string> labels = 5;
 }
 
 message RegisterExecutorRequest {
-    // dm need 'worker-name' to locate the worker.
-    // TODO: Do we really need a "worker name"? Can we use address to identify an executor?
-    string address = 1;
-    string version = 2;
-    int64  capability = 3;
+    Executor executor = 1;
 }
 
-message RegisterExecutorResponse {
-    Error err = 1;
-    string  executor_id = 2;
+message ListExecutorsRequest {
 }
+
+message ListExecutorsResponse {
+    repeated Executor executors = 1;
+}
+
+message Master {
+    string id = 1;
+    // name is the readable name of the master.
+    string name = 2;
+    string address = 3;
+    bool is_leader = 4;
+}
+
+message ListMastersRequest {
+}
+
+message ListMastersResponse {
+    repeated Master masters = 1;
+}
+
 
 message ScheduleTaskRequest {
     string task_id = 1;
     int64 cost = 2;
     repeated ResourceKey resource_requirements = 3;
+    repeated Selector selectors = 4;
 }
 
 message ScheduleTaskResponse {
@@ -174,22 +197,80 @@ message ExecWorkloadResponse {
     Error err = 1;
 }
 
-message PersistResourceRequest {
-    string executor_id = 1;
-    string resource_id = 2;
+message GetLeaderRequest {
 }
 
-message PersistResourceResponse {
-    Error err = 1;
+message GetLeaderResponse {
+    string advertise_addr = 1;
 }
 
-message DebugJobRequest {
-    string job_id = 1;
-    string command = 2;
-    string json_arg = 3;
+message ResignLeaderRequest {
 }
 
-message DebugJobResponse {
-    Error err = 1;
-    string json_ret = 2;
+message Job {
+    enum Type {
+        TypeUnknown = 0;
+        CVSDemo = 1;
+        DM = 2;
+        CDC = 3;
+        FakeJob = 4;
+    }
+
+    enum State{
+        StateUnknown = 0;
+        Created = 1;
+        Running = 2;
+        Failed = 3;
+        Finished = 4;
+        Canceling = 5;
+        Canceled = 6;
+    }
+
+    string id = 1;
+    Type type = 2;
+    State state = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    bytes config = 4;
+    bytes detail = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+    Error error = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+    repeated Selector selectors = 7;
+}
+
+message CreateJobRequest {
+    Job job = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message GetJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message ListJobsRequest {
+    // The maximum number of jobs to return.
+    // If it is unspecified or less than 1, currently server will return all jobs.
+    int32 page_size = 1;
+    // The page token, returned by a previous call, to request the next page of results.
+    string page_token = 2;
+    string tenant_id = 3;
+    string project_id = 4;
+}
+
+message ListJobsResponse {
+    repeated Job jobs = 1;
+    // A token to retrieve next page of results.
+    string next_page_token = 2;
+}
+
+message CancelJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message DeleteJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
 }

@@ -1,4 +1,3 @@
-name: test
 task-mode: all
 shard-mode: pessimistic
 ignore-checking-items: []
@@ -7,7 +6,6 @@ meta-schema: dm_meta
 #heartbeat-update-interval: 1
 #heartbeat-report-interval: 10
 timezone: ""
-case-sensitive: false
 collation_compatible: loose
 target-database:
   host: 127.0.0.1
@@ -48,6 +46,7 @@ upstreams:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  case-sensitive: false
   #validator-config-name: validator-01
 - db-config:
     host: 127.0.0.1
@@ -182,6 +181,7 @@ syncers:
     enable-gtid: false
     disable-detect: false
     safe-mode: false
+    safe-mode-duration: "60s"
     enable-ansi-quotes: false
 #validators:
 #  validator-01:

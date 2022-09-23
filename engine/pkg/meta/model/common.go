@@ -20,9 +20,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
-// ClientType indicates the kvclient type
-type ClientType = int
-
 type (
 	// ProjectID is the alia of tenant.ProjectID
 	ProjectID = tenant.ProjectID
@@ -30,13 +27,32 @@ type (
 	JobID = model.JobID
 )
 
+// ClientType indicates the kvclient type
+type ClientType int
+
 // define client type
 const (
 	UnknownKVClientType = iota
-	MockKVClientType
 	EtcdKVClientType
 	SQLKVClientType
+	MockKVClientType
 )
+
+// String implements the Stringer interface
+func (t ClientType) String() string {
+	switch t {
+	case UnknownKVClientType:
+		return "unknown-kvclient"
+	case EtcdKVClientType:
+		return "etcd-kvclient"
+	case SQLKVClientType:
+		return "sql-kvclient"
+	case MockKVClientType:
+		return "mock-kvclient"
+	}
+
+	return fmt.Sprintf("unexpect client type:%d", int(t))
+}
 
 // ResponseHeader is common response header
 type ResponseHeader struct {
@@ -211,9 +227,9 @@ func (resp *TxnResponse) OpResponse() OpResponse {
 // KeyValue defines a key value byte slice pair
 type KeyValue struct {
 	// Key is the key in bytes. An empty key is not allowed.
-	Key []byte
+	Key []byte `gorm:"column:meta_key;type:varbinary(2048) not null;uniqueIndex:uidx_jk,priority:2"`
 	// Value is the value held by the key, in bytes.
-	Value []byte
+	Value []byte `gorm:"column:meta_value;type:longblob"`
 }
 
 // String only for debug

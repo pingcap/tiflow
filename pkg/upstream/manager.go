@@ -138,10 +138,8 @@ func (m *Manager) add(upstreamID uint64,
 }
 
 // AddUpstream adds an upstream and init it.
-func (m *Manager) AddUpstream(upstreamID model.UpstreamID,
-	info *model.UpstreamInfo,
-) *Upstream {
-	return m.add(upstreamID,
+func (m *Manager) AddUpstream(info *model.UpstreamInfo) *Upstream {
+	return m.add(info.ID,
 		strings.Split(info.PDEndpoints, ","),
 		&security.Credential{
 			CAPath:        info.CAPath,
@@ -170,6 +168,19 @@ func (m *Manager) Close() {
 		m.ups.Delete(k)
 		return true
 	})
+}
+
+// Visit on each upstream, return error on the first
+func (m *Manager) Visit(visitor func(up *Upstream) error) error {
+	var err error
+	m.ups.Range(func(k, v interface{}) bool {
+		err = visitor(v.(*Upstream))
+		if err != nil {
+			return false
+		}
+		return true
+	})
+	return err
 }
 
 // Tick checks and frees upstream that have not been used

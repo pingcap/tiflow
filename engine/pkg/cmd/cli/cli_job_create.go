@@ -15,12 +15,12 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/enginepb"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
@@ -34,7 +34,8 @@ type jobCreateOptions struct {
 	jobTypeStr   string
 	jobConfigStr string
 
-	jobType   engineModel.JobType
+	jobID     string
+	jobType   enginepb.Job_Type
 	jobConfig []byte
 }
 
@@ -50,8 +51,43 @@ func (o *jobCreateOptions) addFlags(cmd *cobra.Command) {
 		return
 	}
 
-	cmd.Flags().StringVar(&o.jobTypeStr, "job-type", "", "job type")
+	cmd.Flags().Var(newJobTypeValue(enginepb.Job_TypeUnknown, &o.jobType), "job-type", "job type, one of [FakeJob, CVSDemo, DM]")
 	cmd.Flags().StringVar(&o.jobConfigStr, "job-config", "", "path of config file for the job")
+	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
+
+	_ = cmd.MarkFlagRequired("job-type")
+}
+
+type jobTypeValue enginepb.Job_Type
+
+func newJobTypeValue(jobType enginepb.Job_Type, p *enginepb.Job_Type) *jobTypeValue {
+	*p = jobType
+	return (*jobTypeValue)(p)
+}
+
+func (v *jobTypeValue) String() string {
+	if enginepb.Job_Type(*v) == enginepb.Job_TypeUnknown {
+		return ""
+	}
+	return enginepb.Job_Type(*v).String()
+}
+
+func (v *jobTypeValue) Set(val string) error {
+	switch val {
+	case "FakeJob":
+		*v = jobTypeValue(enginepb.Job_FakeJob)
+	case "CVSDemo":
+		*v = jobTypeValue(enginepb.Job_CVSDemo)
+	case "DM":
+		*v = jobTypeValue(enginepb.Job_DM)
+	default:
+		return fmt.Errorf("job type must be one of [FakeJob, CVSDemo, DM]")
+	}
+	return nil
+}
+
+func (v *jobTypeValue) Type() string {
+	return "job-type"
 }
 
 // validate checks that the provided job options are valid.
@@ -60,23 +96,20 @@ func (o *jobCreateOptions) validate(ctx context.Context, cmd *cobra.Command) err
 		return errors.WrapError(errors.ErrInvalidCliParameter, err)
 	}
 
-	jobType, ok := engineModel.GetJobTypeByName(o.jobTypeStr)
-	if !ok {
-		return errors.ErrInvalidJobType.GenWithStackByArgs(o.jobType)
-	}
-
 	jobConfig, err := openFileAndReadString(o.jobConfigStr)
 	if err != nil {
 		return errors.WrapError(errors.ErrInvalidCliParameter, err)
 	}
-
-	o.jobType = jobType
 	o.jobConfig = jobConfig
 
 	return nil
 }
 
 func openFileAndReadString(path string) (content []byte, err error) {
+	if path == "" {
+		log.Warn("create job with empty config file")
+		return nil, nil
+	}
 	fp, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -87,18 +120,18 @@ func openFileAndReadString(path string) (content []byte, err error) {
 
 // run the `cli job create` command.
 func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.masterClient.SubmitJob(ctx, &enginepb.SubmitJobRequest{
-		Tp:     int32(o.jobType),
-		Config: o.jobConfig,
-		ProjectInfo: &enginepb.ProjectInfo{
-			TenantId:  o.generalOpts.tenant.TenantID(),
-			ProjectId: o.generalOpts.tenant.ProjectID(),
+	job, err := o.generalOpts.jobManagerCli.CreateJob(ctx, &enginepb.CreateJobRequest{
+		Job: &enginepb.Job{
+			Type:   o.jobType,
+			Config: o.jobConfig,
 		},
+		TenantId:  o.generalOpts.tenant.TenantID(),
+		ProjectId: o.generalOpts.tenant.ProjectID(),
 	})
 	if err != nil {
 		return err
 	}
-	log.Info("create job successfully", zap.Any("resp", resp))
+	log.Info("create job successfully", zap.Any("job", job))
 	return nil
 }
 

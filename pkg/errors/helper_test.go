@@ -142,7 +142,7 @@ func TestChangefeedFastFailError(t *testing.T) {
 	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
 }
 
-func TestChangefeedNotRetryError(t *testing.T) {
+func TestIsChangefeedUnRetryableError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		err      error
@@ -168,9 +168,37 @@ func TestChangefeedNotRetryError(t *testing.T) {
 			err:      errors.New("CDC:ErrExpressionColumnNotFound"),
 			expected: true,
 		},
+		{
+			err:      ErrSyncRenameTableFailed.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      WrapChangefeedUnretryableErr(errors.New("whatever")),
+			expected: true,
+		},
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.expected, IsChangefeedNotRetryError(c.err))
+		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
+	}
+}
+
+func TestIsCliUnprintableError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"context Canceled err", context.Canceled, false},
+		{"context DeadlineExceeded err", context.DeadlineExceeded, false},
+		{"normal err", errors.New("test"), false},
+		{"cdc reachMaxTry err", ErrReachMaxTry, false},
+		{"cli unprint err", ErrCliAborted, true},
+	}
+	for _, tt := range tests {
+		ret := IsCliUnprintableError(tt.err)
+		require.Equal(t, ret, tt.want, "case:%s", tt.name)
 	}
 }

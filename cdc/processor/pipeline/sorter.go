@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -33,15 +33,38 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// TODO determine a reasonable default value
+	// This is part of sink performance optimization
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
+)
+
+// TODO find a better name or avoid using an interface
+// We use an interface here for ease in unit testing.
+type tableFlowController interface {
+	Consume(
+		msg *model.PolymorphicEvent,
+		size uint64,
+		blockCallBack func(batchID uint64) error,
+	) error
+	Release(resolved model.ResolvedTs)
+	Abort()
+	GetConsumption() uint64
+}
+
 type sorterNode struct {
-	sorter sorter.EventSorter
+	pdClient pd.Client
+	sorter   sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -58,7 +81,7 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	state      *TableState
+	state      *tablepb.TableState
 	preparedCh chan struct{}
 
 	// started indicate that the sink is really replicating, not idle.
@@ -68,12 +91,15 @@ type sorterNode struct {
 
 	redoLogEnabled bool
 	changefeed     model.ChangeFeedID
+	// remainEvents record the amount of event remain in sorter engine
+	remainEvents int64
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	state *TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
+	state *tablepb.TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
+	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -86,6 +112,7 @@ func newSorterNode(
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		redoLogEnabled: redoLogEnabled,
+		pdClient:       pdClient,
 
 		changefeed: changefeed,
 	}
@@ -94,11 +121,16 @@ func newSorterNode(
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
-	case model.SortInMemory:
-		return memory.NewEntrySorter(), nil
-	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+	// `file` and `memory` become aliases of `unified` for backward compatibility.
+	case model.SortInMemory, model.SortUnified, model.SortInFile:
+		if sortEngine == model.SortInMemory {
+			log.Warn("Memory sorter is deprecated so we use unified sorter by default.",
+				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("tableName", tableName))
+		}
 		if sortEngine == model.SortInFile {
-			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
+			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings.",
 				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 				zap.String("tableName", tableName))
@@ -109,8 +141,8 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			ssystem := ctx.GlobalVars().SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter, err := leveldb.NewSorter(
-				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
+			levelSorter, err := db.NewSorter(
+				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
@@ -135,15 +167,11 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
+	eventSorter sorter.EventSorter,
 ) error {
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-
-	eventSorter, err := createSorter(ctx, n.tableName, n.tableID)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
@@ -171,21 +199,51 @@ func (n *sorterNode) start(
 			}
 		}
 
-		// once receive startTs, which means sink should start replicating data to downstream.
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case <-n.preparedCh:
+			log.Debug("table is prepared",
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID))
+		}
+
+		// The latest ts from PD when the table becomes replicating.
+		var replicateTs model.Ts
+		// Sink should start replicating data to downstream from the start ts.
 		var startTs model.Ts
 		select {
 		case <-stdCtx.Done():
 			return nil
 		case startTs = <-n.startTsCh:
+			backoffBaseDelayInMs := int64(100)
+			totalRetryDuration := 10 * time.Second
+			start := time.Now()
+			err := retry.Do(stdCtx, func() error {
+				phy, logic, err := n.pdClient.GetTS(ctx)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				replicateTs = oracle.ComposeTS(phy, logic)
+				return nil
+			}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+				retry.WithTotalRetryDuratoin(totalRetryDuration),
+				retry.WithIsRetryableErr(cerror.IsRetryableError))
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Info("table is replicating",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Uint64("replicateTs", replicateTs),
+				zap.Duration("duration", time.Since(start)))
 		}
 
-		select {
-		case <-stdCtx.Done():
-			return nil
-		case <-n.preparedCh:
-		}
-
-		n.state.Store(TableStateReplicating)
+		n.state.Store(tablepb.TableStateReplicating)
 		eventSorter.EmitStartTs(stdCtx, startTs)
 
 		for {
@@ -214,8 +272,16 @@ func (n *sorterNode) start(
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
+					atomic.AddInt64(&n.remainEvents, -1)
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
+						log.Error("got an error from mounter, sorter will stop.",
+							zap.String("namespace", n.changefeed.Namespace),
+							zap.String("changefeed", n.changefeed.ID),
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName),
+							zap.Error(err))
+						ctx.Throw(err)
 						return errors.Trace(err)
 					}
 					if ignored {
@@ -227,6 +293,9 @@ func (n *sorterNode) start(
 						resolvedTsInterpolateFunc(commitTs)
 					}
 
+					// For all rows, we add table replicate ts, so mysql sink can
+					// determine when to turn off safe-mode.
+					msg.Row.ReplicatingTs = replicateTs
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
@@ -256,7 +325,7 @@ func (n *sorterNode) start(
 					})
 					if err != nil {
 						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
+							log.Debug("flow control cancelled for table",
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
@@ -314,29 +383,19 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// startTs (which is used to initialize the `sorterNode.resolvedTs`) received,
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
-		if n.state.Load() == TableStatePreparing {
-			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
-			n.state.Store(TableStatePrepared)
+		if n.state.Load() == tablepb.TableStatePreparing {
+			log.Debug("sorterNode, first resolved event received",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs))
+			n.state.Store(tablepb.TableStatePrepared)
 			close(n.preparedCh)
 		}
+	} else {
+		atomic.AddInt64(&n.remainEvents, 1)
 	}
 	n.sorter.AddEntry(ctx, event)
-}
-
-func (n *sorterNode) TryHandleDataMessage(
-	ctx context.Context, msg pmessage.Message,
-) (bool, error) {
-	switch msg.Tp {
-	case pmessage.MessageTypePolymorphicEvent:
-		n.handleRawEvent(ctx, msg.PolymorphicEvent)
-		return true, nil
-	case pmessage.MessageTypeBarrier:
-		n.updateBarrierTs(msg.BarrierTs)
-		fallthrough
-	default:
-		ctx.(pipeline.NodeContext).SendToNextNode(msg)
-		return true, nil
-	}
 }
 
 func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
@@ -345,7 +404,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
+func (n *sorterNode) releaseResource() {
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
@@ -361,4 +420,8 @@ func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
 
-func (n *sorterNode) State() TableState { return n.state.Load() }
+func (n *sorterNode) State() tablepb.TableState { return n.state.Load() }
+
+func (n *sorterNode) remainEvent() int64 {
+	return atomic.LoadInt64(&n.remainEvents)
+}
