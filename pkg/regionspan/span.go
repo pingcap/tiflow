@@ -80,14 +80,6 @@ func (s ComparableSpan) Hack() ComparableSpan {
 	return s
 }
 
-// Clone clones a ComparableSpan
-func (s ComparableSpan) Clone() ComparableSpan {
-	return ComparableSpan{
-		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
-		End:   append(make([]byte, 0, len(s.End)), s.End...),
-	}
-}
-
 // GetTableSpan returns the span to watch for the specified table
 func GetTableSpan(tableID int64) Span {
 	tablePrefix := tablecodec.GenTablePrefix(tableID)

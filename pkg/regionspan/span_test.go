@@ -129,17 +129,3 @@ func TestSpanHack(t *testing.T) {
 		require.Equal(t, tc.expect, tc.input.Hack())
 	}
 }
-
-func TestSpanClone(t *testing.T) {
-	t.Parallel()
-
-	sp := ComparableSpan{
-		Start: []byte{1},
-		End:   []byte{2},
-	}
-	sp2 := sp.Clone()
-	require.Equal(t, "[01, 02)", sp2.String())
-	sp2.End[0] = 9
-	require.Equal(t, "[01, 02)", sp.String())
-	require.Equal(t, "[01, 09)", sp2.String())
-}
