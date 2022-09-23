@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -45,6 +46,8 @@ type actorNodeContext struct {
 	eventCount uint32
 	tableName  string
 	throw      func(error)
+
+	changefeedID model.ChangeFeedID
 }
 
 func newContext(stdCtx sdtContext.Context,
@@ -70,6 +73,7 @@ func newContext(stdCtx sdtContext.Context,
 		eventCount:       0,
 		tableName:        tableName,
 		throw:            throw,
+		changefeedID:     changefeedVars.ID,
 	}
 }
 
@@ -99,8 +103,8 @@ func (c *actorNodeContext) SendToNextNode(msg pmessage.Message) {
 	case <-c.Context.Done():
 		log.Info("context is canceled",
 			zap.String("tableName", c.tableName),
-			zap.String("namespace", c.changefeedVars.ID.Namespace),
-			zap.String("changefeed", c.changefeedVars.ID.ID),
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 		)
 	case c.outputCh <- msg:
 		c.trySendTickMessage()
