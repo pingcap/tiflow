@@ -71,6 +71,7 @@ function run() {
 	echo "prepare data for invalid connection test"
 	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test1(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT, h TINYINT)"
 	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test2(i TINYINT, j INT UNIQUE KEY, k TINYINT, m TINYINT, n TINYINT, h TINYINT)"
+	check_log_contain_with_retry 'finish to handle ddls in normal mode.*CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test2' $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 
 	kill_dm_worker
 

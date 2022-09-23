@@ -181,6 +181,7 @@ syncers:
     enable-gtid: false
     disable-detect: false
     safe-mode: false
+    safe-mode-duration: "60s"
     enable-ansi-quotes: false
 #validators:
 #  validator-01:

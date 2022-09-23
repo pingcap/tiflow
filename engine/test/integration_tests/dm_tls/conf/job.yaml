@@ -1,0 +1,33 @@
+task-mode: all
+target-database:
+  host: host.docker.internal
+  port: 4000
+  user: dm_user
+  password: ''
+  security:
+    ssl-key-base64: '<downstream-key>'
+    ssl-cert-base64: '<downstream-cert>'
+upstreams:
+  - db-config:
+      host: host.docker.internal
+      port: 3306
+      user: dm_user
+      password: ''
+      security:
+        ssl-key-base64: '<mysql1-key>'
+        ssl-cert-base64: '<mysql1-cert>'
+    source-id: mysql-01
+    block-allow-list: global
+  - db-config:
+      host: host.docker.internal
+      port: 3307
+      user: dm_user
+      password: ''
+      security:
+        ssl-key-base64: '<mysql2-key>'
+        ssl-cert-base64: '<mysql2-cert>'
+    source-id: mysql-02
+    block-allow-list: global
+block-allow-list:
+  global:
+    do-dbs: ["tls"]
