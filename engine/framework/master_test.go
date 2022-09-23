@@ -60,7 +60,7 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -69,7 +69,7 @@ func TestMasterInit(t *testing.T) {
 	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
 	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
 
-	master.On("OnMasterRecovered", mock.Anything).Return(nil)
+	master.On("OnMasterRecovered", mock.Anything).Return()
 	err = master.Init(ctx)
 	require.NoError(t, err)
 
@@ -113,7 +113,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		return master.TickCount() > 10
 	}, time.Millisecond*2000, time.Millisecond*10)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 

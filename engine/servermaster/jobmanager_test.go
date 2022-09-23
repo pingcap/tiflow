@@ -668,6 +668,6 @@ func TestJobOperatorBgLoop(t *testing.T) {
 		return tickCounter.Load() > 0
 	}, time.Second, time.Millisecond*100)
 
-	require.NoError(t, mgr.CloseImpl(ctx))
+	mgr.CloseImpl(ctx)
 	require.NoError(t, mgr.wg.Wait())
 }

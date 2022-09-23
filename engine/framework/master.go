@@ -97,20 +97,44 @@ type MasterImpl interface {
 	//   StopImpl.
 	Tick(ctx context.Context) error
 
-	// OnWorkerDispatched is called when a request to launch a worker is finished.
+	// OnWorkerDispatched is called when the asynchronized action of CreateWorker
+	// is finished. Only after OnWorkerDispatched, OnWorkerOnline and OnWorkerStatusUpdated
+	// of the same worker may be called.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel.
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
+	// Only after OnWorkerOnline, OnWorkerOffline of the same worker may be called.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerStatusUpdated.
 	OnWorkerOnline(worker WorkerHandle) error
 
-	// OnWorkerOffline is called when a worker exits or has timed out.
-	// Worker exit scenario contains normal finish and manually stop
+	// OnWorkerOffline is called as the consequence of worker's Exit or heartbeat
+	// timed out.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerStatusUpdated.
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
-	// OnWorkerStatusUpdated is called when a worker's status is updated.
+	// OnWorkerStatusUpdated is called as the consequence of worker's UpdateStatus.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerOnline and
+	//   OnWorkerOffline.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
 	// CloseImpl is called as the consequence of returning error from InitImpl,
