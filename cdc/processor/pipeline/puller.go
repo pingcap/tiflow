@@ -68,15 +68,16 @@ func (n *pullerNode) start(ctx context.Context,
 	sorter *sorterNode,
 	globalVar *cdcContext.GlobalVars,
 ) error {
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = contextutil.PutCaptureAddrInCtx(ctx, globalVar.CaptureInfo.AdvertiseAddr)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
+
 	n.wg = wg
-	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, globalVar.CaptureInfo.AdvertiseAddr)
-	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.New(
-		ctxC,
+		ctx,
 		up.PDClient,
 		up.GrpcPool,
 		up.RegionCache,
@@ -90,13 +91,13 @@ func (n *pullerNode) start(ctx context.Context,
 		n.tableName,
 	)
 	n.wg.Go(func() error {
-		n.reportErr(errors.Trace(plr.Run(ctxC)))
+		n.reportErr(errors.Trace(plr.Run(ctx)))
 		return nil
 	})
 	n.wg.Go(func() error {
 		for {
 			select {
-			case <-ctxC.Done():
+			case <-ctx.Done():
 				return nil
 			case rawKV := <-plr.Output():
 				if rawKV == nil {

@@ -143,11 +143,12 @@ func TestSorterReplicateTs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	changefeedID := model.DefaultChangeFeedID(t.Name())
 	p := &mockPD{ts: 1}
 	ts := oracle.ComposeTS(1, 1)
 	state := tablepb.TableStatePreparing
 	sn := newSorterNode(t.Name(), 1, 1, &mockFlowController{}, mockMounter{}, &state,
-		model.DefaultChangeFeedID(t.Name()), false, p)
+		changefeedID, false, p, func(err error) {})
 	sn.sorter = memory.NewEntrySorter()
 
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
@@ -155,7 +156,7 @@ func TestSorterReplicateTs(t *testing.T) {
 
 	eg := &errgroup.Group{}
 	router := actor.NewRouter[pmessage.Message](t.Name())
-	ctx1 := newContext(ctx, t.Name(), router, 1, nil, nil, func(err error) {})
+	ctx1 := newContext(ctx, t.Name(), router, 1, changefeedID, func(err error) {})
 	s := &mockSorter{
 		outCh:         make(chan *model.PolymorphicEvent, 1),
 		expectStartTs: 1,

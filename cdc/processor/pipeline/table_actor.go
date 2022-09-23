@@ -306,7 +306,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(ctx, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars, t.changefeedID, t.reportErr)
+		t.actorID, t.changefeedID, t.reportErr)
 	if err := startSorter(sortActorNodeContext, t); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
@@ -319,7 +319,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	pullerActorNodeContext := newContext(ctx,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars, t.changefeedID, t.reportErr)
+		t.actorID, t.changefeedID, t.reportErr)
 	t.pullerNode = pullerNode
 	if err := startPuller(pullerActorNodeContext, t); err != nil {
 		log.Error("puller fails to start",

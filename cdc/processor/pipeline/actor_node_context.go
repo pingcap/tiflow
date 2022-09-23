@@ -50,12 +50,10 @@ type actorNodeContext struct {
 	changefeedID model.ChangeFeedID
 }
 
-func newContext(stdCtx context.Context,
+func newContext(ctx context.Context,
 	tableName string,
 	tableActorRouter *actor.Router[pmessage.Message],
 	tableActorID actor.ID,
-	changefeedVars *cdcContext.ChangefeedVars,
-	globalVars *cdcContext.GlobalVars,
 	changefeedID model.ChangeFeedID,
 	throw func(error),
 ) *actorNodeContext {
@@ -64,12 +62,10 @@ func newContext(stdCtx context.Context,
 		batchSize = config.GetGlobalServerConfig().Debug.TableActor.EventBatchSize
 	}
 	return &actorNodeContext{
-		Context:          stdCtx,
+		Context:          ctx,
 		outputCh:         make(chan pmessage.Message, defaultOutputChannelSize),
 		tableActorRouter: tableActorRouter,
 		tableActorID:     tableActorID,
-		changefeedVars:   changefeedVars,
-		globalVars:       globalVars,
 		eventBatchSize:   batchSize,
 		eventCount:       0,
 		tableName:        tableName,
