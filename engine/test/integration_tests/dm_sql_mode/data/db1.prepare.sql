@@ -47,3 +47,12 @@ set @@session.time_zone = "Asia/Shanghai";
 insert into `sql_mode`.`timezone`(`id`, `a`) values (1, '2001-04-15 01:30:12');
 set @@session.time_zone = "America/Phoenix";
 insert into `sql_mode`.`timezone`(`id`, `a`) values (4, '2001-04-15 01:30:12');
+
+-- test GBK charset BTW
+create table t_3 (id int, name varchar(20), primary key(`id`)) character set gbk;
+insert into t_3 (id, name) values (0, '你好0');
+insert into t_3 (id, name) values (1, '你好1'), (2, '你好2');
+
+create table t_5 (id int, name varchar(20) character set gbk, primary key(`id`)) character set utf8;
+insert into t_5 (id, name) values (0, '你好0');
+insert into t_5 (id, name) values (1, '你好1'), (2, '你好2');
