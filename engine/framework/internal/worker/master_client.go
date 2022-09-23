@@ -131,7 +131,9 @@ func (m *MasterClient) asyncReloadMasterInfo(ctx context.Context) <-chan error {
 		metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
 		masterMeta, err := metaClient.Load(timeoutCtx)
 		if err != nil {
+			log.Warn("async reload master info failed", zap.Error(err))
 			errCh <- err
+			return
 		}
 
 		m.putMasterInfo(masterMeta.NodeID, masterMeta.Epoch)
