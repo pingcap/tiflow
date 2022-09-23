@@ -33,6 +33,7 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	uberatomic "go.uber.org/atomic"
@@ -94,7 +95,9 @@ type tableActor struct {
 	globalVars     *cdcContext.GlobalVars
 	// these fields below are used in logs and metrics only
 	changefeedID model.ChangeFeedID
-	tableName    string
+	// todo: initialize this field.
+	changefeedInfo *model.ChangeFeedInfo
+	tableName      string
 
 	// use to report error to processor
 	reportErr func(error)
@@ -282,7 +285,7 @@ func (t *tableActor) handleStopMsg(ctx context.Context) {
 	}()
 }
 
-func (t *tableActor) start(sdtTableContext context.Context) error {
+func (t *tableActor) start(ctx context.Context) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("namespace", t.changefeedID.Namespace),
@@ -298,13 +301,13 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled(),
-		t.upstream.PDClient,
+		t.upstream.PDClient, t.reportErr,
 	)
 	t.sortNode = sorterNode
-	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
+	sortActorNodeContext := newContext(ctx, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := startSorter(t, sortActorNodeContext); err != nil {
+		t.actorID, t.changefeedVars, t.globalVars, t.changefeedID, t.reportErr)
+	if err := startSorter(sortActorNodeContext, t); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -312,13 +315,13 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
-	pullerActorNodeContext := newContext(sdtTableContext,
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID, t.reportErr)
+	pullerActorNodeContext := newContext(ctx,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
+		t.actorID, t.changefeedVars, t.globalVars, t.changefeedID, t.reportErr)
 	t.pullerNode = pullerNode
-	if err := startPuller(t, pullerActorNodeContext); err != nil {
+	if err := startPuller(pullerActorNodeContext, t); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -342,7 +345,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	var messageProcessFunc asyncMessageProcessorFunc = func(
 		ctx context.Context, msg pmessage.Message,
 	) (bool, error) {
-		return actorSinkNode.HandleMessage(sdtTableContext, msg)
+		return actorSinkNode.HandleMessage(ctx, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
@@ -508,12 +511,13 @@ func (t *tableActor) RemainEvents() int64 {
 }
 
 // for ut
-var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
+var startPuller = func(ctx context.Context, t *tableActor) error {
+	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode, t.globalVars)
 }
 
-var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
+var startSorter = func(ctx pipeline.NodeContext, t *tableActor) error {
+	eventSorter, err := createSorter(ctx, t.tableName, t.tableID,
+		t.changefeedID, t.changefeedInfo, t.globalVars)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -56,6 +56,7 @@ func newContext(stdCtx context.Context,
 	tableActorID actor.ID,
 	changefeedVars *cdcContext.ChangefeedVars,
 	globalVars *cdcContext.GlobalVars,
+	changefeedID model.ChangeFeedID,
 	throw func(error),
 ) *actorNodeContext {
 	batchSize := defaultEventBatchSize
@@ -73,20 +74,12 @@ func newContext(stdCtx context.Context,
 		eventCount:       0,
 		tableName:        tableName,
 		throw:            throw,
-		changefeedID:     changefeedVars.ID,
+		changefeedID:     changefeedID,
 	}
 }
 
 func (c *actorNodeContext) setEventBatchSize(eventBatchSize uint32) {
 	atomic.StoreUint32(&c.eventBatchSize, eventBatchSize)
-}
-
-func (c *actorNodeContext) GlobalVars() *cdcContext.GlobalVars {
-	return c.globalVars
-}
-
-func (c *actorNodeContext) ChangefeedVars() *cdcContext.ChangefeedVars {
-	return c.changefeedVars
 }
 
 func (c *actorNodeContext) Throw(err error) {

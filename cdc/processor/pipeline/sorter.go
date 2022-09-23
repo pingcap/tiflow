@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
@@ -93,6 +94,8 @@ type sorterNode struct {
 	changefeed     model.ChangeFeedID
 	// remainEvents record the amount of event remain in sorter engine
 	remainEvents int64
+
+	reportErr func(err error)
 }
 
 func newSorterNode(
@@ -100,6 +103,7 @@ func newSorterNode(
 	flowController tableFlowController, mounter entry.Mounter,
 	state *tablepb.TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
 	pdClient pd.Client,
+	reportErr func(err error),
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -115,34 +119,41 @@ func newSorterNode(
 		pdClient:       pdClient,
 
 		changefeed: changefeed,
+		reportErr:  reportErr,
 	}
 }
 
-func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
-	sortEngine := ctx.ChangefeedVars().Info.Engine
+func createSorter(ctx context.Context,
+	tableName string,
+	tableID model.TableID,
+	changefeedID model.ChangeFeedID,
+	changefeedInfo *model.ChangeFeedInfo,
+	globalVars *cdcContext.GlobalVars,
+) (sorter.EventSorter, error) {
+	sortEngine := changefeedInfo.Engine
 	switch sortEngine {
 	// `file` and `memory` become aliases of `unified` for backward compatibility.
 	case model.SortInMemory, model.SortUnified, model.SortInFile:
 		if sortEngine == model.SortInMemory {
 			log.Warn("Memory sorter is deprecated so we use unified sorter by default.",
-				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.String("tableName", tableName))
 		}
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings.",
-				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.String("tableName", tableName))
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			startTs := ctx.ChangefeedVars().Info.StartTs
-			ssystem := ctx.GlobalVars().SorterSystem
+			startTs := changefeedInfo.StartTs
+			ssystem := globalVars.SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))
-			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
+			compactScheduler := globalVars.SorterSystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
-				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ctx, changefeedID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
@@ -154,7 +165,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, tableName, tableID)
+		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, changefeedID, tableName, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +188,7 @@ func (n *sorterNode) start(
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
+		n.reportErr(errors.Trace(eventSorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -281,7 +292,7 @@ func (n *sorterNode) start(
 							zap.Int64("tableID", n.tableID),
 							zap.String("tableName", n.tableName),
 							zap.Error(err))
-						ctx.Throw(err)
+						n.reportErr(err)
 						return errors.Trace(err)
 					}
 					if ignored {
@@ -329,7 +340,7 @@ func (n *sorterNode) start(
 								zap.Int64("tableID", n.tableID),
 								zap.String("tableName", n.tableName))
 						} else {
-							ctx.Throw(err)
+							n.reportErr(err)
 						}
 						return nil
 					}

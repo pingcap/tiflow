@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -36,6 +36,8 @@ type pullerNode struct {
 	changefeed model.ChangeFeedID
 	cancel     context.CancelFunc
 	wg         *errgroup.Group
+
+	reportErr func(err error)
 }
 
 func newPullerNode(
@@ -43,12 +45,14 @@ func newPullerNode(
 	startTs model.Ts,
 	tableName string,
 	changefeed model.ChangeFeedID,
+	reportErr func(err error),
 ) *pullerNode {
 	return &pullerNode{
 		tableID:    tableID,
 		startTs:    startTs,
 		tableName:  tableName,
 		changefeed: changefeed,
+		reportErr:  reportErr,
 	}
 }
 
@@ -59,13 +63,14 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 	return spans
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext,
+func (n *pullerNode) start(ctx context.Context,
 	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
+	globalVar *cdcContext.GlobalVars,
 ) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, globalVar.CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
@@ -85,7 +90,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		n.tableName,
 	)
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(plr.Run(ctxC)))
+		n.reportErr(errors.Trace(plr.Run(ctxC)))
 		return nil
 	})
 	n.wg.Go(func() error {

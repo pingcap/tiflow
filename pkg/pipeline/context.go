@@ -14,7 +14,8 @@
 package pipeline
 
 import (
-	"github.com/pingcap/tiflow/pkg/context"
+	"context"
+
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 )
 
