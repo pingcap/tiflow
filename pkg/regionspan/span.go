@@ -46,12 +46,6 @@ func (s Span) String() string {
 	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
 }
 
-// Hack will set End as UpperBoundKey if End is Nil.
-func (s Span) Hack() Span {
-	s.Start, s.End = hackSpan(s.Start, s.End)
-	return s
-}
-
 func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
 	start = originStart
 	end = originEnd
