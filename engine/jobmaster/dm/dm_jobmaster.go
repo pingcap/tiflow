@@ -286,8 +286,10 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {
-		// log and ignore the error.
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
+	}
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
+		jm.Logger().Error("failed to delete task", zap.Error(err))
 	}
 }
 
