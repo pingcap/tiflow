@@ -68,7 +68,6 @@ func (s *spanFrontier) Frontier() uint64 {
 
 // Forward advances the timestamp for a span.
 func (s *spanFrontier) Forward(span regionspan.ComparableSpan, ts uint64) {
-	span = span.Hack()
 	s.insert(span, ts)
 }
 
