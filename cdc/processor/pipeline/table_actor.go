@@ -49,6 +49,7 @@ var (
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
 // replicating 1024 tables in the worst case.
+// todo: how about enlarge this value to 256, and make this configurable.
 const defaultOutputChannelSize = 64
 
 const sinkFlushInterval = 500 * time.Millisecond

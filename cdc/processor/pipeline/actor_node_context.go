@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	sdtContext "context"
+	"context"
 	"sync/atomic"
 
 	"github.com/pingcap/log"
@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/context"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
@@ -35,12 +35,12 @@ const defaultEventBatchSize = uint32(32)
 // the SendToNextNode buffer the pipeline message and tick the actor system
 // the Throw function handle error and stop the actor
 type actorNodeContext struct {
-	sdtContext.Context
+	context.Context
 	outputCh         chan pmessage.Message
 	tableActorRouter *actor.Router[pmessage.Message]
 	tableActorID     actor.ID
-	changefeedVars   *context.ChangefeedVars
-	globalVars       *context.GlobalVars
+	changefeedVars   *cdcContext.ChangefeedVars
+	globalVars       *cdcContext.GlobalVars
 	eventBatchSize   uint32
 	// eventCount is the count of pipeline event that no tick message is sent to actor
 	eventCount uint32
@@ -50,12 +50,12 @@ type actorNodeContext struct {
 	changefeedID model.ChangeFeedID
 }
 
-func newContext(stdCtx sdtContext.Context,
+func newContext(stdCtx context.Context,
 	tableName string,
 	tableActorRouter *actor.Router[pmessage.Message],
 	tableActorID actor.ID,
-	changefeedVars *context.ChangefeedVars,
-	globalVars *context.GlobalVars,
+	changefeedVars *cdcContext.ChangefeedVars,
+	globalVars *cdcContext.GlobalVars,
 	throw func(error),
 ) *actorNodeContext {
 	batchSize := defaultEventBatchSize
@@ -81,11 +81,11 @@ func (c *actorNodeContext) setEventBatchSize(eventBatchSize uint32) {
 	atomic.StoreUint32(&c.eventBatchSize, eventBatchSize)
 }
 
-func (c *actorNodeContext) GlobalVars() *context.GlobalVars {
+func (c *actorNodeContext) GlobalVars() *cdcContext.GlobalVars {
 	return c.globalVars
 }
 
-func (c *actorNodeContext) ChangefeedVars() *context.ChangefeedVars {
+func (c *actorNodeContext) ChangefeedVars() *cdcContext.ChangefeedVars {
 	return c.changefeedVars
 }
 
