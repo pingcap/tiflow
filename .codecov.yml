@@ -38,6 +38,8 @@ ignore:
   - "*.md"
   - "docs/.*"
   - "testing_utils/.*"
+  - "mock/.*"
+  - "*_mock.go"
 
 flags:
   cdc:
