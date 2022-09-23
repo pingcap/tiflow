@@ -15,16 +15,19 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	ormMock "github.com/pingcap/tiflow/engine/pkg/orm/mock"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -492,4 +495,24 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 	require.Equal(t,
 		time.Duration(clock.ToMono(sendTime1)),
 		helper.Client.lastMasterAckedPingTime.Load())
+}
+
+func TestAsyncReloadMasterInfoFailed(t *testing.T) {
+	t.Parallel()
+
+	mockframeMetaClient := ormMock.NewMockClient(gomock.NewController(t))
+	masterID := "test-async-reload-failed"
+	mc := &MasterClient{
+		masterID:        masterID,
+		frameMetaClient: mockframeMetaClient,
+	}
+
+	ctx := context.Background()
+	mockErr := errors.New("mock get job error")
+	mockframeMetaClient.EXPECT().
+		GetJobByID(gomock.Any(), masterID).Times(1).
+		Return(nil, mockErr)
+	ch := mc.asyncReloadMasterInfo(ctx)
+	err := <-ch
+	require.EqualError(t, err, mockErr.Error())
 }
