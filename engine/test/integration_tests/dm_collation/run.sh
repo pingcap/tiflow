@@ -27,15 +27,6 @@ function run() {
 	# create job
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_collation")
 
-	# TODO: blocked by https://github.com/pingcap/tiflow/issues/6856
-	#	# utf8mb4_0900_as_cs is not supported, should display error message
-	#
-	#	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -r '.task_status.\"mysql-02\".status.result.errors[0].message' | grep -q \"Error 1273: Unknown collation: 'utf8mb4_0900_as_cs'\""
-	#	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
-	#	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
-	#	# change allow-list
-	#	# clean downstraem data
-
 	# wait for dump and load finished
 
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMSyncTask\" and .task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
