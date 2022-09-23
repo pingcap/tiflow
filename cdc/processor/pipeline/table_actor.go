@@ -117,6 +117,7 @@ func NewTableActor(
 	sinkV2 sinkv2.TableSink,
 	redoManager redo.LogManager,
 	targetTs model.Ts,
+	changefeedID model.ChangeFeedID,
 ) (tablepb.TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	changefeedVars := cdcCtx.ChangefeedVars()
@@ -150,7 +151,7 @@ func NewTableActor(
 		targetTs:      targetTs,
 		started:       false,
 
-		changefeedID:   changefeedVars.ID,
+		changefeedID:   changefeedID,
 		changefeedVars: changefeedVars,
 		globalVars:     globalVars,
 		router:         globalVars.TableActorSystem.Router(),

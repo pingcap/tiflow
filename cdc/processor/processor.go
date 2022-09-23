@@ -970,7 +970,8 @@ func (p *processor) createTablePipelineImpl(
 			s,
 			nil,
 			p.redoManager,
-			p.changefeed.Info.GetTargetTs())
+			p.changefeed.Info.GetTargetTs(),
+			p.changefeedID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -987,7 +988,8 @@ func (p *processor) createTablePipelineImpl(
 			nil,
 			s,
 			p.redoManager,
-			p.changefeed.Info.GetTargetTs())
+			p.changefeed.Info.GetTargetTs(),
+			p.changefeedID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

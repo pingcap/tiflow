@@ -392,10 +392,11 @@ func TestNewTableActor(t *testing.T) {
 		TableActorSystem: sys,
 	}
 
+	changefeedID := model.DefaultChangeFeedID("changefeed-id-test")
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
 		&cdcContext.ChangefeedVars{
-			ID: model.DefaultChangeFeedID("changefeed-id-test"),
+			ID: changefeedID,
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -410,7 +411,8 @@ func TestNewTableActor(t *testing.T) {
 	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
-		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10,
+		changefeedID)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.Equal(t, tablepb.TableStatePreparing, tbl.State())
@@ -426,7 +428,8 @@ func TestNewTableActor(t *testing.T) {
 	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
-		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10,
+		changefeedID)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
