@@ -14,9 +14,17 @@
 package servermaster
 
 import (
+	"fmt"
+	"math/rand"
+	"time"
+
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"google.golang.org/grpc"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // multiClient is an interface that implements all the Client interfaces
 // for the individual services running on the server masters.
@@ -41,4 +49,10 @@ func newMultiClient(conn *grpc.ClientConn) multiClient {
 		TaskSchedulerClient:   enginepb.NewTaskSchedulerClient(conn),
 		JobManagerClient:      enginepb.NewJobManagerClient(conn),
 	}
+}
+
+func generateNodeID(name string) string {
+	val := rand.Uint32()
+	id := fmt.Sprintf("%s-%08x", name, val)
+	return id
 }

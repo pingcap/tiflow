@@ -30,8 +30,11 @@ const itemLayout = {
   wrapperCol: { span: 18 },
 }
 
-const createPattern = (name: string[]) =>
-  name.length === 0 ? '*' : name.join('|')
+const createPattern = (name: string[]) => {
+  if (name.length === 0) return '*'
+  if (name.length === 1) return name[0]
+  return '~' + name.join('|')
+}
 
 const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
   const [t] = useTranslation()
