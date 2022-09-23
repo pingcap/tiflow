@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -42,8 +41,8 @@ type pullerNode struct {
 
 func newPullerNode(
 	tableID model.TableID,
-	startTs model.Ts,
 	tableName string,
+	startTs model.Ts,
 	changefeed model.ChangeFeedID,
 	reportErr func(err error),
 ) *pullerNode {
@@ -66,10 +65,10 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 func (n *pullerNode) start(ctx context.Context,
 	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
-	globalVar *cdcContext.GlobalVars,
+	captureAddr string,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, globalVar.CaptureInfo.AdvertiseAddr)
+	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureAddr)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
 
 	n.wg = wg

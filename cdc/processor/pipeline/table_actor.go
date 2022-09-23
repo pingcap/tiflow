@@ -309,13 +309,16 @@ func (t *tableActor) start(ctx context.Context) error {
 		t.actorID, t.changefeedID, t.reportErr)
 	if err := startSorter(sortActorNodeContext, t); err != nil {
 		log.Error("sorter fails to start",
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID, t.reportErr)
+	pullerNode := newPullerNode(t.tableID, t.tableName,
+		t.replicaInfo.StartTs, t.changefeedID, t.reportErr)
 	pullerActorNodeContext := newContext(ctx,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -323,9 +326,10 @@ func (t *tableActor) start(ctx context.Context) error {
 	t.pullerNode = pullerNode
 	if err := startPuller(pullerActorNodeContext, t); err != nil {
 		log.Error("puller fails to start",
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
-			zap.Error(err))
+			zap.Int64("tableID", t.tableID))
 		return err
 	}
 	var messageFetchFunc asyncMessageHolderFunc = func() *pmessage.Message {
@@ -512,12 +516,13 @@ func (t *tableActor) RemainEvents() int64 {
 
 // for ut
 var startPuller = func(ctx context.Context, t *tableActor) error {
-	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode, t.globalVars)
+	return t.pullerNode.start(ctx, t.upstream, t.wg,
+		t.sortNode, t.globalVars.CaptureInfo.AdvertiseAddr)
 }
 
 var startSorter = func(ctx pipeline.NodeContext, t *tableActor) error {
 	eventSorter, err := createSorter(ctx, t.tableName, t.tableID,
-		t.changefeedID, t.changefeedInfo, t.globalVars)
+		t.changefeedID, t.changefeedInfo, t.globalVars.SorterSystem)
 	if err != nil {
 		return errors.Trace(err)
 	}

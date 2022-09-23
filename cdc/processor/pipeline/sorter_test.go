@@ -47,9 +47,9 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 		config.GetGlobalServerConfig().Debug.EnableDBSorter = true
 	}()
 
-	_, err := unified.NewUnifiedSorter(dir,
-		model.DefaultChangeFeedID("changefeed-id-test"),
-		"test", 0)
+	changefeed := model.DefaultChangeFeedID("changefeed-id-test")
+
+	_, err := unified.NewUnifiedSorter(dir, changefeed, "test", 0)
 	require.Nil(t, err)
 
 	unified.ResetGlobalPoolWithoutCleanup()
@@ -57,15 +57,16 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
 	nodeCtx := pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)
-	_, err = createSorter(nodeCtx, "", 0)
+	_, err = createSorter(nodeCtx, "", 0, changefeed, nil, nil)
 	require.True(t, strings.Contains(err.Error(), "file lock conflict"))
 }
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
+	changefeed := model.DefaultChangeFeedID("changefeed-id-test")
 	state := tablepb.TableStatePreparing
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
-		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
+		changefeed, false, &mockPD{}, func(err error) {})
 	sn.sorter = memory.NewEntrySorter()
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 	require.Equal(t, tablepb.TableStatePreparing, sn.State())
@@ -200,8 +201,9 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
 	state := tablepb.TableStatePreparing
+	changefeed := model.DefaultChangeFeedID("changefeed-id-test")
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
-		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
+		changefeed, false, &mockPD{}, func(err error) {})
 	sn.sorter = s
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 

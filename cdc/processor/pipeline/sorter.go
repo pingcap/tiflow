@@ -26,11 +26,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
@@ -128,7 +128,7 @@ func createSorter(ctx context.Context,
 	tableID model.TableID,
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
-	globalVars *cdcContext.GlobalVars,
+	ssystem *ssystem.System,
 ) (sorter.EventSorter, error) {
 	sortEngine := changefeedInfo.Engine
 	switch sortEngine {
@@ -149,9 +149,8 @@ func createSorter(ctx context.Context,
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := changefeedInfo.StartTs
-			ssystem := globalVars.SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))
-			compactScheduler := globalVars.SorterSystem.CompactScheduler()
+			compactScheduler := ssystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
 				ctx, changefeedID, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
