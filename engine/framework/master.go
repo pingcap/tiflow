@@ -117,12 +117,12 @@ type MasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 
 	// OnWorkerOffline is called as the consequence of worker's Exit or heartbeat
-	// timed out.
+	// timed out. It's the last callback function among OnWorkerXXX for a worker.
 	// Return:
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
 	// - this function may be concurrently called with another worker's OnWorkerXXX,
-	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerStatusUpdated.
+	//   Tick, CloseImpl, StopImpl, OnCancel.
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
@@ -133,8 +133,7 @@ type MasterImpl interface {
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
 	// - this function may be concurrently called with another worker's OnWorkerXXX,
-	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerOnline and
-	//   OnWorkerOffline.
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerOnline.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
 	// CloseImpl is called as the consequence of returning error from InitImpl,

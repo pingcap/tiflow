@@ -276,6 +276,8 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
+// checkpoint is removed when job is stopped, this is different with OP DM where
+// `--remove-meta` is specified at start-task.
 func (jm *JobMaster) StopImpl(ctx context.Context) {
 	jm.Logger().Info("stoping the dm jobmaster")
 

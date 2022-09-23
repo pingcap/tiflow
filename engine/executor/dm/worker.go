@@ -173,19 +173,19 @@ func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) {
 	w.Logger().Info("close the dm worker", zap.String("task-id", w.taskID))
-	// unregister jobmaster client
-	if w.messageAgent != nil {
-		if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
-			w.Logger().Error("failed to update message client", zap.Error(err))
-		}
+
+	if err := w.unitHolder.Close(ctx); err != nil {
+		w.Logger().Error("fail to close unit holder", zap.Error(err))
 	}
 
-	w.unitHolder.Close(ctx)
-
-	if w.messageAgent != nil {
-		if err := w.messageAgent.Close(ctx); err != nil {
-			w.Logger().Error("failed to close message client", zap.Error(err))
-		}
+	if w.messageAgent == nil {
+		return
+	}
+	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
+		w.Logger().Error("failed to update message client", zap.Error(err))
+	}
+	if err := w.messageAgent.Close(ctx); err != nil {
+		w.Logger().Error("failed to close message client", zap.Error(err))
 	}
 }
 

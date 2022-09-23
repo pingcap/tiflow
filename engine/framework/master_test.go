@@ -69,7 +69,7 @@ func TestMasterInit(t *testing.T) {
 	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
 	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
 
-	master.On("OnMasterRecovered", mock.Anything).Return()
+	master.On("OnMasterRecovered", mock.Anything).Return(nil)
 	err = master.Init(ctx)
 	require.NoError(t, err)
 
