@@ -16,11 +16,15 @@ package internal
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
 // ResourceController is an interface providing relevant operations related
 // to one resource type.
 type ResourceController interface {
-	GCHandler() func(context.Context, *resModel.ResourceMeta) error
+	// GCSingleResource remove a persisted resource.
+	GCSingleResource(context.Context, *resModel.ResourceMeta) error
+	// GCExecutors removes all temporary resources created by the offlined exectors.
+	GCExecutor(context.Context, []*resModel.ResourceMeta, model.ExecutorID) error
 }

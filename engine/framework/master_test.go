@@ -64,7 +64,8 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Restart the master
-	master.Reset()
+	cancelFn := master.Reset()
+	defer cancelFn()
 	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
 	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
 

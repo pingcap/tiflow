@@ -448,10 +448,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.resourceBroker = broker.NewBroker(
-		&s.cfg.Storage,
-		s.selfID,
-		s.masterClient)
+	s.resourceBroker, err = broker.NewBroker(&s.cfg.Storage, s.selfID, s.masterClient)
+	if err != nil {
+		return err
+	}
+	defer s.resourceBroker.Close()
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 

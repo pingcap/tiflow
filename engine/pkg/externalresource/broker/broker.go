@@ -16,6 +16,7 @@ package broker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -23,25 +24,41 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const (
+	defaultTimeout                 = 3 * time.Second
+	defaultClosedWOrkerChannelSize = 10000
+)
+
+type closedWorker struct {
+	workerID resModel.WorkerID
+	jobID    resModel.JobID
+}
 
 // DefaultBroker must implement Broker.
 var _ Broker = (*DefaultBroker)(nil)
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
-	config     *resModel.Config
 	executorID resModel.ExecutorID
 	client     client.ResourceManagerClient
 
 	fileManagers map[resModel.ResourceType]internal.FileManager
+	// TODO: add monitor for closedWorkerCh
+	closedWorkerCh chan closedWorker
+
+	dummyHandler Handle
+	cancel       context.CancelFunc
 }
 
 // NewBroker creates a new Impl instance
@@ -49,27 +66,40 @@ func NewBroker(
 	config *resModel.Config,
 	executorID resModel.ExecutorID,
 	client client.ResourceManagerClient,
-) *DefaultBroker {
+) (*DefaultBroker, error) {
 	log.Info("Create new resource broker",
 		zap.String("executor-id", string(executorID)),
 		zap.Any("config", config))
 
-	fileManagers := make(map[resModel.ResourceType]internal.FileManager)
-	fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
-	if config.S3Enabled() {
-		log.Info("S3 is enabled")
-		// TODO：add s3 file manager
-		// fileManagers[resModel.ResourceTypeS3] = s3.NewFileManagerWithConfig(executorID, config.S3)
-	} else {
-		log.Info("S3 config is not complete, will not use s3 as external storage")
+	broker := &DefaultBroker{
+		executorID:     executorID,
+		client:         client,
+		fileManagers:   make(map[resModel.ResourceType]internal.FileManager),
+		closedWorkerCh: make(chan closedWorker, defaultClosedWOrkerChannelSize),
 	}
 
-	return &DefaultBroker{
-		config:       config,
-		executorID:   executorID,
-		client:       client,
-		fileManagers: fileManagers,
+	ctx, cancel := context.WithCancel(context.Background())
+	go broker.runGCClosedWorker(ctx)
+	broker.cancel = cancel
+
+	// Initialize local file managers
+	if config == nil || !config.LocalEnabled() {
+		log.Panic("local file manager must be supported by resource broker")
 	}
+	broker.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
+
+	// Initialize s3 file managers
+	if !config.S3Enabled() {
+		log.Info("S3 config is not complete, will not use s3 as external storage")
+		return broker, nil
+	}
+
+	broker.fileManagers[resModel.ResourceTypeS3] = s3.NewFileManagerWithConfig(executorID, config.S3)
+	if err := broker.createDummyS3Resource(); err != nil {
+		return nil, err
+	}
+
+	return broker, nil
 }
 
 // OpenStorage implements Broker.OpenStorage
@@ -80,7 +110,7 @@ func (b *DefaultBroker) OpenStorage(
 	jobID resModel.JobID,
 	resID resModel.ResourceID,
 ) (Handle, error) {
-	// Note the semantics of ParseResourcePath:
+	// Note the semantics of PasreResourceID:
 	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
 	// and resName == "my-resource".
 	tp, resName, err := resModel.PasreResourceID(resID)
@@ -138,23 +168,46 @@ func (b *DefaultBroker) createResource(
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
 func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
-	scope := internal.ResourceScope{
-		Executor: b.executorID,
-		WorkerID: workerID,
+	timer := time.NewTimer(defaultTimeout)
+	select {
+	case b.closedWorkerCh <- closedWorker{workerID: workerID, jobID: jobID}:
+		return
+	case <-timer.C:
+		log.Error("closed worker channel is full, broker may be stuck")
 	}
-	for _, fm := range b.fileManagers {
-		err := fm.RemoveTemporaryFiles(ctx, scope)
-		if err != nil {
-			// TODO when we have a cloud-based error collection service, we need
-			// to report this.
-			// However, since an error here is unlikely to indicate a correctness
-			// problem, we do not take further actions.
-			log.Warn("Failed to remove temporary files for worker",
-				zap.String("worker-id", workerID),
-				zap.String("job-id", jobID),
-				zap.Error(err))
+}
+
+func (b *DefaultBroker) runGCClosedWorker(ctx context.Context) {
+	// We run a gc loop at the max frequency of once per second.
+	rl := ratelimit.New(1 /* once per second */)
+	for {
+		rl.Take()
+		select {
+		case <-ctx.Done():
+			return
+		case w := <-b.closedWorkerCh:
+			scope := internal.ResourceScope{
+				Executor: b.executorID,
+				WorkerID: w.workerID,
+			}
+			for _, fm := range b.fileManagers {
+				err := fm.RemoveTemporaryFiles(ctx, scope)
+				if err != nil {
+					// TODO when we have a cloud-based error collection service, we need
+					// to report this.
+					// However, since an error here is unlikely to indicate a correctness
+					// problem, we do not take further actions.
+					log.Warn("Failed to remove temporary files for worker",
+						zap.String("worker-id", w.workerID),
+						zap.String("job-id", w.jobID),
+						zap.Error(err))
+					// handle this worker later
+					b.OnWorkerClosed(ctx, w.workerID, w.jobID)
+				}
+			}
 		}
 	}
+
 }
 
 // RemoveResource implements pb.BrokerServiceServer.
@@ -247,7 +300,73 @@ func (b *DefaultBroker) getPersistResource(
 	return fm.GetPersistedResource(ctx, ident)
 }
 
-// PreCheckConfig does a preflight check on the executor's storage configurations.
+func (b *DefaultBroker) createDummyS3Resource() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// TODO: add retry
+	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
+	if !ok {
+		return errors.New("S3 file manager not found")
+	}
+
+	desc, err := s3FileManager.CreateResource(ctx, s3.GetDummyIdent(b.executorID))
+	if err != nil {
+		return err
+	}
+
+	handler, err := newResourceHandle(fmt.Sprintf(s3.DummyJobID, b.executorID), b.executorID,
+		s3FileManager, desc, false, b.client)
+	if err != nil {
+		return err
+	}
+
+	handler.Persist(ctx)
+	if err != nil {
+		return err
+	}
+
+	b.dummyHandler = handler
+	return nil
+}
+
+func (b *DefaultBroker) Close() {
+	b.cancel()
+
+	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
+		defer fm.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Hour)
+		defer cancel()
+
+		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+			Executor: b.executorID,
+			WorkerID: "", /* empty workID means remove all temp files in executor */
+		})
+		if err != nil {
+			// Ignore this error since gcCoordinator will clean up this temp files.
+			log.Warn("failed to remove temporary files in executor",
+				zap.String("executorID", string(b.executorID)), zap.Error(err))
+			return
+		}
+
+		// Remove s3 dummy file meta
+		if b.dummyHandler != nil {
+			_ = b.dummyHandler.Discard(ctx)
+		}
+	}
+}
+
+// PreCheckConfig checks the configuration of external storage.
 func PreCheckConfig(config resModel.Config) error {
-	return local.PreCheckConfig(config)
+	if config.LocalEnabled() {
+		if err := local.PreCheckConfig(config.Local); err != nil {
+			return err
+		}
+	}
+	if config.S3Enabled() {
+		if err := s3.PreCheckConfig(config.S3); err != nil {
+			return err
+		}
+	}
+	return nil
 }
