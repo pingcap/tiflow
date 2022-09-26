@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
@@ -161,7 +160,7 @@ func newServerMasterMetric() *serverMasterMetric {
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
-	id := "server-master-" + uuid.New().String()
+	id := generateNodeID(cfg.Name)
 	msgService := p2p.NewMessageRPCServiceWithRPCServer(id, nil, nil)
 	p2pMsgRouter := p2p.NewMessageRouter(id, cfg.AdvertiseAddr)
 
