@@ -437,8 +437,9 @@ func TestDeleteCaptureInfo(t *testing.T) {
 	err := s.client.DeleteCaptureInfo(ctx, captureID)
 	require.NoError(t, err)
 	for id := range changefeedStatus {
-		_, _, err := s.client.GetTaskPosition(ctx, id, captureID)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "ErrTaskPositionNotExists")
+		taskPositionKey := GetEtcdKeyTaskPosition(DefaultCDCClusterID, id, captureID)
+		v, err := s.client.Client.Get(ctx, taskPositionKey)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(v.Kvs))
 	}
 }
