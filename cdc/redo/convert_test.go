@@ -134,9 +134,11 @@ func TestDDLRedoConvert(t *testing.T) {
 	ddl := &model.DDLEvent{
 		StartTs:  1020,
 		CommitTs: 1030,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "test",
-			Table:  "t2",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
 		},
 		Type:  timodel.ActionAddColumn,
 		Query: "ALTER TABLE test.t1 ADD COLUMN a int",

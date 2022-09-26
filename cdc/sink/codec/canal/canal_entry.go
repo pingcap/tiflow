@@ -206,14 +206,14 @@ func (b *canalEntryBuilder) fromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 // fromDDLEvent builds canal entry from cdc DDLEvent
 func (b *canalEntryBuilder) fromDDLEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := b.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.TableInfo.TableName.Schema, e.TableInfo.TableName.Table, eventType, -1)
 	isDdl := isCanalDDL(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
 		IsDdlPresent:     &canal.RowChange_IsDdl{IsDdl: isDdl},
 		Sql:              e.Query,
 		RowDatas:         nil,
-		DdlSchemaName:    e.TableInfo.Schema,
+		DdlSchemaName:    e.TableInfo.TableName.Schema,
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {

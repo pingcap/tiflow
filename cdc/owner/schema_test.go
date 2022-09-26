@@ -20,6 +20,7 @@ import (
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -133,11 +134,23 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "create table test.t1(id int primary key)",
 		Type:     timodel.ActionCreateTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		// TableInfo: &model.SimpleTableInfo{
+		// 	Schema:     "test",
+		// 	Table:      "t1",
+		// 	TableID:    job.TableID,
+		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		// },
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+				},
+			},
 		},
 		PreTableInfo: nil,
 	})
@@ -151,17 +164,42 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
 		Type:     timodel.ActionAddColumn,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}, {Name: "c1", Type: mysql.TypeString}},
+		// TableInfo: &model.SimpleTableInfo{
+		// 	Schema:     "test",
+		// 	Table:      "t1",
+		// 	TableID:    job.TableID,
+		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}, {Name: "c1", Type: mysql.TypeString}},
+		// },
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeString)},
+				},
+			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		// PreTableInfo: &model.SimpleTableInfo{
+		// 	Schema:     "test",
+		// 	Table:      "t1",
+		// 	TableID:    job.TableID,
+		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		// },
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+				},
+			},
 		},
 	})
 }
@@ -229,25 +267,27 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "RENAME TABLE `test1`.`t1` TO `test1`.`t10`",
 		Type:     timodel.ActionRenameTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t10",
-			TableID: t1TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t10",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t1",
-			TableID: t1TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t1",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -257,25 +297,27 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "RENAME TABLE `test1`.`t2` TO `test1`.`t20`",
 		Type:     timodel.ActionRenameTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t20",
-			TableID: t2TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t20",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t2",
-			TableID: t2TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t2",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -317,25 +359,27 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		CommitTs: t1DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP TABLE `test`.`t1`",
 		Type:     timodel.ActionDropTable,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: t1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: t1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: t1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: t1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -350,25 +394,27 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		CommitTs: t2DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP TABLE `test`.`t2`",
 		Type:     timodel.ActionDropTable,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t2",
-			TableID: t2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t2",
+				TableID: t2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t2",
-			TableID: t2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t2",
+				TableID: t2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -426,25 +472,27 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		CommitTs: view1DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP VIEW `test`.`view1`",
 		Type:     timodel.ActionDropView,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view1",
-			TableID: view1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view1",
+				TableID: view1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view1",
-			TableID: view1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view1",
+				TableID: view1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
@@ -459,25 +507,27 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		CommitTs: view2DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP VIEW `test`.`view2`",
 		Type:     timodel.ActionDropView,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view2",
-			TableID: view2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view2",
+				TableID: view2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view2",
-			TableID: view2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view2",
+				TableID: view2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
