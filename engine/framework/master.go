@@ -69,7 +69,7 @@ type Master interface {
 type MasterImpl interface {
 	// InitImpl is called at the first time the MasterImpl instance is initialized
 	// after OnOpenAPIInitialized. When InitImpl returns without error, framework
-	// will try to persist a internal state so further failover will call OnMasterRecovered
+	// will try to persist an internal state so further failover will call OnMasterRecovered
 	// rather than InitImpl.
 	// Return:
 	// - error to let the framework call CloseImpl, and framework may retry InitImpl
@@ -80,7 +80,7 @@ type MasterImpl interface {
 	InitImpl(ctx context.Context) error
 
 	// OnMasterRecovered is called when the MasterImpl instance has failover from
-	// error by framework after OnOpenAPIInitialized.
+	// error by framework. For this MasterImpl instance, it's called after OnOpenAPIInitialized.
 	// Return:
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
@@ -104,7 +104,7 @@ type MasterImpl interface {
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
 	// - this function may be concurrently called with another worker's OnWorkerXXX,
-	//   Tick, CloseImpl, StopImpl, OnCancel.
+	//   Tick, CloseImpl, StopImpl, OnCancel, InitImpl, OnMasterRecovered.
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
