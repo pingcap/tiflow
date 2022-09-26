@@ -230,7 +230,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRemoved = true
 		jobsPending = true
 
-		// remove changefeedInfo
+		// remove info
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return nil, true, nil
 		})

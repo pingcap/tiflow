@@ -130,7 +130,7 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error)
 
-	newSink      func() DDLSink
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -168,7 +168,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -488,8 +488,8 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.sink.run(cancelCtx, c.id, c.state.Info)
+	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.sink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
