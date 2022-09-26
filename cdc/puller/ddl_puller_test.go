@@ -81,10 +81,6 @@ func (m *mockPuller) Output() <-chan *model.RawKVEntry {
 	return m.outCh
 }
 
-func (m *mockPuller) IsInitialized() bool {
-	return true
-}
-
 func (m *mockPuller) append(e *model.RawKVEntry) {
 	m.inCh <- e
 }

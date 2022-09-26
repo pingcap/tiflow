@@ -11,26 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package servermaster
 
 import (
-	"context"
-	"time"
+	"strings"
+	"testing"
 
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/stretchr/testify/require"
 )
 
-// backend indicates a transaction backend like MySQL, TiDB, ...
-type backend interface {
-	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
+func TestGenerateNodeID(t *testing.T) {
+	const (
+		name           = "executor"
+		genCount       = 1000
+		minUniqueCount = 999 // Only allow 0.1% of collisions.
+	)
 
-	// Flush pending events in the backend.
-	Flush(ctx context.Context) error
+	ids := make(map[string]struct{})
+	for i := 0; i < genCount; i++ {
+		id := generateNodeID(name)
+		require.True(t, strings.HasPrefix(id, name+"-"))
+		ids[id] = struct{}{}
+	}
 
-	// To reduce latency for low throughput cases.
-	MaxFlushInterval() time.Duration
-
-	// Close the backend.
-	Close() error
+	require.GreaterOrEqual(t, len(ids), minUniqueCount, "too many collisions")
 }
