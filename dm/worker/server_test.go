@@ -754,19 +754,13 @@ func (t *testServer) TestServerDataRace(c *C) {
 	for i := 0; i < 20; i++ {
 		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			err1 := s.Start()
-			switch errors.Cause(err1) {
-			case nil:
-			case terror.ErrWorkerServerClosed:
-				log.L().Info("server closed")
-			default:
-				c.Assert(err1, IsNil)
-			}
-			wg.Done()
+			c.Assert(err1 == nil || err1 == terror.ErrWorkerServerClosed, IsTrue)
 		}()
 		go func() {
+			defer wg.Done()
 			s.Close()
-			wg.Done()
 		}()
 		wg.Wait()
 	}

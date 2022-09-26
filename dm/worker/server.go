@@ -59,8 +59,11 @@ var (
 // sends responses to RPC client.
 type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
-	closeMu     sync.Mutex
-	closed      atomic.Bool
+	closeMu sync.Mutex
+	//close is used to store the current state of the dm-worker server.
+	//if the server starts successfully, s.closed.Store(false)
+	closed atomic.Bool
+	//calledClose is used to indicate that dm-worker has received signal to close and closed successfully.
 	calledClose bool
 	rootLis     net.Listener
 	svr         *grpc.Server
@@ -111,7 +114,7 @@ func (s *Server) Start() error {
 	startErr := func() error {
 		s.closeMu.Lock()
 		defer s.closeMu.Unlock()
-		//If dm-worker received signal and finished close, start() not need to be executed
+		//If dm-worker has received signal and finished close, start() should not continue
 		if s.calledClose {
 			return terror.ErrWorkerServerClosed
 		}
@@ -235,7 +238,7 @@ func (s *Server) Start() error {
 			InitStatus(httpL) // serve status
 		}()
 
-		s.closed.Store(false)
+		s.closed.Store(false) // the server started now.
 		return nil
 	}()
 
