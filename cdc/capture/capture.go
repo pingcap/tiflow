@@ -328,10 +328,16 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 			c.MessageRouter.RemovePeer(captureID)
 		})
 
-		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
+		// when the etcd worker of processor returns an error,
+		// it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
+		err := c.runEtcdWorker(
+			ctx,
+			c.processorManager,
+			globalState, processorFlushInterval,
+			util.RoleProcessor.String(),
+			c.info.ID)
 		log.Info("processor routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
 		return err
@@ -440,9 +446,14 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			c.MessageRouter.RemovePeer(captureID)
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner,
+		err = c.runEtcdWorker(
+			ownerCtx,
+			owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+			ownerFlushInterval,
+			util.RoleOwner.String(),
+			c.info.ID)
+
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,
@@ -482,13 +493,14 @@ func (c *captureImpl) runEtcdWorker(
 	reactorState orchestrator.ReactorState,
 	timerInterval time.Duration,
 	role string,
+	captureID model.CaptureID,
 ) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
 		etcd.BaseKey(c.EtcdClient.GetClusterID()), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, role); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, role, captureID); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as

@@ -48,7 +48,7 @@ const (
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
 	clusterID string
-	client    *etcd.Client
+	client    etcd.CDCEtcdClient
 	reactor   Reactor
 	state     ReactorState
 	// rawState is the local cache of the latest Etcd state.
@@ -107,7 +107,7 @@ func NewEtcdWorker(
 ) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		clusterID:  client.GetClusterID(),
-		client:     client.GetEtcdClient(),
+		client:     client,
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
@@ -129,7 +129,13 @@ func (worker *EtcdWorker) initMetrics() {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
+func (worker *EtcdWorker) Run(
+	ctx context.Context,
+	session *concurrency.Session,
+	timerInterval time.Duration,
+	role string,
+	captureID string,
+) error {
 	defer worker.cleanUp()
 
 	// migrate data here
@@ -152,7 +158,12 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.GetEtcdClient().
+		Watch(watchCtx,
+			worker.prefix.String(),
+			role,
+			clientv3.WithPrefix(),
+			clientv3.WithRev(worker.revision+1))
 
 	if role == pkgutil.RoleProcessor.String() {
 		failpoint.Inject("ProcessorEtcdDelay", func() {
@@ -261,6 +272,23 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if !rl.Allow() {
 				continue
 			}
+
+			// we need to check if this the owner key is delete before we tick the reactor
+			if role == pkgutil.RoleOwner.String() {
+				id, err := worker.client.GetOwnerID(ctx)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if id != captureID {
+					log.Warn("owner key is deleted, exit etcd worker",
+						zap.String("captureID", captureID))
+					// we just need to exit the etcd worker but no need to exit the capture
+					// because the owner key is deleted, the capture will be a normal processor
+					// and will not be affected by the owner key deletion
+					return nil
+				}
+			}
+
 			startTime := time.Now()
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
@@ -332,7 +360,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
-	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
+	resp, err := worker.client.GetEtcdClient().Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -433,12 +461,12 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
 	startTime := time.Now()
-	resp, err := worker.client.Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
+	resp, err := worker.client.GetEtcdClient().Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
 
 	// For testing the situation where we have a progress notification that
 	// has the same revision as the committed Etcd transaction.
 	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
-		if err := worker.client.RequestProgress(ctx); err != nil {
+		if err := worker.client.GetEtcdClient().RequestProgress(ctx); err != nil {
 			failpoint.Return(errors.Trace(err))
 		}
 	})

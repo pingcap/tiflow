@@ -161,7 +161,7 @@ func TestEtcdBank(t *testing.T) {
 				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)},
 					&migrate.NoOpMigrator{})
 				require.Nil(t, err)
-				err = worker.Run(ctx, nil, 100*time.Millisecond, "owner")
+				err = worker.Run(ctx, nil, 100*time.Millisecond, "processor", "")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
