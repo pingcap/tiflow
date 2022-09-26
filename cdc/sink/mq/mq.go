@@ -69,6 +69,7 @@ func newMqSink(
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *common.Config,
 	errCh chan error,
+	changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
@@ -81,7 +82,6 @@ func newMqSink(
 	}
 
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
@@ -374,7 +374,7 @@ func (k *mqSink) asyncFlushToPartitionZero(
 // NewKafkaSaramaSink creates a new Kafka mqSink.
 func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	errCh chan error,
+	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
@@ -452,6 +452,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		baseConfig,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -465,6 +466,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		replicaConfig,
 		encoderConfig,
 		errCh,
+		changefeedID,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
