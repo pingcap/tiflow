@@ -73,6 +73,8 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+
+	statusRecorder *statusRecorder
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -89,6 +91,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		statusRecorder:        newStatusRecorder(),
 	}
 	return loader
 }
@@ -461,17 +464,21 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
+	currentSpeed := l.statusRecorder.getSpeed(finished)
+
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
 		zap.Int64("total_bytes", total),
 		zap.String("progress", progress),
+		zap.Int64("current speed (bytes / seconds)", currentSpeed),
 	)
 	s := &pb.LoadStatus{
-		FinishedBytes:  finished,
-		TotalBytes:     total,
-		Progress:       progress,
-		MetaBinlog:     l.metaBinlog.Load(),
-		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		FinishedBytes:              finished,
+		TotalBytes:                 total,
+		Progress:                   progress,
+		MetaBinlog:                 l.metaBinlog.Load(),
+		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
+		CurrentSpeedBytesPerSecond: currentSpeed,
 	}
 	return s
 }
