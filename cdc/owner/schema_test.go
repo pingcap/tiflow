@@ -134,12 +134,6 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "create table test.t1(id int primary key)",
 		Type:     timodel.ActionCreateTable,
-		// TableInfo: &model.SimpleTableInfo{
-		// 	Schema:     "test",
-		// 	Table:      "t1",
-		// 	TableID:    job.TableID,
-		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
-		// },
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema:  "test",
@@ -164,12 +158,6 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
 		Type:     timodel.ActionAddColumn,
-		// TableInfo: &model.SimpleTableInfo{
-		// 	Schema:     "test",
-		// 	Table:      "t1",
-		// 	TableID:    job.TableID,
-		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}, {Name: "c1", Type: mysql.TypeString}},
-		// },
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema:  "test",
@@ -183,12 +171,6 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 				},
 			},
 		},
-		// PreTableInfo: &model.SimpleTableInfo{
-		// 	Schema:     "test",
-		// 	Table:      "t1",
-		// 	TableID:    job.TableID,
-		// 	ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
-		// },
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema:  "test",
