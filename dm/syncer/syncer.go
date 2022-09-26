@@ -1402,11 +1402,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
-				// simulate the value of affected along with the injected error
-				// -2 instead of -1 is due to the adding of SET SQL of timezone and timestamp
-				if affected > 2 {
-					affected -= 2
-				}
+				affected = len(ddlJob.ddls) / 2
 			})
 			if err != nil {
 				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)

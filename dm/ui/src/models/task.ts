@@ -176,7 +176,9 @@ export type DmapiStartTaskApiArg = {
     source_name_list?: string[]
 
     /**
-     * RFC3339 format date string
+     * supported format:
+     * 2006-01-02T15:04:05 or 2006-01-02T15:04:05
+     *
      */
     start_time?: string
   }

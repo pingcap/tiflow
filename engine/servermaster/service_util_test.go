@@ -11,27 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package servermaster
 
 import (
-	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestNodeInfoEtcdKey(t *testing.T) {
-	t.Parallel()
+func TestGenerateNodeID(t *testing.T) {
+	const (
+		name           = "executor"
+		genCount       = 1000
+		minUniqueCount = 999 // Only allow 0.1% of collisions.
+	)
 
-	nodeInfo := &NodeInfo{
-		ID: "executor-id-1",
+	ids := make(map[string]struct{})
+	for i := 0; i < genCount; i++ {
+		id := generateNodeID(name)
+		require.True(t, strings.HasPrefix(id, name+"-"))
+		ids[id] = struct{}{}
 	}
-	encoded := hex.EncodeToString([]byte("executor-id-1"))
-	require.Equal(t, "/data-flow/node/info/"+encoded, nodeInfo.EtcdKey())
 
-	nodeInfo = &NodeInfo{
-		ID: "server-master-id-1",
-	}
-	encoded = hex.EncodeToString([]byte("server-master-id-1"))
-	require.Equal(t, "/data-flow/node/info/"+encoded, nodeInfo.EtcdKey())
+	require.GreaterOrEqual(t, len(ids), minUniqueCount, "too many collisions")
 }

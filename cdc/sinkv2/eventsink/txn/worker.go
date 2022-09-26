@@ -54,6 +54,7 @@ type worker struct {
 	metricTxnWorkerHandledRows   prometheus.Counter
 
 	// Fields only used in the background loop.
+	flushInterval     time.Duration
 	hasPending        bool
 	wantMoreCallbacks []func()
 }
@@ -77,11 +78,15 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerHandledRows:   metrics.TxnWorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
+		flushInterval:     backend.MaxFlushInterval(),
 		hasPending:        false,
 		wantMoreCallbacks: make([]func(), 0, 1024),
 	}
 }
 
+// Add adds a txnEvent to the worker.
+// The worker will call unlock() when it's ready to receive more events.
+// In other words, it maybe advances the conflict detector.
 func (w *worker) Add(txn *txnEvent, unlock func()) {
 	w.txnCh.In() <- txnWithNotifier{txn, unlock}
 }
@@ -120,50 +125,40 @@ func (w *worker) runBackgroundLoop() {
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID))
 
+		timer := time.NewTicker(w.flushInterval)
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(time.Second)
-		startToWork := time.Now()
 		defer overseerTimer.Stop()
-	LOOP:
+		startToWork := time.Now()
+	Loop:
 		for {
-			if !w.hasPending {
-				// There is no pending events, so use a blocking `select`.
-				select {
-				case <-w.ctx.Done():
-					log.Info("Transaction sink worker exits as canceled",
-						zap.String("changefeedID", w.changefeed),
-						zap.Int("workerID", w.ID))
-					return
-				case <-w.stopped:
-					log.Info("Transaction sink worker exits as closed",
-						zap.String("changefeedID", w.changefeed),
-						zap.Int("workerID", w.ID))
-					return
-				case txn := <-w.txnCh.Out():
-					w.hasPending = true
-					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
-				case now := <-overseerTimer.C:
-					totalTimeSlice = now.Sub(startToWork)
-					busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
-					w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
-					startToWork = now
-					flushTimeSlice = 0
+			// There is no pending events, so use a blocking `select`.
+			select {
+			case <-w.ctx.Done():
+				log.Info("Transaction sink worker exits as canceled",
+					zap.String("changefeedID", w.changefeed),
+					zap.Int("workerID", w.ID))
+				return
+			case <-w.stopped:
+				log.Info("Transaction sink worker exits as closed",
+					zap.String("changefeedID", w.changefeed),
+					zap.Int("workerID", w.ID))
+				return
+			case txn := <-w.txnCh.Out():
+				w.hasPending = true
+				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
+					break Loop
 				}
-			} else {
-				// Have fetched some events so that do a nonblocking `select`.
-				select {
-				case txn := <-w.txnCh.Out():
-					w.hasPending = true
-					if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
-				default:
-					if w.doFlush(&flushTimeSlice) {
-						break LOOP
-					}
+			case <-timer.C:
+				if w.doFlush(&flushTimeSlice) {
+					break Loop
 				}
+			case now := <-overseerTimer.C:
+				totalTimeSlice = now.Sub(startToWork)
+				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
+				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
+				startToWork = now
+				flushTimeSlice = 0
 			}
 		}
 		log.Warn("Transaction sink worker exits unexceptedly",
@@ -174,7 +169,7 @@ func (w *worker) runBackgroundLoop() {
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
-		// The table where the event comes from is in stopping so it's safe
+		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
 		// Still necessary to append the wantMore callback into the pending list.
@@ -191,8 +186,9 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 	return false
 }
 
-// doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
+// doFlush flushes the backend.
+// It returns true only if it can no longer be flushed.
+func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
