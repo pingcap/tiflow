@@ -137,6 +137,7 @@ func NewCapture(pdEndpoints []string,
 		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
+		info:                &model.CaptureInfo{},
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}

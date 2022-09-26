@@ -36,10 +36,11 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
-	// Used to run a background goroutine to GC nodes.
-	garbageNodes *containers.SliceQueue[txnFinishedEvent]
-	wg           sync.WaitGroup
-	closeCh      chan struct{}
+	// Used to run a background goroutine to GC or notify nodes.
+	notifiedNodes *containers.SliceQueue[func()]
+	garbageNodes  *containers.SliceQueue[txnFinishedEvent]
+	wg            sync.WaitGroup
+	closeCh       chan struct{}
 }
 
 type txnFinishedEvent struct {
@@ -53,11 +54,12 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	numSlots uint64,
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
-		workers:      workers,
-		slots:        internal.NewSlots[*internal.Node](numSlots),
-		numSlots:     numSlots,
-		garbageNodes: containers.NewSliceQueue[txnFinishedEvent](),
-		closeCh:      make(chan struct{}),
+		workers:       workers,
+		slots:         internal.NewSlots[*internal.Node](numSlots),
+		numSlots:      numSlots,
+		notifiedNodes: containers.NewSliceQueue[func()](),
+		garbageNodes:  containers.NewSliceQueue[txnFinishedEvent](),
+		closeCh:       make(chan struct{}),
 	}
 
 	ret.wg.Add(1)
@@ -72,7 +74,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 // Add pushes a transaction to the ConflictDetector.
 //
 // NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
+func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	conflictKeys := txn.ConflictKeys(d.numSlots)
 	node := internal.NewNode()
 	node.OnResolved = func(workerID int64) {
@@ -83,8 +85,8 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 		d.sendToWorker(txn, unlock, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
+	node.OnNotified = func(callback func()) { d.notifiedNodes.Push(callback) }
 	d.slots.Add(node, conflictKeys)
-	return nil
 }
 
 // Close closes the ConflictDetector.
@@ -98,6 +100,14 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 		select {
 		case <-d.closeCh:
 			return
+		case <-d.notifiedNodes.C:
+			for {
+				notifiyCallback, ok := d.notifiedNodes.Pop()
+				if !ok {
+					break
+				}
+				notifiyCallback()
+			}
 		case <-d.garbageNodes.C:
 			for {
 				event, ok := d.garbageNodes.Pop()

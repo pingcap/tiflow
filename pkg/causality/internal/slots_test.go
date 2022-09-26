@@ -45,9 +45,9 @@ func TestSlotsTrivial(t *testing.T) {
 		slots.Free(nodes[i], []uint64{1, 2, 3, 4, 5})
 	}
 
-	require.Equal(t, (**Node)(nil), slots.slots[1].tail)
-	require.Equal(t, (**Node)(nil), slots.slots[2].tail)
-	require.Equal(t, (**Node)(nil), slots.slots[3].tail)
-	require.Equal(t, (**Node)(nil), slots.slots[4].tail)
-	require.Equal(t, (**Node)(nil), slots.slots[5].tail)
+	require.Equal(t, 0, len(slots.slots[1].nodes))
+	require.Equal(t, 0, len(slots.slots[2].nodes))
+	require.Equal(t, 0, len(slots.slots[3].nodes))
+	require.Equal(t, 0, len(slots.slots[4].nodes))
+	require.Equal(t, 0, len(slots.slots[5].nodes))
 }

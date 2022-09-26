@@ -252,6 +252,54 @@ func TestUpdatePartition(t *testing.T) {
 	require.True(t, snap2.IsIneligibleTableID(11+65536*2))
 }
 
+func TestExchangePartition(t *testing.T) {
+	var targetTb, sourceTb *model.TableInfo
+
+	snap := NewEmptySnapshot(false)
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 100))
+
+	// exchange partition fails if the target table is not a partitioned table.
+	targetTbID := int64(11)
+	targetTb = newTbInfo(1, "DB_1", targetTbID)
+	targetTb.Partition = nil
+	require.Nil(t, snap.inner.createTable(targetTb, 110))
+	require.Error(t, snap.inner.exchangePartition(newTbInfo(1, "DB_1", 11), 120))
+	require.Nil(t, snap.inner.dropTable(targetTbID, 125))
+
+	// prepare the target table.
+	targetTb = newTbInfo(1, "DB_1", targetTbID)
+	p1ID := int64(11 + 65536*1)
+	p2ID := int64(11 + 65536*2)
+	targetTb.Partition.Definitions[0] = timodel.PartitionDefinition{ID: p1ID}
+	targetTb.Partition.Definitions = append(targetTb.Partition.Definitions, timodel.PartitionDefinition{ID: p2ID})
+	// update the target table to a partition table.
+	require.Nil(t, snap.inner.createTable(targetTb, 140))
+
+	// create source table.
+	sourceTbID := int64(12)
+	sourceTb = newTbInfo(1, "DB_1", sourceTbID)
+	require.Nil(t, snap.inner.createTable(sourceTb, 150))
+
+	// exchange partition, p1ID should be exchange by sourceTbID.
+	exchangedTargetTb := newTbInfo(1, "DB_1", targetTbID)
+	exchangedTargetTb.Partition.Definitions[0] = timodel.PartitionDefinition{ID: sourceTbID}
+	exchangedTargetTb.Partition.Definitions = append(exchangedTargetTb.Partition.Definitions, timodel.PartitionDefinition{ID: p2ID})
+	require.Nil(t, snap.inner.exchangePartition(exchangedTargetTb, 160))
+
+	// make sure we can use the exchanged source table's id to get the target table info,
+	// since the source table has become a partition of target table.
+	tarInfo1, _ := snap.PhysicalTableByID(targetTbID)
+	require.Equal(t, tarInfo1.Partition.Definitions[0].ID, sourceTbID)
+	tarInfo2, ok := snap.PhysicalTableByID(sourceTbID)
+	require.True(t, ok)
+	require.Equal(t, tarInfo1.Name, tarInfo2.Name)
+
+	// make sure we can use the exchanged partition's id to get the source table info.
+	exchangedSourceTb, ok := snap.PhysicalTableByID(p1ID)
+	require.True(t, ok)
+	require.Equal(t, sourceTb.Name, exchangedSourceTb.Name)
+}
+
 func TestDrop(t *testing.T) {
 	snap := NewEmptySnapshot(false)
 

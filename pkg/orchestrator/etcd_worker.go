@@ -534,7 +534,7 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 	}
 }
 
-// checkAndMigrateMetaData check if should migrate meta, if we should, it will block
+// checkAndMigrateMetaData check if we should migrate meta, if true, it will block
 // until migrate done
 func (worker *EtcdWorker) checkAndMigrateMetaData(
 	ctx context.Context, role string,

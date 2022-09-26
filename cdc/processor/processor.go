@@ -519,7 +519,8 @@ func (p *processor) handleErr(err error) error {
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err))
 		return cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
@@ -671,27 +672,42 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableNewSink {
 		log.Info("Try to create sinkV1")
-		p.sinkV1, err = sinkv1.New(
+		s, err := sinkv1.New(
 			stdCtx,
 			p.changefeedID,
 			p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh,
 		)
+		if err != nil {
+			log.Info("processor creates sink failed",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
+		// See: https://go.dev/play/p/sDlHncxO3Nz
+		if s != nil {
+			p.sinkV1 = s
+		}
 	} else {
 		log.Info("Try to create sinkV2")
-		p.sinkV2Factory, err = factory.New(stdCtx, p.changefeed.Info.SinkURI,
+		sinkV2Factory, err := factory.New(stdCtx, p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh)
+		if err != nil {
+			log.Info("processor creates sink failed",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		p.sinkV2Factory = sinkV2Factory
 	}
 
-	if err != nil {
-		log.Info("processor creates sink failed",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)))
-		return errors.Trace(err)
-	}
 	log.Info("processor creates sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID),
