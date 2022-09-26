@@ -121,6 +121,8 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -128,6 +130,7 @@ func TestNewSaramaProducer(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	require.Nil(t, err)
 
@@ -408,6 +411,8 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -415,6 +420,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	defer func() {
 		err := producer.Close()
@@ -488,6 +494,8 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -495,6 +503,7 @@ func TestProducerDoubleClose(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	defer func() {
 		err := producer.Close()

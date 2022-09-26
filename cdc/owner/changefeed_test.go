@@ -207,7 +207,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
 		// new ddl sink
-		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo) DDLSink {
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
 				recordDDLHistory: false,

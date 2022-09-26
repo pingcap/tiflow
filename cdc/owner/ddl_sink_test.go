@@ -66,9 +66,9 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 
 func newDDLSink4Test() (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink()
-	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
-		a.sinkV1 = mockSink
+	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, func(err error) {})
+	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
+		s.sinkV1 = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
@@ -82,7 +82,7 @@ func TestCheckpoint(t *testing.T) {
 		cancel()
 		ddlSink.close(ctx)
 	}()
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
@@ -106,7 +106,7 @@ func TestExecDDLEvents(t *testing.T) {
 		cancel()
 		ddlSink.close(ctx)
 	}()
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	ddlEvents := []*model.DDLEvent{
 		{CommitTs: 1},
@@ -152,7 +152,7 @@ func TestExecDDLError(t *testing.T) {
 		ddlSink.close(ctx)
 	}()
 
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
