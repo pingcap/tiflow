@@ -223,6 +223,7 @@ func (c *Case) diffData(ctx context.Context) (bool, error) {
 			return false, nil
 		}
 	}
+	return true, nil
 }
 
 func (c *Case) diffDataLoop(ctx context.Context) error {
