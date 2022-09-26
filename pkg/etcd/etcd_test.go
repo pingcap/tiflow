@@ -368,7 +368,7 @@ func TestGetOwnerRevision(t *testing.T) {
 		wg       sync.WaitGroup
 	)
 
-	// We will create 3 mock captures and they take turns to be the owner.
+	// We will create 3 mock captures, and they will become the owner one by one.
 	// While each is the owner, it tries to get its owner revision, and
 	// checks that the global monotonicity is guaranteed.
 
@@ -447,4 +447,38 @@ func TestMigrateBackupKey(t *testing.T) {
 	require.Equal(t, "/tidb/cdc/__backup__/1/tidb/cdc/capture/abcd", key)
 	key = MigrateBackupKey(1, "abcdc")
 	require.Equal(t, "/tidb/cdc/__backup__/1/abcdc", key)
+}
+
+func TestDeleteCaptureInfo(t *testing.T) {
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	captureID := "test-capture-id"
+
+	changefeedStatus := map[model.ChangeFeedID]model.ChangeFeedStatus{
+		model.DefaultChangeFeedID("test-cf-1"): {ResolvedTs: 1},
+	}
+
+	for id, status := range changefeedStatus {
+		val, err := status.Marshal()
+		require.NoError(t, err)
+		statusKey := fmt.Sprintf("%s/%s", ChangefeedStatusKeyPrefix(DefaultCDCClusterID, id.Namespace), id.ID)
+		_, err = s.client.Client.Put(ctx, statusKey, val)
+		require.NoError(t, err)
+
+		_, err = s.client.Client.Put(
+			ctx, GetEtcdKeyTaskPosition(DefaultCDCClusterID, id, captureID),
+			fmt.Sprintf("task-%s", id.ID))
+		require.NoError(t, err)
+	}
+	err := s.client.DeleteCaptureInfo(ctx, captureID)
+	require.NoError(t, err)
+	for id := range changefeedStatus {
+		_, _, err := s.client.GetTaskPosition(ctx, id, captureID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "ErrTaskPositionNotExists")
+	}
 }
