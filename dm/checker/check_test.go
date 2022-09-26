@@ -233,8 +233,8 @@ func TestServerIDChecking(t *testing.T) {
 
 	checkHappyPath(t, func() {
 		mock := initMockDB(t)
-		mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-			AddRow("version", "5.7.26-log"))
+		mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+			AddRow("server_id", "1"))
 	}, cfgs)
 }
 
@@ -292,7 +292,7 @@ func TestBinlogFormatChecking(t *testing.T) {
 		AddRow("binlog_format", "STATEMENT"))
 	result, err := RunCheckOnConfigs(context.Background(), cfgs)
 	require.NoError(t, err)
-	require.Contains(t, result.Results[0].Errors[0].ShortErr, "log_bin is OFF, and should be ON")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "binlog_format is STATEMENT, and should be ROW")
 
 	// happy path
 
@@ -620,6 +620,8 @@ func TestSameTargetTableDetection(t *testing.T) {
 }
 
 func initMockDB(t *testing.T) sqlmock.Sqlmock {
+	t.Helper()
+
 	mock, err := conn.MockDefaultDBProvider()
 	require.NoError(t, err)
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
@@ -628,6 +630,8 @@ func initMockDB(t *testing.T) sqlmock.Sqlmock {
 }
 
 func checkHappyPath(t *testing.T, pre func(), cfgs []*config.SubTaskConfig) {
+	t.Helper()
+
 	pre()
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
