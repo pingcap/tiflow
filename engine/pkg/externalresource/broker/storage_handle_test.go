@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

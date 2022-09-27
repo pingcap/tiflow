@@ -25,7 +25,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
