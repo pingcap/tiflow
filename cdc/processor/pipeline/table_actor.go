@@ -86,13 +86,12 @@ type tableActor struct {
 	sinkStopped uberatomic.Bool
 
 	// TODO: try to reduce these config fields below in the future
-	tableID        int64
-	targetTs       model.Ts
-	memoryQuota    uint64
-	replicaInfo    *model.TableReplicaInfo
-	replicaConfig  *serverConfig.ReplicaConfig
-	changefeedVars *cdcContext.ChangefeedVars
-	globalVars     *cdcContext.GlobalVars
+	tableID       int64
+	targetTs      model.Ts
+	memoryQuota   uint64
+	replicaInfo   *model.TableReplicaInfo
+	replicaConfig *serverConfig.ReplicaConfig
+	globalVars    *cdcContext.GlobalVars
 	// these fields below are used in logs and metrics only
 	changefeedID model.ChangeFeedID
 	// todo: initialize this field.
@@ -123,8 +122,8 @@ func NewTableActor(
 	targetTs model.Ts,
 	changefeedID model.ChangeFeedID,
 ) (tablepb.TablePipeline, error) {
-	config := cdcCtx.ChangefeedVars().Info.Config
-	changefeedVars := cdcCtx.ChangefeedVars()
+	changefeedInfo := cdcCtx.ChangefeedVars().Info
+	config := changefeedInfo.Config
 	globalVars := cdcCtx.GlobalVars()
 
 	actorID := globalVars.TableActorSystem.ActorID()
@@ -156,10 +155,11 @@ func NewTableActor(
 		started:       false,
 
 		changefeedID:   changefeedID,
-		changefeedVars: changefeedVars,
-		globalVars:     globalVars,
-		router:         globalVars.TableActorSystem.Router(),
-		actorID:        actorID,
+		changefeedInfo: changefeedInfo,
+
+		globalVars: globalVars,
+		router:     globalVars.TableActorSystem.Router(),
+		actorID:    actorID,
 
 		tablePipelineCtx: cctx,
 	}

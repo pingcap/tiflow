@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -393,19 +394,12 @@ func TestNewTableActor(t *testing.T) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-id-test")
-	cctx := cdcContext.WithChangefeedVars(
-		cdcContext.NewContext(ctx, globalVars),
-		&cdcContext.ChangefeedVars{
-			ID: changefeedID,
-			Info: &model.ChangeFeedInfo{
-				Config: config.GetDefaultReplicaConfig(),
-			},
-		})
 
-	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
+	cctx := cdcContext.NewContext(ctx, globalVars)
+	startPuller = func(ctx context.Context, t *tableActor) error {
 		return nil
 	}
-	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
+	startSorter = func(ctx pipeline.NodeContext, t *tableActor) error {
 		return nil
 	}
 	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
@@ -421,7 +415,7 @@ func TestNewTableActor(t *testing.T) {
 	})
 
 	// start puller failed
-	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
+	startPuller = func(ctx context.Context, t *tableActor) error {
 		return errors.New("failed to start puller")
 	}
 
@@ -451,21 +445,15 @@ func TestTableActorStart(t *testing.T) {
 		startSorter = realStartSorterFunc
 		sys.Stop()
 	}()
-	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
+	startPuller = func(ctx context.Context, t *tableActor) error {
 		return nil
 	}
-	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
+	startSorter = func(ctx pipeline.NodeContext, t *tableActor) error {
 		return nil
 	}
 	tbl := &tableActor{
 		redoManager: redo.NewDisabledManager(),
 		globalVars:  globalVars,
-		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: model.DefaultChangeFeedID("changefeed-id-test"),
-			Info: &model.ChangeFeedInfo{
-				Config: config.GetDefaultReplicaConfig(),
-			},
-		},
 		replicaInfo: &model.TableReplicaInfo{
 			StartTs: 0,
 		},
