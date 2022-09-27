@@ -193,6 +193,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
+		CSVConfig: &config.CSVConfig{
+			Quote:      string(config.DoubleQuoteChar),
+			Delimiter:  string(config.Comma),
+			Terminator: string(config.LF),
+			NullString: config.NULL,
+		},
 		Protocol: "open-protocol",
 	}, cfg.Sink)
 }
