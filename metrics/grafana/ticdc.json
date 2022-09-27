@@ -6267,7 +6267,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6373,7 +6373,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6471,7 +6471,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6583,7 +6583,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6689,7 +6689,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6781,6 +6781,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Duration of event staying in conflict detector",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6801,7 +6802,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6886,6 +6887,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Full flush (backend flush + callback + conflict detector notify) duration",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6906,7 +6908,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -6948,7 +6950,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Worker Flush Duration",
+          "title": "Full Flush Duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7012,7 +7014,7 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": false
@@ -7046,7 +7048,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Worker Busy Ratio",
+          "title": "Worker Busy Ratio",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7110,7 +7112,6 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
             "show": true,
             "total": false,
             "values": false
@@ -7135,7 +7136,7 @@
               "exemplar": true,
               "expr": "sum(rate(ticdc_sinkv2_txn_worker_handled_rows{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance,id)",
               "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-{{id}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -7144,7 +7145,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Worker Input Rows",
+          "title": "Worker Input Rows",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7210,7 +7211,6 @@
             "current": false,
             "max": false,
             "min": false,
-            "rightSide": true,
             "show": true,
             "total": false,
             "values": false
@@ -7252,7 +7252,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Backend Flush Duration",
+          "title": "Backend Flush Duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
