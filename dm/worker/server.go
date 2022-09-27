@@ -60,7 +60,7 @@ var (
 type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
 	closeMu sync.Mutex
-	//close is used to store the current state of the dm-worker server.
+	//closed is used to store the current state of the dm-worker server.
 	//if the server starts successfully, s.closed.Store(false)
 	closed atomic.Bool
 	//calledClose is used to indicate that dm-worker has received signal to close and closed successfully.
