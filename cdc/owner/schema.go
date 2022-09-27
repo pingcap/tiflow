@@ -203,6 +203,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 ) ([]*model.DDLEvent, error) {
 	var err error
 	var preTableInfo *model.TableInfo
+	var tableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -222,7 +223,13 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		tableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
+			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+		} else {
+			tableInfo = &model.TableInfo{
+				TableName: model.TableName{Schema: job.SchemaName},
+			}
+		}
 		event.FromJob(job, preTableInfo, tableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
