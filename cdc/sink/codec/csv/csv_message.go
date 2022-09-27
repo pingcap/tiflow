@@ -86,6 +86,7 @@ func (c *csvMessage) formatWithQuotes(value string, strBuilder *strings.Builder)
 	strBuilder.WriteString(quote)
 }
 
+// formatWithEscapes escapes the csv column if necessary.
 func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder) {
 	lastPos := 0
 	delimiter := c.csvConfig.Delimiter
