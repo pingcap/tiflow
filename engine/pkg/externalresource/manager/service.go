@@ -197,7 +197,7 @@ func (s *Service) GetPlacementConstraint(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 
-	rType, _, err := resModel.GenResourcePath(resourceKey.ID)
+	rType, _, err := resModel.PasreResourceID(resourceKey.ID)
 	if err != nil {
 		return "", false, err
 	}

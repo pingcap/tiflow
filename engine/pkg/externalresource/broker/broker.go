@@ -83,7 +83,7 @@ func (b *DefaultBroker) OpenStorage(
 	// Note the semantics of ParseResourcePath:
 	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
 	// and resName == "my-resource".
-	tp, resName, err := resModel.GenResourcePath(resID)
+	tp, resName, err := resModel.PasreResourceID(resID)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (b *DefaultBroker) RemoveResource(
 	ctx context.Context,
 	request *pb.RemoveLocalResourceRequest,
 ) (*pb.RemoveLocalResourceResponse, error) {
-	tp, resName, err := resModel.GenResourcePath(request.GetResourceId())
+	tp, resName, err := resModel.PasreResourceID(request.GetResourceId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

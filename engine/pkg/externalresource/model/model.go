@@ -133,7 +133,7 @@ const (
 	ResourceTypeS3        = ResourceType("s3")
 )
 
-// GenResourcePath returns the ResourceType and the path suffix.
+// PasreResourceID returns the ResourceType and the path suffix.
 func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)

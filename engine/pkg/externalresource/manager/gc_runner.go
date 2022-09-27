@@ -127,7 +127,7 @@ func (r *DefaultGCRunner) gcOnce(
 		log.Panic("unexpected gc_pending = false")
 	}
 
-	tp, _, err := resModel.GenResourcePath(res.ID)
+	tp, _, err := resModel.PasreResourceID(res.ID)
 	if err != nil {
 		return err
 	}
