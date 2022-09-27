@@ -11,17 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package internal
 
 import (
-	"testing"
+	"context"
 
-	"github.com/stretchr/testify/require"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-func TestParseResourcePath(t *testing.T) {
-	tp, suffix, err := ParseResourcePath("/local/my-local-resource/a/b/c")
-	require.NoError(t, err)
-	require.Equal(t, ResourceTypeLocalFile, tp)
-	require.Equal(t, "my-local-resource/a/b/c", suffix)
+// ResourceDescriptor is an object used internally by the broker
+// to manage resources.
+type ResourceDescriptor interface {
+	URI() string
+	ID() resModel.ResourceID
+	ResourceIdent() ResourceIdent
+	ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error)
 }
