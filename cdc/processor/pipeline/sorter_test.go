@@ -82,16 +82,16 @@ type checkSorter struct {
 
 var _ sorter.EventSorter = (*checkSorter)(nil)
 
-func (c *checkSorter) Run(ctx context.Context) error {
+func (c *checkSorter) Run(_ context.Context) error {
 	return nil
 }
 
-func (c *checkSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+func (c *checkSorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent) {
 	c.ch <- entry
 }
 
-func (c *checkSorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
-
+func (c *checkSorter) ConsumeResolvedTs(_ context.Context, resolvedTs uint64) {
+	c.ch <- model.NewResolvedPolymorphicEvent(0, resolvedTs)
 }
 
 func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {

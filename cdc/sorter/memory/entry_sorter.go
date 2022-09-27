@@ -150,7 +150,13 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 }
 
 func (es *EntrySorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
-
+	if atomic.LoadInt32(&es.closed) != 0 {
+		return
+	}
+	es.lock.Lock()
+	defer es.lock.Unlock()
+	es.resolvedTsGroup = append(es.resolvedTsGroup, resolvedTs)
+	es.resolvedNotifier.Notify()
 }
 
 // Output returns the sorted raw kv output channel
