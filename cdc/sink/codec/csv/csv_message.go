@@ -33,13 +33,16 @@ const (
 )
 
 type csvMessage struct {
-	csvConfig  *config.CSVConfig
+	// csvConfig hold the csv configuration items.
+	csvConfig *config.CSVConfig
+	// opType denotes the specific operation type.
 	opType     string
 	tableName  string
 	schemaName string
 	commitTs   uint64
 	columns    []any
-	newRecord  bool
+	// newRecord indicates whether we encounter a new record.
+	newRecord bool
 }
 
 func newCSVMessage(config *config.CSVConfig) *csvMessage {
@@ -49,6 +52,12 @@ func newCSVMessage(config *config.CSVConfig) *csvMessage {
 	}
 }
 
+// encode returns a byte slice composed of the columns as follows:
+// Col1: The operation-type indicator: I, D, U.
+// Col2: Table name, the name of the source table.
+// Col3: Schema name, the name of the source schema.
+// Col4: Commit TS, the commit-ts of the source txn (optional).
+// Col5-n: one or more columns that represent the data to be changed.
 func (c *csvMessage) encode() []byte {
 	strBuilder := new(strings.Builder)
 	c.formatValue(c.opType, strBuilder)
@@ -64,10 +73,15 @@ func (c *csvMessage) encode() []byte {
 	return []byte(strBuilder.String())
 }
 
+// as stated in https://datatracker.ietf.org/doc/html/rfc4180,
+// if double-quotes are used to enclose fields, then a double-quote
+// appearing inside a field must be escaped by preceding it with
+// another double quote.
 func (c *csvMessage) formatWithQuotes(value string, strBuilder *strings.Builder) {
 	quote := c.csvConfig.Quote
 
 	strBuilder.WriteString(quote)
+	// replace any quote in csv column with two quotes.
 	strBuilder.WriteString(strings.ReplaceAll(value, quote, quote+quote))
 	strBuilder.WriteString(quote)
 }
@@ -79,8 +93,10 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 	for i := 0; i < len(value); i++ {
 		ch := value[i]
 		isDelimiterStart := strings.HasPrefix(value[i:], delimiter)
+		// if '\r', '\n', '\' or the delimiter (may have multiple characters) are contained in
+		// csv column, we should escape these characters.
 		if ch == config.CR || ch == config.LF || ch == config.Backslash || isDelimiterStart {
-			// write out characters up until this position
+			// write out characters up until this position.
 			strBuilder.WriteString(value[lastPos:i])
 			switch ch {
 			case config.LF:
@@ -91,6 +107,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 			strBuilder.WriteRune(config.Backslash)
 			strBuilder.WriteRune(rune(ch))
 
+			// escape every characters in delimiter.
 			if isDelimiterStart {
 				for k := 1; k < len(c.csvConfig.Delimiter); k++ {
 					strBuilder.WriteRune(config.Backslash)
@@ -105,6 +122,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 	strBuilder.WriteString(value[lastPos:])
 }
 
+// formatValue formats the csv column and appends it to a string builder.
 func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	defer func() {
 		c.newRecord = false
@@ -121,7 +139,9 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 
 	switch v := value.(type) {
 	case string:
-		if c.csvConfig.Quote != "" {
+		// if quote is configured, format the csv column with quotes,
+		// otherwise escape this csv column.
+		if len(c.csvConfig.Quote) != 0 {
 			c.formatWithQuotes(v, strBuilder)
 		} else {
 			c.formatWithEscapes(v, strBuilder)
@@ -131,6 +151,7 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	}
 }
 
+// convertToCSVType converts column from TiDB type to csv type.
 func convertToCSVType(col *model.Column, ft *types.FieldType) (any, error) {
 	switch col.Type {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
@@ -168,6 +189,7 @@ func convertToCSVType(col *model.Column, ft *types.FieldType) (any, error) {
 	}
 }
 
+// buildRowData converts a RowChangedEvent to a csv record.
 func buildRowData(csvConfig *config.CSVConfig, e *model.RowChangedEvent) ([]byte, error) {
 	var cols []any
 

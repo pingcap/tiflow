@@ -90,12 +90,11 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 
 // newBatchEncoder creates a new csv BatchEncoder.
 func newBatchEncoder(config *config.CSVConfig) codec.EventBatchEncoder {
-	batch := &BatchEncoder{
+	return &BatchEncoder{
 		csvConfig:   config,
 		valueBuf:    &bytes.Buffer{},
 		callbackBuf: make([]func(), 0),
 	}
-	return batch
 }
 
 type batchEncoderBuilder struct {
