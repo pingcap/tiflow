@@ -408,7 +408,7 @@ func TestGetTopicForDDL(t *testing.T) {
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
 						Schema: "test",
-						Table: "tb1",
+						Table:  "tb1",
 					},
 				},
 				Type: timodel.ActionCreateTable,
@@ -420,7 +420,7 @@ func TestGetTopicForDDL(t *testing.T) {
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
 						Schema: "test",
-						Table: "tb1",
+						Table:  "tb1",
 					},
 				},
 				Type: timodel.ActionDropTable,

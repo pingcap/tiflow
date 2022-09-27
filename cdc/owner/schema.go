@@ -226,6 +226,8 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
 			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 		} else {
+			// for an invalid DDL job or a DDL job that does not contain TableInfo,
+			// just retrieve the schema name.
 			tableInfo = &model.TableInfo{
 				TableName: model.TableName{Schema: job.SchemaName},
 			}
