@@ -95,8 +95,6 @@ jobs:
           kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
       - name: Wait for TiDB ready
         run: |
-          sleep 120
-          kubectl describe pods tidb-0
           kubectl wait --for=condition=Ready pod/tidb-0 --timeout=10m || true
           echo show pvc
           kubectl get pvc -l app=tidb -o wide
@@ -112,6 +110,8 @@ jobs:
           kubectl describe po -l app=tidb
           echo describe pvc
           kubectl describe pvc -l app=tidb
+          echo get log
+          kubectl logs pod/tidb-0
           kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
 
          # Set up upstream instances
