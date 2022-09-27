@@ -563,6 +563,8 @@ func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, captureID str
 	_, err = c.Client.Delete(ctx, taskKey, clientv3.WithPrefix())
 	if err != nil {
 		log.Warn("delete task position failed",
+			zap.String("clusterID", c.ClusterID),
+			zap.String("captureID", captureID),
 			zap.String("key", key), zap.Error(err))
 	}
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
