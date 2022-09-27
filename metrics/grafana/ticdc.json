@@ -62,7 +62,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": true,
-        "expr": "max(ticdc_owner_checkpoint_ts_lag) by (changefeed, instance) > BOOL $spike_threshold",
+        "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, instance) > BOOL $spike_threshold",
         "hide": true,
         "iconColor": "#F2495C",
         "limit": 100,
@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1663055210154,
+  "iteration": 1664260864293,
   "links": [],
   "panels": [
     {
@@ -3342,120 +3342,6 @@
           }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of replicated tables maintained in owner",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "left",
-                "filterable": false
-              },
-              "decimals": 2,
-              "displayName": "",
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "short"
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Field"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Instance"
-                  },
-                  {
-                    "id": "unit",
-                    "value": "string"
-                  },
-                  {
-                    "id": "custom.align",
-                    "value": null
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Last"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Count"
-                  },
-                  {
-                    "id": "decimals"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 7,
-            "x": 0,
-            "y": 9
-          },
-          "id": 138,
-          "links": [],
-          "options": {
-            "showHeader": true
-          },
-          "pluginVersion": "7.5.11",
-          "targets": [
-            {
-              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"total\"}) by (capture)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}}-total",
-              "refId": "A"
-            },
-            {
-              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"wip\"}) by (capture)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}}-wip",
-              "refId": "B"
-            }
-          ],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table count maintained by owner",
-          "transformations": [
-            {
-              "id": "reduce",
-              "options": {
-                "includeTimeField": false,
-                "reducers": [
-                  "last"
-                ]
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
           "aliasColors": {},
           "bars": true,
           "cacheTimeout": null,
@@ -3781,7 +3667,6 @@
               "exemplar": true,
               "expr": "max(ticdc_processor_checkpoint_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed)",
               "format": "time_series",
-              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{changefeed}}",
@@ -3894,7 +3779,6 @@
               "exemplar": true,
               "expr": "max(ticdc_processor_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed)",
               "format": "time_series",
-              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{changefeed}}",
@@ -8983,7 +8867,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 1
+            "y": 9
           },
           "hiddenSeries": false,
           "id": 571,
@@ -9085,7 +8969,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 1
+            "y": 9
           },
           "hiddenSeries": false,
           "id": 589,
@@ -9191,7 +9075,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 5
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 546,
@@ -9304,7 +9188,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 5
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 549,
@@ -9417,7 +9301,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 11
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 548,
@@ -9530,7 +9414,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 11
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 588,
@@ -9639,7 +9523,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 545,
@@ -9746,7 +9630,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 547,
@@ -9858,7 +9742,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 543,
@@ -9971,7 +9855,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 544,
@@ -10081,7 +9965,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 37
           },
           "hiddenSeries": false,
           "id": 541,
@@ -10200,7 +10084,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 37
           },
           "hiddenSeries": false,
           "id": 590,
@@ -10319,7 +10203,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 43
           },
           "hiddenSeries": false,
           "id": 560,
@@ -19368,8 +19252,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19554,8 +19438,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [],
@@ -19661,8 +19545,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19783,8 +19667,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -22401,6 +22285,6 @@
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1",
-  "version": 43
+  "uid": "YiGL8hBZ1x",
+  "version": 1
 }
