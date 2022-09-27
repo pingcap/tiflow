@@ -206,7 +206,8 @@ func buildRowData(csvConfig *config.CSVConfig, e *model.RowChangedEvent) ([]byte
 	if e.IsDelete() {
 		csvMsg.opType = deleteOperation
 		for i, column := range e.PreColumns {
-			// TODO: check when would this condition happen
+			// column could be nil in a condition described in
+			// https://github.com/pingcap/tiflow/issues/6198#issuecomment-1191132951
 			if column == nil {
 				continue
 			}
