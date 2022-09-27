@@ -15,7 +15,6 @@ package manager
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -249,10 +248,7 @@ func (r *DefaultGCRunner) mustCleanupS3Executors(
 		}
 
 		// Remove s3 dummy meta record
-		_, err = r.client.DeleteResource(ctx, pkgOrm.ResourceKey{
-			ID:    s3.DummyResourceID,
-			JobID: fmt.Sprintf(s3.DummyJobID, id),
-		})
+		_, err = r.client.DeleteResource(ctx, s3.GetDummyResourceKey(id))
 		if err != nil {
 			return err
 		}
@@ -260,7 +256,7 @@ func (r *DefaultGCRunner) mustCleanupS3Executors(
 		return nil
 	}
 
-	// Cleanup one executor per two second for avoiding too many requests to s3.
+	// Cleanup one executor per second for avoiding too many requests to s3.
 	// The rate limit takes effect only when initialing gcCoordinator.
 	rl := ratelimit.New(gcExecutorsRateLimit)
 	for _, executor := range executors {

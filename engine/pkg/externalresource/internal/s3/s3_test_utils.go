@@ -15,7 +15,6 @@ package s3
 
 import (
 	"os"
-	"time"
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
@@ -30,8 +29,6 @@ const (
 	UtBucketName = "engine-ut"
 	// MockExecutorID is the executor ID for mock executor
 	MockExecutorID = "executor-1"
-	// CaseTimeout is the timeout for ut case
-	CaseTimeout = 10 * time.Second
 )
 
 // GetS3OptionsForUT returns the s3 options for unit test.

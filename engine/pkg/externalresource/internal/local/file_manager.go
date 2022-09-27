@@ -312,8 +312,3 @@ func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}
 			zap.String("currentExecutor", string(m.executorID)))
 	}
 }
-
-// Close shuts down the FileManager.
-func (m *FileManager) Close() {
-	log.Info("local file manager closed", zap.String("executorID", string(m.executorID)))
-}

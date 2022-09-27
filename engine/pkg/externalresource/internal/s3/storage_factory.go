@@ -29,72 +29,47 @@ import (
 // unit testing easier.
 type ExternalStorageFactory interface {
 	newS3ExternalStorageForScope(
-		ctx context.Context,
-		bucket BucketName,
-		scope internal.ResourceScope,
+		ctx context.Context, scope internal.ResourceScope,
 	) (brStorage.ExternalStorage, error)
 
-	newS3ExternalStorageFromURI(
-		ctx context.Context,
-		uri string,
-	) (brStorage.ExternalStorage, error)
+	newS3ExternalStorageFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
 
-	scopeURI(bucket BucketName, scope internal.ResourceScope) string
+	baseURI() string
 }
 
 // ExternalStorageFactoryImpl implements ExternalStorageFactory.
 // It is exported for testing purposes.
 type ExternalStorageFactoryImpl struct {
+	// Bucket represents a name of an s3 bucket.
+	Bucket string
 	// Prefix is an optional prefix in the S3 file path.
 	// It can be useful when a shared bucket is used for testing purposes.
 	Prefix string
-
 	// Options provide necessary information such as endpoints and access key
 	// for creating an s3 client.
 	Options *brStorage.S3BackendOptions
 }
 
-// NewExternalStorageFactory creates a new ExternalStorageFactory with
-// s3 options.
+// NewExternalStorageFactory creates a new ExternalStorageFactory with s3 options.
 func NewExternalStorageFactory(
+	bucket string, prefix string,
 	options *brStorage.S3BackendOptions,
 ) *ExternalStorageFactoryImpl {
-	return &ExternalStorageFactoryImpl{
-		Options: options,
-	}
-}
-
-// NewExternalStorageFactoryWithPrefix is exported for integration tests.
-func NewExternalStorageFactoryWithPrefix(
-	prefix string,
-	options *brStorage.S3BackendOptions,
-) *ExternalStorageFactoryImpl {
-	return &ExternalStorageFactoryImpl{Prefix: prefix, Options: options}
+	return &ExternalStorageFactoryImpl{Prefix: prefix, Bucket: bucket, Options: options}
 }
 
 func (f *ExternalStorageFactoryImpl) newS3ExternalStorageForScope(
-	ctx context.Context,
-	bucket BucketName,
-	scope internal.ResourceScope,
+	ctx context.Context, scope internal.ResourceScope,
 ) (brStorage.ExternalStorage, error) {
-	uri := f.scopeURI(bucket, scope)
+	// full uri path is `s3://bucket/prefix/executorID/workerID`
+	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
 	return GetExternalStorageFromURI(ctx, uri, *f.Options)
 }
 
-func (f *ExternalStorageFactoryImpl) scopeURI(
-	bucket BucketName, scope internal.ResourceScope,
-) string {
-	// full uri path is `s3://bucket/prefix/executorID/workerID`
-	uri := fmt.Sprintf("s3://%s", url.QueryEscape(bucket))
+func (f *ExternalStorageFactoryImpl) baseURI() string {
+	uri := fmt.Sprintf("s3://%s", url.QueryEscape(f.Bucket))
 	if f.Prefix != "" {
-		uri += "/" + f.Prefix
-	}
-	if scope.Executor == "" {
-		return uri
-	}
-	uri += fmt.Sprintf("/%s", url.QueryEscape(string(scope.Executor)))
-	if scope.WorkerID != "" {
-		uri += fmt.Sprintf("/%s", url.QueryEscape(scope.WorkerID))
+		uri += "/" + url.QueryEscape(f.Prefix)
 	}
 	return uri
 }

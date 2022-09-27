@@ -320,7 +320,7 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 		return err
 	}
 
-	handler, err := newResourceHandle(fmt.Sprintf(s3.DummyJobID, b.executorID), b.executorID,
+	handler, err := newResourceHandle(s3.GetDummyJobID(b.executorID), b.executorID,
 		s3FileManager, desc, false, b.client)
 	if err != nil {
 		return err
@@ -340,8 +340,6 @@ func (b *DefaultBroker) Close() {
 	b.cancel()
 
 	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
-		defer fm.Close()
-
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Hour)
 		defer cancel()
 

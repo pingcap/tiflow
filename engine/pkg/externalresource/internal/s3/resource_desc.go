@@ -15,6 +15,7 @@ package s3
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
@@ -29,20 +30,17 @@ import (
 // so it is not thread-safe to use. But thread-safety does not seem
 // to be a necessary requirement.
 type resourceDescriptor struct {
-	Bucket BucketName
-	Ident  internal.ResourceIdent
+	Ident internal.ResourceIdent
 
 	storageFactory ExternalStorageFactory
 	storage        brStorage.ExternalStorage
 }
 
 func newResourceDescriptor(
-	bucket BucketName,
 	ident internal.ResourceIdent,
 	factory ExternalStorageFactory,
 ) *resourceDescriptor {
 	return &resourceDescriptor{
-		Bucket:         bucket,
 		Ident:          ident,
 		storageFactory: factory,
 	}
@@ -67,7 +65,7 @@ func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage
 }
 
 func (r *resourceDescriptor) URI() string {
-	return r.storageFactory.scopeURI(r.Bucket, r.Ident.Scope()) + "/" + r.Ident.Name
+	return fmt.Sprintf("%s/%s", r.storageFactory.baseURI(), r.Ident.BuildResPath())
 }
 
 func (r *resourceDescriptor) ResourceIdent() internal.ResourceIdent {

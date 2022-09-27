@@ -336,7 +336,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	checkAlive := func(ctx context.Context, executors ...model.ExecutorID) {
 		for _, executor := range executors {
 			res, err := helper.Meta.GetResourceByID(ctx, pkgOrm.ResourceKey{
-				JobID: fmt.Sprintf(s3.DummyJobID, executor),
+				JobID: s3.GetDummyJobID(executor),
 				ID:    s3.DummyResourceID,
 			})
 			require.NoError(t, err)
@@ -360,7 +360,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	for _, executor := range executors {
 		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 			ID:       s3.DummyResourceID,
-			Job:      fmt.Sprintf(s3.DummyJobID, executor),
+			Job:      s3.GetDummyJobID(model.ExecutorID(executor)),
 			Worker:   s3.DummyWorkerID,
 			Executor: model.ExecutorID(executor),
 		})

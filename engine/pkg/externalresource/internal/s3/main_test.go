@@ -16,8 +16,14 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// Ref: https://github.com/pingcap/tidb/blob/master/br/pkg/storage/s3.go#L366
+	opts := []goleak.Option{
+		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
+	}
+	leakutil.SetUpLeakTest(m, opts...)
 }

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -53,11 +54,21 @@ var (
 
 func newBrokerForS3(
 	t *testing.T, executorID resModel.ExecutorID,
-) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage) {
+) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage, string) {
+	s3Prefix := fmt.Sprintf("%s-%s-%d", t.Name(),
+		time.Now().Format("20060102-150405"), rand.Int())
+	return newBrokerForS3WithPrefix(t, executorID, s3Prefix)
+}
+
+func newBrokerForS3WithPrefix(
+	t *testing.T, executorID resModel.ExecutorID, s3Prefix string,
+) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage, string) {
 	// Remove the following comments if running tests locally.
-	// os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
-	// os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
-	// os.Setenv("ENGINE_S3_SECRET_KEY", "engineSecret")
+	os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
+	os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
+	os.Setenv("ENGINE_S3_SECRET_KEY", "engineSecret")
+
+	log.Warn("s3 prefix", zap.String("s3prefix", s3Prefix))
 	tmpDir := t.TempDir()
 	cli := manager.NewMockClient()
 	s3Cfg, err := s3.GetS3OptionsForUT()
@@ -66,16 +77,13 @@ func newBrokerForS3(
 		t.Skipf("server not configured for s3 integration: %s", err.Error())
 	}
 
-	s3Prefix := fmt.Sprintf("%s-%s", t.Name(), time.Now().Format("20060102-150405"))
-	require.NoError(t, err)
-
 	// request during persisting dummy resource
 	cli.On("CreateResource", mock.Anything,
 		&pb.CreateResourceRequest{
 			ProjectInfo:     &pb.ProjectInfo{},
 			ResourceId:      fmt.Sprintf("/s3/%s", s3.DummyResourceName),
 			CreatorExecutor: string(executorID),
-			JobId:           fmt.Sprintf(s3.DummyJobID, executorID),
+			JobId:           s3.GetDummyJobID(executorID),
 			CreatorWorkerId: s3.DummyWorkerID,
 		}, mock.Anything).Return(nil)
 
@@ -98,7 +106,7 @@ func newBrokerForS3(
 
 	// check dummy resource exists
 	checkFile(t, rootStrorage, "keep-alive-worker/dummy/.keep", fileExists)
-	return broker, cli, tmpDir, rootStrorage
+	return broker, cli, tmpDir, rootStrorage, s3Prefix
 }
 
 func closeBrokerForS3(
@@ -109,8 +117,8 @@ func closeBrokerForS3(
 	cli.On("RemoveResource", mock.Anything,
 		&pb.RemoveResourceRequest{
 			ResourceKey: &pb.ResourceKey{
-				JobId:      fmt.Sprintf(s3.DummyJobID, broker.executorID),
-				ResourceId: fmt.Sprintf("/s3/%s", s3.DummyResourceName),
+				JobId:      s3.GetDummyJobID(broker.executorID),
+				ResourceId: s3.DummyResourceID,
 			},
 		}, mock.Anything).Return(nil)
 	broker.Close()
@@ -227,7 +235,7 @@ func getExistingS3ResourceForWorker(
 }
 
 func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
-	brk, cli, dir, rootStrorage := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, dir, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
 
 	// test local file works well under this condition
 	cli.On("QueryResource", mock.Anything,
@@ -283,7 +291,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 
 // FIXME: this test is unstable, fix it after removing the index design
 func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
-	brk, cli, _, rootStrorage := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, _, rootStrorage, s3Prefix := newBrokerForS3(t, s3.MockExecutorID)
 
 	testFiles := []string{"1.txt", "inner1/2.txt", "inner1/inner2/3.txt"}
 
@@ -302,7 +310,7 @@ func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 	getExistingS3ResourceForWorker(t, brk, cli, "worker-1", "worker-2", persistedRes)
 
 	// Scenario 3: worker in other executor opens the persistent resource `test-1`
-	brk1, cli1, _, rootStrorage1 := newBrokerForS3(t, "executor-test-persisted")
+	brk1, cli1, _, rootStrorage1, _ := newBrokerForS3WithPrefix(t, "executor-test-persisted", s3Prefix)
 	defer closeBrokerForS3(t, brk1, cli1, rootStrorage1)
 	getExistingS3ResourceForWorker(t, brk1, cli1, "worker-1", "worker-1", persistedRes)
 	getExistingS3ResourceForWorker(t, brk1, cli1, "worker-1", "worker-3", persistedRes)
@@ -334,7 +342,7 @@ func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 }
 
 func TestIntegrationBrokerGCClosedWorker(t *testing.T) {
-	brk, cli, _, rootStrorage := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, _, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

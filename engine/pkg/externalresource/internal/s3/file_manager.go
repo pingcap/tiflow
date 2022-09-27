@@ -15,9 +15,9 @@ package s3
 
 import (
 	"context"
-	gerrors "errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,25 +29,39 @@ import (
 )
 
 const (
+	// TODO: use the contents of placeholder to indicate persistent status
 	placeholderFileName = ".keep"
-
-	// DummyJobID is a dummy job ID used for the s3 storage.
-	DummyJobID = "dummy-job-%s"
-	// DummyWorkerID is a dummy worker ID used for the s3 storage.
-	DummyWorkerID = "keep-alive-worker"
-	// DummyResourceName is a dummy resource name used for the s3 storage.
-	DummyResourceName = "dummy"
-	// DummyResourceID is a dummy resource ID used for the s3 storage.
-	DummyResourceID = "/s3/dummy"
 )
+
+type persistedResources map[resModel.ResourceName]struct{}
+
+func newpersistedResources() persistedResources {
+	return make(map[resModel.ResourceName]struct{})
+}
+
+func (f persistedResources) SetPersisted(ident internal.ResourceIdent) bool {
+	if _, ok := f[ident.Name]; ok {
+		return false
+	}
+	f[ident.Name] = struct{}{}
+	return true
+}
+
+func (f persistedResources) UnsetPersisted(ident internal.ResourceIdent) bool {
+	if _, ok := f[ident.Name]; !ok {
+		return false
+	}
+	delete(f, ident.Name)
+	return true
+}
 
 // FileManager manages resource files stored on s3.
 type FileManager struct {
 	executorID     model.ExecutorID
-	bucketSelector BucketSelector
 	storageFactory ExternalStorageFactory
-	index          indexManager
-	prefix         string
+
+	mu              sync.RWMutex
+	persistedResMap map[resModel.WorkerID]persistedResources
 }
 
 // NewFileManagerWithConfig returns a new s3 FileManager.
@@ -56,22 +70,20 @@ type FileManager struct {
 func NewFileManagerWithConfig(
 	executorID resModel.ExecutorID, config resModel.S3Config,
 ) *FileManager {
-	bucketSelector := NewConstantBucketSelector(config.Bucket)
-	factory := NewExternalStorageFactoryWithPrefix(config.Prefix, &config.S3BackendOptions)
-	return NewFileManager(executorID, bucketSelector, factory)
+	factory := NewExternalStorageFactory(config.Bucket,
+		config.Prefix, &config.S3BackendOptions)
+	return NewFileManager(executorID, factory)
 }
 
 // NewFileManager creates a new s3 FileManager.
 func NewFileManager(
 	executorID resModel.ExecutorID,
-	bucketSelector BucketSelector,
 	factory ExternalStorageFactory,
 ) *FileManager {
 	return &FileManager{
-		executorID:     executorID,
-		bucketSelector: bucketSelector,
-		storageFactory: factory,
-		index:          newIndexManager(executorID, bucketSelector, factory),
+		executorID:      executorID,
+		storageFactory:  factory,
+		persistedResMap: make(map[string]persistedResources),
 	}
 }
 
@@ -81,12 +93,7 @@ func (m *FileManager) CreateResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	m.validateExecutor(ident.Executor, ident)
-	bucket, err := m.bucketSelector.GetBucket(ctx, ident.Scope())
-	if err != nil {
-		return nil, errors.Annotate(err, "FileManager: CreateResource")
-	}
-
-	desc := newResourceDescriptor(bucket, ident, m.storageFactory)
+	desc := newResourceDescriptor(ident, m.storageFactory)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -104,30 +111,7 @@ func (m *FileManager) CreateResource(
 func (m *FileManager) GetPersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
-	persistedResourceSet, err := m.index.LoadPersistedFileSet(ctx, ident.Scope())
-	if err != nil {
-		if gerrors.Is(err, errIndexFileDoesNotExist) {
-			return nil, internal.ErrResourceFilesNotFound.GenWithStack(
-				&internal.ResourceFilesNotFoundError{
-					Ident:   ident,
-					Details: err.Error(),
-				})
-		}
-		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
-	}
-	if _, ok := persistedResourceSet[ident.Name]; !ok {
-		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
-			&internal.ResourceFilesNotFoundError{
-				Ident: ident,
-			})
-	}
-
-	bucket, err := m.bucketSelector.GetBucket(ctx, ident.Scope())
-	if err != nil {
-		return nil, errors.Annotate(err, "FileManager: GetPersistedResource")
-	}
-
-	desc := newResourceDescriptor(bucket, ident, m.storageFactory)
+	desc := newResourceDescriptor(ident, m.storageFactory)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -141,6 +125,7 @@ func (m *FileManager) GetPersistedResource(
 		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
 			&internal.ResourceFilesNotFoundError{
 				Ident: ident,
+				URI:   desc.URI(),
 			})
 	}
 
@@ -154,41 +139,53 @@ func (m *FileManager) RemoveTemporaryFiles(
 ) error {
 	m.validateExecutor(scope.Executor, scope)
 	if scope.WorkerID == "" {
-		return m.removeAllTemporaryFilesForExecutor(ctx, scope)
+		return m.removeTemporaryFilesForExecutor(ctx, scope)
 	}
+	return m.removeTemporaryFilesForWorker(ctx, scope)
+}
 
-	persistedFiles, err := m.index.LoadPersistedFileSet(ctx, scope)
-	if err != nil && !gerrors.Is(err, errIndexFileDoesNotExist) {
-		return err
-	}
+func (m *FileManager) removeTemporaryFilesForWorker(
+	ctx context.Context, scope internal.ResourceScope,
+) error {
+	m.mu.RLock()
+	resources, ok := m.persistedResMap[scope.WorkerID]
+	// unlock here is safe because `resources` will not be changed after worker exits.
+	m.mu.RUnlock()
 
 	log.Info("Removing temporary resources for single worker", zap.Any("scope", scope))
+	if !ok {
+		return m.removeFilesIf(ctx, scope, func(_ string) bool {
+			// remove all files within this scope since no persisted files are found
+			return true
+		})
+	}
 
 	return m.removeFilesIf(ctx, scope, func(path string) bool {
 		resName, _, ok := strings.Cut(path, "/")
 		if !ok {
 			return false
 		}
-		_, ok = persistedFiles[resName]
+		_, ok = resources[resName]
 		return !ok
 	})
 }
 
-func (m *FileManager) removeAllTemporaryFilesForExecutor(
+func (m *FileManager) removeTemporaryFilesForExecutor(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
-	// get all persisted files which is created by current executor
-	persistedFileSet := make(map[resModel.ResourceName]struct{})
+	// Get all persisted files which is created by current executor.
+	persistedResSet := make(map[resModel.ResourceName]struct{})
 
-	persistedFileMap := m.index.GetPersistedFileMap()
-	for workerID, indexFile := range persistedFileMap {
-		for resName := range indexFile.PersistedFileSet {
+	m.mu.RLock()
+	for workerID, resources := range m.persistedResMap {
+		for resName := range resources {
 			resPath := fmt.Sprintf("%s/%s", workerID, resName)
-			persistedFileSet[resPath] = struct{}{}
+			persistedResSet[resPath] = struct{}{}
 		}
 	}
+	m.mu.RUnlock()
 
-	return m.removeAllTemporaryFilesByMeta(ctx, scope, persistedFileSet)
+	return m.removeAllTemporaryFilesByMeta(ctx, scope, persistedResSet)
 }
 
 // removeAllTemporaryFilesByMeta removes all temporary resources located in the given scope.
@@ -233,8 +230,19 @@ func (m *FileManager) RemoveResource(
 		}
 		return resName == ident.Name
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	if m.executorID == ident.Executor {
+		// Remove from persistedResMap
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if resources, ok := m.persistedResMap[ident.WorkerID]; ok {
+			resources.UnsetPersisted(ident)
+		}
+	}
+	return nil
 }
 
 // SetPersisted marks a resource as persisted. It can only be called
@@ -243,10 +251,16 @@ func (m *FileManager) SetPersisted(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
 	m.validateExecutor(ident.Executor, ident)
-	ok, err := m.index.SetPersisted(ctx, ident)
-	if err != nil {
-		return err
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	resources, ok := m.persistedResMap[ident.WorkerID]
+	if !ok {
+		resources = newpersistedResources()
+		m.persistedResMap[ident.WorkerID] = resources
 	}
+
+	ok = resources.SetPersisted(ident)
 	if !ok {
 		log.Warn("resource is already persisted",
 			zap.Any("ident", ident))
@@ -263,22 +277,12 @@ func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}
 	}
 }
 
-// Close closes the FileManager.
-func (m *FileManager) Close() {
-	m.index.Close()
-}
-
 func (m *FileManager) removeFilesIf(
 	ctx context.Context,
 	scope internal.ResourceScope,
 	pred func(path string) bool,
 ) error {
-	bucket, err := m.bucketSelector.GetBucket(ctx, scope)
-	if err != nil {
-		return err
-	}
-
-	storage, err := m.storageFactory.newS3ExternalStorageForScope(ctx, bucket, scope)
+	storage, err := m.storageFactory.newS3ExternalStorageForScope(ctx, scope)
 	if err != nil {
 		return err
 	}
@@ -297,7 +301,7 @@ func (m *FileManager) removeFilesIf(
 
 	log.Info("Removing resources",
 		zap.Any("scope", scope),
-		zap.Any("file-set", toRemoveFiles))
+		zap.Any("toRemoveFiles", toRemoveFiles))
 
 	for _, path := range toRemoveFiles {
 		if err := storage.DeleteFile(ctx, path); err != nil {
@@ -322,33 +326,22 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 		return errors.Annotate(err, "creating placeholder file")
 	}
 
-	_, err = writer.Write(ctx, []byte("dummy"))
+	_, err = writer.Write(ctx, []byte("placeholder"))
 	if err != nil {
-		return errors.Annotate(err, "creating placeholder file")
+		return errors.Annotate(err, "writing placeholder file")
 	}
 
 	if err := writer.Close(ctx); err != nil {
-		return errors.Annotate(err, "creating placeholder file")
+		return errors.Annotate(err, "closing placeholder file")
 	}
 	return nil
-}
-
-// GetDummyIdent returns a dummy resource ident for testing.
-func GetDummyIdent(executorID model.ExecutorID) internal.ResourceIdent {
-	return internal.ResourceIdent{
-		Name: DummyResourceName,
-		ResourceScope: internal.ResourceScope{
-			Executor: executorID,
-			WorkerID: DummyWorkerID,
-		},
-	}
 }
 
 // PreCheckConfig does a preflight check on the executor's storage configurations.
 func PreCheckConfig(config resModel.S3Config) error {
 	// TODO: use customized retry policy.
-	factory := NewExternalStorageFactoryWithPrefix(config.Prefix, &config.S3BackendOptions)
-	_, err := factory.newS3ExternalStorageForScope(context.Background(),
-		config.Bucket, internal.ResourceScope{})
+	factory := NewExternalStorageFactory(config.Bucket,
+		config.Prefix, &config.S3BackendOptions)
+	_, err := factory.newS3ExternalStorageForScope(context.Background(), internal.ResourceScope{})
 	return err
 }

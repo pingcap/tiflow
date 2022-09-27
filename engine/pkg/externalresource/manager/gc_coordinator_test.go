@@ -15,7 +15,6 @@ package manager
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -139,11 +138,12 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 
 	executors := []string{"executor-1", "executor-2", "executor-3"}
 	for _, executor := range executors {
+		id := model.ExecutorID(executor)
 		err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 			ID:       s3.DummyResourceID,
-			Job:      fmt.Sprintf(s3.DummyJobID, executor),
+			Job:      s3.GetDummyJobID(id),
 			Worker:   s3.DummyWorkerID,
-			Executor: model.ExecutorID(executor),
+			Executor: id,
 		})
 		require.NoError(t, err)
 	}
@@ -178,7 +178,7 @@ func TestGCCoordinatorRemoveExecutors(t *testing.T) {
 	for _, executor := range executors {
 		require.Eventually(t, func() bool {
 			return helper.IsRemoved(t, pkgOrm.ResourceKey{
-				JobID: fmt.Sprintf(s3.DummyJobID, executor),
+				JobID: s3.GetDummyJobID(model.ExecutorID(executor)),
 				ID:    s3.DummyResourceID,
 			})
 		}, 1*time.Second, 10*time.Millisecond)
