@@ -46,8 +46,11 @@ type Task struct {
 	// reader -> db and db -> compactor
 	DeleteReq *DeleteRequest
 
-	// StartTs let reader now the lower bound timestamp for reading data from db
+	// StartTs let reader know the lower bound timestamp for reading data from db
 	StartTs uint64
+
+	// ResolvedTs is the latest received resolved ts
+	ResolvedTs uint64
 
 	// A test message.
 	Test *Test

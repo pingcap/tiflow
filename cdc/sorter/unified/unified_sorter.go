@@ -240,6 +240,10 @@ func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	}
 }
 
+func (s *Sorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
+
+}
+
 // Output implements the EventSorter interface
 func (s *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh

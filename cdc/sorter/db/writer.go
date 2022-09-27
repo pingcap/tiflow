@@ -55,22 +55,27 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
 		}
 
-		ev := msgs[i].Value.InputEvent
-		if ev.IsResolved() {
-			if w.maxResolvedTs < ev.CRTs {
-				w.maxResolvedTs = ev.CRTs
+		msgVal := msgs[i].Value
+		resolvedTs := msgVal.ResolvedTs
+		if resolvedTs != 0 {
+			if resolvedTs > w.maxResolvedTs {
+				w.maxResolvedTs = resolvedTs
 			}
 			resolvedEventCount++
 			continue
 		}
+
+		ev := msgVal.InputEvent
 		if w.maxCommitTs < ev.CRTs {
 			w.maxCommitTs = ev.CRTs
 		}
 		kvEventCount++
 
 		key := encoding.EncodeKey(w.uid, w.tableID, ev)
-		value := []byte{}
-		var err error
+		var (
+			value []byte
+			err   error
+		)
 		value, err = w.serde.Marshal(ev, value)
 		if err != nil {
 			log.Panic("failed to marshal events", zap.Error(err))

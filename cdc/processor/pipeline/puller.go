@@ -97,6 +97,12 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 				if rawKV == nil {
 					continue
 				}
+
+				if rawKV.OpType == model.OpTypeResolved {
+					sorter.handleResolvedTs(ctx, rawKV.CRTs)
+					continue
+				}
+
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				sorter.handleRawEvent(ctx, pEvent)
 			}

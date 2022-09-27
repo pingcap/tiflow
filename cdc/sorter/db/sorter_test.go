@@ -65,6 +65,21 @@ func TestAddEntry(t *testing.T) {
 		}, task.Value)
 }
 
+func TestConsumeResolvedTs(t *testing.T) {
+	t.Parallel()
+
+	s, mb := newTestSorter(t.Name(), 1)
+
+	s.ConsumeResolvedTs(context.Background(), 10)
+	task, ok := mb.Receive()
+	require.True(t, ok)
+	require.Equal(t, message.Task{
+		UID:        s.uid,
+		TableID:    s.tableID,
+		ResolvedTs: 10,
+	}, task.Value)
+}
+
 func TestOutput(t *testing.T) {
 	t.Parallel()
 

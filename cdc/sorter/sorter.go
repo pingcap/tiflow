@@ -45,4 +45,6 @@ type EventSorter interface {
 
 	// EmitStartTs let sorter know the start timestamp for consuming data
 	EmitStartTs(ctx context.Context, ts uint64)
+
+	ConsumeResolvedTs(ctx context.Context, resolvedTs uint64)
 }

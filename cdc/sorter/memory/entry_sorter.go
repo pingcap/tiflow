@@ -149,6 +149,10 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 }
 
+func (es *EntrySorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
+
+}
+
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh

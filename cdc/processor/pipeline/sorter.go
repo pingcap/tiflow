@@ -352,6 +352,44 @@ func (n *sorterNode) start(
 	return nil
 }
 
+func (n *sorterNode) handleResolvedTs(ctx context.Context, resolvedTs uint64) {
+	oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
+	if oldResolvedTs >= resolvedTs {
+		log.Panic("resolved ts regression",
+			zap.Int64("tableID", n.tableID),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("oldResolvedTs", oldResolvedTs))
+	}
+	atomic.StoreUint64(&n.resolvedTs, resolvedTs)
+	if resolvedTs > n.BarrierTs() && !n.redoLogEnabled {
+		// Do not send resolved ts events that is larger than
+		// barrier ts.
+		// When DDL puller stall, resolved events that outputted by
+		// sorter may pile up in memory, as they have to wait DDL.
+		//
+		// Disabled if redolog is on, it requires sink reports
+		// resolved ts, conflicts to this change.
+		// TODO: Remove redolog check once redolog decouples for global
+		//       resolved ts.
+		resolvedTs = n.BarrierTs()
+	}
+	// sorterNode is preparing, and a resolved ts greater than the `sorterNode`
+	// startTs (which is used to initialize the `sorterNode.resolvedTs`) received,
+	// this indicates that all regions connected,
+	// and sorter have data can be consumed by downstream.
+	if n.state.Load() == tablepb.TableStatePreparing {
+		log.Debug("sorterNode, first resolved event received",
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID),
+			zap.Int64("tableID", n.tableID),
+			zap.Uint64("resolvedTs", resolvedTs))
+		n.state.Store(tablepb.TableStatePrepared)
+		close(n.preparedCh)
+	}
+
+	n.sorter.ConsumeResolvedTs(ctx, resolvedTs)
+}
+
 // handleRawEvent process the raw kv event,send it to sorter
 func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.PolymorphicEvent) {
 	rawKV := event.RawKV

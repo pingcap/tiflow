@@ -221,6 +221,18 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
 }
 
+func (ls *Sorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
+	if atomic.LoadInt32(&ls.closed) != 0 {
+		return
+	}
+	msg := actormsg.ValueMessage(message.Task{
+		UID:        ls.uid,
+		TableID:    ls.tableID,
+		ResolvedTs: resolvedTs,
+	})
+	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
+}
+
 // Output returns the sorted raw kv output channel
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events

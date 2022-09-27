@@ -90,6 +90,10 @@ func (c *checkSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEven
 	c.ch <- entry
 }
 
+func (c *checkSorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
+
+}
+
 func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
 }
