@@ -232,7 +232,7 @@ jobs:
           kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
       - name: Wait for TiDB ready
         run: |
-          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=10m || true
           echo show pvc
           kubectl get pvc -l app=tidb -o wide
           echo show pv
