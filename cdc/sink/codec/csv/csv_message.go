@@ -108,7 +108,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 			strBuilder.WriteRune(config.Backslash)
 			strBuilder.WriteRune(rune(ch))
 
-			// escape every characters in delimiter.
+			// escape each characters in delimiter.
 			if isDelimiterStart {
 				for k := 1; k < len(c.csvConfig.Delimiter); k++ {
 					strBuilder.WriteRune(config.Backslash)
