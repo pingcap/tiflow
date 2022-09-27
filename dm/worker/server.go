@@ -60,10 +60,10 @@ var (
 type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
 	closeMu sync.Mutex
-	//closed is used to store the current state of the dm-worker server.
-	//if the server starts successfully, s.closed.Store(false)
+	// closed is used to indicate whether dm-worker server is in closed state.
 	closed atomic.Bool
-	//calledClose is used to indicate that dm-worker has received signal to close and closed successfully.
+	// calledClose is used to indicate that dm-worker has received signal to close and closed successfully.
+	// we use this variable to avoid Start() after Close()
 	calledClose bool
 	rootLis     net.Listener
 	svr         *grpc.Server
@@ -114,7 +114,7 @@ func (s *Server) Start() error {
 	startErr := func() error {
 		s.closeMu.Lock()
 		defer s.closeMu.Unlock()
-		//If dm-worker has received signal and finished close, start() should not continue
+		// if dm-worker has received signal and finished close, start() should not continue
 		if s.calledClose {
 			return terror.ErrWorkerServerClosed
 		}
