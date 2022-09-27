@@ -134,7 +134,7 @@ const (
 )
 
 // GenResourcePath returns the ResourceType and the path suffix.
-func GenResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
+func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
