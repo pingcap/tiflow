@@ -57,8 +57,15 @@ type DefaultBroker struct {
 	// TODO: add monitor for closedWorkerCh
 	closedWorkerCh chan closedWorker
 
-	dummyHandler Handle
-	cancel       context.CancelFunc
+	// If S3 is configured, a dummy resource will be persisted by broker to indicate
+	// that its temporary files have not been cleaned, which is useful to prevent
+	// resource leaks.
+	//
+	// Normally a broker will attempt to clean up temporary files and dummy resources
+	// before exiting. If this step fails, the dummy record is stored in Meta, which
+	// will be cleaned up by GCCoordinator eventually.
+	s3dummyHandler Handle
+	cancel         context.CancelFunc
 }
 
 // NewBroker creates a new Impl instance
@@ -90,7 +97,7 @@ func NewBroker(
 
 	// Initialize s3 file managers
 	if !config.S3Enabled() {
-		log.Info("S3 config is not complete, will not use s3 as external storage")
+		log.Info("broker will not use s3 as external storage since s3 is not configured")
 		return broker, nil
 	}
 
@@ -324,7 +331,7 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 		return err
 	}
 
-	b.dummyHandler = handler
+	b.s3dummyHandler = handler
 	return nil
 }
 
@@ -350,8 +357,8 @@ func (b *DefaultBroker) Close() {
 		}
 
 		// Remove s3 dummy file meta
-		if b.dummyHandler != nil {
-			_ = b.dummyHandler.Discard(ctx)
+		if b.s3dummyHandler != nil {
+			_ = b.s3dummyHandler.Discard(ctx)
 		}
 	}
 }

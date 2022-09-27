@@ -76,6 +76,7 @@ func NewFileManager(
 }
 
 // CreateResource creates a new resource on s3.
+// It can only be used to create resources that belong to the current executor.
 func (m *FileManager) CreateResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
@@ -217,8 +218,8 @@ func (m *FileManager) removeAllTemporaryFilesByMeta(
 	})
 }
 
-// RemoveResource removes a resource from s3. It can be called
-// on any executor node.
+// RemoveResource removes a resource from s3.
+// It can be called on any executor node.
 func (m *FileManager) RemoveResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
@@ -254,7 +255,6 @@ func (m *FileManager) SetPersisted(
 }
 
 func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}) {
-	// Defensive verification to ensure that local resources are not accessible across nodes.
 	if creator != m.executorID {
 		log.Panic("inconsistent executor ID of s3 file",
 			zap.Any("resource", res),
