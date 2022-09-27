@@ -59,7 +59,7 @@ func (r *resourceController) GCSingleResource(ctx context.Context, res *resModel
 	})
 }
 
-// GCHandler returns a closure to the invoker to perform GC.
+// GCExecutor cleanups all temporary resources created by the executor.
 func (r *resourceController) GCExecutor(
 	ctx context.Context, resources []*resModel.ResourceMeta, executorID model.ExecutorID,
 ) error {

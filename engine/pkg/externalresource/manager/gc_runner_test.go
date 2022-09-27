@@ -27,39 +27,10 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
-
-type mockResourceController struct {
-	internal.ResourceController
-	gcRequestCh  chan *resModel.ResourceMeta
-	gcExecutorCh chan []*resModel.ResourceMeta
-}
-
-func (r *mockResourceController) GCSingleResource(
-	ctx context.Context, res *resModel.ResourceMeta,
-) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case r.gcRequestCh <- res:
-	}
-	return nil
-}
-
-func (r *mockResourceController) GCExecutor(
-	ctx context.Context, resources []*resModel.ResourceMeta, executorID model.ExecutorID,
-) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case r.gcExecutorCh <- resources:
-	}
-	return nil
-}
 
 type gcRunnerTestHelper struct {
 	Runner *DefaultGCRunner
@@ -172,7 +143,8 @@ func (c *mockMetaClientErrOnce) GetOneResourceForGC(ctx context.Context) (*resMo
 }
 
 func (c *mockMetaClientErrOnce) DeleteResourcesByTypeAndExecutorIDs(ctx context.Context,
-	resType resModel.ResourceType, executorID ...engineModel.ExecutorID) (pkgOrm.Result, error) {
+	resType resModel.ResourceType, executorID ...engineModel.ExecutorID,
+) (pkgOrm.Result, error) {
 	if _, erred := c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"]; !erred {
 		c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"] = struct{}{}
 		return nil, errors.New("injected error")
@@ -182,7 +154,8 @@ func (c *mockMetaClientErrOnce) DeleteResourcesByTypeAndExecutorIDs(ctx context.
 }
 
 func (c *mockMetaClientErrOnce) QueryResourcesByExecutorIDs(ctx context.Context,
-	executorID ...engineModel.ExecutorID) ([]*resModel.ResourceMeta, error) {
+	executorID ...engineModel.ExecutorID,
+) ([]*resModel.ResourceMeta, error) {
 	if _, erred := c.methodsAllReadyErred["QueryResourcesByExecutorIDs"]; !erred {
 		c.methodsAllReadyErred["QueryResourcesByExecutorIDs"] = struct{}{}
 		return nil, errors.New("injected error")

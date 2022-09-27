@@ -15,6 +15,7 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -133,6 +136,17 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 		Executor: "executor-3",
 	})
 	require.NoError(t, err)
+
+	executors := []string{"executor-1", "executor-2", "executor-3"}
+	for _, executor := range executors {
+		err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:       s3.DummyResourceID,
+			Job:      fmt.Sprintf(s3.DummyJobID, executor),
+			Worker:   s3.DummyWorkerID,
+			Executor: model.ExecutorID(executor),
+		})
+		require.NoError(t, err)
+	}
 }
 
 func TestGCCoordinatorRemoveExecutors(t *testing.T) {
@@ -160,6 +174,15 @@ func TestGCCoordinatorRemoveExecutors(t *testing.T) {
 		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "/local/resource-3"})
 	}, 1*time.Second, 10*time.Millisecond)
 
+	executors := []string{"executor-1", "executor-2", "executor-3"}
+	for _, executor := range executors {
+		require.Eventually(t, func() bool {
+			return helper.IsRemoved(t, pkgOrm.ResourceKey{
+				JobID: fmt.Sprintf(s3.DummyJobID, executor),
+				ID:    s3.DummyResourceID,
+			})
+		}, 1*time.Second, 10*time.Millisecond)
+	}
 	helper.Close()
 }
 
