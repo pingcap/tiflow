@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 
