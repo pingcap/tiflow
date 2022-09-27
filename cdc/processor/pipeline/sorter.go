@@ -356,6 +356,8 @@ func (n *sorterNode) handleResolvedTs(ctx context.Context, resolvedTs uint64) {
 	oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
 	if oldResolvedTs >= resolvedTs {
 		log.Panic("resolved ts regression",
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID),
 			zap.Int64("tableID", n.tableID),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("oldResolvedTs", oldResolvedTs))
@@ -388,6 +390,11 @@ func (n *sorterNode) handleResolvedTs(ctx context.Context, resolvedTs uint64) {
 	}
 
 	n.sorter.ConsumeResolvedTs(ctx, resolvedTs)
+}
+
+func (n *sorterNode) handleRawKVEntry(ctx context.Context, entry *model.RawKVEntry) {
+	n.sorter.ConsumeRawKVEntry(ctx, entry)
+	atomic.AddInt64(&n.remainEvents, 1)
 }
 
 // handleRawEvent process the raw kv event,send it to sorter

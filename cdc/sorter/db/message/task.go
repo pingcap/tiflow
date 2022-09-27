@@ -52,6 +52,9 @@ type Task struct {
 	// ResolvedTs is the latest received resolved ts
 	ResolvedTs uint64
 
+	// Data is the latest received raw row event data
+	Data *model.RawKVEntry
+
 	// A test message.
 	Test *Test
 }

@@ -221,6 +221,18 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
 }
 
+func (ls *Sorter) ConsumeRawKVEntry(ctx context.Context, entry *model.RawKVEntry) {
+	if atomic.LoadInt32(&ls.closed) != 0 {
+		return
+	}
+	msg := actormsg.ValueMessage(message.Task{
+		UID:     ls.uid,
+		TableID: ls.tableID,
+		Data:    entry,
+	})
+	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
+}
+
 func (ls *Sorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return

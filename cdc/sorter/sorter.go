@@ -47,4 +47,6 @@ type EventSorter interface {
 	EmitStartTs(ctx context.Context, ts uint64)
 
 	ConsumeResolvedTs(ctx context.Context, resolvedTs uint64)
+
+	//ConsumeRawKVEntry(ctx context.Context, entry *model.RawKVEntry)
 }
