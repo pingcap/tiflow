@@ -15,7 +15,7 @@ package scheduler
 
 import (
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/label"
 )
@@ -54,7 +54,7 @@ var ErrSelectorUnsatisfied = rpcerror.Normalize[SelectorUnsatisfiedError]()
 type SelectorUnsatisfiedError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.ResourceExhausted]
 
-	Selector label.Selector
+	Selector *label.Selector
 }
 
 // ErrFilterNoResult indicates that a scheduler filter returns an

@@ -12,6 +12,7 @@ while [ $i -le $retry_times ]; do
 	echo "The ${i} times to try to start engine cluster..."
 	run_engine.sh deploy "$@" && break
 	((i++)) || true
+	run_engine.sh stop "$@" || true
 	echo "start engine cluster failed"
 done
 
@@ -20,5 +21,5 @@ if [ $i -gt $retry_times ]; then
 	exit 1
 else
 	# TODO: add check logic to wait cluster ready
-	sleep 20
+	sleep 5
 fi

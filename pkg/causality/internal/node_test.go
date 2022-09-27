@@ -17,10 +17,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 )
 
-var _ Eq[*Node] = &Node{} // Asserts that *Node implements Eq[*Node].
+var _ SlotNode[*Node] = &Node{} // Asserts that *Node implements SlotNode[*Node].
 
 func TestNodeFree(t *testing.T) {
 	// This case should not be run parallel to
@@ -44,9 +43,8 @@ func TestNodeEquals(t *testing.T) {
 
 	nodeA := NewNode()
 	nodeB := NewNode()
-	require.False(t, nodeA.Equals(nodeB))
-	require.False(t, nodeB.Equals(nodeA))
-	require.True(t, nodeA.Equals(nodeA))
+	require.False(t, nodeA.NodeID() == nodeB.NodeID())
+	require.True(t, nodeA.NodeID() == nodeA.NodeID())
 }
 
 func TestNodeDependOn(t *testing.T) {
@@ -56,12 +54,8 @@ func TestNodeDependOn(t *testing.T) {
 	nodeA := NewNode()
 	nodeB := NewNode()
 
-	nodeA.DependOn(nodeB)
+	nodeA.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB})
 	require.Equal(t, nodeA.dependerCount(), 0)
-	require.Equal(t, nodeB.dependerCount(), 1)
-
-	// DependOn should be idempotent.
-	nodeA.DependOn(nodeB)
 	require.Equal(t, nodeB.dependerCount(), 1)
 }
 
@@ -70,20 +64,11 @@ func TestNodeSingleDependency(t *testing.T) {
 
 	nodeA := NewNode()
 
-	var onNoConflictCalled atomic.Bool
 	nodeB := NewNode()
-	nodeB.DependOn(nodeA)
-	nodeB.OnNoConflict(func(id workerID) {
-		require.Equal(t, workerID(1), id)
-		require.False(t, onNoConflictCalled.Swap(true))
-	})
+	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA})
 
-	nodeA.AssignTo(1)
-	require.True(t, onNoConflictCalled.Load())
+	require.True(t, nodeA.assignTo(1))
 	require.Equal(t, workerID(1), nodeA.assignedWorkerID())
-	require.Equal(t, unassigned, nodeB.assignedWorkerID())
-
-	nodeB.AssignTo(workerID(1))
 	require.Equal(t, workerID(1), nodeB.assignedWorkerID())
 }
 
@@ -99,34 +84,26 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeB := NewNode()
 	nodeC := NewNode()
 
-	nodeC.DependOn(nodeA)
-	nodeC.DependOn(nodeB)
+	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB})
+	nodeC.RandWorkerID = func() workerID { return 100 }
 
-	var onNoConflictCalled atomic.Bool
-	nodeC.OnNoConflict(func(id workerID) {
-		require.Equal(t, workerID(1), id)
-		require.False(t, onNoConflictCalled.Swap(true))
-	})
+	require.True(t, nodeA.assignTo(1))
+	require.True(t, nodeB.assignTo(2))
 
-	require.False(t, onNoConflictCalled.Load())
-	nodeA.AssignTo(1)
-	require.False(t, onNoConflictCalled.Load())
-	nodeB.AssignTo(2)
-	require.False(t, onNoConflictCalled.Load())
+	require.Equal(t, unassigned, nodeC.assignedWorkerID())
+
+	nodeA.Remove()
 	nodeB.Remove()
-	require.True(t, onNoConflictCalled.Load())
+	require.Equal(t, int64(100), nodeC.assignedWorkerID())
 }
 
 func TestNodeResolveImmediately(t *testing.T) {
 	t.Parallel()
 
 	nodeA := NewNode()
-	var onNoConflictCalled atomic.Bool
-	nodeA.OnNoConflict(func(id workerID) {
-		require.Equal(t, unassigned, id) // WorkerID is indeterminate.
-		require.False(t, onNoConflictCalled.Swap(true))
-	})
-	require.True(t, onNoConflictCalled.Load())
+	nodeA.RandWorkerID = func() workerID { return workerID(100) }
+	nodeA.DependOn(nil)
+	require.Equal(t, workerID(100), nodeA.assignedWorkerID())
 }
 
 func TestNodeDependOnSelf(t *testing.T) {
@@ -134,7 +111,7 @@ func TestNodeDependOnSelf(t *testing.T) {
 
 	nodeA := NewNode()
 	require.Panics(t, func() {
-		nodeA.DependOn(nodeA)
+		nodeA.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA})
 	})
 }
 
@@ -142,33 +119,6 @@ func TestNodeDoubleAssigning(t *testing.T) {
 	t.Parallel()
 
 	nodeA := NewNode()
-	nodeA.AssignTo(1)
-	require.Panics(t, func() {
-		nodeA.AssignTo(1)
-	})
-}
-
-func TestNodeRemovedPrematurely(t *testing.T) {
-	t.Parallel()
-
-	// Construct a dependency graph: A --> B
-	nodeA := NewNode()
-	nodeB := NewNode()
-
-	nodeA.DependOn(nodeB)
-
-	require.Panics(t, func() {
-		nodeA.Remove() // Removed prematurely here.
-	})
-}
-
-func TestNodeDoubleOnNoConflict(t *testing.T) {
-	t.Parallel()
-
-	nodeA := NewNode()
-	nodeA.OnNoConflict(func(_ workerID) {})
-
-	require.Panics(t, func() {
-		nodeA.OnNoConflict(func(_ workerID) {})
-	})
+	require.True(t, nodeA.assignTo(1))
+	require.False(t, nodeA.assignTo(2))
 }

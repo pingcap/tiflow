@@ -19,15 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -58,7 +57,7 @@ func TestMasterInit(t *testing.T) {
 
 	resp, err := master.GetFrameMetaClient().GetJobByID(ctx, masterName)
 	require.NoError(t, err)
-	require.Equal(t, frameModel.MasterStatusInit, resp.StatusCode)
+	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
@@ -150,7 +149,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		masterName,
 		workerID1,
 		executorNodeID1,
-		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		[]resModel.ResourceID{"resource-1", "resource-2"},
 		// call GenEpoch three times, including create master meta, master init
 		// refresh meta, create worker.
 		epoch+3,
@@ -186,18 +185,18 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.GetFrameMetaClient())
+	workerMetaClient := metadata.NewWorkerStatusClient(masterName, master.GetFrameMetaClient())
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
 	err = workerMetaClient.Store(ctx, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	})
 	require.NoError(t, err)
 
 	master.On("OnWorkerStatusUpdated", mock.Anything, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	}).Return(nil)
 
@@ -209,7 +208,7 @@ func TestMasterCreateWorker(t *testing.T) {
 			Worker:      workerID1,
 			MasterEpoch: master.currentEpoch.Load(),
 			Status: &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			},
 		})
@@ -222,7 +221,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		select {
 		case updatedStatus := <-master.updatedStatuses:
 			require.Equal(t, &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			}, updatedStatus)
 		default:
@@ -230,7 +229,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		}
 
 		status := master.GetWorkers()[workerID1].Status()
-		return status.Code == frameModel.WorkerStatusNormal
+		return status.State == frameModel.WorkerStateNormal
 	}, 1*time.Second, 10*time.Millisecond)
 }
 
@@ -305,16 +304,16 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &frameModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			frameModel.FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
-			FakeTask, fakeWorkerCfg,
+			frameModel.FakeTask, fakeWorkerCfg,
 			fakeCfgBytes, fakeWorkerID,
 		},
 	}
 	for _, tc := range testCases {
-		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		rawConfig, workerID, err := master.PrepareWorkerConfig(tc.workerType, tc.config)
 		require.NoError(t, err)
 		require.Equal(t, tc.rawConfig, rawConfig)
 		require.Equal(t, tc.workerID, workerID)

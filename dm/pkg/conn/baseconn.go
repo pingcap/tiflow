@@ -23,11 +23,11 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -116,8 +116,9 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 // ExecuteSQLWithIgnoreError executes sql on real DB, and will ignore some error and continue execute the next query.
 // return
 // 1. failed: (the index of sqls executed error, error)
-// 2. succeed: (len(sqls), nil).
-func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *metricsproxy.HistogramVecProxy, task string, ignoreErr func(error) bool, queries []string, args ...[]interface{}) (int, error) {
+// 2. succeed: (rows affected, nil).
+func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, ignoreErr func(error) bool, queries []string, args ...[]interface{}) (int, error) {
+	var affect int64
 	// inject an error to trigger retry, this should be placed before the real execution of the SQL statement.
 	failpoint.Inject("retryableError", func(val failpoint.Value) {
 		if mark, ok := val.(string); ok {
@@ -169,23 +170,25 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 		}
 
 		startTime = time.Now()
-		_, err = txn.ExecContext(tctx.Context(), query, arg...)
-		if err == nil {
+		result, err2 := txn.ExecContext(tctx.Context(), query, arg...)
+		if err2 == nil {
+			rows, _ := result.RowsAffected()
+			affect += rows
 			if hVec != nil {
 				hVec.WithLabelValues("stmt", task).Observe(time.Since(startTime).Seconds())
 			}
 		} else {
-			if ignoreErr != nil && ignoreErr(err) {
+			if ignoreErr != nil && ignoreErr(err2) {
 				tctx.L().Warn("execute statement failed and will ignore this error",
 					zap.String("query", utils.TruncateString(query, -1)),
 					zap.String("argument", utils.TruncateInterface(arg, -1)),
-					log.ShortError(err))
+					log.ShortError(err2))
 				continue
 			}
 
 			tctx.L().ErrorFilterContextCanceled("execute statement failed",
 				zap.String("query", utils.TruncateString(query, -1)),
-				zap.String("argument", utils.TruncateInterface(arg, -1)), log.ShortError(err))
+				zap.String("argument", utils.TruncateInterface(arg, -1)), log.ShortError(err2))
 
 			startTime = time.Now()
 			rerr := txn.Rollback()
@@ -198,7 +201,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 				hVec.WithLabelValues("rollback", task).Observe(time.Since(startTime).Seconds())
 			}
 			// we should return the exec err, instead of the rollback rerr.
-			return i, terror.ErrDBExecuteFailed.Delegate(err, utils.TruncateString(query, -1))
+			return i, terror.ErrDBExecuteFailed.Delegate(err2, utils.TruncateString(query, -1))
 		}
 	}
 	startTime = time.Now()
@@ -209,14 +212,14 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 	if hVec != nil {
 		hVec.WithLabelValues("commit", task).Observe(time.Since(startTime).Seconds())
 	}
-	return l, nil
+	return int(affect), nil
 }
 
 // ExecuteSQL executes sql on real DB,
 // return
 // 1. failed: (the index of sqls executed error, error)
-// 2. succeed: (len(sqls), nil).
-func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *metricsproxy.HistogramVecProxy, task string, queries []string, args ...[]interface{}) (int, error) {
+// 2. succeed: (rows affected, nil).
+func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, queries []string, args ...[]interface{}) (int, error) {
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
 }
 

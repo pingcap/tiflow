@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 
@@ -59,7 +59,8 @@ func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelp
 		}
 		return nil
 	}
-	runner := NewGCRunner(meta, map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler})
+	runner := NewGCRunner(meta, nil)
+	runner.gcHandlers = map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler}
 	clk := clock.NewMock()
 	runner.clock = clk
 	ctx, cancel := context.WithCancel(context.Background())

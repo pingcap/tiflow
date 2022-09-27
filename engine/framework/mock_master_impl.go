@@ -67,7 +67,7 @@ func NewMockMasterImpl(t *testing.T, masterID, id frameModel.MasterID) *MockMast
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
-		tp:                FakeJobMaster,
+		tp:                frameModel.FakeJobMaster,
 		dispatchedWorkers: make(chan WorkerHandle, 1),
 		dispatchedResult:  make(chan error, 1),
 		updatedStatuses:   make(chan *frameModel.WorkerStatus, 1024),
@@ -229,6 +229,15 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 
 // CloseImpl implements MasterImpl.CloseImpl
 func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+// StopImpl implements MasterImpl.StopImpl
+func (m *MockMasterImpl) StopImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

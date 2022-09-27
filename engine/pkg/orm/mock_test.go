@@ -20,7 +20,7 @@ import (
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -255,33 +255,33 @@ func TestJobMock(t *testing.T) {
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&frameModel.MasterMetaKVData{
+				&frameModel.MasterMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 1,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
 				},
 			},
 		},
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&frameModel.MasterMetaKVData{
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 2,
-					Addr:       "127.0.0.1",
+				&frameModel.MasterMeta{
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     2,
+					Addr:      "127.0.0.1",
 				},
 			},
 		},
@@ -295,7 +295,7 @@ func TestJobMock(t *testing.T) {
 			},
 		},
 		{
-			// DELETE FROM `master_meta_kv_data` WHERE project_id = '111-222-334' AND job_id = '111'
+			// DELETE FROM `master_meta` WHERE project_id = '111-222-334' AND job_id = '111'
 			fn: "DeleteJob",
 			inputs: []interface{}{
 				"j113",
@@ -305,25 +305,25 @@ func TestJobMock(t *testing.T) {
 			},
 		},
 		{
-			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333' AND job_id = '111' ORDER BY `master_meta_kv_data`.`id` LIMIT 1
+			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_id = '111' ORDER BY `master_meta`.`id` LIMIT 1
 			fn: "GetJobByID",
 			inputs: []interface{}{
 				"j111",
 			},
-			output: &frameModel.MasterMetaKVData{
+			output: &frameModel.MasterMeta{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
 				},
-				ProjectID:  "p111",
-				ID:         "j111",
-				Tp:         1,
-				NodeID:     "n111",
-				Epoch:      1,
-				StatusCode: 2,
-				Addr:       "127.0.0.1",
-				Config:     []byte{0x11, 0x22},
+				ProjectID: "p111",
+				ID:        "j111",
+				Type:      1,
+				NodeID:    "n111",
+				Epoch:     1,
+				State:     2,
+				Addr:      "127.0.0.1",
+				Config:    []byte{0x11, 0x22},
 			},
 		},
 		{
@@ -334,26 +334,26 @@ func TestJobMock(t *testing.T) {
 			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
-			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333'
+			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333'
 			fn: "QueryJobsByProjectID",
 			inputs: []interface{}{
 				"p111",
 			},
-			output: []*frameModel.MasterMetaKVData{
+			output: []*frameModel.MasterMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 2,
-					Addr:       "1.1.1.1",
-					Config:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     2,
+					Addr:      "1.1.1.1",
+					Config:    []byte{0x11, 0x22},
 				},
 			},
 		},
@@ -362,40 +362,40 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"p113",
 			},
-			output: []*frameModel.MasterMetaKVData{},
+			output: []*frameModel.MasterMeta{},
 		},
 		{
-			//  SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333' AND job_status = 1
-			fn: "QueryJobsByStatus",
+			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j111",
 				2,
 			},
-			output: []*frameModel.MasterMetaKVData{
+			output: []*frameModel.MasterMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
 					},
-					ProjectID:  "p111",
-					ID:         "j111",
-					Tp:         1,
-					NodeID:     "n111",
-					Epoch:      1,
-					StatusCode: 2,
-					Addr:       "127.0.0.1",
-					Config:     []byte{0x11, 0x22},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     2,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
 				},
 			},
 		},
 		{
-			fn: "QueryJobsByStatus",
+			fn: "QueryJobsByState",
 			inputs: []interface{}{
 				"j113",
 				1,
 			},
-			output: []*frameModel.MasterMetaKVData{},
+			output: []*frameModel.MasterMeta{},
 		},
 	}
 
@@ -430,7 +430,7 @@ func TestWorkerMock(t *testing.T) {
 					JobID:     "j111",
 					ID:        "w222",
 					Type:      1,
-					Code:      1,
+					State:     1,
 					ErrorMsg:  "error",
 					ExtBytes:  []byte{0x11, 0x22},
 				},
@@ -448,7 +448,7 @@ func TestWorkerMock(t *testing.T) {
 					JobID:     "j111",
 					ID:        "w224",
 					Type:      1,
-					Code:      1,
+					State:     1,
 					ErrorMsg:  "error",
 					ExtBytes:  []byte{0x11, 0x22},
 				},
@@ -493,7 +493,7 @@ func TestWorkerMock(t *testing.T) {
 				JobID:     "j111",
 				ID:        "w222",
 				Type:      1,
-				Code:      1,
+				State:     1,
 				ErrorMsg:  "error",
 				ExtBytes:  []byte{0x11, 0x22},
 			},
@@ -523,7 +523,7 @@ func TestWorkerMock(t *testing.T) {
 					JobID:     "j111",
 					ID:        "w222",
 					Type:      1,
-					Code:      1,
+					State:     1,
 					ErrorMsg:  "error",
 					ExtBytes:  []byte{0x11, 0x22},
 				},
@@ -538,7 +538,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				1,
@@ -554,14 +554,14 @@ func TestWorkerMock(t *testing.T) {
 					JobID:     "j111",
 					ID:        "w222",
 					Type:      1,
-					Code:      1,
+					State:     1,
 					ErrorMsg:  "error",
 					ExtBytes:  []byte{0x11, 0x22},
 				},
 			},
 		},
 		{
-			fn: "QueryWorkersByStatus",
+			fn: "QueryWorkersByState",
 			inputs: []interface{}{
 				"j111",
 				4,
@@ -589,7 +589,7 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "UpsertResource",
 			inputs: []interface{}{
-				&resourcemeta.ResourceMeta{
+				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -606,7 +606,7 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "UpsertResource",
 			inputs: []interface{}{
-				&resourcemeta.ResourceMeta{
+				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -652,7 +652,7 @@ func TestResourceMock(t *testing.T) {
 					ID:    "r333",
 				},
 			},
-			output: &resourcemeta.ResourceMeta{
+			output: &resModel.ResourceMeta{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -681,7 +681,7 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: []*resourcemeta.ResourceMeta{
+			output: []*resModel.ResourceMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -702,14 +702,14 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 			},
-			output: []*resourcemeta.ResourceMeta{},
+			output: []*resModel.ResourceMeta{},
 		},
 		{
 			fn: "QueryResourcesByExecutorID",
 			inputs: []interface{}{
 				"e444",
 			},
-			output: []*resourcemeta.ResourceMeta{
+			output: []*resModel.ResourceMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -730,7 +730,7 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"e445",
 			},
-			output: []*resourcemeta.ResourceMeta{},
+			output: []*resModel.ResourceMeta{},
 		},
 	}
 

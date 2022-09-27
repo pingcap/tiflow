@@ -85,7 +85,7 @@ jobs:
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
-          helm install -f $GITHUB_WORKSPACE/engine/chaos/manifests/chaos-values.yaml chaos $GITHUB_WORKSPACE/deployments/engine/helm/tiflow
+          helm install -f $GITHUB_WORKSPACE/deployments/engine/helm/tiflow/values.yaml chaos $GITHUB_WORKSPACE/deployments/engine/helm/tiflow
           helm list
           sleep 5
           kubectl get pods
@@ -221,14 +221,14 @@ jobs:
         run: |
           # Add a delay if test fails, to check whether the cluster can recover after chaos is removed
           sleep 60
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10240/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "executor"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10241/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master"|xargs -I{} kubectl exec -i -c server-master {} -- wget http://127.0.0.1:10240/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "executor"|xargs -I{} kubectl exec -i -c executor {} -- wget http://127.0.0.1:10241/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log ./logs || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} kubectl cp {}:/log ./logs || true
           kind export logs ./logs/kind --name dataflow-engine-cluster
           sudo chown -R runner ./logs
 

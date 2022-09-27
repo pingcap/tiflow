@@ -151,6 +151,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedUnretryable"]
+error = '''
+changefeed is in unretryable state, please check the error message, and you should manually handle it
+'''
+
 ["CDC:ErrChangefeedUpdateFailed"]
 error = '''
 changefeed update failed due to unexpected etcd transaction failure: %s
@@ -326,6 +331,11 @@ error = '''
 eventfeed returns event error
 '''
 
+["CDC:ErrExchangePartition"]
+error = '''
+exchange partition failed, %s
+'''
+
 ["CDC:ErrExecDDLFailed"]
 error = '''
 exec DDL failed
@@ -469,6 +479,11 @@ bad namespace, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the l
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
+'''
+
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
 '''
 
 ["CDC:ErrInvalidS3URI"]
@@ -879,16 +894,6 @@ table not found in processor cache
 ["CDC:ErrProcessorUnknown"]
 error = '''
 processor running unknown error
-'''
-
-["CDC:ErrPulsarNewProducer"]
-error = '''
-new pulsar producer
-'''
-
-["CDC:ErrPulsarSendMessage"]
-error = '''
-pulsar send message failed
 '''
 
 ["CDC:ErrReachMaxTry"]
@@ -1411,6 +1416,31 @@ error = '''
 invalid worker type: %s
 '''
 
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job is already canceled: %s
+'''
+
+["DFLOW:ErrJobManagerGetJobDetailFail"]
+error = '''
+failed to get job detail from job master
+'''
+
+["DFLOW:ErrJobManagerReadRespBodyFail"]
+error = '''
+failed to read response body
+'''
+
+["DFLOW:ErrJobManagerRespStatusCode404"]
+error = '''
+get job detail response status code is 404
+'''
+
+["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
+error = '''
+get job detail response status code is not 2XX
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
@@ -1454,6 +1484,11 @@ parse config flag set failed
 ["DFLOW:ErrMasterConfigUnknownItem"]
 error = '''
 master config contains unknown configuration options: %s
+'''
+
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]
@@ -1716,6 +1751,16 @@ error = '''
 cannot find executor ID: %s
 '''
 
+["DFLOW:ErrWorkerCancel"]
+error = '''
+worker is canceled
+'''
+
+["DFLOW:ErrWorkerFailed"]
+error = '''
+worker is failed permanently
+'''
+
 ["DFLOW:ErrWorkerFinish"]
 error = '''
 worker finished and exited
@@ -1739,11 +1784,6 @@ worker is not found: worker ID %s
 ["DFLOW:ErrWorkerOffline"]
 error = '''
 worker is offline: workerID: %s, error message: %s
-'''
-
-["DFLOW:ErrWorkerStop"]
-error = '''
-worker is stopped
 '''
 
 ["DFLOW:ErrWorkerSuicide"]

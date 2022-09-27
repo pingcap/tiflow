@@ -322,7 +322,6 @@ generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
-	tools/bin/mockgen -source cdc/sinkv2/eventsink/txn/backend.go -destination cdc/sinkv2/eventsink/txn/mock/backend_mock.go
 
 clean:
 	go clean -i ./...
@@ -502,7 +501,7 @@ engine_unit_test: check_failpoint_ctl
 
 engine_integration_test: check_third_party_binary_for_engine
 	mkdir -p /tmp/tiflow_engine_test || true
-	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" | tee /tmp/tiflow_engine_test/engine_it.log
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
 	./engine/test/utils/check_log.sh
 
 check_third_party_binary_for_engine:
@@ -511,6 +510,7 @@ check_third_party_binary_for_engine:
 	@which go || (echo "go not found in ${PATH}"; exit 1)
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh

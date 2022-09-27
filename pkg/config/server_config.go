@@ -43,6 +43,8 @@ const (
 	DebugConfigurationItem = "debug"
 
 	// DefaultTableMemoryQuota is the default memory quota for each table.
+	// It is larger than TiDB's txn-entry-size-limit.
+	// We can't set it to a larger value without risking oom in incremental scenarios.
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 )
 

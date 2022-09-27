@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -125,4 +126,20 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.Equal(t, "d1", rules[0].PartitionRule)
 	require.Equal(t, "p1", rules[1].PartitionRule)
 	require.Equal(t, "", rules[2].PartitionRule)
+}
+
+func TestValidateAndAdjust(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	require.False(t, cfg.EnableSyncPoint)
+	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.EnableSyncPoint = true
+	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.SyncPointInterval = time.Second * 29
+	require.Error(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.SyncPointInterval = time.Second * 30
+	cfg.SyncPointRetention = time.Minute * 10
+	require.Error(t, cfg.ValidateAndAdjust(nil))
 }

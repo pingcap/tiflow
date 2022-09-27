@@ -72,17 +72,17 @@ spec:
                   fieldPath: metadata.namespace
             - name: MY_SERVICE_NAME
               value: {{ include "tiflow.name" . }}-server-master
+          resources:
+{{ toYaml .Values.master.resources | indent 12 }}
           ports:
             - containerPort: 10240
               name: port-master
           command:
             - "/tiflow"
             - "master"
+            - "--name=$(MY_POD_NAME)"
             - "--addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10240"
-            - "--etcd-endpoints={{ include "tiflow.name" . }}-metastore-etcd:12479"
-            - "--framework-meta-endpoints={{ include "tiflow.name" . }}-metastore-mysql:3306"
-            - "--business-meta-endpoints={{ include "tiflow.name" . }}-metastore-mysql:3306"
             - "--config=/config/server-master.toml"
             - "--log-file=/log/$(MY_POD_NAME).log"
       volumes:

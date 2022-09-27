@@ -16,6 +16,7 @@ package servermaster
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -25,18 +26,16 @@ import (
 	"go.uber.org/zap"
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
 const (
-	defaultSessionTTL        = 5 * time.Second
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
-	defaultCampaignTimeout   = 5 * time.Second
-	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
 
@@ -45,12 +44,14 @@ const (
 	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
 	defaultBusinessMetaUser      = "root"
 	defaultBusinessMetaPassword  = ""
+	defaultBusinessMetaSchema    = "test_business"
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = ""
+	defaultFrameMetaSchema    = "test_framework"
 
 	defaultFrameworkStoreType = metaModel.StoreTypeMySQL
 	defaultBusinessStoreType  = metaModel.StoreTypeMySQL
@@ -60,13 +61,12 @@ const (
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
+	Name          string `toml:"name" json:"name"`
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
-
-	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-metastore-conf" json:"framework-metastore-conf"`
-	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
+	FrameworkMeta *metaModel.StoreConfig `toml:"framework-meta" json:"framework-meta"`
+	BusinessMeta  *metaModel.StoreConfig `toml:"business-meta" json:"business-meta"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -78,6 +78,8 @@ type Config struct {
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
 	Security *security.Credential `toml:"security" json:"security"`
+
+	JobBackoff *jobop.BackoffConfig `toml:"job-backoff" json:"job-backoff"`
 }
 
 func (c *Config) String() string {
@@ -103,11 +105,26 @@ func (c *Config) Toml() (string, error) {
 // AdjustAndValidate validates and adjusts the master configuration
 func (c *Config) AdjustAndValidate() (err error) {
 	// adjust the metastore type
-	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
-	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+	c.FrameworkMeta.StoreType = strings.ToLower(strings.TrimSpace(c.FrameworkMeta.StoreType))
+	c.BusinessMeta.StoreType = strings.ToLower(strings.TrimSpace(c.BusinessMeta.StoreType))
+
+	if c.FrameworkMeta.Schema == defaultFrameMetaSchema {
+		log.Warn("use default schema for framework metastore, "+
+			"better to use predefined schema in production environment",
+			zap.String("schema", defaultFrameMetaSchema))
+	}
+	if c.BusinessMeta.Schema == defaultBusinessMetaSchema {
+		log.Warn("use default schema for business metastore, "+
+			"better to use predefined schema in production environment",
+			zap.String("schema", defaultBusinessMetaSchema))
+	}
 
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
+	}
+
+	if c.Name == "" {
+		c.Name = fmt.Sprintf("master-%s", c.AdvertiseAddr)
 	}
 
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
@@ -126,18 +143,9 @@ func (c *Config) AdjustAndValidate() (err error) {
 	}
 
 	return validation.ValidateStruct(c,
-		validation.Field(&c.FrameMetaConf),
-		validation.Field(&c.BusinessMetaConf),
+		validation.Field(&c.FrameworkMeta),
+		validation.Field(&c.BusinessMeta),
 	)
-}
-
-// configFromFile loads config from file and merges items into Config.
-func (c *Config) configFromFile(path string) error {
-	metaData, err := toml.DecodeFile(path, c)
-	if err != nil {
-		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
-	}
-	return checkUndecodedItems(metaData)
 }
 
 func (c *Config) configFromString(data string) error {
@@ -155,13 +163,15 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
+		Name:                 "",
 		Addr:                 defaultMasterAddr,
 		AdvertiseAddr:        "",
-		FrameMetaConf:        newFrameMetaConfig(),
-		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
+		FrameworkMeta:        newFrameMetaConfig(),
+		BusinessMeta:         NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
+		JobBackoff:           jobop.NewDefaultBackoffConfig(),
 	}
 }
 
@@ -180,11 +190,12 @@ func checkUndecodedItems(metaData toml.MetaData) error {
 // newFrameMetaConfig return the default framework metastore config
 func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
+	conf.Schema = defaultFrameMetaSchema
 	conf.StoreID = FrameMetaID
 	conf.StoreType = defaultFrameworkStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
-	conf.Auth.User = defaultFrameMetaUser
-	conf.Auth.Passwd = defaultFrameMetaPassword
+	conf.User = defaultFrameMetaUser
+	conf.Password = defaultFrameMetaPassword
 
 	return conf
 }
@@ -192,11 +203,12 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 // NewDefaultBusinessMetaConfig return the default business metastore config
 func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
+	conf.Schema = defaultBusinessMetaSchema
 	conf.StoreID = DefaultBusinessMetaID
 	conf.StoreType = defaultBusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
-	conf.Auth.User = defaultBusinessMetaUser
-	conf.Auth.Passwd = defaultBusinessMetaPassword
+	conf.User = defaultBusinessMetaUser
+	conf.Password = defaultBusinessMetaPassword
 
 	return conf
 }

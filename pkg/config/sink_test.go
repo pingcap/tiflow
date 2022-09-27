@@ -131,12 +131,6 @@ func TestValidateApplyParameter(t *testing.T) {
 			expectedLevel: noneTxnAtomicity,
 		},
 		{
-			sinkURI: "pulsar://127.0.0.1:9092?transaction-atomicity=table" +
-				"&protocol=open-protocol",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
-		},
-		{
 			sinkURI:       "kafka://127.0.0.1:9092?protocol=default",
 			expectedErr:   "",
 			expectedLevel: noneTxnAtomicity,

@@ -191,6 +191,8 @@ ErrContinuousValidatorCfgNotFound,[code=20056:class=config:scope=internal:level=
 ErrConfigStartTimeTooLate,[code=20057:class=config:scope=internal:level=high], "Message: start-time %s is too late, no binlog location matches it, Workaround: Please check the `--start-time` is expected or try again later."
 ErrConfigLoaderDirInvalid,[code=20058:class=config:scope=internal:level=high], "Message: loader's dir %s is invalid, Workaround: Please check the `dir` config in task configuration file."
 ErrConfigLoaderS3NotSupport,[code=20059:class=config:scope=internal:level=high], "Message: loader's dir %s is s3 dir, but s3 is not supported, Workaround: Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
+ErrConfigInvalidSafeModeDuration,[code=20060:class=config:scope=internal:level=medium], "Message: safe-mode-duration '%s' parsed failed: %v, Workaround: Please check the `safe-mode-duration` is correct."
+ErrConfigConfictSafeModeDurationAndSafeMode,[code=20061:class=config:scope=internal:level=low], "Message: safe-mode(true) conflicts with safe-mode-duration(0s), Workaround: Please set safe-mode to false or safe-mode-duration to non-zero."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
@@ -348,6 +350,8 @@ ErrSyncerParseDDL,[code=36067:class=sync-unit:scope=internal:level=high], "Messa
 ErrSyncerUnsupportedStmt,[code=36068:class=sync-unit:scope=internal:level=high], "Message: `%s` statement not supported in %s mode"
 ErrSyncerGetEvent,[code=36069:class=sync-unit:scope=upstream:level=high], "Message: get binlog event error: %v, Workaround: Please check if the binlog file could be parsed by `mysqlbinlog`."
 ErrSyncerDownstreamTableNotFound,[code=36070:class=sync-unit:scope=internal:level=high], "Message: downstream table %s not found"
+ErrSyncerCancelledDDL,[code=11129:class=sync-unit:scope=internal:level=high], "Message: DDL %s executed in background and met error, Workaround: Please manually check the error from TiDB and handle it."
+ErrSyncerReprocessWithSafeModeFail,[code=36071:class=sync-unit:scope=internal:level=medium], "Message: your `safe-mode-duration` in task.yaml is set to 0s, the task can't be re-processed without safe mode currently, Workaround: Please stop and re-start this task. If you want to start task successfully, you need set `safe-mode-duration` greater than `0s`."
 ErrMasterSQLOpNilRequest,[code=38001:class=dm-master:scope=internal:level=medium], "Message: nil request not valid"
 ErrMasterSQLOpNotSupport,[code=38002:class=dm-master:scope=internal:level=medium], "Message: op %s not supported"
 ErrMasterSQLOpWithoutSharding,[code=38003:class=dm-master:scope=internal:level=medium], "Message: operate request without --sharding specified not valid"

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
@@ -41,6 +42,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -49,6 +51,7 @@ import (
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -187,10 +190,10 @@ func (s *Server) makeTask(
 	logutil.NewContextWithLogger(dctx, logger)
 
 	// NOTICE: only take effect when job type is job master
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: dctx.ProjectInfo.UniqueID(),
 		ID:        workerID,
-		Tp:        workerType,
+		Type:      workerType,
 		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
@@ -199,7 +202,8 @@ func (s *Server) makeTask(
 	}
 	dctx.Environ.MasterMetaBytes = metaBytes
 
-	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
+	globalRegistry := registry.GlobalWorkerRegistry()
+	newWorker, err := globalRegistry.CreateWorker(
 		dctx,
 		workerType,
 		workerID,
@@ -211,6 +215,12 @@ func (s *Server) makeTask(
 		log.Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
+	if _, ok := newWorker.(framework.BaseJobMaster); ok {
+		err := precheckMasterMeta(dctx, globalRegistry, workerID, workerType)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if jm, ok := newWorker.(framework.BaseJobMasterExt); ok {
 		jobID := newWorker.ID()
 		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
@@ -219,27 +229,100 @@ func (s *Server) makeTask(
 	return taskutil.WrapWorker(newWorker), nil
 }
 
+// precheckMasterMeta checks job master metadata before running it, stop task
+// creating if job master has met a business unretryable error.
+// Return error means meets failure in this function or job creation should be
+// terminated.
+func precheckMasterMeta(
+	dctx *dcontext.Context,
+	register registry.Registry,
+	id frameModel.MasterID,
+	tp frameModel.WorkerType,
+) error {
+	var param struct {
+		dig.In
+		FrameMetaClient pkgOrm.Client
+	}
+	if err := dctx.Deps().Fill(&param); err != nil {
+		log.Panic("failed to fill dependencies", zap.Error(err))
+	}
+	meta, err := param.FrameMetaClient.GetJobByID(dctx, id)
+	if err != nil {
+		return err
+	}
+	if meta.ErrorMsg == "" {
+		return nil
+	}
+	errInMeta := perrors.New(meta.ErrorMsg)
+	retryable, err := checkBusinessErrorIsRetryable(register, errInMeta, tp)
+	if err != nil {
+		return err
+	} else if !retryable {
+		return errInMeta
+	}
+	return nil
+}
+
+// convertMakeTaskErrorToRPCError converts an error returned from `makeTask` to
+// a gRPC friendly error.
+func convertMakeTaskErrorToRPCError(
+	register registry.Registry, err error, tp frameModel.WorkerType,
+) error {
+	if pkgClient.ErrCreateWorkerTerminate.Is(err) {
+		return rpcerror.ToGRPCError(err)
+	}
+
+	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
+	if inErr != nil {
+		return inErr
+	}
+	if retryable {
+		return rpcerror.ToGRPCError(
+			pkgClient.ErrCreateWorkerNonTerminate.GenWithStack(
+				&pkgClient.CreateWorkerNonTerminateError{
+					Details: err.Error(),
+				}))
+	}
+	return rpcerror.ToGRPCError(
+		pkgClient.ErrCreateWorkerTerminate.GenWithStack(
+			&pkgClient.CreateWorkerTerminateError{
+				Details: err.Error(),
+			}))
+}
+
+// checkBusinessErrorIsRetryable converts raw error to business error if possible, and
+// checks whether this error is retryable from the perspective of business logic.
+func checkBusinessErrorIsRetryable(
+	register registry.Registry, err error, tp frameModel.WorkerType,
+) (retryable bool, retErr error) {
+	switch tp {
+	case frameModel.DMJobMaster:
+		err = errors.ToDMError(err)
+	case frameModel.FakeJobMaster:
+		err = fake.ToFakeJobError(err)
+	default:
+	}
+	return register.IsRetryableError(err, tp)
+}
+
 // PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	if !s.isReadyToServe() {
 		return nil, status.Error(codes.Unavailable, "executor server is not ready")
 	}
 
+	workerType := frameModel.WorkerType(req.GetTaskTypeId())
 	task, err := s.makeTask(
 		ctx,
 		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		frameModel.WorkerType(req.GetTaskTypeId()),
+		workerType,
 		req.GetTaskConfig(),
 		req.GetWorkerEpoch(),
 	)
 	if err != nil {
-		// We use the code Aborted here per the suggestion in gRPC's documentation
-		// "Use Aborted if the client should retry at a higher-level".
-		// Failure to make task is usually a problem that the business logic
-		// should be notified of.
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, convertMakeTaskErrorToRPCError(registry.GlobalWorkerRegistry(), err, workerType)
 	}
 
 	if !s.taskCommitter.PreDispatchTask(req.GetRequestId(), task) {
@@ -552,6 +635,7 @@ func (s *Server) selfRegister(ctx context.Context) error {
 			Name:       s.cfg.Name,
 			Address:    s.cfg.AdvertiseAddr,
 			Capability: defaultCapability,
+			Labels:     s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)

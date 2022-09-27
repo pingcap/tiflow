@@ -51,7 +51,7 @@ import (
 type Capture interface {
 	Run(ctx context.Context) error
 	AsyncClose()
-	Drain(ctx context.Context) <-chan struct{}
+	Drain() <-chan struct{}
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
@@ -120,6 +120,8 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
+	sorterSystem *ssystem.System,
+	tableActorSystem *system.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -129,8 +131,11 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
+		sorterSystem:        sorterSystem,
+		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
+		info:                &model.CaptureInfo{},
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
@@ -206,32 +211,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = newElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.GetClusterID()))
-
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-	}
-	c.tableActorSystem = system.NewSystem()
-	err = c.tableActorSystem.Start(ctx)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
-	if c.config.Debug.EnableDBSorter {
-		if c.sorterSystem != nil {
-			err := c.sorterSystem.Stop()
-			if err != nil {
-				log.Warn("stop sorter system failed", zap.Error(err))
-			}
-		}
-		// Sorter dir has been set and checked when server starts.
-		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
-		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		memPercentage := float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
-		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
-		err = c.sorterSystem.Start(ctx)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-	}
 
 	c.grpcService.Reset(nil)
 
@@ -400,8 +379,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Before campaign check liveness
 		if c.liveness.Load() == model.LivenessCaptureStopping {
-			// If the capture is stopping, do not campaign.
-			log.Info("do not campaign owner, liveness is stopping")
+			log.Info("do not campaign owner, liveness is stopping",
+				zap.String("captureID", c.info.ID))
 			return nil
 		}
 		// Campaign to be the owner, it blocks until it been elected.
@@ -423,7 +402,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			// If the capture is stopping, resign actively.
 			log.Info("resign owner actively, liveness is stopping")
 			if resignErr := c.resign(ctx); resignErr != nil {
-				return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
+				log.Warn("resign owner actively failed",
+					zap.String("captureID", c.info.ID), zap.Error(resignErr))
+				return errors.Trace(err)
 			}
 			return nil
 		}
@@ -592,22 +573,6 @@ func (c *captureImpl) AsyncClose() {
 	}
 	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
-	if c.tableActorSystem != nil {
-		c.tableActorSystem.Stop()
-		c.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.String("captureID", c.info.ID))
-
-	if c.sorterSystem != nil {
-		err := c.sorterSystem.Stop()
-		if err != nil {
-			log.Warn("stop sorter system failed",
-				zap.String("captureID", c.info.ID), zap.Error(err))
-		}
-		c.sorterSystem = nil
-	}
-	log.Info("sorter actor system closed", zap.String("captureID", c.info.ID))
-
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
@@ -618,100 +583,22 @@ func (c *captureImpl) AsyncClose() {
 }
 
 // Drain removes tables in the current TiCDC instance.
-func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
-	log.Info("draining capture, removing all tables on the capture",
-		zap.String("captureID", c.info.ID))
-
-	const drainInterval = 100 * time.Millisecond
+func (c *captureImpl) Drain() <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
-		ticker := time.NewTicker(drainInterval)
-		defer ticker.Stop()
-		for {
-			complete := c.drainImpl(ctx)
-			if complete {
-				return
-			}
-			ticker.Reset(drainInterval)
-			select {
-			case <-ctx.Done():
-				// Give up when the context cancels. In the current
-				// implementation, it is caused TiCDC receives a second signal
-				// and begins force shutdown.
-				return
-			case <-ticker.C:
-			}
+		// Set liveness stopping first, no matter is the owner or not.
+		// this is triggered by user manually stop the TiCDC instance by sent signals.
+		// It may cost a few seconds before cdc server fully stop, set it to `stopping` to prevent
+		// the capture become the leader or tables dispatched to it.
+		c.liveness.Store(model.LivenessCaptureStopping)
+
+		// if the instance is the owner, resign the ownership
+		if o, _ := c.GetOwner(); o != nil {
+			o.AsyncStop()
 		}
+		close(done)
 	}()
 	return done
-}
-
-func (c *captureImpl) drainImpl(ctx context.Context) bool {
-	if !c.config.Debug.EnableSchedulerV3 {
-		// Skip drain as two phase scheduler is disabled.
-		return true
-	}
-
-	// Step 1, resign ownership.
-	o, _ := c.GetOwner()
-	if o != nil {
-		doneCh := make(chan error, 1)
-		query := &owner.Query{Tp: owner.QueryCaptures, Data: []*model.CaptureInfo{}}
-		o.Query(query, doneCh)
-		select {
-		case <-ctx.Done():
-		case err := <-doneCh:
-			if err != nil {
-				log.Warn("query capture count failed, retry", zap.Error(err))
-				return false
-			}
-		}
-		if len(query.Data.([]*model.CaptureInfo)) <= 1 {
-			// There is only one capture, the owner itself. It's impossible to
-			// resign owner nor move out tables, give up drain.
-			log.Warn("there is only one capture, skip drain")
-			return true
-		}
-		o.AsyncStop()
-		// Make sure it's not the owner before step 2.
-		return false
-	}
-	// Step 2, wait for moving out all tables.
-	// Set liveness stopping, owners will move all tables out in the capture.
-	c.liveness.Store(model.LivenessCaptureStopping)
-	// Check if there is an owner.
-	_, err := c.GetEtcdClient().GetOwnerID(ctx)
-	if err != nil {
-		if errors.Cause(err) != concurrency.ErrElectionNoLeader {
-			log.Error("fail to get owner ID, retry")
-			return false
-		}
-		// There is no owner. It's impossible to move tables out, give up drain.
-		log.Warn("there is no owner, skip drain")
-		return true
-	}
-
-	queryDone := make(chan error, 1)
-	tableCh := make(chan int, 1)
-	c.processorManager.QueryTableCount(ctx, tableCh, queryDone)
-	select {
-	case <-ctx.Done():
-	case err := <-queryDone:
-		if err != nil {
-			log.Warn("query table count failed, retry", zap.Error(err))
-			return false
-		}
-	}
-	select {
-	case <-ctx.Done():
-	case tableCount := <-tableCh:
-		if tableCount == 0 {
-			log.Info("all tables removed, drain capture complete")
-			return true
-		}
-	}
-	return false
 }
 
 // Liveness returns liveness of the capture.

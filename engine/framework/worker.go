@@ -36,7 +36,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -56,6 +56,7 @@ type Worker interface {
 	ID() runtime.RunnableID
 	Workload() model.RescUnit
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -73,7 +74,7 @@ type WorkerImpl interface {
 	Workload() model.RescUnit
 
 	// OnMasterMessage is called when worker receives master message
-	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
+	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
@@ -102,7 +103,7 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error)
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -123,7 +124,7 @@ type DefaultBaseWorker struct {
 	masterClient *worker.MasterClient
 	masterID     frameModel.MasterID
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	statusSender     *statusutil.Writer
 	workerStatus     *frameModel.WorkerStatus
 	messageRouter    *MessageRouter
@@ -307,13 +308,13 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.workerStatus.Epoch,
 	)
 
-	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
+	w.workerMetaClient = metadata.NewWorkerStatusClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(topic, msg)
+			return w.Impl.OnMasterMessage(ctx, topic, msg)
 		},
 	)
 
@@ -336,7 +337,7 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	w.workerStatus.Code = frameModel.WorkerStatusInit
+	w.workerStatus.State = frameModel.WorkerStateInit
 	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
 		return errors.Trace(err)
 	}
@@ -427,6 +428,11 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 	}
 }
 
+// Stop implements Worker.Stop, works the same as Worker.Close
+func (w *DefaultBaseWorker) Stop(ctx context.Context) error {
+	return w.Close(ctx)
+}
+
 // ID implements BaseWorker.ID
 func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 	return w.id
@@ -448,7 +454,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
-// The status is persisted if Code or ErrorMsg has changed. Refer to (*WorkerStatus).HasSignificantChange.
+// The status is persisted if State or ErrorMsg has changed. Refer to (*WorkerState).HasSignificantChange.
 //
 // If UpdateStatus returns without an error, then the status must have been persisted,
 // but there is no guarantee that the master has received a notification.
@@ -458,7 +464,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	w.workerStatus.Code = status.Code
+	w.workerStatus.State = status.State
 	w.workerStatus.ErrorMsg = status.ErrorMsg
 	w.workerStatus.ExtBytes = status.ExtBytes
 	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
@@ -487,7 +493,7 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
@@ -506,15 +512,15 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 
 	switch exitReason {
 	case ExitReasonFinished:
-		w.workerStatus.Code = frameModel.WorkerStatusFinished
+		w.workerStatus.State = frameModel.WorkerStateFinished
 	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
-		w.workerStatus.Code = frameModel.WorkerStatusStopped
+		w.workerStatus.State = frameModel.WorkerStateStopped
 	case ExitReasonFailed:
 		// TODO: replace error with failed
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	default:
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	}
 
 	if err != nil {

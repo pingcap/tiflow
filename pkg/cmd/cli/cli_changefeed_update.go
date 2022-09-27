@@ -58,11 +58,9 @@ func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command,
 ) *v2.ChangefeedConfig {
 	replicaConfig := info.Config
 	res := &v2.ChangefeedConfig{
-		TargetTs:          info.TargetTs,
-		SinkURI:           info.SinkURI,
-		SyncPointEnabled:  info.SyncPointEnabled,
-		SyncPointInterval: info.SyncPointInterval,
-		ReplicaConfig:     replicaConfig,
+		TargetTs:      info.TargetTs,
+		SinkURI:       info.SinkURI,
+		ReplicaConfig: replicaConfig,
 	}
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
@@ -152,7 +150,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 	if err != nil {
 		return nil, err
 	}
-
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "target-ts":
@@ -169,16 +166,12 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
-		case "sync-point":
-			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
-		case "sync-interval":
-			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
 		case "changefeed-id", "no-confirm":
 			// Do nothing, these are some flags from the changefeed command,
 			// we don't use it to update, but we do use these flags.
-		case "pd", "log-level", "key", "cert", "ca":
+		case "pd", "log-level", "key", "cert", "ca", "server":
 		// Do nothing, this is a flags from the cli command
 		// we don't use it to update, but we do use these flags.
 		case "upstream-pd", "upstream-ca", "upstream-cert", "upstream-key":

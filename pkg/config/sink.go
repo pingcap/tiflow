@@ -283,8 +283,8 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	if protocolFromURI != "" {
 		if s.Protocol != "" {
 			log.Warn(
-				fmt.Sprintf("protocol is specified in both sink URI and config file"+
-					"the value in sink URI will be used"+
+				fmt.Sprintf("protocol is specified in both sink URI and config file "+
+					"the value in sink URI will be used "+
 					"protocol in sink URI:%s, protocol in config file:%s",
 					protocolFromURI, s.Protocol))
 		}
