@@ -22,8 +22,7 @@ import (
 )
 
 var (
-	filenames = []string{"dmjob.yaml"}
-	doSchemas = []string{"dm_engine_chaos"}
+	filenames = []string{"dmjob"}
 )
 
 func runDMJobCases(ctx context.Context, cfg *config) error {
@@ -31,7 +30,7 @@ func runDMJobCases(ctx context.Context, cfg *config) error {
 	for _, f := range filenames {
 		file := f
 		eg.Go(func() error {
-			testCase, err := dmchaos.NewCase(ctx2, cfg.Addr, "dmjob", filepath.Join(cfg.ConfigDir, file))
+			testCase, err := dmchaos.NewCase(ctx2, cfg.Addr, file, filepath.Join(cfg.ConfigDir, file+".yaml"))
 			if err != nil {
 				return err
 			}
