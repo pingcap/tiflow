@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resourcetypes
+package local
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/engine/pkg/client"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +28,7 @@ func TestRemoveFileOnExecutor(t *testing.T) {
 	mockCli := client.NewMockExecutorClient(gomock.NewController(t))
 	clientGroup.AddClient("executor-1", mockCli)
 
-	resourceTp := NewLocalFileResourceType(clientGroup)
+	resourceTp := NewFileResourceController(clientGroup)
 	gcHandler := resourceTp.GCHandler()
 
 	resMeta := &resModel.ResourceMeta{

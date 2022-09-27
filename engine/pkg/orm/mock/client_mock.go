@@ -11,7 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/engine/framework/model"
 	model0 "github.com/pingcap/tiflow/engine/model"
-	model1 "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	model1 "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	orm "github.com/pingcap/tiflow/engine/pkg/orm"
 	model2 "github.com/pingcap/tiflow/engine/pkg/orm/model"
 )

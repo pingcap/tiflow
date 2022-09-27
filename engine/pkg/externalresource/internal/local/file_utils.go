@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package broker
+package local
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -40,25 +40,26 @@ func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error
 	return ls, nil
 }
 
-func resourceNameToFilePathName(resName model.ResourceName) string {
+// ResourceNameToFilePathName converts a resource name to a file path name.
+func ResourceNameToFilePathName(resName resModel.ResourceName) string {
 	return hex.EncodeToString([]byte(resName))
 }
 
-func filePathNameToResourceName(filePath string) (model.ResourceName, error) {
+func filePathNameToResourceName(filePath string) (resModel.ResourceName, error) {
 	result, err := hex.DecodeString(filePath)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	return model.ResourceName(result), nil
+	return resModel.ResourceName(result), nil
 }
 
 func localPathWithEncoding(baseDir string,
 	creator frameModel.WorkerID,
-	resName model.ResourceName,
+	resName resModel.ResourceName,
 	suffixes ...string,
 ) string {
 	joinSegments := []string{
-		baseDir, creator, resourceNameToFilePathName(resName),
+		baseDir, creator, ResourceNameToFilePathName(resName),
 	}
 	joinSegments = append(joinSegments, suffixes...)
 	return filepath.Join(joinSegments...)
@@ -69,7 +70,7 @@ func AssertLocalFileExists(
 	t *testing.T,
 	baseDir string,
 	creator frameModel.WorkerID,
-	resName model.ResourceName,
+	resName resModel.ResourceName,
 	suffixes ...string,
 ) {
 	require.FileExistsf(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
@@ -82,7 +83,7 @@ func AssertNoLocalFileExists(
 	t *testing.T,
 	baseDir string,
 	creator frameModel.WorkerID,
-	resName model.ResourceName,
+	resName resModel.ResourceName,
 	suffixes ...string,
 ) {
 	require.NoFileExists(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
