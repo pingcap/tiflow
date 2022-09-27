@@ -24,7 +24,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -64,7 +64,7 @@ type Config struct {
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 
-	Storage storagecfg.Config `toml:"storage" json:"storage"`
+	Storage resModel.Config `toml:"storage" json:"storage"`
 
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
@@ -169,8 +169,9 @@ func GetDefaultExecutorConfig() *Config {
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
-		Storage: storagecfg.Config{
-			Local: storagecfg.LocalFileConfig{BaseDir: ""},
+		Storage: resModel.Config{
+			Local: resModel.LocalFileConfig{BaseDir: ""},
+			S3:    resModel.S3Config{Bucket: ""},
 		},
 	}
 }

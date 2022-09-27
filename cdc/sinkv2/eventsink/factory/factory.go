@@ -84,14 +84,14 @@ func New(ctx context.Context,
 }
 
 // CreateTableSink creates a TableSink by schema.
-func (s *SinkFactory) CreateTableSink(tableID model.TableID, totalRowsCounter prometheus.Counter) tablesink.TableSink {
+func (s *SinkFactory) CreateTableSink(changefeedID model.ChangeFeedID, tableID model.TableID, totalRowsCounter prometheus.Counter) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
-		return tablesink.New[*model.RowChangedEvent](tableID,
+		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
 			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
 	case sink.TxnSink:
-		return tablesink.New[*model.SingleTableTxn](tableID,
+		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID,
 			s.txnSink, &eventsink.TxnEventAppender{}, totalRowsCounter)
 	default:
 		panic("unknown sink type")

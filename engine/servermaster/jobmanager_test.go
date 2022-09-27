@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	jobMock "github.com/pingcap/tiflow/engine/pkg/httputil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -120,7 +120,7 @@ func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
 	workerType framework.WorkerType,
 	config framework.WorkerConfig,
 	cost model.RescUnit,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) (frameModel.WorkerID, error) {
 	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
 }
