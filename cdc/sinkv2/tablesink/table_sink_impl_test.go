@@ -154,7 +154,8 @@ func TestNewEventTableSink(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	require.Equal(t, uint64(0), tb.eventID, "eventID should start from 0")
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
@@ -169,7 +170,8 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
@@ -179,29 +181,34 @@ func TestUpdateResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(100))
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(100))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(100), tb.maxResolvedTs, "maxResolvedTs should be updated")
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
 	require.Len(t, sink.events, 0, "no event should not be flushed")
 
 	// One event will be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	err = tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(101), tb.maxResolvedTs, "maxResolvedTs should be updated")
 	require.Len(t, tb.eventBuffer, 6, "txn event buffer should have 6 txns")
 	require.Len(t, sink.events, 1, "one event should be flushed")
 
 	// Two events will be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	err = tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(102), tb.maxResolvedTs, "maxResolvedTs should be updated")
 	require.Len(t, tb.eventBuffer, 4, "txn event buffer should have 4 txns")
 	require.Len(t, sink.events, 3, "two events should be flushed")
 
 	// Same resolved ts will not be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	err = tb.UpdateResolvedTs(model.NewResolvedTs(102))
+	require.Nil(t, err)
 	require.Equal(
 		t,
 		model.NewResolvedTs(102),
@@ -212,7 +219,8 @@ func TestUpdateResolvedTs(t *testing.T) {
 	require.Len(t, sink.events, 3, "no event should be flushed")
 
 	// All events will be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(105), tb.maxResolvedTs, "maxResolvedTs should be updated")
 	require.Len(t, tb.eventBuffer, 0, "txn event buffer should be empty")
 	require.Len(t, sink.events, 7, "all events should be flushed")
@@ -222,19 +230,22 @@ func TestGetCheckpointTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 
 	// One event will be flushed.
-	tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(101))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 	sink.acknowledge(101)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
 
 	// Flush all events.
-	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
 
 	// Only acknowledge some events.
@@ -255,10 +266,12 @@ func TestClose(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	var wg sync.WaitGroup
 	go func() {
@@ -282,10 +295,12 @@ func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
@@ -306,10 +321,12 @@ func TestCloseReentrant(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
@@ -324,6 +341,6 @@ func TestCloseReentrant(t *testing.T) {
 		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
-	err := tb.Close(ctx)
+	err = tb.Close(ctx)
 	require.Nil(t, err, "table should not be stopping again")
 }
