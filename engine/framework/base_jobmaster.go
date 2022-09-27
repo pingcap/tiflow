@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -59,7 +59,7 @@ type BaseJobMaster interface {
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
 	// their ID's must be passed by `resources`.
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error)
 
 	// CreateWorkerV2 is the latest version of CreateWorker, but with
 	// a more flexible way of passing options.
@@ -311,7 +311,7 @@ func (d *DefaultBaseJobMaster) CreateWorker(
 	workerType WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) (frameModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
 }

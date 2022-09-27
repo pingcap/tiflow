@@ -20,8 +20,9 @@ import (
 	"testing"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -29,13 +30,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// DefaultBroker must implement Broker.
-var _ Broker = (*DefaultBroker)(nil)
-
 func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 	tmpDir := t.TempDir()
 	cli := manager.NewMockClient()
-	broker := NewBroker(&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: tmpDir}},
+	broker := NewBroker(&resModel.Config{Local: resModel.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		cli)
 	return broker, cli, tmpDir
@@ -74,7 +72,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 
 	cli.AssertExpectations(t)
 
-	AssertLocalFileExists(t, dir, "worker-1", "test-1", "1.txt")
+	local.AssertLocalFileExists(t, dir, "worker-1", "test-1", "1.txt")
 }
 
 func TestBrokerOpenExistingStorage(t *testing.T) {
@@ -123,13 +121,13 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	err = f.Close(context.Background())
 	require.NoError(t, err)
 
-	AssertLocalFileExists(t, dir, "worker-2", "test-2", "1.txt")
+	local.AssertLocalFileExists(t, dir, "worker-2", "test-2", "1.txt")
 }
 
 func TestBrokerRemoveResource(t *testing.T) {
 	brk, _, dir := newBroker(t)
 
-	resPath := filepath.Join(dir, "worker-1", resourceNameToFilePathName("resource-1"))
+	resPath := filepath.Join(dir, "worker-1", local.ResourceNameToFilePathName("resource-1"))
 	err := os.MkdirAll(resPath, 0o700)
 	require.NoError(t, err)
 
