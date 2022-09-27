@@ -87,6 +87,61 @@ jobs:
         run: |
           kind load docker-image dataflow:chaos --name dataflow-engine-cluster
 
+         # Set up upstream instances
+      - name: Set up sources
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+      - name: Wait for sources ready # kubectl wait --all not working
+        run: |
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=300s || true
+          sleep 10
+          echo show pvc
+          kubectl get pvc -l app=sources -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=sources -o wide
+          echo show sts
+          kubectl get sts -l app=sources -o wide
+          echo show po
+          kubectl get po -l app=sources -o wide
+          echo describe po
+          kubectl describe po -l app=sources
+          echo describe pvc
+          kubectl describe pvc -l app=sources
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=0s
+
+      # Set up downstream TiDB instance (deploy a TiDB with mockTiKV, not a TidbCluster managed by TiDB-operator)
+      - name: Set up TiDB
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+      - name: Wait for TiDB ready
+        run: |
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=10m || true
+          echo show pvc
+          kubectl get pvc -l app=tidb -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=tidb -o wide
+          echo show sts
+          kubectl get sts -l app=tidb -o wide
+          echo show po
+          kubectl get po -l app=tidb -o wide
+          echo describe po
+          kubectl describe po -l app=tidb
+          echo describe pvc
+          kubectl describe pvc -l app=tidb
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
+
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
@@ -193,62 +248,7 @@ jobs:
           kubectl logs chaos-executor-2 -p || true
 
           kubectl logs chaos-executor-0 -c wait-server-master || true
-      
-      # Set up upstream instances
-      - name: Set up sources
-        run: |
-          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
-          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
-      - name: Wait for sources ready # kubectl wait --all not working
-        run: |
-          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=300s || true
-          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=300s || true
-          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=300s || true
-          sleep 10
-          echo show pvc
-          kubectl get pvc -l app=sources -o wide
-          echo show pv
-          kubectl get pv -o wide
-          echo show svc
-          kubectl get svc -l app=sources -o wide
-          echo show sts
-          kubectl get sts -l app=sources -o wide
-          echo show po
-          kubectl get po -l app=sources -o wide
-          echo describe po
-          kubectl describe po -l app=sources
-          echo describe pvc
-          kubectl describe pvc -l app=sources
-          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=0s
-          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=0s
-          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=0s
-
-      # Set up downstream TiDB instance (deploy a TiDB with mockTiKV, not a TidbCluster managed by TiDB-operator)
-      - name: Set up TiDB
-        run: |
-          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
-          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
-      - name: Wait for TiDB ready
-        run: |
-          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=10m || true
-          echo show pvc
-          kubectl get pvc -l app=tidb -o wide
-          echo show pv
-          kubectl get pv -o wide
-          echo show svc
-          kubectl get svc -l app=tidb -o wide
-          echo show sts
-          kubectl get sts -l app=tidb -o wide
-          echo show po
-          kubectl get po -l app=tidb -o wide
-          echo describe po
-          kubectl describe po -l app=tidb
-          echo describe pvc
-          kubectl describe pvc -l app=tidb
-          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
-
+ 
       - name: Set up chaos test cases
         run: |
           kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
