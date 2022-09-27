@@ -125,6 +125,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 // formatValue formats the csv column and appends it to a string builder.
 func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	defer func() {
+		// reset newRecord to false after handing the first csv column
 		c.newRecord = false
 	}()
 
