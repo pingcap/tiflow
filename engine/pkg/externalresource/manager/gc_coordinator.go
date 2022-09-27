@@ -26,10 +26,13 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
+
+var _ GCCoordinator = &DefaultGCCoordinator{}
 
 // DefaultGCCoordinator implements interface GCCoordinator.
 // It is responsible for triggering file resource garbage collection.
@@ -37,13 +40,7 @@ type DefaultGCCoordinator struct {
 	executorInfos ExecutorInfoProvider
 	jobInfos      JobStatusProvider
 	metaClient    pkgOrm.ResourceClient
-	notifier      GCNotifier
-}
-
-// GCNotifier exposes a GCNotify method which is called
-// when a new object is marked as needing GC.
-type GCNotifier interface {
-	GCNotify()
+	gcRunner      GCRunner
 }
 
 // NewGCCoordinator creates a new DefaultGCCoordinator.
@@ -51,13 +48,13 @@ func NewGCCoordinator(
 	executorInfos ExecutorInfoProvider,
 	jobInfos JobStatusProvider,
 	metaClient pkgOrm.ResourceClient,
-	gcNotifier GCNotifier,
+	gcRunner GCRunner,
 ) *DefaultGCCoordinator {
 	return &DefaultGCCoordinator{
 		executorInfos: executorInfos,
 		jobInfos:      jobInfos,
 		metaClient:    metaClient,
-		notifier:      gcNotifier,
+		gcRunner:      gcRunner,
 	}
 }
 
@@ -116,7 +113,7 @@ func (c *DefaultGCCoordinator) runGCEventLoop(
 			if jobStatusChange.EventType != JobRemovedEvent {
 				continue
 			}
-			err := c.gcByOfflineJobID(ctx, jobStatusChange.JobID)
+			err := c.gcByOfflineJobIDs(ctx, jobStatusChange.JobID)
 			if err != nil {
 				return err
 			}
@@ -124,7 +121,7 @@ func (c *DefaultGCCoordinator) runGCEventLoop(
 			if executorEvent.Tp != model.EventExecutorOffline {
 				continue
 			}
-			err := c.gcByOfflineExecutorID(ctx, executorEvent.ID)
+			err := c.gcByOfflineExecutorIDs(ctx, executorEvent.ID)
 			if err != nil {
 				return err
 			}
@@ -175,68 +172,59 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	var (
-		toGC []engineModel.JobID
-
-		// toRemove is used to remove meta records when
-		// the associated executors are offline.
-		// TODO adjust the mechanism when we implement S3 support.
-		toRemove []model.ExecutorID
+		toGCJobs      []engineModel.JobID
+		toGCExecutors []model.ExecutorID
 	)
 	for _, resMeta := range resources {
 		if _, exists := jobSnapshot[resMeta.Job]; !exists {
 			// The resource belongs to a deleted job.
-			toGC = append(toGC, resMeta.Job)
+			toGCJobs = append(toGCJobs, resMeta.Job)
 			continue
 		}
 
 		if _, exists := executorSet[resMeta.Executor]; !exists {
 			// The resource belongs to an offlined executor.
-			toRemove = append(toRemove, resMeta.Executor)
+			tp, resName, err := resModel.PasreResourceID(resMeta.ID)
+			if err != nil {
+				return err
+			}
+			if tp == resModel.ResourceTypeLocalFile ||
+				tp == resModel.ResourceTypeS3 && resName == s3.DummyResourceName {
+				toGCExecutors = append(toGCExecutors, resMeta.Executor)
+			}
 			continue
 		}
 	}
 
-	if len(toGC) > 0 {
-		log.Info("Adding resources to GC queue",
-			zap.Any("resource-ids", toGC))
-		if err := c.metaClient.SetGCPendingByJobs(ctx, toGC); err != nil {
-			return err
-		}
-		c.notifier.GCNotify()
+	if err := c.gcByOfflineJobIDs(ctx, toGCJobs...); err != nil {
+		return err
 	}
-
-	if len(toRemove) > 0 {
-		log.Info("Removing stale resources for offlined executors",
-			zap.Any("resource-ids", toRemove))
-		// Note: soft delete has not been implemented for resources yet.
-		if _, err := c.metaClient.DeleteResourcesByExecutorIDs(ctx, toRemove); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return c.gcByOfflineExecutorIDs(ctx, toGCExecutors...)
 }
 
-func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
-	log.Info("Added resources to GC queue of jobID", zap.String("job_id", jobID))
+func (c *DefaultGCCoordinator) gcByOfflineJobIDs(
+	ctx context.Context, jobIDs ...string,
+) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
 
-	if err := c.metaClient.SetGCPendingByJobs(ctx, []engineModel.JobID{jobID}); err != nil {
+	log.Info("Added resources to GC queue since job offline", zap.Any("jobIDs", jobIDs))
+	if err := c.metaClient.SetGCPendingByJobs(ctx, jobIDs...); err != nil {
 		return err
 	}
 
-	c.notifier.GCNotify()
+	c.gcRunner.GCNotify()
 	return nil
 }
 
-func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, executorID model.ExecutorID) error {
-	log.Info("Cleaning up resources meta for offlined executor",
-		zap.String("executor-id", string(executorID)))
+func (c *DefaultGCCoordinator) gcByOfflineExecutorIDs(
+	ctx context.Context, executorIDs ...model.ExecutorID,
+) error {
+	if len(executorIDs) == 0 {
+		return nil
+	}
 
-	// Currently, we only support local files, so the resources are bound to
-	// the executors. Hence, executors going offline means that the resource is
-	// already gone.
-	// TODO Trigger GC for all resources and let the GCRunner decide whether to
-	// perform any action, or just remove the meta record.
-	_, err := c.metaClient.DeleteResourcesByExecutorID(ctx, executorID)
-	return err
+	log.Info("Clean up offlined executors", zap.Any("executorIDs", executorIDs))
+	return c.gcRunner.GCExecutors(ctx, executorIDs...)
 }

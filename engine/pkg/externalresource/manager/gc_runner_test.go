@@ -24,9 +24,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
+
+type mockResourceController struct {
+	internal.ResourceController
+	gcRequestCh chan *resModel.ResourceMeta
+}
+
+func (r *mockResourceController) GCSingleResource(ctx context.Context, res *resModel.ResourceMeta) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case r.gcRequestCh <- res:
+	}
+	return nil
+}
 
 type gcRunnerTestHelper struct {
 	Runner *DefaultGCRunner
@@ -51,16 +66,8 @@ func newGCRunnerTestHelper() *gcRunnerTestHelper {
 
 func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelper {
 	reqCh := make(chan *resModel.ResourceMeta, 16)
-	mockHandler := func(ctx context.Context, meta *resModel.ResourceMeta) error {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case reqCh <- meta:
-		}
-		return nil
-	}
-	runner := NewGCRunner(meta, nil)
-	runner.gcHandlers = map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler}
+	runner := NewGCRunner(meta, nil, nil)
+	runner.gcHandlers[resModel.ResourceTypeLocalFile] = &mockResourceController{gcRequestCh: reqCh}
 	clk := clock.NewMock()
 	runner.clock = clk
 	ctx, cancel := context.WithCancel(context.Background())

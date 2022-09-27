@@ -106,6 +106,7 @@ func (f *ExternalStorageFactoryImpl) newS3ExternalStorageFromURI(
 	return GetExternalStorageFromURI(ctx, uri, *f.Options)
 }
 
+// GetExternalStorageFromURI creates a new brStorage.ExternalStorage from a uri.
 func GetExternalStorageFromURI(
 	ctx context.Context, uri string, s3Opts brStorage.S3BackendOptions,
 ) (brStorage.ExternalStorage, error) {

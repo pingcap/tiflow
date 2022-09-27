@@ -85,7 +85,8 @@ func newBrokerForS3(
 			S3BackendOptions: *s3Cfg,
 			Bucket:           s3.UtBucketName,
 			Prefix:           s3Prefix,
-		}}, executorID, cli)
+		},
+	}, executorID, cli)
 	require.NoError(t, err)
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
@@ -133,14 +134,14 @@ func checkFile(t *testing.T, storage brStorage.ExternalStorage, path string, exp
 
 func checkS3ResourceForWorker(
 	t *testing.T, storage brStorage.ExternalStorage,
-	creater resModel.WorkerID, resID resModel.ResourceID,
+	creator resModel.WorkerID, resID resModel.ResourceID,
 	expected bool, testFiles ...string,
 ) {
 	tp, resName, err := resModel.PasreResourceID(resID)
 	require.NoError(t, err)
 	require.Equal(t, resModel.ResourceTypeS3, tp)
 
-	resPath := fmt.Sprintf("%s/%s", creater, resName)
+	resPath := fmt.Sprintf("%s/%s", creator, resName)
 	// check .keep file
 	checkFile(t, storage, fmt.Sprintf("%s/.keep", resPath), expected)
 	for _, fileName := range testFiles {
@@ -280,7 +281,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 	checkS3ResourceForWorker(t, rootStrorage, "worker-1", "/s3/test-2", fileNotExists, testFiles...)
 }
 
-// FIXME: this test is unstable
+// FIXME: this test is unstable, fix it after removing the index design
 func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 	brk, cli, _, rootStrorage := newBrokerForS3(t, s3.MockExecutorID)
 

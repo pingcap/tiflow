@@ -31,24 +31,24 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
+var _ pb.ResourceManagerServer = (*Service)(nil)
+
 // Service implements pb.ResourceManagerServer
 type Service struct {
 	metaclient pkgOrm.Client
+<<<<<<< HEAD
 
 	executors ExecutorInfoProvider
 
+=======
+>>>>>>> 49ec23fad (finish gc policy in manager)
 	preRPCHook rpcutil.PreRPCHook
 }
 
 // NewService creates a new externalresource manage service
-func NewService(
-	metaclient pkgOrm.Client,
-	executorInfoProvider ExecutorInfoProvider,
-	preRPCHook rpcutil.PreRPCHook,
-) *Service {
+func NewService(metaclient pkgOrm.Client, preRPCHook rpcutil.PreRPCHook) *Service {
 	return &Service{
 		metaclient: metaclient,
-		executors:  executorInfoProvider,
 		preRPCHook: preRPCHook,
 	}
 }

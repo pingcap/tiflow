@@ -15,11 +15,13 @@ package orm
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -705,9 +707,9 @@ func TestResourceMock(t *testing.T) {
 			output: []*resModel.ResourceMeta{},
 		},
 		{
-			fn: "QueryResourcesByExecutorID",
+			fn: "QueryResourcesByExecutorIDs",
 			inputs: []interface{}{
-				"e444",
+				engineModel.ExecutorID("e444"),
 			},
 			output: []*resModel.ResourceMeta{
 				{
@@ -726,15 +728,16 @@ func TestResourceMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryResourcesByExecutorID",
+			fn: "QueryResourcesByExecutorIDs",
 			inputs: []interface{}{
-				"e445",
+				engineModel.ExecutorID("e444"),
 			},
 			output: []*resModel.ResourceMeta{},
 		},
 	}
 
 	for _, tc := range testCases {
+		fmt.Println("testing", tc.fn)
 		testInnerMock(t, cli, tc)
 	}
 }

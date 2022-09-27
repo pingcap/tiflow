@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	gerrors "errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -125,14 +126,15 @@ type ResourceClient interface {
 	GetResourceByID(ctx context.Context, resourceKey ResourceKey) (*ResourceMeta, error)
 	QueryResources(ctx context.Context) ([]*ResourceMeta, error)
 	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*ResourceMeta, error)
-	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*ResourceMeta, error)
+	QueryResourcesByExecutorIDs(ctx context.Context,
+		executorID ...engineModel.ExecutorID) ([]*ResourceMeta, error)
 
-	SetGCPendingByJobs(ctx context.Context, jobIDs []engineModel.JobID) error
+	SetGCPendingByJobs(ctx context.Context, jobIDs ...engineModel.JobID) error
 	GetOneResourceForGC(ctx context.Context) (*ResourceMeta, error)
 
 	DeleteResource(ctx context.Context, resourceKey ResourceKey) (Result, error)
-	DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error)
-	DeleteResourcesByExecutorIDs(ctx context.Context, executorID []engineModel.ExecutorID) (Result, error)
+	DeleteResourcesByTypeAndExecutorIDs(ctx context.Context,
+		resType resModel.ResourceType, executorID ...engineModel.ExecutorID) (Result, error)
 }
 
 // JobOpClient defines interface that operates job status (upper logic oriented)
@@ -588,11 +590,13 @@ func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string)
 	return resources, nil
 }
 
-// QueryResourcesByExecutorID query all resources of the executor_id
-func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resModel.ResourceMeta, error) {
+// QueryResourcesByExecutorIDs query all resources of the executorIDs
+func (c *metaOpsClient) QueryResourcesByExecutorIDs(
+	ctx context.Context, executorIDs ...engineModel.ExecutorID,
+) ([]*resModel.ResourceMeta, error) {
 	var resources []*resModel.ResourceMeta
 	if err := c.db.WithContext(ctx).
-		Where("executor_id = ?", executorID).
+		Where("executor_id in ?", executorIDs).
 		Find(&resources).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -600,23 +604,20 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	return resources, nil
 }
 
-// DeleteResourcesByExecutorID delete all the resources of executorID
-func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error) {
-	result := c.db.WithContext(ctx).
-		Where("executor_id = ?", executorID).
-		Delete(&resModel.ResourceMeta{})
-	if result.Error == nil {
-		return &ormResult{rowsAffected: result.RowsAffected}, nil
+// DeleteResourcesByTypeAndExecutorIDs delete a specific type of resources of executorID
+func (c *metaOpsClient) DeleteResourcesByTypeAndExecutorIDs(
+	ctx context.Context, resType resModel.ResourceType, executorIDs ...engineModel.ExecutorID,
+) (Result, error) {
+	var result *gorm.DB
+	if len(executorIDs) == 1 {
+		result = c.db.WithContext(ctx).
+			Where("executor_id = ? and id like ?", executorIDs[0], fmt.Sprintf("/%s%%", resType)).
+			Delete(&resModel.ResourceMeta{})
+	} else {
+		result = c.db.WithContext(ctx).
+			Where("executor_id in ? and id like ?", executorIDs, fmt.Sprintf("/%s%%", resType)).
+			Delete(&resModel.ResourceMeta{})
 	}
-
-	return nil, errors.ErrMetaOpFail.Wrap(result.Error)
-}
-
-// DeleteResourcesByExecutorIDs delete all the resources of executorID
-func (c *metaOpsClient) DeleteResourcesByExecutorIDs(ctx context.Context, executorIDs []engineModel.ExecutorID) (Result, error) {
-	result := c.db.WithContext(ctx).
-		Where("executor_id in ?", executorIDs).
-		Delete(&resModel.ResourceMeta{})
 	if result.Error == nil {
 		return &ormResult{rowsAffected: result.RowsAffected}, nil
 	}
@@ -625,7 +626,7 @@ func (c *metaOpsClient) DeleteResourcesByExecutorIDs(ctx context.Context, execut
 }
 
 // SetGCPendingByJobs set the resourceIDs to the state `waiting to gc`
-func (c *metaOpsClient) SetGCPendingByJobs(ctx context.Context, jobIDs []engineModel.JobID) error {
+func (c *metaOpsClient) SetGCPendingByJobs(ctx context.Context, jobIDs ...engineModel.JobID) error {
 	err := c.db.WithContext(ctx).
 		Model(&resModel.ResourceMeta{}).
 		Where("job_id in ?", jobIDs).

@@ -34,6 +34,7 @@ const (
 	CaseTimeout = 10 * time.Second
 )
 
+// GetS3OptionsForUT returns the s3 options for unit test.
 func GetS3OptionsForUT() (*brStorage.S3BackendOptions, error) {
 	endpoint := os.Getenv(envS3Endpoint)
 	if len(endpoint) == 0 {

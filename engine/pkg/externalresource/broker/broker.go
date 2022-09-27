@@ -37,7 +37,7 @@ import (
 
 const (
 	defaultTimeout                 = 3 * time.Second
-	defaultClosedWOrkerChannelSize = 10000
+	defaultClosedWorkerChannelSize = 10000
 )
 
 type closedWorker struct {
@@ -75,7 +75,7 @@ func NewBroker(
 		executorID:     executorID,
 		client:         client,
 		fileManagers:   make(map[resModel.ResourceType]internal.FileManager),
-		closedWorkerCh: make(chan closedWorker, defaultClosedWOrkerChannelSize),
+		closedWorkerCh: make(chan closedWorker, defaultClosedWorkerChannelSize),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -207,7 +207,6 @@ func (b *DefaultBroker) runGCClosedWorker(ctx context.Context) {
 			}
 		}
 	}
-
 }
 
 // RemoveResource implements pb.BrokerServiceServer.
@@ -320,7 +319,7 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 		return err
 	}
 
-	handler.Persist(ctx)
+	err = handler.Persist(ctx)
 	if err != nil {
 		return err
 	}
@@ -329,6 +328,7 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 	return nil
 }
 
+// Close cleans up the broker.
 func (b *DefaultBroker) Close() {
 	b.cancel()
 

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,21 +162,23 @@ func (jp *MockJobStatusProvider) WatchJobStatuses(
 	return snapCopy, jp.notifier.NewReceiver(), nil
 }
 
-// MockGCNotifier implements the interface GCNotifier.
-type MockGCNotifier struct {
+// MockGCRunner implements the interface GCRunner.
+type MockGCRunner struct {
+	GCRunner
 	notifyCh chan struct{}
 }
 
-// NewMockGCNotifier returns a new MockGCNotifier
-func NewMockGCNotifier() *MockGCNotifier {
-	return &MockGCNotifier{
+// NewMockGCRunner returns a new MockGCNotifier
+func NewMockGCRunner(resClient pkgOrm.ResourceClient) *MockGCRunner {
+	return &MockGCRunner{
+		GCRunner: NewGCRunner(resClient, nil, nil),
 		notifyCh: make(chan struct{}, 1),
 	}
 }
 
 // GCNotify pushes a new notification to the internal channel so
 // it can be waited on by WaitNotify().
-func (n *MockGCNotifier) GCNotify() {
+func (n *MockGCRunner) GCNotify() {
 	select {
 	case n.notifyCh <- struct{}{}:
 	default:
@@ -183,7 +186,7 @@ func (n *MockGCNotifier) GCNotify() {
 }
 
 // WaitNotify waits for a pending notification with timeout.
-func (n *MockGCNotifier) WaitNotify(t *testing.T, timeout time.Duration) {
+func (n *MockGCRunner) WaitNotify(t *testing.T, timeout time.Duration) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 

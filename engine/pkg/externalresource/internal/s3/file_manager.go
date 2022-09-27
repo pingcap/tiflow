@@ -31,10 +31,14 @@ import (
 const (
 	placeholderFileName = ".keep"
 
-	DummyJobID        = "dummy-job-%s"
-	DummyWorkerID     = "keep-alive-worker"
+	// DummyJobID is a dummy job ID used for the s3 storage.
+	DummyJobID = "dummy-job-%s"
+	// DummyWorkerID is a dummy worker ID used for the s3 storage.
+	DummyWorkerID = "keep-alive-worker"
+	// DummyResourceName is a dummy resource name used for the s3 storage.
 	DummyResourceName = "dummy"
-	DummyResourceID   = "/s3/dummy"
+	// DummyResourceID is a dummy resource ID used for the s3 storage.
+	DummyResourceID = "/s3/dummy"
 )
 
 // FileManager manages resource files stored on s3.
@@ -177,7 +181,7 @@ func (m *FileManager) removeAllTemporaryFilesForExecutor(
 
 	persistedFileMap := m.index.GetPersistedFileMap()
 	for workerID, indexFile := range persistedFileMap {
-		for resName, _ := range indexFile.PersistedFileSet {
+		for resName := range indexFile.PersistedFileSet {
 			resPath := fmt.Sprintf("%s/%s", workerID, resName)
 			persistedFileSet[resPath] = struct{}{}
 		}
@@ -329,6 +333,7 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 	return nil
 }
 
+// GetDummyIdent returns a dummy resource ident for testing.
 func GetDummyIdent(executorID model.ExecutorID) internal.ResourceIdent {
 	return internal.ResourceIdent{
 		Name: DummyResourceName,

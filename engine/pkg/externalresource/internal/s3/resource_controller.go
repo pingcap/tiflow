@@ -81,8 +81,5 @@ func (r *resourceController) GCExecutor(
 		Executor: executorID,
 		WorkerID: "",
 	}
-	if err := r.fm.removeAllTemporaryFilesByMeta(ctx, scope, persistedResSet); err != nil {
-		return err
-	}
-	return nil
+	return r.fm.removeAllTemporaryFilesByMeta(ctx, scope, persistedResSet)
 }
