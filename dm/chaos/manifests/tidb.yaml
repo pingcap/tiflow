@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: tidb
-          image: pingcap/tidb:latest # latest release version
+          image: pingcap/tidb:v6.1.0 # latest release version
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /data
