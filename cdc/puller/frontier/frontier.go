@@ -36,14 +36,10 @@ type spanFrontier struct {
 }
 
 // NewFrontier creates Frontier from the given spans.
+// spanFrontier don't support use Nil as the maximum key of End range
+// So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
+// End key bigger than util.UpperBoundKey
 func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Frontier {
-	// spanFrontier don't support use Nil as the maximum key of End range
-	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
-	// End key bigger than util.UpperBoundKey
-	for i, span := range spans {
-		spans[i] = span.Hack()
-	}
-
 	s := &spanFrontier{
 		spanList: *newSpanList(),
 	}
