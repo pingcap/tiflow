@@ -65,6 +65,10 @@ func (r *resourceController) GCExecutor(
 ) error {
 	persistedResSet := make(map[string]struct{})
 	for _, res := range resources {
+		if res.Executor != executorID {
+			log.Panic("unexpected resource which is persisted by other exeuctor",
+				zap.Any("resource", res), zap.Any("expectedeExecutor", executorID))
+		}
 		tp, resName, err := resModel.PasreResourceID(res.ID)
 		if err != nil {
 			return err

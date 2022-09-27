@@ -36,13 +36,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 )
 
-const (
+var (
 	gcCheckInterval          = 10 * time.Second
 	gcTimeout                = 10 * time.Second
-	gcOnceRetryMinIntervalMs = 100
-	gcOnceRetryMaxIntervalMs = 100
+	gcOnceRetryMinIntervalMs = int64(100)
+	gcOnceRetryMaxIntervalMs = int64(100)
 
-	gcExecutorsMinIntervalMs = 100
+	gcExecutorsTimeout       = 600 * time.Second
+	gcExecutorsRateLimit     = 1 /* once per second*/
+	gcExecutorsMinIntervalMs = int64(100)
 	gcExecutorsMaxIntervalMs = int64(30 * time.Second)
 )
 
@@ -64,12 +66,14 @@ func NewGCRunner(
 	config *resModel.Config,
 ) *DefaultGCRunner {
 	gcRunner := &DefaultGCRunner{
-		client: resClient,
-		gcHandlers: map[resModel.ResourceType]internal.ResourceController{
-			resModel.ResourceTypeLocalFile: local.NewFileResourceController(executorClients),
-		},
-		notifyCh: make(chan struct{}, 1),
-		clock:    clock.New(),
+		client:     resClient,
+		gcHandlers: map[resModel.ResourceType]internal.ResourceController{},
+		notifyCh:   make(chan struct{}, 1),
+		clock:      clock.New(),
+	}
+	if executorClients != nil {
+		localType := resModel.ResourceTypeLocalFile
+		gcRunner.gcHandlers[localType] = local.NewFileResourceController(executorClients)
 	}
 	if config != nil && config.S3Enabled() {
 		gcRunner.gcHandlers[resModel.ResourceTypeS3] = s3.NewResourceController(config.S3)
@@ -191,7 +195,7 @@ func (r *DefaultGCRunner) gcOnce(
 func (r *DefaultGCRunner) GCExecutors(ctx context.Context, executors ...model.ExecutorID) error {
 	// The total retry time is set to 10min to alleviate the impact to normal request.
 	// Note that if this function returns an error, the leader will exit.
-	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, gcExecutorsTimeout)
 	defer cancel()
 
 	if err := r.mustCleanupLocalExecutors(ctx, executors); err != nil {
@@ -227,7 +231,13 @@ func (r *DefaultGCRunner) mustCleanupS3Executors(
 		return nil
 	}
 
-	gcOnce := func(id model.ExecutorID) error {
+	gcOnce := func(id model.ExecutorID) (err error) {
+		defer func() {
+			if err != nil {
+				log.Warn("failed to cleanup s3 temporary resources for executor",
+					zap.Any("executor-id", id), zap.Error(err))
+			}
+		}()
 		log.Info("start to clean up executor", zap.Any("executor", id))
 		// Get persistent s3 resource
 		resources, err := r.client.QueryResourcesByExecutorIDs(ctx, id)
@@ -252,7 +262,7 @@ func (r *DefaultGCRunner) mustCleanupS3Executors(
 
 	// Cleanup one executor per two second for avoiding too many requests to s3.
 	// The rate limit takes effect only when initialing gcCoordinator.
-	rl := ratelimit.New(2 /* once per two second */)
+	rl := ratelimit.New(gcExecutorsRateLimit)
 	for _, executor := range executors {
 		rl.Take()
 		err := retry.Do(ctx, func() error {
