@@ -36,7 +36,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -123,7 +123,7 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error)
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -508,7 +508,7 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)

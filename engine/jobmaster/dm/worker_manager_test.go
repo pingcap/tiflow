@@ -21,18 +21,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
+	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
@@ -580,7 +579,7 @@ type MockWorkerAgent struct {
 	mock.Mock
 }
 
-func (mockAgent *MockWorkerAgent) CreateWorker(workerType framework.WorkerType, taskCfg interface{}, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
+func (mockAgent *MockWorkerAgent) CreateWorker(workerType framework.WorkerType, taskCfg interface{}, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	args := mockAgent.Called()

@@ -31,3 +31,12 @@ insert into t_2(id, name) values (0, 'b');
 -- test sql_mode NO_BACKSLASH_ESCAPES
 set @@session.sql_mode=concat(@@session.sql_mode, ',NO_BACKSLASH_ESCAPES');
 insert into t_2(name) values ('\\a');
+
+-- test GBK charset BTW
+create table t_4 (id int, name varchar(20), primary key(`id`)) character set gbk;
+insert into t_4 (id, name) values (0, '你好');
+insert into t_4 (id, name) values (1, '你好Aa'), (2, '你好aA');
+
+create table t_6 (id int, name varchar(20) character set gbk, primary key(`id`)) character set utf8mb4 collate utf8mb4_bin;
+insert into t_6 (id, name) values (0, '你好');
+insert into t_6 (id, name) values (1, '你好Aa'), (2, '你好aA');

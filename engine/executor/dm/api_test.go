@@ -15,11 +15,11 @@ package dm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -81,25 +81,26 @@ func TestQueryStatusAPI(t *testing.T) {
 			RawCause:   "raw cause",
 			Workaround: "workaround",
 		}
-		dumpStatusBytes, _ = json.Marshal(dumpStatus)
-		loadStatusBytes, _ = json.Marshal(loadStatus)
-		syncStatusBytes, _ = json.Marshal(syncStatus)
+		mar                = jsonpb.Marshaler{EmitDefaults: true}
+		dumpStatusBytes, _ = mar.MarshalToString(dumpStatus)
+		loadStatusBytes, _ = mar.MarshalToString(loadStatus)
+		syncStatusBytes, _ = mar.MarshalToString(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
 			Unit:   frameModel.WorkerDMDump,
 			Stage:  metadata.StageRunning,
-			Status: dumpStatusBytes,
+			Status: []byte(dumpStatusBytes),
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   frameModel.WorkerDMLoad,
 			Stage:  metadata.StageFinished,
 			Result: &dmpkg.ProcessResult{IsCanceled: false},
-			Status: loadStatusBytes,
+			Status: []byte(loadStatusBytes),
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   frameModel.WorkerDMSync,
 			Stage:  metadata.StagePaused,
 			Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
-			Status: syncStatusBytes,
+			Status: []byte(syncStatusBytes),
 		}
 	)
 
@@ -136,6 +137,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp)
+	require.Contains(t, string(syncStatusResp.Status), "secondsBehindMaster")
 }
 
 func TestStopWorker(t *testing.T) {

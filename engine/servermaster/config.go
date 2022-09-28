@@ -33,15 +33,11 @@ import (
 )
 
 const (
-	defaultSessionTTL        = 5 * time.Second
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
-	defaultCampaignTimeout   = 5 * time.Second
-	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
-	defaultEtcdEndpoint      = "127.0.0.1:2379"
 
 	// DefaultBusinessMetaID is the ID for default business metastore
 	DefaultBusinessMetaID        = "_default"
@@ -68,8 +64,6 @@ type Config struct {
 	Name          string `toml:"name" json:"name"`
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
-
-	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
 
 	FrameworkMeta *metaModel.StoreConfig `toml:"framework-meta" json:"framework-meta"`
 	BusinessMeta  *metaModel.StoreConfig `toml:"business-meta" json:"business-meta"`
@@ -172,7 +166,6 @@ func GetDefaultMasterConfig() *Config {
 		Name:                 "",
 		Addr:                 defaultMasterAddr,
 		AdvertiseAddr:        "",
-		ETCDEndpoints:        []string{defaultEtcdEndpoint},
 		FrameworkMeta:        newFrameMetaConfig(),
 		BusinessMeta:         NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,

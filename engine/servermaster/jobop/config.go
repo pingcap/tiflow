@@ -23,6 +23,7 @@ const (
 	// If a job keeps failing, the max back interval is 5 minutes, and 10 minutes
 	// can keep at least one failed record.
 	defaultBackoffResetInterval = 2 * defaultBackoffMaxInterval
+	defaultBackoffMaxTryTime    = 8
 )
 
 // BackoffConfig is used to configure job backoff
@@ -31,6 +32,7 @@ type BackoffConfig struct {
 	InitialInterval time.Duration `toml:"initial-interval" json:"initial-interval"`
 	MaxInterval     time.Duration `toml:"max-interval" json:"max-interval"`
 	Multiplier      float64       `toml:"multiplier" json:"multiplier"`
+	MaxTryTime      int           `toml:"max-try-time" json:"max-try-time"`
 }
 
 // NewDefaultBackoffConfig creates a default backoff config
@@ -40,5 +42,6 @@ func NewDefaultBackoffConfig() *BackoffConfig {
 		InitialInterval: defaultBackoffInitInterval,
 		MaxInterval:     defaultBackoffMaxInterval,
 		Multiplier:      defaultBackoffMultiplier,
+		MaxTryTime:      defaultBackoffMaxTryTime,
 	}
 }

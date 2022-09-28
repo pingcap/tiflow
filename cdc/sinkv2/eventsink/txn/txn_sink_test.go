@@ -51,6 +51,10 @@ func (b *blackhole) Flush(ctx context.Context) error {
 	return nil
 }
 
+func (b *blackhole) MaxFlushInterval() time.Duration {
+	return 100 * time.Millisecond
+}
+
 func (b *blackhole) Close() error {
 	return nil
 }
