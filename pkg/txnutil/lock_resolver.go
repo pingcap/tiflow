@@ -131,7 +131,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		bo = tikv.NewGcResolveLockMaxBackoffer(ctx)
 	}
-	log.Info("resolve lock successfully",
+	log.Debug("resolve lock successfully",
 		zap.Uint64("regionID", regionID),
 		zap.Int("lockCount", lockCount),
 		zap.Uint64("maxVersion", maxVersion),
