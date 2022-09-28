@@ -117,8 +117,7 @@ func (w *exampleWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, me
 	return nil
 }
 
-func (w *exampleWorker) CloseImpl(ctx context.Context) error {
+func (w *exampleWorker) CloseImpl(ctx context.Context) {
 	log.Info("CloseImpl")
 	w.wg.Wait()
-	return nil
 }

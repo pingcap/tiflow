@@ -337,14 +337,10 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // CloseImpl is called when the master is being closed
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return nil
-}
+func (jm *JobMaster) CloseImpl(ctx context.Context) {}
 
 // StopImpl is called when the master is being canceled
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
-	return nil
-}
+func (jm *JobMaster) StopImpl(ctx context.Context) {}
 
 // ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {
