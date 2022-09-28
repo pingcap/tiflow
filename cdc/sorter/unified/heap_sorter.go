@@ -103,7 +103,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	)
 
 	if h.heap.Len() > 0 {
-		lowerBound = h.heap[0].entry.CRTs
+		lowerBound = h.heap[0].entry.RawKV.CRTs
 	} else {
 		return nil
 	}

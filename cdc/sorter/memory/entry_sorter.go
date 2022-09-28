@@ -120,7 +120,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				startTime = time.Now()
 				var merged []*model.PolymorphicEvent
 				mergeEvents(toSort, sorted, func(entry *model.PolymorphicEvent) {
-					if entry.CRTs <= maxResolvedTs {
+					if entry.RawKV.CRTs <= maxResolvedTs {
 						output(ctx, entry)
 					} else {
 						merged = append(merged, entry)
@@ -142,7 +142,7 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	es.lock.Lock()
 	defer es.lock.Unlock()
 	if entry.IsResolved() {
-		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
+		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.RawKV.CRTs)
 		es.resolvedNotifier.Notify()
 	} else {
 		es.unsorted = append(es.unsorted, entry)

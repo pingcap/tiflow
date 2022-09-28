@@ -45,8 +45,5 @@ func (m *MsgPackGenSerde) Unmarshal(event *model.PolymorphicEvent, bytes []byte)
 		return nil, errors.Trace(err)
 	}
 
-	event.StartTs = event.RawKV.StartTs
-	event.CRTs = event.RawKV.CRTs
-
 	return bytes, nil
 }

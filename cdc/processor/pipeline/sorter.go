@@ -183,7 +183,7 @@ func (n *sorterNode) start(
 	n.eg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
-		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
+		lastCommitTs := uint64(0)            // the commit-ts of the last row changed we sent.
 
 		resolvedTsInterpolateFunc := func(commitTs uint64) {
 			// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
@@ -191,8 +191,8 @@ func (n *sorterNode) start(
 			// processing the first event in a new transaction, (2) a resolved-ts is safe to be
 			// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
 			// as a resolved-ts, improving the frequency at which the sink flushes.
-			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
-				lastSentResolvedTs = lastCRTs
+			if lastCommitTs > lastSentResolvedTs && commitTs > lastCommitTs {
+				lastSentResolvedTs = lastCommitTs
 				lastSendResolvedTsTime = time.Now()
 				msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
@@ -264,10 +264,10 @@ func (n *sorterNode) start(
 					log.Panic("unexpected empty msg", zap.Any("msg", msg))
 				}
 
-				if msg.CRTs < startTs {
+				if msg.RawKV.CRTs < startTs {
 					// Ignore messages are less than initial checkpoint ts.
 					log.Debug("sorterNode: ignore sorter output event",
-						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
+						zap.Uint64("CRTs", msg.RawKV.CRTs), zap.Uint64("startTs", startTs))
 					continue
 				}
 
@@ -287,7 +287,7 @@ func (n *sorterNode) start(
 					if ignored {
 						continue
 					}
-					commitTs := msg.CRTs
+					commitTs := msg.Row.CommitTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
 						resolvedTsInterpolateFunc(commitTs)
@@ -300,15 +300,15 @@ func (n *sorterNode) start(
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
-					// means interrupting a transaction. Otherwise the pipeline would deadlock.
+					// means interrupting a transaction. Otherwise, the pipeline would deadlock.
 					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
-						if commitTs > lastCRTs {
+						if commitTs > lastCommitTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							resolvedTsInterpolateFunc(commitTs)
-						} else if commitTs == lastCRTs {
+						} else if commitTs == lastCommitTs {
 							// send batch resolve event
-							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							msg := model.NewResolvedPolymorphicEvent(0, lastCommitTs)
 							msg.Resolved = &model.ResolvedTs{
 								Ts:      commitTs,
 								Mode:    model.BatchResolvedMode,
@@ -318,7 +318,7 @@ func (n *sorterNode) start(
 						} else {
 							log.Panic("flow control blocked, report a bug",
 								zap.Uint64("commitTs", commitTs),
-								zap.Uint64("lastCommitTs", lastCRTs),
+								zap.Uint64("lastCommitTs", lastCommitTs),
 								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
 						}
 						return nil
@@ -333,15 +333,15 @@ func (n *sorterNode) start(
 						}
 						return nil
 					}
-					lastCRTs = msg.CRTs
+					lastCommitTs = msg.Row.CommitTs
 				} else {
 					// handle OpTypeResolved
-					if msg.CRTs < lastSentResolvedTs {
+					if msg.RawKV.CRTs < lastSentResolvedTs {
 						continue
 					}
 					tickMsg := message.ValueMessage(pmessage.TickMessage())
 					_ = tableActorRouter.Send(tableActorID, tickMsg)
-					lastSentResolvedTs = msg.CRTs
+					lastSentResolvedTs = msg.RawKV.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))

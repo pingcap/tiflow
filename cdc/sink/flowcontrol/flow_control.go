@@ -87,7 +87,7 @@ func (c *TableFlowController) Consume(
 	size uint64,
 	callBack func(batchID uint64) error,
 ) error {
-	commitTs := msg.CRTs
+	commitTs := msg.Row.CommitTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 	blockingCallBack := func() (err error) {
 		if commitTs > lastCommitTs || c.splitTxn {
@@ -150,7 +150,7 @@ func (c *TableFlowController) Release(resolved model.ResolvedTs) {
 func (c *TableFlowController) enqueueSingleMsg(
 	msg *model.PolymorphicEvent, size uint64, callback func() error,
 ) {
-	commitTs := msg.CRTs
+	commitTs := msg.Row.CommitTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	c.queueMu.Lock()
@@ -191,8 +191,8 @@ func (c *TableFlowController) enqueueSingleMsg(
 func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64) {
 	c.batchGroupCount++
 	c.queue.Push(&txnSizeEntry{
-		startTs:  msg.StartTs,
-		commitTs: msg.CRTs,
+		startTs:  msg.Row.StartTs,
+		commitTs: msg.Row.CommitTs,
 		size:     size,
 		rowCount: 1,
 		batchID:  c.batchID,

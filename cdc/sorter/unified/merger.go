@@ -192,7 +192,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 			}
 
-			if event.CRTs > minResolvedTs {
+			if event.RawKV.CRTs > minResolvedTs {
 				pendingSet.Store(task, event)
 				// continues the loop
 				return true
@@ -247,9 +247,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 			} else {
 				pendingSet.Store(task, nextEvent)
-				if nextEvent.CRTs < minResolvedTs {
+				if nextEvent.RawKV.CRTs < minResolvedTs {
 					log.Panic("remaining event CRTs too small",
-						zap.Uint64("nextTs", nextEvent.CRTs),
+						zap.Uint64("nextTs", nextEvent.RawKV.CRTs),
 						zap.Uint64("minResolvedTs", minResolvedTs))
 				}
 			}
@@ -274,13 +274,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			task := item.data.(*flushTask)
 			event := item.entry
 
-			if event.CRTs < task.lastTs {
-				log.Panic("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("curTs", event.CRTs), zap.Uint64("lastTs", task.lastTs))
+			if event.RawKV.CRTs < task.lastTs {
+				log.Panic("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("curTs", event.RawKV.CRTs), zap.Uint64("lastTs", task.lastTs))
 			}
-			task.lastTs = event.CRTs
+			task.lastTs = event.RawKV.CRTs
 
 			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
-				if event.CRTs < lastOutputTs {
+				if event.RawKV.CRTs < lastOutputTs {
 					for sortHeap.Len() > 0 {
 						item := heap.Pop(sortHeap).(*sortItem)
 						task := item.data.(*flushTask)
@@ -294,7 +294,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.Int("curTaskID", task.taskID),
 						zap.Uint64("curTaskResolved", task.maxResolvedTs),
 						zap.Reflect("curEvent", event),
-						zap.Uint64("curTs", event.CRTs),
+						zap.Uint64("curTs", event.RawKV.CRTs),
 						zap.Int("lastHeapID", lastTask.heapSorterID),
 						zap.Int("lastTaskID", lastTask.taskID),
 						zap.Uint64("lastTaskResolved", task.maxResolvedTs),
@@ -303,11 +303,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.Int("sortHeapLen", sortHeap.Len()))
 				}
 
-				if event.CRTs <= lastOutputResolvedTs {
+				if event.RawKV.CRTs <= lastOutputResolvedTs {
 					log.Panic("unified sorter: output ts smaller than resolved ts, bug?", zap.Uint64("minResolvedTs", minResolvedTs),
-						zap.Uint64("lastOutputResolvedTs", lastOutputResolvedTs), zap.Uint64("eventCrts", event.CRTs))
+						zap.Uint64("lastOutputResolvedTs", lastOutputResolvedTs), zap.Uint64("eventCrts", event.RawKV.CRTs))
 				}
-				lastOutputTs = event.CRTs
+				lastOutputTs = event.RawKV.CRTs
 				lastEvent = event
 				lastTask = task
 				select {
@@ -321,7 +321,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 			select {
 			case <-resolvedTicker.C:
-				err := sendResolvedEvent(event.CRTs - 1)
+				err := sendResolvedEvent(event.RawKV.CRTs - 1)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -352,9 +352,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.IsResolved()) {
+			if event.RawKV.CRTs > minResolvedTs || (event.RawKV.CRTs == minResolvedTs && event.IsResolved()) {
 				// we have processed all events from this task that need to be processed in this merge
-				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
+				if event.RawKV.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
 					pendingSet.Store(task, event)
 				}
 				err := retire(task)

@@ -76,7 +76,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	if r.lastEvent == nil {
 		r.lastEvent = event
 	}
-	if r.lastEvent.CRTs > event.CRTs {
+	if r.lastEvent.RawKV.CRTs > event.RawKV.CRTs {
 		log.Panic("regression",
 			zap.Any("lastEntry", r.lastEvent), zap.Any("event", event),
 			zap.Uint64("regionID", event.RegionID()))
@@ -84,7 +84,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	select {
 	case r.outputCh <- event:
 		r.lastEvent = event
-		r.lastSentCommitTs = event.CRTs
+		r.lastSentCommitTs = event.RawKV.CRTs
 		return true
 	default:
 		return false
@@ -116,7 +116,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 			hasRemainEvents = true
 			break
 		}
-		lastCommitTs = event.CRTs
+		lastCommitTs = event.RawKV.CRTs
 
 		// Delete sent events.
 		key := encoding.EncodeKey(r.uid, r.tableID, event)
@@ -180,17 +180,17 @@ func (r *reader) outputIterEvents(
 		if err != nil {
 			return false, 0, errors.Trace(err)
 		}
-		if commitTs > event.CRTs || commitTs > resolvedTs {
+		if commitTs > event.RawKV.CRTs || commitTs > resolvedTs {
 			log.Panic("event commit ts regression",
 				zap.Any("event", event), zap.Stringer("key", message.Key(iter.Key())),
 				zap.Uint64("ts", commitTs), zap.Uint64("resolvedTs", resolvedTs))
 		}
 
 		if commitTs == 0 {
-			commitTs = event.CRTs
+			commitTs = event.RawKV.CRTs
 		}
 		// Read all resolved events that have the same commit ts.
-		if commitTs == event.CRTs {
+		if commitTs == event.RawKV.CRTs {
 			buffer.appendResolvedEvent(event)
 			continue
 		}
@@ -207,7 +207,7 @@ func (r *reader) outputIterEvents(
 		}
 
 		// Append new event to the buffer.
-		commitTs = event.CRTs
+		commitTs = event.RawKV.CRTs
 		buffer.appendResolvedEvent(event)
 	}
 	elapsed := time.Since(start)

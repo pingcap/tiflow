@@ -34,8 +34,6 @@ func (r RowChangedDatums) IsEmpty() bool {
 
 // PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {
-	StartTs  uint64
-	CRTs     uint64
 	Resolved *ResolvedTs
 
 	RawKV *RawKVEntry
@@ -45,7 +43,6 @@ type PolymorphicEvent struct {
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
 func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:  ts,
 		RawKV: &RawKVEntry{},
 		Row:   &RowChangedEvent{},
 	}
@@ -57,16 +54,13 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
-		StartTs: rawKV.StartTs,
-		CRTs:    rawKV.CRTs,
-		RawKV:   rawKV,
+		RawKV: rawKV,
 	}
 }
 
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts.
 func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:  resolvedTs,
 		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
 		Row:   nil,
 	}
@@ -86,16 +80,16 @@ func (e *PolymorphicEvent) IsResolved() bool {
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
 // It returns true if and only if i should precede j.
 func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
-	if i.CRTs == j.CRTs {
+	if i.RawKV.CRTs == j.RawKV.CRTs {
 		if i.IsResolved() {
 			return false
 		} else if j.IsResolved() {
 			return true
 		}
 
-		if i.StartTs > j.StartTs {
+		if i.RawKV.StartTs > j.RawKV.StartTs {
 			return false
-		} else if i.StartTs < j.StartTs {
+		} else if i.RawKV.StartTs < j.RawKV.StartTs {
 			return true
 		}
 
@@ -103,7 +97,7 @@ func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 			return true
 		}
 	}
-	return i.CRTs < j.CRTs
+	return i.RawKV.CRTs < j.RawKV.CRTs
 }
 
 // ResolvedMode describes the batch type of a resolved event.

@@ -77,10 +77,10 @@ func (b *outputBuffer) shiftResolvedEvents(index int) {
 // appendResolvedEvent appends resolved events to the buffer.
 func (b *outputBuffer) appendResolvedEvent(event *model.PolymorphicEvent) {
 	if len(b.resolvedEvents) > 0 {
-		if b.resolvedEvents[0].CRTs != event.CRTs {
+		if b.resolvedEvents[0].RawKV.CRTs != event.RawKV.CRTs {
 			log.Panic("commit ts must be equal",
-				zap.Uint64("newCommitTs", event.CRTs),
-				zap.Uint64("commitTs", b.resolvedEvents[0].CRTs))
+				zap.Uint64("newCommitTs", event.RawKV.CRTs),
+				zap.Uint64("commitTs", b.resolvedEvents[0].RawKV.CRTs))
 		}
 	}
 	b.resolvedEvents = append(b.resolvedEvents, event)

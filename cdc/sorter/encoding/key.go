@@ -75,10 +75,10 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 	binary.BigEndian.PutUint64(uint64Buf[:], tableID)
 	buf = append(buf, uint64Buf[:]...)
 	// CRTs
-	binary.BigEndian.PutUint64(uint64Buf[:], event.CRTs)
+	binary.BigEndian.PutUint64(uint64Buf[:], event.RawKV.CRTs)
 	buf = append(buf, uint64Buf[:]...)
 	// startTs
-	binary.BigEndian.PutUint64(uint64Buf[:], event.StartTs)
+	binary.BigEndian.PutUint64(uint64Buf[:], event.RawKV.StartTs)
 	buf = append(buf, uint64Buf[:]...)
 	// Let Delete < Put
 	binary.BigEndian.PutUint16(uint64Buf[:], ^uint16(event.RawKV.OpType))

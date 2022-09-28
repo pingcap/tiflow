@@ -114,7 +114,8 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 		return false, errors.Trace(err)
 	}
 	if row == nil {
-		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", pEvent.StartTs))
+		log.Debug("message's row changed event is nil, it should be ignored",
+			zap.Uint64("startTs", pEvent.RawKV.StartTs))
 		return true, nil
 	}
 

@@ -113,12 +113,12 @@ func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	w.bytesWritten += 8*5 + event.RawKV.ApproximateDataSize()
 
 	failpoint.Inject("sorterDebug", func() {
-		if event.CRTs < w.maxTs {
+		if event.RawKV.CRTs < w.maxTs {
 			log.Panic("memoryBackEnd: ts regressed, bug?",
 				zap.Uint64("prevTs", w.maxTs),
-				zap.Uint64("curTs", event.CRTs))
+				zap.Uint64("curTs", event.RawKV.CRTs))
 		}
-		w.maxTs = event.CRTs
+		w.maxTs = event.RawKV.CRTs
 	})
 	return nil
 }

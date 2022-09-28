@@ -345,7 +345,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 
-			resolved := model.NewResolvedTs(event.CRTs)
+			resolved := model.NewResolvedTs(event.RawKV.CRTs)
 			if event.Resolved != nil {
 				resolved = *(event.Resolved)
 			}
