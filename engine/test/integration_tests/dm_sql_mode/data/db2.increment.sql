@@ -22,3 +22,20 @@ replace into t_2(id, name) values (0, 'c');
 -- test sql_mode NO_BACKSLASH_ESCAPES
 set @@session.sql_mode=concat(@@session.sql_mode, ',NO_BACKSLASH_ESCAPES');
 insert into t_2(name) values ('\\a');
+
+-- test GBK charset BTW
+insert into t_4 (id, name) values (3, '你好aa3'), (4, '你好AA4');
+update t_4 set name = '你好Aa5' where id = 1;
+delete from t_4 where id = 2;
+
+create table t_8 (id int, name varchar(20), primary key(`id`)) character set gbk;
+insert into t_8 (id, name) values (1, '你好Aa'), (2, '你好aA');
+insert into t_8 (id, name) values (3, '你好aa3'), (4, '你好AA4');
+update t_8 set name = '你好Aa5' where id = 1;
+delete from t_8 where id = 2;
+
+create table t_10 (id int, name varchar(20) character set gbk, primary key(`id`)) character set utf8mb4 collate utf8mb4_bin;
+insert into t_10 (id, name) values (1, '你好Aa'), (2, '你好aA');
+insert into t_10 (id, name) values (3, '你好aa3'), (4, '你好AA4');
+update t_10 set name = '你好Aa5' where id = 1;
+delete from t_10 where id = 2;

@@ -152,7 +152,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	eventCh := make(chan model.RegionFeedEvent, 2)
 	s := createFakeEventFeedSession(ctx)
 	s.eventCh = eventCh
-	span := regionspan.Span{}.Hack()
+	span := regionspan.Span{Start: []byte{}, End: regionspan.UpperBoundKey}
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ToComparableSpan(span),

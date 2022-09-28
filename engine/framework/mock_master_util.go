@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -106,14 +106,14 @@ func MockBaseMasterCreateWorker(
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	executorID model.ExecutorID,
-	resources []resourcemeta.ResourceID,
+	resources []resModel.ResourceID,
 	workerEpoch frameModel.Epoch,
 ) {
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId:               workerID,
 		Cost:                 int64(cost),
-		ResourceRequirements: resourcemeta.ToResourceRequirement(masterID, resources...),
+		ResourceRequirements: resModel.ToResourceRequirement(masterID, resources...),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
 		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).

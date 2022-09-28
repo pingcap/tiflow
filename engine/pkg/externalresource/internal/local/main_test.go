@@ -4,24 +4,20 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package model
+package local
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-func TestParseResourcePath(t *testing.T) {
-	tp, suffix, err := ParseResourcePath("/local/my-local-resource/a/b/c")
-	require.NoError(t, err)
-	require.Equal(t, ResourceTypeLocalFile, tp)
-	require.Equal(t, "my-local-resource/a/b/c", suffix)
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

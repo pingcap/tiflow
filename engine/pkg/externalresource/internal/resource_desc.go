@@ -4,20 +4,27 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package resourcetypes
+
+package internal
 
 import (
-	"testing"
+	"context"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+// ResourceDescriptor is an object used internally by the broker
+// to manage resources.
+type ResourceDescriptor interface {
+	URI() string
+	ID() resModel.ResourceID
+	ResourceIdent() ResourceIdent
+	ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error)
 }

@@ -19,10 +19,6 @@ import (
 	"time"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -30,7 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"go.uber.org/zap"
 )
 
 var (
@@ -47,7 +46,7 @@ type WorkerAgent interface {
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
 		cost model.RescUnit,
-		resources ...resourcemeta.ResourceID,
+		resources ...resModel.ResourceID,
 	) (frameModel.WorkerID, error)
 }
 
@@ -249,7 +248,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
 		}
 
-		var resources []resourcemeta.ResourceID
+		var resources []resModel.ResourceID
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
@@ -332,7 +331,7 @@ func (wm *WorkerManager) createWorker(
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
 	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
