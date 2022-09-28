@@ -93,6 +93,7 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 		RetryCount:         10,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
+<<<<<<< HEAD
 		IsRetryableFn: func(retryTime int, err error) bool {
 			if retry.IsConnectionError(err) {
 				err = conn.ResetConn(tctx)
@@ -116,6 +117,9 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 			}
 			return false
 		},
+=======
+		IsRetryableFn:      conn.retryableFn(tctx, query, args),
+>>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
@@ -175,6 +179,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		RetryCount:         100,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
+<<<<<<< HEAD
 		IsRetryableFn: func(retryTime int, err error) bool {
 			if retry.IsConnectionError(err) {
 				err = conn.ResetConn(tctx)
@@ -203,6 +208,9 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 			// TODO: move it to above IsRetryableError
 			return isRetryableError(err)
 		},
+=======
+		IsRetryableFn:      conn.retryableFn(tctx, queries, args),
+>>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
@@ -251,6 +259,32 @@ func isRetryableError(err error) bool {
 // ExecuteSQL does some SQL executions.
 func (conn *DBConn) ExecuteSQL(tctx *tcontext.Context, queries []string, args ...[]interface{}) (int, error) {
 	return conn.ExecuteSQLWithIgnore(tctx, nil, queries, args...)
+}
+
+func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
+	return func(retryTime int, err error) bool {
+		if retry.IsConnectionError(err) {
+			err = conn.ResetConn(tctx)
+			if err != nil {
+				tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
+					zap.String("queries", utils.TruncateInterface(queries, -1)),
+					zap.String("arguments", utils.TruncateInterface(args, -1)),
+					log.ShortError(err))
+				return false
+			}
+			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
+				zap.Error(err))
+			return true
+		}
+		if dbutil.IsRetryableError(err) {
+			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				zap.String("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
+			return true
+		}
+		return false
+	}
 }
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.

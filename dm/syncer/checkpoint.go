@@ -679,13 +679,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	sqls := make([]string, 0, 100)
 	args := make([][]interface{}, 0, 100)
 
-	if snapshotCp.globalPoint != nil {
-		locationG := snapshotCp.globalPoint.location
-		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
-		sqls = append(sqls, sqlG)
-		args = append(args, argG)
-	}
-
 	type tableCpSnapshotTuple struct {
 		tableCp         *binlogPoint // current table checkpoint location
 		snapshotTableCP tablePoint   // table checkpoint snapshot location
@@ -724,12 +717,26 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		args = append(args, extraArgs[i])
 	}
 
+	// updating global checkpoint should be the last SQL, its success indicates
+	// the checkpoint is flushed successfully.
+	if snapshotCp.globalPoint != nil {
+		locationG := snapshotCp.globalPoint.location
+		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
+		sqls = append(sqls, sqlG)
+		args = append(args, argG)
+	}
+
 	cp.Unlock()
 
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
+<<<<<<< HEAD
 	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+=======
+	// TODO: refine dbConn and add ExecuteSQLAutoSplit
+	_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
+>>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	if err != nil {
 		return err
 	}
