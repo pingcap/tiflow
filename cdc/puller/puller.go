@@ -195,9 +195,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved)))
-				for _, resolvedSpan := range e.Resolved {
-					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
+				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Span)))
+				resolvedTs := e.Resolved.ResolvedTs
+				for _, resolvedSpan := range e.Resolved.Span {
+					if !regionspan.IsSubSpan(resolvedSpan, p.spans...) {
 						log.Panic("the resolved span is not in the total span",
 							zap.String("namespace", p.changefeed.Namespace),
 							zap.String("changefeed", p.changefeed.ID),
@@ -207,35 +208,36 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 							zap.Any("spans", p.spans),
 						)
 					}
-					// Forward is called in a single thread
-					p.tsTracker.Forward(resolvedSpan.Span, resolvedSpan.ResolvedTs)
-					resolvedTs := p.tsTracker.Frontier()
-					if resolvedTs > 0 && !initialized {
-						initialized = true
-
-						spans := make([]string, 0, len(p.spans))
-						for i := range p.spans {
-							spans = append(spans, p.spans[i].String())
-						}
-						log.Info("puller is initialized",
-							zap.String("namespace", p.changefeed.Namespace),
-							zap.String("changefeed", p.changefeed.ID),
-							zap.Int64("tableID", p.tableID),
-							zap.String("tableName", p.tableName),
-							zap.Uint64("resolvedTs", resolvedTs),
-							zap.Duration("duration", time.Since(start)),
-							zap.Strings("spans", spans))
-					}
-					if !initialized || resolvedTs == lastResolvedTs {
-						continue
-					}
-					lastResolvedTs = resolvedTs
-					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-					if err != nil {
-						return errors.Trace(err)
-					}
-					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+					p.tsTracker.Forward(resolvedSpan, resolvedTs)
 				}
+
+				resolvedTs = p.tsTracker.Frontier()
+				if !initialized && resolvedTs > 0 {
+					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
+					log.Info("puller is initialized",
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
+						zap.Int64("tableID", p.tableID),
+						zap.String("tableName", p.tableName),
+						zap.Uint64("resolvedTs", resolvedTs),
+						zap.Duration("duration", time.Since(start)),
+						zap.Strings("spans", spans))
+				}
+
+				if !initialized || resolvedTs > lastResolvedTs {
+					continue
+				}
+				lastResolvedTs = resolvedTs
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+				if err != nil {
+					return errors.Trace(err)
+				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})

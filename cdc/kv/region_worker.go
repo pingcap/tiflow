@@ -778,7 +778,7 @@ func (w *regionWorker) handleResolvedTs(
 	revents *resolvedTsEvent,
 ) error {
 	resolvedTs := revents.resolvedTs
-	resolvedSpans := make([]*model.ResolvedSpan, 0, len(revents.regions))
+	resolvedSpans := make([]regionspan.ComparableSpan, 0, len(revents.regions))
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
@@ -798,10 +798,7 @@ func (w *regionWorker) handleResolvedTs(
 			continue
 		}
 		// emit a checkpointTs
-		resolvedSpans = append(resolvedSpans, &model.ResolvedSpan{
-			Span:       state.sri.span,
-			ResolvedTs: resolvedTs,
-		})
+		resolvedSpans = append(resolvedSpans, state.sri.span)
 	}
 	if len(resolvedSpans) == 0 {
 		return nil
@@ -821,7 +818,10 @@ func (w *regionWorker) handleResolvedTs(
 		state.lock.Unlock()
 	}
 	// emit a checkpointTs
-	revent := model.RegionFeedEvent{Resolved: resolvedSpans}
+	revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpan{
+		Span:       resolvedSpans,
+		ResolvedTs: resolvedTs,
+	}}
 	select {
 	case w.outputCh <- revent:
 		w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))

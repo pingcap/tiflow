@@ -38,7 +38,7 @@ const (
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
-	Resolved []*ResolvedSpan
+	Resolved *ResolvedSpan
 
 	// Additional debug info, not used
 	RegionID uint64
@@ -48,11 +48,11 @@ type RegionFeedEvent struct {
 func (e *RegionFeedEvent) GetValue() interface{} {
 	if e.Val != nil {
 		return e.Val
-	} else if e.Resolved != nil {
-		return e.Resolved
-	} else {
-		return nil
 	}
+	if e.Resolved != nil {
+		return e.Resolved
+	}
+	return nil
 }
 
 // ResolvedSpan guarantees all the KV value event
@@ -60,7 +60,7 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 //
 //msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
-	Span       regionspan.ComparableSpan
+	Span       []regionspan.ComparableSpan
 	ResolvedTs uint64
 }
 
