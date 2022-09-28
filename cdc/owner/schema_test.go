@@ -90,10 +90,18 @@ func TestAllTableNames(t *testing.T) {
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	require.Nil(t, schema.HandleDDL(job))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
+	require.Equal(t, []model.TableName{{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 70,
+	}}, schema.AllTableNames())
 	// add ineligible table
 	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
+	require.Equal(t, []model.TableName{{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 70,
+	}}, schema.AllTableNames())
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
