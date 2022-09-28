@@ -288,7 +288,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
-			log.Info("skip the column which is not visible",
+			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
@@ -296,7 +296,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
-			log.Info("column value is not found",
+			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
