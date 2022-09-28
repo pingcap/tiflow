@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework"
@@ -96,7 +97,9 @@ func (r *registryImpl) CreateWorker(
 
 	config, err := factory.DeserializeConfig(configBytes)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, client.ErrCreateWorkerTerminate.GenWithStack(
+			&client.CreateWorkerTerminateError{Details: err.Error()},
+		)
 	}
 
 	impl, err := factory.NewWorkerImpl(ctx, workerID, masterID, config)

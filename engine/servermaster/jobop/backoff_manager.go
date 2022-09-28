@@ -15,24 +15,44 @@ package jobop
 
 import "github.com/pingcap/tiflow/engine/pkg/clock"
 
-// BackoffManager manages JobBackoff of all running or retrying jobs
-type BackoffManager struct {
+// BackoffManager manages backoff of a target job set
+type BackoffManager interface {
+	Terminate(jobID string) bool
+	Allow(jobID string) bool
+	JobOnline(jobID string)
+	JobFail(jobID string)
+	JobTerminate(jobID string)
+}
+
+// BackoffManagerImpl manages JobBackoff of all running or retrying jobs, it
+// implement interface BackoffManager.
+type BackoffManagerImpl struct {
 	jobs    map[string]*JobBackoff
 	clocker clock.Clock
 	config  *BackoffConfig
 }
 
-// NewBackoffManager creates a new backoff manager
-func NewBackoffManager(clocker clock.Clock, config *BackoffConfig) *BackoffManager {
-	return &BackoffManager{
+// NewBackoffManagerImpl creates a new backoff manager
+func NewBackoffManagerImpl(clocker clock.Clock, config *BackoffConfig) *BackoffManagerImpl {
+	return &BackoffManagerImpl{
 		jobs:    make(map[string]*JobBackoff),
 		clocker: clocker,
 		config:  config,
 	}
 }
 
+// Terminate checks whether this job should be terminated, terminated means
+// job manager won't create this job any more.
+func (m *BackoffManagerImpl) Terminate(jobID string) bool {
+	backoff, ok := m.jobs[jobID]
+	if !ok {
+		return false
+	}
+	return backoff.Terminate()
+}
+
 // Allow checks whether this job can be created now
-func (m *BackoffManager) Allow(jobID string) bool {
+func (m *BackoffManagerImpl) Allow(jobID string) bool {
 	backoff, ok := m.jobs[jobID]
 	if !ok {
 		return true
@@ -41,23 +61,23 @@ func (m *BackoffManager) Allow(jobID string) bool {
 }
 
 // JobOnline means a job is online
-func (m *BackoffManager) JobOnline(jobID string) {
+func (m *BackoffManagerImpl) JobOnline(jobID string) {
 	m.ensureJobBackoffExists(jobID)
 	m.jobs[jobID].Success()
 }
 
 // JobFail means a job is offline(with error) or dispatched with error
-func (m *BackoffManager) JobFail(jobID string) {
+func (m *BackoffManagerImpl) JobFail(jobID string) {
 	m.ensureJobBackoffExists(jobID)
 	m.jobs[jobID].Fail()
 }
 
 // JobTerminate means a job is finished, canceled or failed
-func (m *BackoffManager) JobTerminate(jobID string) {
+func (m *BackoffManagerImpl) JobTerminate(jobID string) {
 	delete(m.jobs, jobID)
 }
 
-func (m *BackoffManager) ensureJobBackoffExists(jobID string) {
+func (m *BackoffManagerImpl) ensureJobBackoffExists(jobID string) {
 	if _, ok := m.jobs[jobID]; !ok {
 		m.jobs[jobID] = NewJobBackoff(jobID, m.clocker, m.config)
 	}
