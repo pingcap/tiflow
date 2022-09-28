@@ -268,6 +268,10 @@ func precheckMasterMeta(
 func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
+	if pkgClient.ErrCreateWorkerTerminate.Is(err) {
+		return rpcerror.ToGRPCError(err)
+	}
+
 	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
 	if inErr != nil {
 		return inErr

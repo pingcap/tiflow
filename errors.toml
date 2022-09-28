@@ -1486,6 +1486,11 @@ error = '''
 create worker is being backoff, retry later
 '''
 
+["DFLOW:ErrMasterCreateWorkerTerminate"]
+error = '''
+create worker is terminated, won't backoff any more
+'''
+
 ["DFLOW:ErrMasterDecodeConfigFile"]
 error = '''
 decode config file failed
