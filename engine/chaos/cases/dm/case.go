@@ -258,6 +258,7 @@ func (c *Case) randDML(source int, table string) (string, error) {
 	c.result[t]++
 	switch t {
 	case 0:
+		log.L().Info("gen insert row")
 		sql, uk, err := generator.GenInsertRow()
 		if err != nil {
 			return "", err
@@ -274,8 +275,10 @@ func (c *Case) randDML(source int, table string) (string, error) {
 		c.keySet[table][uk.GetValueHash()] = struct{}{}
 		return sql, nil
 	case 1:
+		log.L().Info("gen update row")
 		return generator.GenUpdateRow(mcp.NextUK())
 	default:
+		log.L().Info("gen delete row")
 		key := mcp.NextUK()
 		sql, err := generator.GenDeleteRow(key)
 		if err != nil {
@@ -301,7 +304,9 @@ func (c *Case) genIncrData(ctx context.Context) error {
 
 		sqls := make([]string, 0, batch)
 		for i := 0; i < batch; i++ {
+			log.L().Info("start rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			sql, err := c.randDML(source, tableName)
+			log.L().Info("finished rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			if err != nil {
 				log.L().Info("error in rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 				return err
