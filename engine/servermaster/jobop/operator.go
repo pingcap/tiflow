@@ -128,9 +128,9 @@ func (oper *JobOperatorImpl) checkJobStatus(
 		}
 		return isJobTerminated, err
 	}
-	// TODO: add MasterStateFailed
 	switch meta.State {
-	case frameworkModel.MasterStateFinished, frameworkModel.MasterStateStopped:
+	case frameworkModel.MasterStateFinished,
+		frameworkModel.MasterStateStopped, frameworkModel.MasterStateFailed:
 		isJobTerminated = true
 		return isJobTerminated, oper.MarkJobCanceled(ctx, jobID)
 	}

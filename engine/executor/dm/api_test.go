@@ -158,7 +158,7 @@ func TestStopWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	// mock close by framework
-	require.NoError(t, dmWorker.CloseImpl(context.Background()))
+	dmWorker.CloseImpl(context.Background())
 }
 
 func TestOperateTask(t *testing.T) {

@@ -24,8 +24,8 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
@@ -60,7 +60,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	resMeta, err := cluster.meta.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"})
 	require.NoError(t, err)
 	require.Equal(t, model.ExecutorID("executor-1"), resMeta.Executor)
-	broker.AssertLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
+	local.AssertLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	// Triggers GC by removing the job
 	cluster.jobInfo.RemoveJob("job-1")
@@ -69,7 +69,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 		log.Warn("GetResourceByID", zap.Error(err))
 		return err != nil && pkgOrm.IsNotFoundError(err)
 	}, 1*time.Second, 5*time.Millisecond)
-	broker.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
+	local.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	cluster.Stop()
 }
@@ -138,7 +138,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 		_, err := cluster.meta.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-2"})
 		return err != nil && pkgOrm.IsNotFoundError(err)
 	}, 1*time.Second, 5*time.Millisecond)
-	broker.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
+	local.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	cluster.Stop()
 }
