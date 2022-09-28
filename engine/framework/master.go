@@ -104,7 +104,7 @@ type MasterImpl interface {
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
 	// - this function may be concurrently called with another worker's OnWorkerXXX,
-	//   Tick, CloseImpl, StopImpl, OnCancel, InitImpl, OnMasterRecovered.
+	//   Tick, CloseImpl, StopImpl, OnCancel.
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
