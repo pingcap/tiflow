@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
 // BrokerServiceClient wraps a pb.BrokerServiceClient

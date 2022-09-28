@@ -24,9 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/stretchr/testify/require"
@@ -72,10 +70,7 @@ func newMockGCCluster() *mockCluster {
 		&rate.Limiter{}, nil))
 
 	executorGroup := client.NewMockExecutorGroup()
-	resourceTp := resourcetypes.NewLocalFileResourceType(executorGroup)
-	gcRunner := manager.NewGCRunner(meta, map[resourcemeta.ResourceType]manager.GCHandlerFunc{
-		"local": resourceTp.GCHandler(),
-	})
+	gcRunner := manager.NewGCRunner(meta, executorGroup)
 	gcCoordinator := manager.NewGCCoordinator(executorInfo, jobInfo, meta, gcRunner)
 
 	return &mockCluster{
@@ -121,7 +116,7 @@ func (c *mockCluster) Stop() {
 }
 
 func (c *mockCluster) AddBroker(id model.ExecutorID, baseDir string) {
-	config := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: baseDir}}
+	config := &resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}}
 	cli := &resourceClientStub{service: c.service}
 	brk := broker.NewBroker(config, id, cli)
 
