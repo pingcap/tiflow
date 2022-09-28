@@ -36,12 +36,6 @@ var _ pb.ResourceManagerServer = (*Service)(nil)
 // Service implements pb.ResourceManagerServer
 type Service struct {
 	metaclient pkgOrm.Client
-<<<<<<< HEAD
-
-	executors ExecutorInfoProvider
-
-=======
->>>>>>> 49ec23fad (finish gc policy in manager)
 	preRPCHook rpcutil.PreRPCHook
 }
 
