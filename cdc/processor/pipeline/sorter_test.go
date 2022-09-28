@@ -227,8 +227,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 
 	resolvedTs4 := model.NewResolvedPolymorphicEvent(0, 4)
 	sn.redoLogEnabled = true
-	sn.handleRawEvent(ctx, resolvedTs4)
-	resolvedTs4 = model.NewResolvedPolymorphicEvent(0, 4)
+	sn.handleResolvedTs(ctx, 4)
 	require.EqualValues(t, resolvedTs4, <-s.Output())
 }
 

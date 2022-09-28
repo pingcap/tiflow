@@ -353,8 +353,8 @@ func (n *sorterNode) start(
 }
 
 func (n *sorterNode) handleResolvedTs(ctx context.Context, resolvedTs uint64) {
-	oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
-	if oldResolvedTs >= resolvedTs {
+	oldResolvedTs := n.ResolvedTs()
+	if oldResolvedTs > resolvedTs {
 		log.Panic("resolved ts regression",
 			zap.Int64("tableID", n.tableID),
 			zap.Uint64("resolvedTs", resolvedTs),
