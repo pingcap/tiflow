@@ -150,6 +150,7 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 }
 
 func TestGCCoordinatorRemoveExecutors(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()
@@ -187,6 +188,7 @@ func TestGCCoordinatorRemoveExecutors(t *testing.T) {
 }
 
 func TestGCCoordinatorRemoveJobs(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()
@@ -218,6 +220,7 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 }
 
 func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()

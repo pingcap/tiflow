@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/model"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -143,7 +142,7 @@ func (c *mockMetaClientErrOnce) GetOneResourceForGC(ctx context.Context) (*resMo
 }
 
 func (c *mockMetaClientErrOnce) DeleteResourcesByTypeAndExecutorIDs(ctx context.Context,
-	resType resModel.ResourceType, executorID ...engineModel.ExecutorID,
+	resType resModel.ResourceType, executorID ...model.ExecutorID,
 ) (pkgOrm.Result, error) {
 	if _, erred := c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"]; !erred {
 		c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"] = struct{}{}
@@ -154,7 +153,7 @@ func (c *mockMetaClientErrOnce) DeleteResourcesByTypeAndExecutorIDs(ctx context.
 }
 
 func (c *mockMetaClientErrOnce) QueryResourcesByExecutorIDs(ctx context.Context,
-	executorID ...engineModel.ExecutorID,
+	executorID ...model.ExecutorID,
 ) ([]*resModel.ResourceMeta, error) {
 	if _, erred := c.methodsAllReadyErred["QueryResourcesByExecutorIDs"]; !erred {
 		c.methodsAllReadyErred["QueryResourcesByExecutorIDs"] = struct{}{}
@@ -165,6 +164,7 @@ func (c *mockMetaClientErrOnce) QueryResourcesByExecutorIDs(ctx context.Context,
 }
 
 func TestGCRunnerNotify(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 	helper.Start()
 
@@ -191,6 +191,7 @@ func TestGCRunnerNotify(t *testing.T) {
 }
 
 func TestGCRunnerUnsupportedResourceType(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 
 	// Unsupported resources should be ignored by the GCRunner.
@@ -228,6 +229,7 @@ func TestGCRunnerUnsupportedResourceType(t *testing.T) {
 }
 
 func TestGCRunnerTicker(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 	helper.Start()
 
@@ -252,6 +254,7 @@ func TestGCRunnerTicker(t *testing.T) {
 }
 
 func TestGCRunnerMultiple(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 
 	resources := []string{"/local/resource", "/s3/resource"}
@@ -291,6 +294,7 @@ loop:
 }
 
 func TestGCRunnerRetry(t *testing.T) {
+	t.Parallel()
 	mockMeta := newMockMetaClientErrOnce()
 	helper := newGCRunnerTestHelperWithMeta(mockMeta)
 

@@ -40,6 +40,7 @@ func newResourceIdentForTesting(executor, workerID, resourceName string) interna
 }
 
 func TestStorageHandlePersistAndDiscard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	executor := model.ExecutorID("executor-1")
@@ -106,6 +107,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 }
 
 func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	fm := local.NewLocalFileManager("", resModel.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()

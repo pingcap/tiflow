@@ -41,6 +41,7 @@ func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 }
 
 func TestBrokerOpenNewStorage(t *testing.T) {
+	t.Parallel()
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	brk, cli, dir := newBroker(t)
 	defer brk.Close()
@@ -78,6 +79,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 }
 
 func TestBrokerOpenExistingStorage(t *testing.T) {
+	t.Parallel()
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	brk, cli, dir := newBroker(t)
 	defer brk.Close()
@@ -128,6 +130,7 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 }
 
 func TestBrokerRemoveResource(t *testing.T) {
+	t.Parallel()
 	brk, _, dir := newBroker(t)
 	defer brk.Close()
 

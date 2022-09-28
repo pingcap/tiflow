@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -64,9 +63,9 @@ func newBrokerForS3WithPrefix(
 	t *testing.T, executorID resModel.ExecutorID, s3Prefix string,
 ) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage, string) {
 	// Remove the following comments if running tests locally.
-	os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
-	os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
-	os.Setenv("ENGINE_S3_SECRET_KEY", "engineSecret")
+	// os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
+	// os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
+	// os.Setenv("ENGINE_S3_SECRET_KEY", "engineSecret")
 
 	log.Warn("s3 prefix", zap.String("s3prefix", s3Prefix))
 	tmpDir := t.TempDir()
@@ -235,6 +234,7 @@ func getExistingS3ResourceForWorker(
 }
 
 func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
+	t.Parallel()
 	brk, cli, dir, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
 
 	// test local file works well under this condition
@@ -291,6 +291,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 
 // FIXME: this test is unstable, fix it after removing the index design
 func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
+	t.Parallel()
 	brk, cli, _, rootStrorage, s3Prefix := newBrokerForS3(t, s3.MockExecutorID)
 
 	testFiles := []string{"1.txt", "inner1/2.txt", "inner1/inner2/3.txt"}
@@ -342,6 +343,7 @@ func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 }
 
 func TestIntegrationBrokerGCClosedWorker(t *testing.T) {
+	t.Parallel()
 	brk, cli, _, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

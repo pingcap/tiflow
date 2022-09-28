@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -25,85 +24,19 @@ import (
 )
 
 const (
-	caseTimeout = 10 * time.Second
+	numTemporaryResources = 10
+	numPersistedResources = 10
 )
 
-func newFileManagerForTest(t *testing.T) *FileManager {
-	// Remove the following comments if running tests locally.
-	// os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
-	// os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
-	// os.Setenv("ENGINE_S3_SECRET_KEY", "engineSecret")
-	options, err := GetS3OptionsForUT()
-	if err != nil {
-		t.Skipf("server not configured for s3 integration: %s", err.Error())
-	}
-
-	pathPrefix := fmt.Sprintf("%s-%s", t.Name(), time.Now().Format("20060102-150405"))
-	config := resModel.S3Config{
-		S3BackendOptions: *options,
-		Bucket:           UtBucketName,
-		Prefix:           pathPrefix,
-	}
-	err = PreCheckConfig(config)
-	require.NoError(t, err)
-	return NewFileManagerWithConfig(MockExecutorID, config)
-}
-
-func TestIntegrationS3FileManagerBasics(t *testing.T) {
+func TestS3ResourceController(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), caseTimeout)
 	defer cancel()
 
-	fm := newFileManagerForTest(t)
-	ident := internal.ResourceIdent{
-		ResourceScope: internal.ResourceScope{
-			Executor: MockExecutorID,
-			WorkerID: "worker-1",
-		},
-		Name: "resource-1",
-	}
-
-	desc, err := fm.CreateResource(ctx, internal.ResourceIdent{
-		ResourceScope: internal.ResourceScope{
-			Executor: MockExecutorID,
-			WorkerID: "worker-1",
-		},
-		Name: "resource-1",
-	})
-	require.NoError(t, err)
-
-	storage, err := desc.ExternalStorage(ctx)
-	require.NoError(t, err)
-
-	err = storage.WriteFile(ctx, "file-1", []byte("content-1"))
-	require.NoError(t, err)
-
-	err = fm.SetPersisted(ctx, ident)
-	require.NoError(t, err)
-
-	desc, err = fm.GetPersistedResource(ctx, ident)
-	require.NoError(t, err)
-
-	storage, err = desc.ExternalStorage(ctx)
-	require.NoError(t, err)
-
-	bytes, err := storage.ReadFile(ctx, "file-1")
-	require.NoError(t, err)
-	require.Equal(t, []byte("content-1"), bytes)
-
-	err = fm.RemoveResource(ctx, ident)
-	require.NoError(t, err)
-}
-
-func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithTimeout(context.Background(), caseTimeout)
-	defer cancel()
-
-	fm := newFileManagerForTest(t)
+	fm, factory := newFileManagerForUT(t)
 	workers := []string{"worker-1", "worker-2", "worker-3"}
+	persistedResources := []*resModel.ResourceMeta{}
 	for _, worker := range workers {
 		scope := internal.ResourceScope{
 			Executor: MockExecutorID,
@@ -119,15 +52,22 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 		}
 
 		for i := 0; i < numPersistedResources; i++ {
+			name := fmt.Sprintf("persisted-resource-%d", i)
 			ident := internal.ResourceIdent{
 				ResourceScope: scope,
-				Name:          fmt.Sprintf("persisted-resource-%d", i),
+				Name:          name,
 			}
 			_, err := fm.CreateResource(ctx, ident)
 			require.NoError(t, err)
 
 			err = fm.SetPersisted(ctx, ident)
 			require.NoError(t, err)
+
+			persistedResources = append(persistedResources, &resModel.ResourceMeta{
+				ID:       "/s3/" + name,
+				Executor: ident.Executor,
+				Worker:   worker,
+			})
 		}
 	}
 
@@ -157,24 +97,35 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 			}
 		}
 	}
-
-	// remove worker-1
-	err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
-		Executor: MockExecutorID,
-		WorkerID: workers[0],
-	})
-	require.NoError(t, err)
-	checkWorker(workers[0], true)
+	checkWorker(workers[0], false)
 	checkWorker(workers[1], false)
 	checkWorker(workers[2], false)
 
-	// remove executor
-	err = fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
-		Executor: MockExecutorID,
-		WorkerID: "",
-	})
+	// GCExecutor
+	fm1 := newFileManagerForUTFromSharedStorageFactory(t, "leader-controller", factory)
+	controller := &resourceController{fm: fm1}
+	err := controller.GCExecutor(ctx, persistedResources, MockExecutorID)
 	require.NoError(t, err)
 	checkWorker(workers[0], true)
 	checkWorker(workers[1], true)
 	checkWorker(workers[2], true)
+
+	// test GCSingleResource
+	for _, res := range persistedResources {
+		_, resName, err := resModel.PasreResourceID(res.ID)
+		require.NoError(t, err)
+		ident := internal.ResourceIdent{
+			ResourceScope: internal.ResourceScope{
+				Executor: MockExecutorID,
+				WorkerID: res.Worker,
+			},
+			Name: resName,
+		}
+		_, err = fm.GetPersistedResource(ctx, ident)
+		require.NoError(t, err)
+
+		controller.GCSingleResource(ctx, res)
+		_, err = fm.GetPersistedResource(ctx, ident)
+		require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+	}
 }
