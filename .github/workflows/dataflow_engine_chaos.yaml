@@ -58,7 +58,7 @@ jobs:
           key: ${{ runner.os }}-dataflow-${{ hashFiles('go.sum') }}
 
       - name: Create k8s Kind Cluster
-        uses: helm/kind-action@1.4.0
+        uses: helm/kind-action@v1.4.0
         with:
           cluster_name: dataflow-engine-cluster
           config: ${{ github.workspace }}/engine/chaos/manifests/kind-cluster.yaml
