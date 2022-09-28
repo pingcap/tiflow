@@ -5,7 +5,7 @@ metadata:
   labels:
     app: pod-kill-dataflow
 spec:
-  schedule: '@every 2m'
+  schedule: '@every 1m'
   type: PodChaos
   historyLimit: 5
   concurrencyPolicy: Forbid
