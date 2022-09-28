@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1663055210154,
+  "iteration": 1664344212586,
   "links": [],
   "panels": [
     {
@@ -3086,7 +3086,7 @@
             ]
           },
           "gridPos": {
-            "h": 6,
+            "h": 4,
             "w": 7,
             "x": 0,
             "y": 3
@@ -3342,118 +3342,118 @@
           }
         },
         {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of replicated tables maintained in owner",
+          "decimals": 1,
+          "description": "The number of tables in different capture.",
+          "editable": true,
+          "error": false,
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "left",
-                "filterable": false
-              },
-              "decimals": 2,
-              "displayName": "",
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "short"
+              "unit": "none"
             },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Field"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Instance"
-                  },
-                  {
-                    "id": "unit",
-                    "value": "string"
-                  },
-                  {
-                    "id": "custom.align",
-                    "value": null
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Last"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Count"
-                  },
-                  {
-                    "id": "decimals"
-                  }
-                ]
-              }
-            ]
+            "overrides": []
           },
+          "fill": 0,
+          "fillGradient": 0,
+          "grid": {},
           "gridPos": {
-            "h": 5,
+            "h": 7,
             "w": 7,
             "x": 0,
-            "y": 9
+            "y": 7
           },
-          "id": 138,
+          "hiddenSeries": false,
+          "id": 642,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "sort": null,
+            "sortDesc": null,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
           "links": [],
+          "nullPointMode": "null",
           "options": {
-            "showHeader": true
+            "alertThreshold": true
           },
+          "paceLength": 10,
+          "percentage": false,
           "pluginVersion": "7.5.11",
+          "pointradius": 1,
+          "points": true,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"total\"}) by (capture)",
+              "exemplar": false,
+              "expr": "sum(ticdc_scheduler_capture_table{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\", changefeed=~\"$changefeed\"}) by (changefeed, addr)",
               "format": "time_series",
+              "hide": false,
+              "instant": false,
               "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}}-total",
-              "refId": "A"
+              "intervalFactor": 2,
+              "legendFormat": "{{changefeed}}-{{addr}}",
+              "refId": "A",
+              "step": 10
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Capture tables count",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
             },
             {
-              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"wip\"}) by (capture)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}}-wip",
-              "refId": "B"
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
             }
           ],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table count maintained by owner",
-          "transformations": [
-            {
-              "id": "reduce",
-              "options": {
-                "includeTimeField": false,
-                "reducers": [
-                  "last"
-                ]
-              }
-            }
-          ],
-          "type": "table"
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         },
         {
           "aliasColors": {},
@@ -7160,7 +7160,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:177",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -7169,7 +7168,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:178",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -7267,7 +7265,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:229",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -7276,7 +7273,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:230",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -7957,7 +7953,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 5
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 218,
@@ -7981,7 +7977,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8058,7 +8054,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 5
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 229,
@@ -8082,7 +8078,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8159,7 +8155,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 228,
@@ -8183,7 +8179,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8260,7 +8256,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 220,
@@ -8284,7 +8280,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8361,7 +8357,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 13
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 219,
@@ -8385,7 +8381,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8462,7 +8458,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 13
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 224,
@@ -8486,7 +8482,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8563,7 +8559,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 20
           },
           "hiddenSeries": false,
           "id": 223,
@@ -8587,7 +8583,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8664,7 +8660,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 20
           },
           "hiddenSeries": false,
           "id": 221,
@@ -8688,7 +8684,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8765,7 +8761,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 25
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 227,
@@ -8790,7 +8786,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8868,7 +8864,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 225,
@@ -8893,7 +8889,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8971,7 +8967,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 108,
@@ -8996,7 +8992,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9073,7 +9069,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 240,
@@ -9098,7 +9094,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -9191,7 +9187,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 1
+            "y": 9
           },
           "hiddenSeries": false,
           "id": 571,
@@ -9293,7 +9289,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 1
+            "y": 9
           },
           "hiddenSeries": false,
           "id": 589,
@@ -9399,7 +9395,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 5
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 546,
@@ -9512,7 +9508,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 5
+            "y": 13
           },
           "hiddenSeries": false,
           "id": 549,
@@ -9625,7 +9621,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 11
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 548,
@@ -9738,7 +9734,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 11
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 588,
@@ -9847,7 +9843,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 545,
@@ -9954,7 +9950,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 547,
@@ -10066,7 +10062,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 543,
@@ -10179,7 +10175,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 544,
@@ -10289,7 +10285,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 37
           },
           "hiddenSeries": false,
           "id": 541,
@@ -10408,7 +10404,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 37
           },
           "hiddenSeries": false,
           "id": 590,
@@ -10527,7 +10523,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 43
           },
           "hiddenSeries": false,
           "id": 560,
@@ -10648,7 +10644,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 6
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 271,
@@ -10668,7 +10664,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10742,7 +10738,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 6
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 273,
@@ -10763,7 +10759,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10850,7 +10846,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 6
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 272,
@@ -10872,7 +10868,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -10954,7 +10950,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 12
+            "y": 16
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11030,7 +11026,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 12
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 288,
@@ -11053,7 +11049,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11158,7 +11154,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 12
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 286,
@@ -11183,7 +11179,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11270,7 +11266,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 18
+            "y": 22
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11346,7 +11342,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 18
+            "y": 22
           },
           "hiddenSeries": false,
           "id": 279,
@@ -11369,7 +11365,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11449,7 +11445,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 18
+            "y": 22
           },
           "hiddenSeries": false,
           "id": 275,
@@ -11473,7 +11469,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11572,7 +11568,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 24
+            "y": 28
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11656,7 +11652,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 24
+            "y": 28
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11740,7 +11736,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 24
+            "y": 28
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11816,7 +11812,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 30
+            "y": 34
           },
           "hiddenSeries": false,
           "id": 280,
@@ -11839,7 +11835,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -11916,7 +11912,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 30
+            "y": 34
           },
           "hiddenSeries": false,
           "id": 283,
@@ -11939,7 +11935,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12016,7 +12012,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 30
+            "y": 34
           },
           "hiddenSeries": false,
           "id": 287,
@@ -12039,7 +12035,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -12124,7 +12120,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 36
+            "y": 40
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -19576,8 +19572,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19762,8 +19758,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [],
@@ -19869,8 +19865,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -19991,8 +19987,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "cdc:8300",
-              "value": "cdc:8300"
+              "text": "lingjin-3.jinling.tispace:8300",
+              "value": "lingjin-3.jinling.tispace:8300"
             }
           },
           "seriesOverrides": [
@@ -22326,7 +22322,7 @@
       "type": "row"
     }
   ],
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -22610,5 +22606,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 43
+  "version": 44
 }
