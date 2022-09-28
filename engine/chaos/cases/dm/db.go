@@ -88,6 +88,7 @@ func (dc *dbConn) ExecuteSQLs(queries ...string) (int, error) {
 		FirstRetryDuration: time.Second,
 		BackoffStrategy:    retry.Stable,
 		IsRetryableFn: func(_ int, err error) bool {
+			log.L().Info("in retryable func", zap.Error(err))
 			if retry.IsConnectionError(err) {
 				// HACK: for some errors like `invalid connection`, `sql: connection is already closed`, we can ignore them just for testing.
 				err = dc.resetConn(ctx)

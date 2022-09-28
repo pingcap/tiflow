@@ -313,6 +313,7 @@ func (c *Case) genIncrData(ctx context.Context) error {
 			log.L().Info("error in execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 			return err
 		}
+		log.L().Info("finished execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID))
 	}
 }
 
