@@ -337,7 +337,6 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	changefeedCheckpointTsLagGauge.Reset()
 	changefeedResolvedTsGauge.Reset()
 	changefeedResolvedTsLagGauge.Reset()
-	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
 }
 
@@ -360,20 +359,6 @@ func (o *ownerImpl) updateMetrics() {
 		if infoProvider == nil {
 			// The scheduler has not been initialized yet.
 			continue
-		}
-
-		totalCounts := infoProvider.GetTotalTableCounts()
-		pendingCounts := infoProvider.GetPendingTableCounts()
-
-		for captureID, info := range o.captures {
-			ownerMaintainTableNumGauge.
-				WithLabelValues(cfID.Namespace, cfID.ID,
-					info.AdvertiseAddr, maintainTableTypeTotal).
-				Set(float64(totalCounts[captureID]))
-			ownerMaintainTableNumGauge.
-				WithLabelValues(cfID.Namespace, cfID.ID,
-					info.AdvertiseAddr, maintainTableTypeWip).
-				Set(float64(pendingCounts[captureID]))
 		}
 	}
 	return
