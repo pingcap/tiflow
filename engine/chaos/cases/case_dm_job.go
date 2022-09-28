@@ -21,9 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var (
-	filenames = []string{"dmjob"}
-)
+var filenames = []string{"dmjob"}
 
 func runDMJobCases(ctx context.Context, cfg *config) error {
 	eg, ctx2 := errgroup.WithContext(ctx)

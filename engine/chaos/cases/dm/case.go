@@ -292,6 +292,7 @@ func (c *Case) genIncrData(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			log.L().Info("ctx done in incr data", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			return nil
 		default:
 		}
@@ -302,11 +303,14 @@ func (c *Case) genIncrData(ctx context.Context) error {
 		for i := 0; i < batch; i++ {
 			sql, err := c.randDML(source, tableName)
 			if err != nil {
+				log.L().Info("error in rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 				return err
 			}
 			sqls = append(sqls, sql)
 		}
+		log.L().Info("start execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID))
 		if _, err := c.sources[source].ExecuteSQLs(sqls...); err != nil {
+			log.L().Info("error in execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 			return err
 		}
 	}
