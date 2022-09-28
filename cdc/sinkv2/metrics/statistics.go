@@ -31,13 +31,13 @@ func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
 
-	namespcae := statistics.changefeedID.Namespace
+	namespace := statistics.changefeedID.Namespace
 	changefeedID := statistics.changefeedID.ID
 	s := sinkType.String()
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespcae, changefeedID, s)
-	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespcae, changefeedID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespace, changefeedID, s)
+	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespace, changefeedID, s)
 	return statistics
 }
 
