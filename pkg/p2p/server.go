@@ -686,7 +686,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	case <-ctx.Done():
 		return status.New(codes.Canceled, "context canceled").Err()
 	case <-m.closeCh:
-		return status.New(codes.Aborted, "CDC capture closing").Err()
+		return status.New(codes.Aborted, "message server is closing").Err()
 	}
 
 	// NB: `errg` will NOT be waited on because due to the limitation of grpc-go, we cannot cancel Send & Recv
