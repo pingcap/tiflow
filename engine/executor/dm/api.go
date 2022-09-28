@@ -14,10 +14,12 @@
 package dm
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -33,7 +35,9 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	status := w.unitHolder.Status(ctx)
 	stage, result := w.unitHolder.Stage()
 	// copy status via json
-	statusBytes, err := json.Marshal(status)
+	mar := jsonpb.Marshaler{EmitDefaults: true}
+	var buf bytes.Buffer
+	err := mar.Marshal(&buf, status.(proto.Message))
 	if err != nil {
 		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
@@ -41,7 +45,7 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 		Unit:   w.workerType,
 		Stage:  stage,
 		Result: dmpkg.NewProcessResultFromPB(result),
-		Status: statusBytes,
+		Status: buf.Bytes(),
 	}
 }
 

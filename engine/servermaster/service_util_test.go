@@ -11,16 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resourcetypes
+package servermaster
 
 import (
-	"context"
+	"strings"
+	"testing"
 
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/stretchr/testify/require"
 )
 
-// ResourceTypeController is an interface providing relevant operations related
-// to one resource type.
-type ResourceTypeController interface {
-	GCHandler() func(context.Context, *resModel.ResourceMeta) error
+func TestGenerateNodeID(t *testing.T) {
+	const (
+		name           = "executor"
+		genCount       = 1000
+		minUniqueCount = 999 // Only allow 0.1% of collisions.
+	)
+
+	ids := make(map[string]struct{})
+	for i := 0; i < genCount; i++ {
+		id := generateNodeID(name)
+		require.True(t, strings.HasPrefix(id, name+"-"))
+		ids[id] = struct{}{}
+	}
+
+	require.GreaterOrEqual(t, len(ids), minUniqueCount, "too many collisions")
 }

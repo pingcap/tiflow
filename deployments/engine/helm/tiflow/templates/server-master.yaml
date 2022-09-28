@@ -80,6 +80,7 @@ spec:
           command:
             - "/tiflow"
             - "master"
+            - "--name=$(MY_POD_NAME)"
             - "--addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10240"
             - "--config=/config/server-master.toml"
