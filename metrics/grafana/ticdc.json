@@ -62,7 +62,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": true,
-        "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, instance) > BOOL $spike_threshold",
+        "expr": "max(ticdc_owner_checkpoint_ts_lag) by (changefeed, instance) > BOOL $spike_threshold",
         "hide": true,
         "iconColor": "#F2495C",
         "limit": 100,
@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1664260864293,
+  "iteration": 1663055210154,
   "links": [],
   "panels": [
     {
@@ -3342,6 +3342,120 @@
           }
         },
         {
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "The number of replicated tables maintained in owner",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "left",
+                "filterable": false
+              },
+              "decimals": 2,
+              "displayName": "",
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Field"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Instance"
+                  },
+                  {
+                    "id": "unit",
+                    "value": "string"
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": null
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Last"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Count"
+                  },
+                  {
+                    "id": "decimals"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 7,
+            "x": 0,
+            "y": 9
+          },
+          "id": 138,
+          "links": [],
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "7.5.11",
+          "targets": [
+            {
+              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"total\"}) by (capture)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-total",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(ticdc_owner_maintain_table_num{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\",type=\"wip\"}) by (capture)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-wip",
+              "refId": "B"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Table count maintained by owner",
+          "transformations": [
+            {
+              "id": "reduce",
+              "options": {
+                "includeTimeField": false,
+                "reducers": [
+                  "last"
+                ]
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
           "aliasColors": {},
           "bars": true,
           "cacheTimeout": null,
@@ -3667,6 +3781,7 @@
               "exemplar": true,
               "expr": "max(ticdc_processor_checkpoint_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed)",
               "format": "time_series",
+              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{changefeed}}",
@@ -3779,6 +3894,7 @@
               "exemplar": true,
               "expr": "max(ticdc_processor_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance,changefeed)",
               "format": "time_series",
+              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{changefeed}}",
@@ -6148,13 +6264,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6193,7 +6309,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Batch Row Count",
+          "title": "Output Row Batch Size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6236,7 +6352,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Row count for total received rows.",
+          "description": "Row count for total output rows.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6254,13 +6370,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6280,7 +6396,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sinkv2_batch_row_count_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "expr": "sum(rate(ticdc_sinkv2_batch_row_count_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}",
               "queryType": "randomWalk",
@@ -6291,7 +6407,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Received Row Count",
+          "title": "Output Row Count (per second)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6352,13 +6468,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6402,7 +6518,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "DDL Count & Executing Duration",
+          "title": "Output DDL Count & Executing Duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6463,13 +6579,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6551,7 +6667,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Count of errors.",
+          "description": "Count of errors in the last minute.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6569,13 +6685,13 @@
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6595,7 +6711,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sinkv2_execution_error{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "expr": "sum(delta(ticdc_sinkv2_execution_error{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}",
               "queryType": "randomWalk",
@@ -6606,7 +6722,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Error Count",
+          "title": "Sink Error Count (1min)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6664,6 +6780,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Duration of event staying in conflict detector",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6674,20 +6791,20 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 6
+            "y": 30
           },
           "hiddenSeries": false,
           "id": 618,
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6769,6 +6886,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Full flush (backend flush + callback + conflict detector notify) duration",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6779,20 +6897,20 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 6
+            "y": 30
           },
           "hiddenSeries": false,
           "id": 620,
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6831,7 +6949,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Worker Flush Duration",
+          "title": "Full Flush Duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6885,20 +7003,20 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 619,
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": false,
+            "current": true,
             "max": false,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "total": false,
-            "values": false
+            "values": true
           },
           "lines": true,
           "linewidth": 1,
@@ -6929,7 +7047,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink Worker Busy Ratio",
+          "title": "Worker Busy Ratio",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6953,6 +7071,212 @@
               "show": true
             },
             {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 38
+          },
+          "hiddenSeries": false,
+          "id": 634,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sinkv2_txn_worker_handled_rows{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance,id)",
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-{{id}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Worker Input Rows",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:177",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:178",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Sink worker busy ratio",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 46
+          },
+          "hiddenSeries": false,
+          "id": 635,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_txn_sink_dml_batch_commit_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (le,changefeed,instance))",
+              "interval": "",
+              "legendFormat": "99.9-{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sinkv2_txn_sink_dml_batch_commit_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_txn_sink_dml_batch_commit_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "avg-{{changefeed}}-{{instance}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Backend Flush Duration",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:229",
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:230",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -8867,7 +9191,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 1
           },
           "hiddenSeries": false,
           "id": 571,
@@ -8969,7 +9293,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 1
           },
           "hiddenSeries": false,
           "id": 589,
@@ -9075,7 +9399,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 13
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 546,
@@ -9188,7 +9512,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 13
+            "y": 5
           },
           "hiddenSeries": false,
           "id": 549,
@@ -9301,7 +9625,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 548,
@@ -9414,7 +9738,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 588,
@@ -9523,7 +9847,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 25
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 545,
@@ -9630,7 +9954,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 547,
@@ -9742,7 +10066,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 543,
@@ -9855,7 +10179,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 544,
@@ -9965,7 +10289,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 37
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 541,
@@ -10084,7 +10408,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 37
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 590,
@@ -10203,7 +10527,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 43
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 560,
@@ -19252,8 +19576,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
@@ -19438,8 +19762,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [],
@@ -19545,8 +19869,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
@@ -19667,8 +19991,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "lingjin-3.jinling.tispace:8300",
-              "value": "lingjin-3.jinling.tispace:8300"
+              "text": "cdc:8300",
+              "value": "cdc:8300"
             }
           },
           "seriesOverrides": [
@@ -22285,6 +22609,6 @@
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1x",
-  "version": 1
+  "uid": "YiGL8hBZ1",
+  "version": 43
 }
