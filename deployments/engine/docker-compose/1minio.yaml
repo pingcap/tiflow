@@ -26,5 +26,6 @@ services:
       /bin/sh -c "
       /usr/bin/mc alias set myminio http://minio:9000 engine engineSecret;
       /usr/bin/mc mb myminio/engine-ut;
+      /usr/bin/mc version enable myminio/engine-ut;
       exit 0;
       "
