@@ -734,6 +734,8 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 }
 
 func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
+	t.Helper()
+
 	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t, err)
 	sourceCfg.From.Password = "" // no password set
