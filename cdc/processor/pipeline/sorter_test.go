@@ -70,8 +70,7 @@ func TestSorterResolvedTs(t *testing.T) {
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 	require.Equal(t, tablepb.TableStatePreparing, sn.State())
 
-	msg := model.NewResolvedPolymorphicEvent(0, 2)
-	sn.handleRawEvent(context.Background(), msg)
+	sn.handleResolvedTs(context.Background(), 2)
 	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
 	require.Equal(t, tablepb.TableStatePrepared, sn.State())
 }
@@ -209,8 +208,8 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 
 	// Resolved ts must not regress even if there is no barrier ts message.
-	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
-	sn.handleRawEvent(context.Background(), resolvedTs1)
+	ctx := context.Background()
+	sn.handleResolvedTs(ctx, 1)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
 	require.Equal(t, tablepb.TableStatePrepared, sn.State())
 
@@ -219,16 +218,16 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	require.EqualValues(t, 2, sn.BarrierTs())
 
 	resolvedTs2 := model.NewResolvedPolymorphicEvent(0, 2)
-	sn.handleRawEvent(context.Background(), resolvedTs2)
+
+	sn.handleResolvedTs(ctx, 2)
 	require.EqualValues(t, resolvedTs2, <-s.Output())
 
-	resolvedTs3 := model.NewResolvedPolymorphicEvent(0, 3)
-	sn.handleRawEvent(context.Background(), resolvedTs3)
+	sn.handleResolvedTs(ctx, 3)
 	require.EqualValues(t, resolvedTs2, <-s.Output())
 
 	resolvedTs4 := model.NewResolvedPolymorphicEvent(0, 4)
 	sn.redoLogEnabled = true
-	sn.handleRawEvent(context.Background(), resolvedTs4)
+	sn.handleRawEvent(ctx, resolvedTs4)
 	resolvedTs4 = model.NewResolvedPolymorphicEvent(0, 4)
 	require.EqualValues(t, resolvedTs4, <-s.Output())
 }
