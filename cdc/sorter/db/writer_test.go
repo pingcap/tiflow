@@ -87,16 +87,14 @@ func TestWriterPoll(t *testing.T) {
 	// two cases.
 	cases := []struct {
 		inputEvents []*model.PolymorphicEvent
+		resolvedTs  []uint64
 
 		expectWrites        [][]byte
 		expectMaxCommitTs   uint64
 		expectMaxResolvedTs uint64
 	}{{
-		// Only resoved ts events.
-		inputEvents: []*model.PolymorphicEvent{
-			model.NewResolvedPolymorphicEvent(0, 1),
-			model.NewResolvedPolymorphicEvent(0, 2),
-		},
+		// Only resolved ts
+		resolvedTs: []uint64{1, 2},
 
 		expectWrites:        [][]byte{},
 		expectMaxCommitTs:   0,
@@ -118,10 +116,10 @@ func TestWriterPoll(t *testing.T) {
 		// Mix rawkv events and resolved ts events.
 		inputEvents: []*model.PolymorphicEvent{
 			newTestEvent(4, 2, 0), // crts 4, startts 2
-			model.NewResolvedPolymorphicEvent(0, 3),
 			newTestEvent(6, 3, 0), // crts 6, startts 3
-			model.NewResolvedPolymorphicEvent(0, 3),
 		},
+
+		resolvedTs: []uint64{3, 3},
 
 		expectWrites: [][]byte{
 			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 2, 0)),
@@ -158,9 +156,7 @@ func TestWriterPoll(t *testing.T) {
 		expectMaxResolvedTs: 3,
 	}, {
 		// Resolved ts regress. It should not happen, but we test it anyway.
-		inputEvents: []*model.PolymorphicEvent{
-			model.NewResolvedPolymorphicEvent(0, 2),
-		},
+		resolvedTs: []uint64{2},
 
 		expectWrites:        [][]byte{},
 		expectMaxCommitTs:   6,
@@ -172,6 +168,11 @@ func TestWriterPoll(t *testing.T) {
 		for i := range cs.inputEvents {
 			msgs = append(msgs, actormsg.ValueMessage(message.Task{
 				InputEvent: cs.inputEvents[i],
+			}))
+		}
+		for i := range cs.resolvedTs {
+			msgs = append(msgs, actormsg.ValueMessage(message.Task{
+				ResolvedTs: cs.resolvedTs[i],
 			}))
 		}
 		t.Logf("test case #%d, %v", i, cs)

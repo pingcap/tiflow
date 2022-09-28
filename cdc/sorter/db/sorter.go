@@ -221,6 +221,7 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
 }
 
+// ConsumeResolvedTs write the coming resolved ts to the db sorter
 func (ls *Sorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return

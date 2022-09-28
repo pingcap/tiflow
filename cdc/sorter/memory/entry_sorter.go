@@ -149,6 +149,7 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 }
 
+// ConsumeResolvedTs receive the coming resolved ts
 func (es *EntrySorter) ConsumeResolvedTs(ctx context.Context, resolvedTs uint64) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return
