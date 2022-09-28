@@ -164,12 +164,6 @@ func (w *dmWorker) Workload() model.RescUnit {
 	return 0
 }
 
-// OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
-func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error {
-	w.Logger().Info("dmworker.OnMasterFailover")
-	return nil
-}
-
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.Logger().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
@@ -177,20 +171,22 @@ func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
-func (w *dmWorker) CloseImpl(ctx context.Context) error {
+func (w *dmWorker) CloseImpl(ctx context.Context) {
 	w.Logger().Info("close the dm worker", zap.String("task-id", w.taskID))
-	var recordErr error
-	// unregister jobmaster client
+
+	if err := w.unitHolder.Close(ctx); err != nil {
+		w.Logger().Error("fail to close unit holder", zap.Error(err))
+	}
+
+	if w.messageAgent == nil {
+		return
+	}
 	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
 		w.Logger().Error("failed to update message client", zap.Error(err))
-		recordErr = err
 	}
-	w.unitHolder.Close(ctx)
 	if err := w.messageAgent.Close(ctx); err != nil {
 		w.Logger().Error("failed to close message client", zap.Error(err))
-		recordErr = err
 	}
-	return recordErr
 }
 
 // setupStorage opens and configs external storage
