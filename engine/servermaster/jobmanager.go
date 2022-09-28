@@ -748,16 +748,16 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 }
 
 // CloseImpl implements frame.MasterImpl.CloseImpl
-func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
+func (jm *JobManagerImpl) CloseImpl(ctx context.Context) {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
 	jm.jobOperatorNotifier.Close()
-	return jm.wg.Wait()
+	return
 }
 
 // StopImpl implements frame.MasterImpl.StopImpl
-func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
-	return jm.CloseImpl(ctx)
+func (jm *JobManagerImpl) StopImpl(ctx context.Context) {
+	jm.CloseImpl(ctx)
 }
 
 // WatchJobStatuses returns a snapshot of job statuses followed by a stream
