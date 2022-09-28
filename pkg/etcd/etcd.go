@@ -556,7 +556,7 @@ func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, captureID str
 	}
 	// we need to clean all task position related to this capture when the capture is offline
 	// otherwise the task positions may leak
-	// TODO: use changefeed's name space
+	// FIXME (dongmen 2022.9.28): find a way to use changefeed's namespace
 	taskKey := TaskPositionKeyPrefix(c.ClusterID, model.DefaultNamespace)
 	// the taskKey format is /tidb/cdc/{clusterID}/{namespace}/task/position/{captureID}
 	taskKey = fmt.Sprintf("%s/%s", taskKey, captureID)
