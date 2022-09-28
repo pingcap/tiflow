@@ -191,6 +191,9 @@ func (r *DefaultGCRunner) gcOnce(
 // For s3 resource, we need to remove all temporary resources created by the
 // offline exectors to avoid resource leaks. Note dummy meta record created by
 // such exectors should be removed after temporary files are cleared.
+//
+// FIXME: we should a periodic background cleaning policy to avoid affecting
+// normal services.
 func (r *DefaultGCRunner) GCExecutors(ctx context.Context, executors ...model.ExecutorID) error {
 	// The total retry time is set to 10min to alleviate the impact to normal request.
 	// Note that if this function returns an error, the leader will exit.

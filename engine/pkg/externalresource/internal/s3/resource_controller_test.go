@@ -101,14 +101,19 @@ func TestS3ResourceController(t *testing.T) {
 	checkWorker(workers[1], false)
 	checkWorker(workers[2], false)
 
-	// GCExecutor
+	// test GCExecutor
 	fm1 := newFileManagerForUTFromSharedStorageFactory(t, "leader-controller", factory)
 	controller := &resourceController{fm: fm1}
-	err := controller.GCExecutor(ctx, persistedResources, MockExecutorID)
-	require.NoError(t, err)
-	checkWorker(workers[0], true)
-	checkWorker(workers[1], true)
-	checkWorker(workers[2], true)
+	gcExecutor := func() {
+		err := controller.GCExecutor(ctx, persistedResources, MockExecutorID)
+		require.NoError(t, err)
+		checkWorker(workers[0], true)
+		checkWorker(workers[1], true)
+		checkWorker(workers[2], true)
+	}
+	gcExecutor()
+	// test for idempotency
+	gcExecutor()
 
 	// test GCSingleResource
 	for _, res := range persistedResources {

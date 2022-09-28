@@ -282,6 +282,7 @@ func (m *FileManager) removeFilesIf(
 	scope internal.ResourceScope,
 	pred func(path string) bool,
 ) error {
+	// TODO: add a cache here to reuse storage.
 	storage, err := m.storageFactory.newS3ExternalStorageForScope(ctx, scope)
 	if err != nil {
 		return err

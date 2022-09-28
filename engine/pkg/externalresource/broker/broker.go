@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	defaultTimeout                 = 3 * time.Second
+	defaultTimeout                 = 10 * time.Second
 	defaultClosedWorkerChannelSize = 10000
 )
 
@@ -208,7 +208,10 @@ func (b *DefaultBroker) runGCClosedWorker(ctx context.Context) {
 						zap.String("worker-id", w.workerID),
 						zap.String("job-id", w.jobID),
 						zap.Error(err))
-					// handle this worker later
+					// Handle this worker later
+					// Note that if the cleanup operation continues to fail, some requests
+					// will be discarded after the channel is full, and they will be cleaned
+					// when broker exits.
 					b.OnWorkerClosed(ctx, w.workerID, w.jobID)
 				}
 			}
@@ -307,14 +310,13 @@ func (b *DefaultBroker) getPersistResource(
 }
 
 func (b *DefaultBroker) createDummyS3Resource() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	// TODO: add retry
 	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
 	if !ok {
 		return errors.New("S3 file manager not found")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
 	desc, err := s3FileManager.CreateResource(ctx, s3.GetDummyIdent(b.executorID))
 	if err != nil {
 		return err
@@ -339,8 +341,9 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 func (b *DefaultBroker) Close() {
 	b.cancel()
 
+	// Try to clean up temporary files created by current executor
 	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Hour)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		defer cancel()
 
 		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{

@@ -43,6 +43,7 @@ func GetDummyIdent(executorID model.ExecutorID) internal.ResourceIdent {
 	}
 }
 
+// GetDummyResourceKey returns a dummy resource key for s3 storage.
 func GetDummyResourceKey(executorID model.ExecutorID) resModel.ResourceKey {
 	return resModel.ResourceKey{
 		JobID: GetDummyJobID(executorID),
@@ -50,6 +51,7 @@ func GetDummyResourceKey(executorID model.ExecutorID) resModel.ResourceKey {
 	}
 }
 
+// GetDummyJobID returns a dummy job ID for s3 storage.
 func GetDummyJobID(executorID model.ExecutorID) model.JobID {
 	return fmt.Sprintf(dummyJobID, executorID)
 }

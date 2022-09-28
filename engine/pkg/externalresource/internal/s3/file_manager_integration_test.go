@@ -159,22 +159,32 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 	}
 
 	// remove worker-1
-	err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
-		Executor: MockExecutorID,
-		WorkerID: workers[0],
-	})
-	require.NoError(t, err)
-	checkWorker(workers[0], true)
-	checkWorker(workers[1], false)
-	checkWorker(workers[2], false)
+	removeWorker0 := func() {
+		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+			Executor: MockExecutorID,
+			WorkerID: workers[0],
+		})
+		require.NoError(t, err)
+		checkWorker(workers[0], true)
+		checkWorker(workers[1], false)
+		checkWorker(workers[2], false)
+	}
+	removeWorker0()
+	// test for idempotency
+	removeWorker0()
 
 	// remove executor
-	err = fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
-		Executor: MockExecutorID,
-		WorkerID: "",
-	})
-	require.NoError(t, err)
-	checkWorker(workers[0], true)
-	checkWorker(workers[1], true)
-	checkWorker(workers[2], true)
+	removeExecutor := func() {
+		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+			Executor: MockExecutorID,
+			WorkerID: "",
+		})
+		require.NoError(t, err)
+		checkWorker(workers[0], true)
+		checkWorker(workers[1], true)
+		checkWorker(workers[2], true)
+	}
+	removeExecutor()
+	// test for idempotency
+	removeExecutor()
 }

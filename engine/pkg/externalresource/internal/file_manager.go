@@ -66,7 +66,7 @@ func (i ResourceIdent) Scope() ResourceScope {
 
 // BuildResPath builds a resource path from the given ident.
 func (i ResourceIdent) BuildResPath() string {
-	return fmt.Sprintf("%s/%s", i.Scope().BuildResPath(), url.QueryEscape(string(i.Name)))
+	return fmt.Sprintf("%s/%s", i.Scope().BuildResPath(), url.QueryEscape(i.Name))
 }
 
 // FileManager abstracts the operations on the underlying storage.
