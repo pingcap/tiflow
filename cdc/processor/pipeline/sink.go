@@ -405,7 +405,7 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 			// ignore context canceled error
 		default:
 		}
-		return errors.Trace(err)
+		return err
 	}
 
 	log.Info("sinkV2 is closed",
