@@ -68,7 +68,7 @@ func (s *spanFrontier) Frontier() uint64 {
 
 // Forward advances the timestamp for a span.
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
-	if n, ok := s.nodes[regionID]; ok {
+	if n, ok := s.nodes[regionID]; ok && n.regionID > 0 && n.end != nil {
 		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
@@ -82,15 +82,6 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 		s.result[i] = nil
 	}
 	seekRes := s.spanList.Seek(span.Start, s.result)
-	for _, n := range seekRes {
-		if n == nil {
-			break
-		}
-		if n.regionID > 0 {
-			delete(s.nodes, n.regionID)
-		}
-	}
-
 	// if there is no change in the region span
 	// We just need to update the ts corresponding to the span in list
 	next := seekRes.Node().Next()
@@ -98,6 +89,14 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
 			return
+		}
+	}
+	for _, n := range seekRes {
+		if n == nil {
+			break
+		}
+		if n.regionID > 0 {
+			delete(s.nodes, n.regionID)
 		}
 	}
 
