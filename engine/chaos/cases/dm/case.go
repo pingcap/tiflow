@@ -258,32 +258,26 @@ func (c *Case) randDML(source int, table string) (string, error) {
 	c.result[t]++
 	switch t {
 	case 0:
-		log.L().Info("gen insert row")
 		sql, uk, err := generator.GenInsertRow()
-		log.L().Info("finish insert row")
 		if err != nil {
 			return "", err
 		}
-		for _, ok := c.keySet[table][uk.GetValueHash()]; ok; {
-			log.L().Info("again gen insert row", zap.String("hash", uk.GetValueHash()), zap.Int("len", len(c.keySet[table])))
+		_, ok := c.keySet[table][uk.GetValueHash()]
+		for ok {
 			sql, uk, err = generator.GenInsertRow()
-			log.L().Info("again finish gen insert row", zap.String("hash", uk.GetValueHash()), zap.Int("len", len(c.keySet[table])))
 			if err != nil {
 				return "", err
 			}
+			_, ok = c.keySet[table][uk.GetValueHash()]
 		}
-		log.L().Info("add insert row")
 		if err := c.mcps[source][table].AddUK(uk); err != nil {
 			return "", err
 		}
-		log.L().Info("finished add insert row")
 		c.keySet[table][uk.GetValueHash()] = struct{}{}
 		return sql, nil
 	case 1:
-		log.L().Info("gen update row")
 		return generator.GenUpdateRow(mcp.NextUK())
 	default:
-		log.L().Info("gen delete row")
 		key := mcp.NextUK()
 		sql, err := generator.GenDeleteRow(key)
 		if err != nil {
@@ -300,7 +294,6 @@ func (c *Case) genIncrData(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.L().Info("ctx done in incr data", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			return nil
 		default:
 		}
@@ -309,21 +302,15 @@ func (c *Case) genIncrData(ctx context.Context) error {
 
 		sqls := make([]string, 0, batch)
 		for i := 0; i < batch; i++ {
-			log.L().Info("start rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			sql, err := c.randDML(source, tableName)
-			log.L().Info("finished rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID))
 			if err != nil {
-				log.L().Info("error in rand dml", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 				return err
 			}
 			sqls = append(sqls, sql)
 		}
-		log.L().Info("start execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID))
 		if _, err := c.sources[source].ExecuteSQLs(sqls...); err != nil {
-			log.L().Info("error in execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Error(err))
 			return err
 		}
-		log.L().Info("finished execute sql", zap.String("name", c.name), zap.String("job_id", c.jobID))
 	}
 }
 
