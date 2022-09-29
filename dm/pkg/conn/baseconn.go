@@ -24,11 +24,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tidb/errno"
-	"github.com/prometheus/client_golang/prometheus"
->>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -42,14 +38,16 @@ import (
 // BaseConn is the basic connection we use in dm
 // BaseDB -> BaseConn correspond to sql.DB -> sql.Conn
 // In our scenario, there are two main reasons why we need BaseConn
-//   1. we often need one fixed DB connection to execute sql
-//   2. we need own retry policy during execute failed
+//  1. we often need one fixed DB connection to execute sql
+//  2. we need own retry policy during execute failed
+//
 // So we split a fixed sql.Conn out of sql.DB, and wraps it to BaseConn
 // And Similar with sql.Conn, all BaseConn generated from one BaseDB shares this BaseDB to reset
 //
 // Basic usage:
 // For Syncer and Loader Unit, they both have different amount of connections due to config
 // Currently we have some types of connections exist
+//
 //	Syncer:
 //		Worker Connection:
 //			DML connection:
@@ -229,7 +227,7 @@ func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *metricsproxy.Hist
 // The `queries` and `args` should be the same length.
 func (conn *BaseConn) ExecuteSQLsAutoSplit(
 	tctx *tcontext.Context,
-	hVec *prometheus.HistogramVec,
+	hVec *metricsproxy.HistogramVecProxy,
 	task string,
 	queries []string,
 	args ...[]interface{},

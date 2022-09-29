@@ -21,40 +21,12 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/errno"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-<<<<<<< HEAD
-
-	"github.com/DATA-DOG/go-sqlmock"
-	. "github.com/pingcap/check"
-	"github.com/prometheus/client_golang/prometheus"
-)
-
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testBaseConnSuite{})
-
-type testBaseConnSuite struct{}
-
-var testStmtHistogram = metricsproxy.NewHistogramVec(
-	prometheus.HistogramOpts{
-		Namespace: "dm",
-		Subsystem: "conn",
-		Name:      "stmt_duration_time",
-		Help:      "Bucketed histogram of every statement query time (s).",
-		Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
-	}, []string{"type", "task"})
-
-func (t *testBaseConnSuite) TestBaseConn(c *C) {
-=======
 	"github.com/stretchr/testify/require"
 )
 
 func TestBaseConn(t *testing.T) {
->>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	baseConn := NewBaseConn(nil, nil)
 
 	tctx := tcontext.Background()

@@ -93,33 +93,7 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 		RetryCount:         10,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
-<<<<<<< HEAD
-		IsRetryableFn: func(retryTime int, err error) bool {
-			if retry.IsConnectionError(err) {
-				err = conn.ResetConn(tctx)
-				if err != nil {
-					tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("query", utils.TruncateInterface(query, -1)),
-						zap.String("arguments", utils.TruncateInterface(args, -1)),
-						log.ShortError(err))
-					return false
-				}
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
-				return true
-			}
-			if dbutil.IsRetryableError(err) {
-				tctx.L().Warn("query statement", zap.Int("retry", retryTime),
-					zap.String("query", utils.TruncateString(query, -1)),
-					zap.String("argument", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
-				return true
-			}
-			return false
-		},
-=======
 		IsRetryableFn:      conn.retryableFn(tctx, query, args),
->>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
@@ -179,38 +153,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		RetryCount:         100,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
-<<<<<<< HEAD
-		IsRetryableFn: func(retryTime int, err error) bool {
-			if retry.IsConnectionError(err) {
-				err = conn.ResetConn(tctx)
-				if err != nil {
-					tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("queries", utils.TruncateInterface(queries, -1)),
-						zap.String("arguments", utils.TruncateInterface(args, -1)),
-						log.ShortError(err))
-					return false
-				}
-				tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
-					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
-				return true
-			}
-			if dbutil.IsRetryableError(err) {
-				tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
-					zap.String("queries", utils.TruncateInterface(queries, -1)),
-					zap.String("arguments", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
-				tctx.L().Warn("execute sql failed by retryable error", zap.Int("retry", retryTime),
-					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
-				return true
-			}
-			// TODO: move it to above IsRetryableError
-			return isRetryableError(err)
-		},
-=======
 		IsRetryableFn:      conn.retryableFn(tctx, queries, args),
->>>>>>> 54e3c7489 (util(dm): auto split the transaction when it's too large (#7208))
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
