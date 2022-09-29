@@ -260,18 +260,23 @@ func (c *Case) randDML(source int, table string) (string, error) {
 	case 0:
 		log.L().Info("gen insert row")
 		sql, uk, err := generator.GenInsertRow()
+		log.L().Info("finish insert row")
 		if err != nil {
 			return "", err
 		}
 		for _, ok := c.keySet[table][uk.GetValueHash()]; ok; {
+			log.L().Info("again gen insert row")
 			sql, uk, err = generator.GenInsertRow()
+			log.L().Info("again finish gen insert row")
 			if err != nil {
 				return "", err
 			}
 		}
+		log.L().Info("add insert row")
 		if err := c.mcps[source][table].AddUK(uk); err != nil {
 			return "", err
 		}
+		log.L().Info("finished add insert row")
 		c.keySet[table][uk.GetValueHash()] = struct{}{}
 		return sql, nil
 	case 1:
