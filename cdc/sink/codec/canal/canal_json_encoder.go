@@ -29,8 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-//var json = jsoniter.ConfigCompatibleWithStandardLibrary
-
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
 	builder     *canalEntryBuilder
