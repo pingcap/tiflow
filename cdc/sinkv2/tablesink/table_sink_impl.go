@@ -136,8 +136,8 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),
 		zap.Uint64("checkpointTs", e.GetCheckpointTs().Ts))
-
-	e.progressTracker.close(ctx)
+	// may meet context.Cancel or context.DeadlineExceeded, just swallow it.
+	_ = e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
 	log.Info("Table sink stopped",
 		zap.String("namespace", e.changefeedID.Namespace),
