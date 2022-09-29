@@ -7576,7 +7576,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Outgong Bytes",
+          "title": "Kafka Outgoing Bytes",
           "tooltip": {
             "shared": true,
             "sort": 0,
