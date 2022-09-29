@@ -471,7 +471,8 @@ func isProcessorIgnorableError(err error) bool {
 
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
-// The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
+// The main logic of processor is in this function, including the calculation of many kinds of ts,
+// maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -507,13 +508,13 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
 	p.refreshMetrics()
 
-	if err == nil {
-		return nil
-	}
 	return p.handleErr(err)
 }
 
 func (p *processor) handleErr(err error) error {
+	if err == nil {
+		return nil
+	}
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
@@ -547,7 +548,7 @@ func (p *processor) handleErr(err error) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Error(err))
-	return cerror.ErrReactorFinished.GenWithStackByArgs()
+	return err
 }
 
 func (p *processor) tick(ctx cdcContext.Context) error {
@@ -1121,13 +1122,21 @@ func (p *processor) Close() error {
 func (p *processor) cleanupMetrics() {
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	resolvedTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
 		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
