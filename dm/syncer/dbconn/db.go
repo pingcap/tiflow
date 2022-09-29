@@ -226,7 +226,7 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 				log.ShortError(err))
 			return true
 		}
-		return false
+		return isRetryableError(err)
 	}
 }
 
