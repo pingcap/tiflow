@@ -88,7 +88,13 @@ func New(ctx context.Context,
 	// To make puller level resolved ts initialization distinguishable, we set
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
-	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+	pullerType := "dml"
+	if len(spans) > 1 {
+		pullerType = "ddl"
+	}
+	metricTxnCollectCounterResolved := regionCollectCounter.
+		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
+	tsTracker := frontier.NewFrontier(0, metricTxnCollectCounterResolved, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName)
 	p := &pullerImpl{

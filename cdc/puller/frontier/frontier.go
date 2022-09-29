@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
@@ -31,21 +32,24 @@ type Frontier interface {
 
 // spanFrontier tracks the minimum timestamp of a set of spans.
 type spanFrontier struct {
-	spanList  skipList
-	minTsHeap fibonacciHeap
-	result    []*skipListNode
-	nodes     map[uint64]*skipListNode
+	spanList                                  skipList
+	minTsHeap                                 fibonacciHeap
+	result                                    []*skipListNode
+	nodes                                     map[uint64]*skipListNode
+	metricResolvedRegionCachedCounterResolved prometheus.Counter
 }
 
 // NewFrontier creates Frontier from the given spans.
 // spanFrontier don't support use Nil as the maximum key of End range
 // So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 // End key bigger than util.UpperBoundKey
-func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Frontier {
+func NewFrontier(checkpointTs uint64, metricResolvedRegionCachedCounterResolved prometheus.Counter, spans ...regionspan.ComparableSpan) Frontier {
 	s := &spanFrontier{
 		spanList: *newSpanList(),
 		result:   make(seekResult, maxHeight),
 		nodes:    map[uint64]*skipListNode{},
+
+		metricResolvedRegionCachedCounterResolved: metricResolvedRegionCachedCounterResolved,
 	}
 	firstSpan := true
 	for _, span := range spans {
@@ -71,6 +75,7 @@ func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, 
 	if n, ok := s.nodes[regionID]; ok && n.regionID > 0 && n.end != nil {
 		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
+			s.metricResolvedRegionCachedCounterResolved.Inc()
 			return
 		}
 	}
@@ -90,6 +95,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
 			s.nodes[regionID] = seekRes.Node()
 			s.nodes[regionID].regionID = regionID
+			s.nodes[regionID].end = next.key
 			return
 		}
 	}
