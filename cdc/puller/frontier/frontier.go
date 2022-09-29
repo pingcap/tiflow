@@ -73,7 +73,7 @@ func (s *spanFrontier) Frontier() uint64 {
 // Forward advances the timestamp for a span.
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	if n, ok := s.nodes[regionID]; ok && n.regionID > 0 && n.end != nil {
-		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
+		if regionID == n.regionID && bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			s.metricResolvedRegionCachedCounterResolved.Inc()
 			return
