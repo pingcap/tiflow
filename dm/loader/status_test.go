@@ -24,7 +24,7 @@ import (
 )
 
 func (*testLoaderSuite) TestConcurrentStatus(c *C) {
-	l := &Loader{}
+	l := &Loader{statusRecorder: newStatusRecorder()}
 	l.cfg = &config.SubTaskConfig{}
 	l.logger = log.L()
 	l.finishedDataSize.Store(100)
