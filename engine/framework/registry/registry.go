@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework"
@@ -63,9 +64,9 @@ func NewRegistry() Registry {
 // MustRegisterWorkerType implements Registry.MustRegisterWorkerType
 func (r *registryImpl) MustRegisterWorkerType(tp frameModel.WorkerType, factory WorkerFactory) {
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
-		log.Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
+		log.Panic("duplicate worker type", zap.Stringer("worker-type", tp))
 	}
-	log.Info("register worker", zap.Int64("worker-type", int64(tp)))
+	log.Info("register worker", zap.Stringer("worker-type", tp))
 }
 
 // RegisterWorkerType implements Registry.RegisterWorkerType
@@ -96,7 +97,9 @@ func (r *registryImpl) CreateWorker(
 
 	config, err := factory.DeserializeConfig(configBytes)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, client.ErrCreateWorkerTerminate.GenWithStack(
+			&client.CreateWorkerTerminateError{Details: err.Error()},
+		)
 	}
 
 	impl, err := factory.NewWorkerImpl(ctx, workerID, masterID, config)

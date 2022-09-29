@@ -240,7 +240,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 		} else {
 			if exiting {
-				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
+				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick,
+				// and all pending patches is applied.
 				return nil
 			}
 			if worker.revision < worker.barrierRev {
@@ -255,7 +256,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 
 			// If !rl.Allow(), skip this Tick to avoid etcd worker tick reactor too frequency.
-			// It make etcdWorker to batch etcd changed event in worker.state.
+			// It makes etcdWorker to batch etcd changed event in worker.state.
 			// The semantics of `ReactorState` requires that any implementation
 			// can batch updates internally.
 			if !rl.Allow() {
@@ -533,7 +534,7 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 	}
 }
 
-// checkAndMigrateMetaData check if should migrate meta, if we should, it will block
+// checkAndMigrateMetaData check if we should migrate meta, if true, it will block
 // until migrate done
 func (worker *EtcdWorker) checkAndMigrateMetaData(
 	ctx context.Context, role string,

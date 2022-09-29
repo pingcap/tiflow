@@ -15,6 +15,8 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -28,20 +30,69 @@ import (
 
 // TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
-type TaskStage string
+type TaskStage int
 
 // These stages may be updated in later pr.
 const (
-	StageInit     TaskStage = "init"
-	StageRunning  TaskStage = "running"
-	StagePaused   TaskStage = "paused"
-	StageFinished TaskStage = "finished"
-	StageError    TaskStage = "error"
-	StagePausing  TaskStage = "pausing"
+	StageInit TaskStage = iota + 1
+	StageRunning
+	StagePaused
+	StageFinished
+	StageError
+	StagePausing
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled TaskStage = "unscheduled"
+	StageUnscheduled
 )
+
+var typesStringify = [...]string{
+	0:                "",
+	StageInit:        "Initing",
+	StageRunning:     "Running",
+	StagePaused:      "Paused",
+	StageFinished:    "Finished",
+	StageError:       "Error",
+	StagePausing:     "Pausing",
+	StageUnscheduled: "Unscheduled",
+}
+
+var toTaskStage map[string]TaskStage
+
+func init() {
+	toTaskStage = make(map[string]TaskStage, len(typesStringify))
+	for i, s := range typesStringify {
+		toTaskStage[s] = TaskStage(i)
+	}
+}
+
+// String implements fmt.Stringer interface
+func (ts TaskStage) String() string {
+	if int(ts) >= len(typesStringify) || ts < 0 {
+		return fmt.Sprintf("Unknown TaskStage %d", ts)
+	}
+	return typesStringify[ts]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (ts TaskStage) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.String())
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (ts *TaskStage) UnmarshalJSON(b []byte) error {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
+		return err
+	}
+	*ts, ok = toTaskStage[j]
+	if !ok {
+		return errors.Errorf("Unknown TaskStage %s", j)
+	}
+	return nil
+}
 
 // Job represents the state of a job.
 type Job struct {

@@ -197,7 +197,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 
 // This function is not thread safe, it must be called with m.workerListMu locked
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
-	workerID, err := m.CreateWorker(framework.FakeTask, wcfg, 1)
+	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg, 1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -493,15 +493,13 @@ func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus 
 }
 
 // CloseImpl implements MasterImpl.CloseImpl
-func (m *Master) CloseImpl(ctx context.Context) error {
+func (m *Master) CloseImpl(ctx context.Context) {
 	log.Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
 }
 
 // StopImpl implements MasterImpl.StopImpl
-func (m *Master) StopImpl(ctx context.Context) error {
+func (m *Master) StopImpl(ctx context.Context) {
 	log.Info("FakeMaster: Stop", zap.Stack("stack"))
-	return nil
 }
 
 // OnMasterMessage implements MasterImpl.OnMasterMessage

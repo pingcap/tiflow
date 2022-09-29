@@ -200,7 +200,10 @@ func TestGetChangefeed(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 
 	// test get changefeed succeeded
@@ -755,7 +758,10 @@ func TestListCapture(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/captures", method: "GET"}
@@ -896,9 +902,10 @@ func TestHealth(t *testing.T) {
 	// capture is owner
 	ctrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCapture(ctrl)
+
+	api := testCase{url: "/api/v1/health", method: "GET"}
 	sp := mock_owner.NewMockStatusProvider(ctrl)
 	ownerRouter := newRouter(cp, sp)
-	api := testCase{url: "/api/v1/health", method: "GET"}
 
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {

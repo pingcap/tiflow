@@ -19,10 +19,6 @@ import (
 	"time"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -30,7 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"go.uber.org/zap"
 )
 
 var (
@@ -47,7 +46,7 @@ type WorkerAgent interface {
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
 		cost model.RescUnit,
-		resources ...resourcemeta.ResourceID,
+		resources ...resModel.ResourceID,
 	) (frameModel.WorkerID, error)
 }
 
@@ -239,21 +238,21 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
-			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
+			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit))
 			continue
 		} else if !ok {
-			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
+			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Stringer("unit", nextUnit))
 		} else if !runningWorker.RunAsExpected() {
-			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
 		}
 
-		var resources []resourcemeta.ResourceID
+		var resources []resModel.ResourceID
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
 			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
@@ -268,16 +267,16 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 
 var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeAll: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
-		framework.WorkerDMSync,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
+		frameModel.WorkerDMSync,
 	},
 	dmconfig.ModeFull: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
 	},
 	dmconfig.ModeIncrement: {
-		framework.WorkerDMSync,
+		frameModel.WorkerDMSync,
 	},
 }
 
@@ -332,12 +331,12 @@ func (wm *WorkerManager) createWorker(
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) error {
-	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
+	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
 	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
 	if err != nil {
-		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
+		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Stringer("unit", unit), zap.Error(err))
 	}
 	if len(workerID) != 0 {
 		//	There are two mechanisms for create workers status.

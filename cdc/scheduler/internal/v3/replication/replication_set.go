@@ -20,7 +20,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -134,21 +135,21 @@ type ReplicationSet struct { //nolint:revive
 	// NB: Invariant, 1) at most one primary, 2) primary capture must be in
 	//     CaptureRolePrimary.
 	Captures   map[model.CaptureID]Role
-	Checkpoint schedulepb.Checkpoint
+	Checkpoint tablepb.Checkpoint
 }
 
 // NewReplicationSet returns a new replication set.
 func NewReplicationSet(
 	tableID model.TableID,
 	checkpoint model.Ts,
-	tableStatus map[model.CaptureID]*schedulepb.TableStatus,
+	tableStatus map[model.CaptureID]*tablepb.TableStatus,
 	changefeed model.ChangeFeedID,
 ) (*ReplicationSet, error) {
 	r := &ReplicationSet{
 		Changefeed: changefeed,
 		TableID:    tableID,
 		Captures:   make(map[string]Role),
-		Checkpoint: schedulepb.Checkpoint{
+		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,
 		},
@@ -164,7 +165,7 @@ func NewReplicationSet(
 		r.updateCheckpoint(table.Checkpoint)
 
 		switch table.State {
-		case schedulepb.TableStateReplicating:
+		case tablepb.TableStateReplicating:
 			if len(r.Primary) != 0 {
 				return nil, r.multiplePrimaryError(
 					table, captureID, "schedulerv3: multiple primary",
@@ -180,20 +181,20 @@ func NewReplicationSet(
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-		case schedulepb.TableStatePreparing:
+		case tablepb.TableStatePreparing:
 			// Recognize secondary if it's table is in preparing state.
 			err := r.setCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-		case schedulepb.TableStatePrepared:
+		case tablepb.TableStatePrepared:
 			// Recognize secondary and Commit state if it's table is in prepared state.
 			committed = true
 			err := r.setCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-		case schedulepb.TableStateStopping:
+		case tablepb.TableStateStopping:
 			// The capture is stopping the table. It is possible that the
 			// capture is primary, and is still replicating data to downstream.
 			// We need to wait its state becomes Stopped or Absent before
@@ -207,8 +208,8 @@ func NewReplicationSet(
 				return nil, errors.Trace(err)
 			}
 			stoppingCount++
-		case schedulepb.TableStateAbsent,
-			schedulepb.TableStateStopped:
+		case tablepb.TableStateAbsent,
+			tablepb.TableStateStopped:
 			// Ignore stop state.
 		default:
 			log.Warn("schedulerv3: unknown table state",
@@ -312,7 +313,7 @@ func (r *ReplicationSet) clearPrimary() {
 }
 
 func (r *ReplicationSet) inconsistentError(
-	input *schedulepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
+	input *tablepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
@@ -325,7 +326,7 @@ func (r *ReplicationSet) inconsistentError(
 }
 
 func (r *ReplicationSet) multiplePrimaryError(
-	input *schedulepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
+	input *tablepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
@@ -339,7 +340,7 @@ func (r *ReplicationSet) multiplePrimaryError(
 
 // checkInvariant ensures ReplicationSet invariant is hold.
 func (r *ReplicationSet) checkInvariant(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) error {
 	if r.TableID != input.TableID {
 		return r.inconsistentError(input, captureID,
@@ -373,7 +374,7 @@ func (r *ReplicationSet) checkInvariant(
 // poll transit replication state based on input and the current state.
 // See ReplicationSetState's comment for the state transition.
 func (r *ReplicationSet) poll(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) ([]*schedulepb.Message, error) {
 	if _, ok := r.Captures[captureID]; !ok {
 		return nil, nil
@@ -421,21 +422,21 @@ func (r *ReplicationSet) poll(
 }
 
 func (r *ReplicationSet) pollOnAbsent(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateAbsent:
+	case tablepb.TableStateAbsent:
 		r.State = ReplicationSetStatePrepare
 		err := r.setCapture(captureID, RoleSecondary)
 		return nil, true, errors.Trace(err)
 
-	case schedulepb.TableStateStopped:
+	case tablepb.TableStateStopped:
 		// Ignore stopped table state as a capture may shutdown unexpectedly.
 		return nil, false, nil
-	case schedulepb.TableStatePreparing,
-		schedulepb.TableStatePrepared,
-		schedulepb.TableStateReplicating,
-		schedulepb.TableStateStopping:
+	case tablepb.TableStatePreparing,
+		tablepb.TableStatePrepared,
+		tablepb.TableStateReplicating,
+		tablepb.TableStateStopping:
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -445,10 +446,10 @@ func (r *ReplicationSet) pollOnAbsent(
 }
 
 func (r *ReplicationSet) pollOnPrepare(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateAbsent:
+	case tablepb.TableStateAbsent:
 		if r.isInRole(captureID, RoleSecondary) {
 			return &schedulepb.Message{
 				To:      captureID,
@@ -464,23 +465,23 @@ func (r *ReplicationSet) pollOnPrepare(
 				},
 			}, false, nil
 		}
-	case schedulepb.TableStatePreparing:
+	case tablepb.TableStatePreparing:
 		if r.isInRole(captureID, RoleSecondary) {
 			// Ignore secondary Preparing, it may take a long time.
 			return nil, false, nil
 		}
-	case schedulepb.TableStatePrepared:
+	case tablepb.TableStatePrepared:
 		if r.isInRole(captureID, RoleSecondary) {
 			// Secondary is prepared, transit to Commit state.
 			r.State = ReplicationSetStateCommit
 			return nil, true, nil
 		}
-	case schedulepb.TableStateReplicating:
+	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
 		}
-	case schedulepb.TableStateStopping, schedulepb.TableStateStopped:
+	case tablepb.TableStateStopping, tablepb.TableStateStopped:
 		if r.Primary == captureID {
 			// Primary is stopped, but we may still has secondary.
 			// Clear primary and promote secondary when it's prepared.
@@ -520,10 +521,10 @@ func (r *ReplicationSet) pollOnPrepare(
 }
 
 func (r *ReplicationSet) pollOnCommit(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStatePrepared:
+	case tablepb.TableStatePrepared:
 		if r.isInRole(captureID, RoleSecondary) {
 			if r.Primary != "" {
 				// Secondary capture is prepared and waiting for stopping primary.
@@ -577,7 +578,7 @@ func (r *ReplicationSet) pollOnCommit(
 			}, false, nil
 		}
 
-	case schedulepb.TableStateStopped, schedulepb.TableStateAbsent:
+	case tablepb.TableStateStopped, tablepb.TableStateAbsent:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 			original := r.Primary
@@ -601,7 +602,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("original", original),
-				zap.String("captureID", captureID))
+				zap.String("captureID", secondary))
 			return &schedulepb.Message{
 				To:      r.Primary,
 				MsgType: schedulepb.MsgDispatchTableRequest,
@@ -641,7 +642,7 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, false, errors.Trace(err)
 		}
 
-	case schedulepb.TableStateReplicating:
+	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 			if r.hasRole(RoleSecondary) {
@@ -674,7 +675,7 @@ func (r *ReplicationSet) pollOnCommit(
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "schedulerv3: multiple primary")
 
-	case schedulepb.TableStateStopping:
+	case tablepb.TableStateStopping:
 		if r.Primary == captureID && r.hasRole(RoleSecondary) {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
@@ -686,7 +687,7 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, false, nil
 		}
 
-	case schedulepb.TableStatePreparing:
+	case tablepb.TableStatePreparing:
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -696,10 +697,10 @@ func (r *ReplicationSet) pollOnCommit(
 }
 
 func (r *ReplicationSet) pollOnReplicating(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateReplicating:
+	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
@@ -707,11 +708,11 @@ func (r *ReplicationSet) pollOnReplicating(
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "schedulerv3: multiple primary")
 
-	case schedulepb.TableStateAbsent:
-	case schedulepb.TableStatePreparing:
-	case schedulepb.TableStatePrepared:
-	case schedulepb.TableStateStopping:
-	case schedulepb.TableStateStopped:
+	case tablepb.TableStateAbsent:
+	case tablepb.TableStatePreparing:
+	case tablepb.TableStatePrepared:
+	case tablepb.TableStateStopping:
+	case tablepb.TableStateStopped:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 
@@ -734,12 +735,12 @@ func (r *ReplicationSet) pollOnReplicating(
 }
 
 func (r *ReplicationSet) pollOnRemoving(
-	input *schedulepb.TableStatus, captureID model.CaptureID,
+	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStatePreparing,
-		schedulepb.TableStatePrepared,
-		schedulepb.TableStateReplicating:
+	case tablepb.TableStatePreparing,
+		tablepb.TableStatePrepared,
+		tablepb.TableStateReplicating:
 		return &schedulepb.Message{
 			To:      captureID,
 			MsgType: schedulepb.MsgDispatchTableRequest,
@@ -749,7 +750,7 @@ func (r *ReplicationSet) pollOnRemoving(
 				},
 			},
 		}, false, nil
-	case schedulepb.TableStateAbsent, schedulepb.TableStateStopped:
+	case tablepb.TableStateAbsent, tablepb.TableStateStopped:
 		errField := zap.Skip()
 		if r.Primary == captureID {
 			r.clearPrimary()
@@ -766,7 +767,7 @@ func (r *ReplicationSet) pollOnRemoving(
 			zap.String("captureID", captureID),
 			errField)
 		return nil, false, nil
-	case schedulepb.TableStateStopping:
+	case tablepb.TableStateStopping:
 		return nil, false, nil
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
@@ -777,7 +778,7 @@ func (r *ReplicationSet) pollOnRemoving(
 }
 
 func (r *ReplicationSet) handleTableStatus(
-	from model.CaptureID, status *schedulepb.TableStatus,
+	from model.CaptureID, status *tablepb.TableStatus,
 ) ([]*schedulepb.Message, error) {
 	return r.poll(status, from)
 }
@@ -800,10 +801,10 @@ func (r *ReplicationSet) handleAddTable(
 	log.Info("schedulerv3: replication state transition, add table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	status := schedulepb.TableStatus{
+	status := tablepb.TableStatus{
 		TableID:    r.TableID,
-		State:      schedulepb.TableStateAbsent,
-		Checkpoint: schedulepb.Checkpoint{},
+		State:      tablepb.TableStateAbsent,
+		Checkpoint: tablepb.Checkpoint{},
 	}
 	return r.poll(&status, captureID)
 }
@@ -834,10 +835,10 @@ func (r *ReplicationSet) handleMoveTable(
 	log.Info("schedulerv3: replication state transition, move table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	status := schedulepb.TableStatus{
+	status := tablepb.TableStatus{
 		TableID:    r.TableID,
-		State:      schedulepb.TableStateAbsent,
-		Checkpoint: schedulepb.Checkpoint{},
+		State:      tablepb.TableStateAbsent,
+		Checkpoint: tablepb.Checkpoint{},
 	}
 	return r.poll(&status, dest)
 }
@@ -860,10 +861,10 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	log.Info("schedulerv3: replication state transition, remove table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	status := schedulepb.TableStatus{
+	status := tablepb.TableStatus{
 		TableID: r.TableID,
-		State:   schedulepb.TableStateReplicating,
-		Checkpoint: schedulepb.Checkpoint{
+		State:   tablepb.TableStateReplicating,
+		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: r.Checkpoint.CheckpointTs,
 			ResolvedTs:   r.Checkpoint.ResolvedTs,
 		},
@@ -889,15 +890,15 @@ func (r *ReplicationSet) handleCaptureShutdown(
 		return nil, false, nil
 	}
 	// The capture has shutdown, the table has stopped.
-	status := schedulepb.TableStatus{
+	status := tablepb.TableStatus{
 		TableID: r.TableID,
-		State:   schedulepb.TableStateStopped,
+		State:   tablepb.TableStateStopped,
 	}
 	msgs, err := r.poll(&status, captureID)
 	return msgs, true, errors.Trace(err)
 }
 
-func (r *ReplicationSet) updateCheckpoint(checkpoint schedulepb.Checkpoint) {
+func (r *ReplicationSet) updateCheckpoint(checkpoint tablepb.Checkpoint) {
 	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
 		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
 	}

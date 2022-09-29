@@ -30,3 +30,20 @@ insert into t_1(num) values(4/0);
 -- test sql_mode NO_AUTO_CREATE_USER
 drop user if exists 'no_auto_create_user';
 grant select on *.* to 'no_auto_create_user';
+
+-- test GBK charset BTW
+insert into t_3 (id, name) values (3, '你好3'), (4, '你好4');
+update t_3 set name = '你好5' where id = 1;
+delete from t_3 where id = 2;
+
+create table t_7 (id int, name varchar(20), primary key(`id`)) character set gbk;
+insert into t_7 (id, name) values (1, '你好1'), (2, '你好2');
+insert into t_7 (id, name) values (3, '你好3'), (4, '你好4');
+update t_7 set name = '你好5' where id = 1;
+delete from t_7 where id = 2;
+
+create table t_9 (id int, name varchar(20) character set gbk, primary key(`id`)) character set utf8;
+insert into t_9 (id, name) values (1, '你好1'), (2, '你好2');
+insert into t_9 (id, name) values (3, '你好3'), (4, '你好4');
+update t_9 set name = '你好5' where id = 1;
+delete from t_9 where id = 2;

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -96,11 +97,9 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
-		lightningCfg.Security.CAPath = cfg.To.Security.SSLCA
-		lightningCfg.Security.CertPath = cfg.To.Security.SSLCert
-		lightningCfg.Security.KeyPath = cfg.To.Security.SSLKey
-		// use task name as tls config name to prevent multiple subtasks from conflicting with each other
-		lightningCfg.Security.TLSConfigName = cfg.Name
+		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
+		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
+		lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
@@ -265,7 +264,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	return err
+	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
 func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {

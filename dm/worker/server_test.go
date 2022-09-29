@@ -26,6 +26,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -764,4 +765,12 @@ func (t *testServer) TestServerDataRace(c *C) {
 		}()
 		wg.Wait()
 	}
+
+func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
+	t.Helper()
+
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	sourceCfg.From.Password = "" // no password set
+	return sourceCfg
 }

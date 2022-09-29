@@ -92,7 +92,7 @@ var _ framework.JobMasterImpl = (*JobMaster)(nil)
 // RegisterWorker is used to register cvs job master into global registry
 func RegisterWorker() {
 	factory := registry.NewSimpleWorkerFactory(NewCVSJobMaster)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.CvsJobMaster, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.CvsJobMaster, factory)
 }
 
 // NewCVSJobMaster creates a new cvs job master
@@ -164,7 +164,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
 		if workerInfo.needCreate.Load() {
-			workerID, err := jm.CreateWorker(framework.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
+			workerID, err := jm.CreateWorker(frameModel.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
 			if err != nil {
 				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
@@ -337,14 +337,10 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // CloseImpl is called when the master is being closed
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return nil
-}
+func (jm *JobMaster) CloseImpl(ctx context.Context) {}
 
 // StopImpl is called when the master is being canceled
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
-	return nil
-}
+func (jm *JobMaster) StopImpl(ctx context.Context) {}
 
 // ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {

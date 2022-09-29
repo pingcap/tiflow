@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestTableManager(t *testing.T) {
 	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	tableM.addTable(model.TableID(1))
-	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)
+	require.Equal(t, tablepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)
 
 	tableM.dropTable(model.TableID(1))
 	require.NotContains(t, tableM.tables, model.TableID(1))
