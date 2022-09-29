@@ -703,7 +703,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		})
 		ok = false
 	}
-
+	// clean stale capture task positions
 	for captureID := range c.state.TaskPositions {
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
