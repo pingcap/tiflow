@@ -125,8 +125,7 @@ func TestCloseTracker(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := tracker.close(context.Background())
-		require.Nil(t, err, "close should not return error")
+		tracker.close(context.Background())
 		wg.Done()
 	}()
 
@@ -157,7 +156,7 @@ func TestCloseTrackerCancellable(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := tracker.close(ctx)
+		tracker.close(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()
 	}()

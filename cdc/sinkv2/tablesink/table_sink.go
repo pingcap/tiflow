@@ -36,5 +36,5 @@ type TableSink interface {
 	GetCheckpointTs() model.ResolvedTs
 	// Close closes the table sink.
 	// We should make sure this method is cancellable.
-	Close(ctx context.Context) error
+	Close(ctx context.Context)
 }

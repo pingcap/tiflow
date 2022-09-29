@@ -392,20 +392,18 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 			return
 		}
 		log.Info("sinkV1 is closed",
-			zap.Int64("tableID", n.tableID),
 			zap.String("namespace", n.changefeed.Namespace),
-			zap.String("changefeed", n.changefeed.ID))
+			zap.String("changefeed", n.changefeed.ID),
+			zap.Int64("tableID", n.tableID))
 		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 		return
 	}
-	err = n.sinkV2.Close(ctx)
-	if err != nil {
-		return
-	}
+
+	n.sinkV2.Close(ctx)
 	log.Info("sinkV2 is closed",
-		zap.Int64("tableID", n.tableID),
 		zap.String("namespace", n.changefeed.Namespace),
-		zap.String("changefeed", n.changefeed.ID))
+		zap.String("changefeed", n.changefeed.ID),
+		zap.Int64("tableID", n.tableID))
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	return
 }

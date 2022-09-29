@@ -20,7 +20,6 @@ import (
 	stdatomic "sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
@@ -234,7 +233,7 @@ func (r *progressTracker) trackingCount() int {
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close(ctx context.Context) error {
+func (r *progressTracker) close(ctx context.Context) {
 	r.mu.Lock()
 	r.closed = true
 	r.mu.Unlock()
@@ -246,7 +245,7 @@ func (r *progressTracker) close(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
+			return
 		case <-blockTicker.C:
 			log.Warn("Close process doesn't return in time, may be stuck",
 				zap.Int64("tableID", r.tableID),
@@ -256,7 +255,7 @@ func (r *progressTracker) close(ctx context.Context) error {
 		case <-waitingTicker.C:
 			r.advance()
 			if r.trackingCount() == 0 {
-				return nil
+				return
 			}
 		}
 	}
