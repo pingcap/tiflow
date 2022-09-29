@@ -418,7 +418,7 @@ func (t *tableActor) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
-// if the actor system is slow, too many warn log will be printed, so we need to add rate limit 
+// if the actor system is slow, too many warn log will be printed, so we need to add rate limit
 var updateBarrierTsLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*500), 1)
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
