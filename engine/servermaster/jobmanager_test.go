@@ -683,7 +683,9 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
-	mockBackoffMgr := jobopMock.NewMockBackoffManager(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	mockBackoffMgr := jobopMock.NewMockBackoffManager(ctrl)
+	mockJobOperator := jobopMock.NewMockJobOperator(ctrl)
 	mgr := &JobManagerImpl{
 		BaseMaster:      mockMaster,
 		JobFsm:          NewJobFsm(),
@@ -691,6 +693,7 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 		frameMetaClient: mockMaster.GetFrameMetaClient(),
 		jobHTTPClient:   jobMock.NewMockNilReturnJobHTTPClient(),
 		JobBackoffMgr:   mockBackoffMgr,
+		jobOperator:     mockJobOperator,
 	}
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
@@ -712,12 +715,14 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 	mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
 
 	// job is being backoff
+	mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
 	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(false)
 	mockBackoffMgr.EXPECT().Allow(jobID).Times(1).Return(false)
 	err = mgr.Tick(ctx)
 	require.NoError(t, err)
 
 	// job will be terminated
+	mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
 	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(true)
 	err = mgr.Tick(ctx)
 	require.NoError(t, err)

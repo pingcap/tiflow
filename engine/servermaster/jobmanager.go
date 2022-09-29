@@ -596,7 +596,8 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *frameModel.MasterMeta) (string, error) {
-			if jm.JobBackoffMgr.Terminate(job.ID) {
+			isJobCanceling := jm.jobOperator.IsJobCanceling(ctx, job.ID)
+			if isJobCanceling || jm.JobBackoffMgr.Terminate(job.ID) {
 				if err := jm.terminateJob(ctx, job.ErrorMsg, job.ID); err != nil {
 					return "", err
 				}
