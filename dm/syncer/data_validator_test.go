@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,6 +197,42 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 		return validator.Stage() == pb.Stage_Stopped
 	}))
 	require.Len(t, validator.result.Errors, 1)
+}
+
+func TestValidatorDeadLock(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	_, _, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.persistHelper.schemaInitialized.Store(true)
+	validator.Start(pb.Stage_Running)
+	require.Equal(t, pb.Stage_Running, validator.Stage())
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer func() {
+			// ignore panic when try to insert error to a closed channel
+			// which will happen after the validator is successfully stop.
+			// The panic is expected.
+			wg.Done()
+			recover()
+		}()
+		for i := 0; i < 100; i++ {
+			validator.sendError(context.Canceled) // prevent from stopping the validator
+		}
+	}()
+	// stuck
+	validator.Stop()
+	wg.Wait()
 }
 
 type mockedCheckPointForValidator struct {
