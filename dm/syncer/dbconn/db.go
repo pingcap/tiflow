@@ -226,6 +226,10 @@ func (conn *DBConn) ExecuteSQLAutoSplit(
 	queries []string,
 	args ...[]interface{},
 ) error {
+	if conn == nil {
+		// only happens in test
+		return nil
+	}
 	var m *prometheus.HistogramVec
 	if metricProxies != nil {
 		m = metricProxies.StmtHistogram
