@@ -133,11 +133,11 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 		}
 	}
 	if shouldInsertStartNode {
-		n := s.spanList.InsertNextToNode(seekRes, span.Start, s.minTsHeap.Insert(ts))
-		n.regionID = regionID
-		n.end = span.End
-		s.nodes[regionID] = n
-		seekRes.Next()
+		s.spanList.InsertNextToNode(seekRes, span.Start, s.minTsHeap.Insert(ts))
+		//n.regionID = regionID
+		//n.end = span.End
+		//s.nodes[regionID] = n
+		//seekRes.Next()
 	}
 	s.spanList.InsertNextToNode(seekRes, span.End, s.minTsHeap.Insert(lastNodeTs))
 }

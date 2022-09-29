@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +38,7 @@ func TestSpanFrontier(t *testing.T) {
 	spBD := regionspan.ComparableSpan{Start: keyB, End: keyD}
 	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
 
-	f := NewFrontier(5, spAD).(*spanFrontier)
+	f := NewFrontier(5, c, spAD).(*spanFrontier)
 
 	require.Equal(t, uint64(5), f.Frontier())
 	require.Equal(t, `[a @ 5] [d @ Max] `, f.String())
@@ -169,7 +170,7 @@ func TestSpanFrontierFallback(t *testing.T) {
 	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
 	spDE := regionspan.ComparableSpan{Start: keyD, End: keyE}
 
-	f := NewFrontier(20, spAB).(*spanFrontier)
+	f := NewFrontier(20, c, spAB).(*spanFrontier)
 	f.Forward(0, spBC, 20)
 	f.Forward(0, spCD, 10)
 	f.Forward(0, spDE, 20)
@@ -211,7 +212,7 @@ func TestMinMax(t *testing.T) {
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 	spMinMax = spMinMax.Hack()
 
-	f := NewFrontier(0, spMinMax)
+	f := NewFrontier(0, c, spMinMax)
 	require.Equal(t, uint64(0), f.Frontier())
 	require.Equal(t, "[ @ 0] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
@@ -256,7 +257,7 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	sp12 := regionspan.ComparableSpan{Start: key1, End: key2}
 	sp1F := regionspan.ComparableSpan{Start: key1, End: keyF}
 
-	f := NewFrontier(0, spAB, spCE)
+	f := NewFrontier(0, c, spAB, spCE)
 	require.Equal(t, uint64(0), f.Frontier())
 	require.Equal(t, `[a @ 0] [b @ Max] [c @ 0] [e @ Max] `, f.String())
 	checkFrontier(t, f)
@@ -302,12 +303,14 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	checkFrontier(t, f)
 }
 
+var c = prometheus.NewCounterVec(prometheus.CounterOpts{}, []string{"type"}).WithLabelValues("a")
+
 func TestSpanFrontierRandomly(t *testing.T) {
 	t.Parallel()
 	var keyMin []byte
 	var keyMax []byte
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
-	f := NewFrontier(0, spMinMax)
+	f := NewFrontier(0, c, spMinMax)
 
 	var spans []regionspan.ComparableSpan
 	for len(spans) < 500000 {
@@ -349,4 +352,44 @@ func checkFrontier(t *testing.T, f Frontier) {
 	sort.Slice(tsInHeap, func(i, j int) bool { return tsInHeap[i] < tsInHeap[j] })
 	require.Equal(t, tsInHeap, tsInList)
 	require.Equal(t, tsInList[0], f.Frontier())
+}
+
+func TestMinMaxWithRegion(t *testing.T) {
+	t.Parallel()
+
+	ab := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}
+	bc := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}
+	cd := regionspan.ComparableSpan{Start: []byte("c"), End: []byte("d")}
+	de := regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}
+	ef := regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}
+	af := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("f")}
+
+	f := NewFrontier(0, c, af)
+	require.Equal(t, uint64(0), f.Frontier())
+	f.Forward(1, ab, 1)
+	require.Equal(t, uint64(0), f.Frontier())
+	f.Forward(2, bc, 1)
+	require.Equal(t, uint64(0), f.Frontier())
+	f.Forward(3, cd, 1)
+	require.Equal(t, uint64(0), f.Frontier())
+	f.Forward(4, de, 1)
+	require.Equal(t, uint64(0), f.Frontier())
+	f.Forward(5, ef, 1)
+	require.Equal(t, uint64(1), f.Frontier())
+	f.Forward(6, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 6)
+	require.Equal(t, uint64(1), f.Frontier())
+	f.Forward(7, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("f")}, 2)
+	require.Equal(t, uint64(2), f.Frontier())
+	f.Forward(7, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("f")}, 3)
+	require.Equal(t, uint64(3), f.Frontier())
+	f.Forward(7, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("f")}, 4)
+	require.Equal(t, uint64(4), f.Frontier())
+	f.Forward(8, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}, 4)
+	require.Equal(t, uint64(4), f.Frontier())
+	f.Forward(9, regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}, 4)
+	require.Equal(t, uint64(4), f.Frontier())
+	f.Forward(9, regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}, 7)
+	require.Equal(t, uint64(4), f.Frontier())
+	f.Forward(8, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}, 5)
+	require.Equal(t, uint64(5), f.Frontier())
 }
