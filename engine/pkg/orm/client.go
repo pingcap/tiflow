@@ -738,7 +738,7 @@ func (c *metaOpsClient) QueryJobOp(
 	ctx context.Context, jobID string,
 ) (*model.JobOp, error) {
 	var op *model.JobOp
-	err := c.db.WithContext(ctx).Where("job_id = ?").Find(&op).Error
+	err := c.db.WithContext(ctx).Where("job_id = ?", jobID).Find(&op).Error
 	if err != nil {
 		return nil, err
 	}
