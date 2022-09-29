@@ -99,23 +99,17 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 			return
 		}
 	}
-	for _, n := range seekRes {
-		if n == nil {
-			break
-		}
-		if n.regionID > 0 {
-			delete(s.nodes, n.regionID)
-		}
-	}
 
 	// regions are merged or split, overwrite span into list
 	node := seekRes.Node()
+	delete(s.nodes, node.regionID)
 	lastNodeTs := uint64(math.MaxUint64)
 	shouldInsertStartNode := true
 	if node.Value() != nil {
 		lastNodeTs = node.Value().key
 	}
 	for ; node != nil; node = node.Next() {
+		delete(s.nodes, node.regionID)
 		cmpStart := bytes.Compare(node.Key(), span.Start)
 		if cmpStart < 0 {
 			continue
@@ -134,10 +128,6 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	}
 	if shouldInsertStartNode {
 		s.spanList.InsertNextToNode(seekRes, span.Start, s.minTsHeap.Insert(ts))
-		//n.regionID = regionID
-		//n.end = span.End
-		//s.nodes[regionID] = n
-		//seekRes.Next()
 	}
 	s.spanList.InsertNextToNode(seekRes, span.End, s.minTsHeap.Insert(lastNodeTs))
 }

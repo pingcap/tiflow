@@ -131,7 +131,7 @@ LevelLoop:
 }
 
 // InsertNextToNode insert the specified node after the seek result
-func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) *skipListNode {
+func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
 	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
 		log.Panic("the InsertNextToNode function can only append node to the seek result.")
 	}
@@ -154,7 +154,6 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 		n.nexts[level] = prev.nexts[level]
 		prev.nexts[level] = n
 	}
-	return n
 }
 
 // Insert inserts the specified node
