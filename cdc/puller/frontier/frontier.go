@@ -88,6 +88,8 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
+			s.nodes[regionID] = seekRes.Node()
+			s.nodes[regionID].regionID = regionID
 			return
 		}
 	}
