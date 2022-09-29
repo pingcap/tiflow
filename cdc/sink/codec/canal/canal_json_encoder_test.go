@@ -15,8 +15,9 @@ package canal
 
 import (
 	"context"
-	"github.com/goccy/go-json"
 	"testing"
+
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -49,7 +50,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	message, err := encoder.newJSONMessageForDML(testCaseInsert)
 	require.Nil(t, err)
-	jsonMsg, ok := message.(*canalJSONMessage)
+	jsonMsg, ok := message.(*CanalJSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
@@ -90,7 +91,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	message, err = encoder.newJSONMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
-	jsonMsg, ok = message.(*canalJSONMessage)
+	jsonMsg, ok = message.(*CanalJSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
@@ -98,7 +99,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	message, err = encoder.newJSONMessageForDML(testCaseDelete)
 	require.Nil(t, err)
-	jsonMsg, ok = message.(*canalJSONMessage)
+	jsonMsg, ok = message.(*CanalJSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
@@ -124,7 +125,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
 
-	msg, ok := message.(*canalJSONMessage)
+	msg, ok := message.(*CanalJSONMessage)
 	require.True(t, ok)
 	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
 	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
@@ -167,7 +168,7 @@ func TestBatching(t *testing.T) {
 			for j := range msgs {
 				require.Equal(t, 1, msgs[j].GetRowsCount())
 
-				var msg canalJSONMessage
+				var msg CanalJSONMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				require.Nil(t, err)
 				require.Equal(t, "UPDATE", msg.EventType)
@@ -230,7 +231,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 	// Unmarshal from the data we have encoded.
 	jsonMsg := canalJSONMessageWithTiDBExtension{
-		&canalJSONMessage{},
+		&CanalJSONMessage{},
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &jsonMsg)

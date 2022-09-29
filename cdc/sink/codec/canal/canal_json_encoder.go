@@ -104,7 +104,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canal
 		}
 	}
 
-	msg := &canalJSONMessage{
+	msg := &CanalJSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        header.SchemaName,
 		Table:         header.TableName,
@@ -137,14 +137,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canal
 	}
 
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: msg,
+		CanalJSONMessage: msg,
 		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
 	}, nil
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
 	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
-	msg := &canalJSONMessage{
+	msg := &CanalJSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        header.SchemaName,
 		Table:         header.TableName,
@@ -161,14 +161,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 	}
 
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: msg,
+		CanalJSONMessage: msg,
 		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
 	}
 }
 
 func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONMessageWithTiDBExtension {
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: &canalJSONMessage{
+		CanalJSONMessage: &CanalJSONMessage{
 			ID:            0,
 			IsDDL:         false,
 			EventType:     tidbWaterMarkType,
