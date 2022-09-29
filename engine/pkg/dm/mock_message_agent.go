@@ -15,7 +15,7 @@ package dm
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"sync"
 
 	"github.com/stretchr/testify/mock"

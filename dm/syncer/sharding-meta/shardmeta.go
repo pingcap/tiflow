@@ -14,7 +14,7 @@
 package shardmeta
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"fmt"
 
 	"github.com/go-mysql-org/go-mysql/mysql"

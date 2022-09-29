@@ -15,7 +15,7 @@ package election_test
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"regexp"
 	"testing"
 

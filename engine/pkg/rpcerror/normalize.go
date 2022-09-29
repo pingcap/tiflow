@@ -14,8 +14,8 @@
 package rpcerror
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 	"reflect"
 	"strings"
 	"sync"

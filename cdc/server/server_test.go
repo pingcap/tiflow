@@ -16,7 +16,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"fmt"
 	"net/http"
 	"net/url"

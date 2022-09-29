@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"math/big"
 	"strconv"
 	"strings"

@@ -15,8 +15,8 @@ package schema
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 	"sort"
 	"testing"
 	"time"

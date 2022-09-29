@@ -15,7 +15,7 @@ package metadata
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"testing"
 
 	"github.com/pingcap/log"

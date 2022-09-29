@@ -15,7 +15,7 @@ package syncer
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"fmt"
 
 	"github.com/pingcap/tidb/parser"

@@ -16,7 +16,7 @@ package election
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"fmt"
 
 	"github.com/pingcap/errors"

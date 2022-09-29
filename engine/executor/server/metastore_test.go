@@ -15,7 +15,7 @@ package server
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"testing"
 
 	"github.com/golang/mock/gomock"

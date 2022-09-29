@@ -15,7 +15,7 @@ package canal
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"

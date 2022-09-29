@@ -15,7 +15,7 @@ package ha
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"

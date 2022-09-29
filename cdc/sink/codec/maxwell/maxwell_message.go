@@ -14,7 +14,7 @@
 package maxwell
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"

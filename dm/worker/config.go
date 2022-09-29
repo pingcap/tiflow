@@ -16,7 +16,7 @@ package worker
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"flag"
 	"fmt"
 	"net"

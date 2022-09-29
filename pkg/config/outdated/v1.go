@@ -14,7 +14,7 @@
 package outdated
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/tidb/util/filter"
 )

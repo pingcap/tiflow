@@ -16,7 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"path"
 	"reflect"
 	"strings"

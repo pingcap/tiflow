@@ -15,7 +15,7 @@ package reader
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"sync"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"

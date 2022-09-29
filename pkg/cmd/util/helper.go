@@ -15,7 +15,7 @@ package util
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"net/url"
 	"os"
 	"os/signal"

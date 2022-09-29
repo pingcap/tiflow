@@ -15,8 +15,8 @@ package client
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 	"reflect"
 
 	"github.com/golang/mock/gomock"

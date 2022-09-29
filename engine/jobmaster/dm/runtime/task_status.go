@@ -14,7 +14,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"

@@ -14,7 +14,7 @@
 package model
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/errors"
 

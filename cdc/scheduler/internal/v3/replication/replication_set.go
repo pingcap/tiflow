@@ -14,8 +14,8 @@
 package replication
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

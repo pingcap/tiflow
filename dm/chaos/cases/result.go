@@ -13,7 +13,7 @@
 
 package main
 
-import "encoding/json"
+import "github.com/goccy/go-json"
 
 // singleResult holds the result of a single source.
 type singleResult struct {

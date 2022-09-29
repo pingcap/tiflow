@@ -14,7 +14,7 @@
 package config
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"

@@ -14,8 +14,8 @@
 package dm
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"

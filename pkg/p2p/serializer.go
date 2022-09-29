@@ -13,7 +13,7 @@
 
 package p2p
 
-import "encoding/json"
+import "github.com/goccy/go-json"
 
 // Serializable is an interface for defining custom serialization methods
 // for peer messages.

@@ -14,7 +14,7 @@
 package orchestrator
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 	"reflect"
 
 	"github.com/pingcap/errors"
