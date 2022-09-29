@@ -14,8 +14,7 @@
 package canal
 
 import (
-	"encoding/json"
-
+	"github.com/goccy/go-json"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"

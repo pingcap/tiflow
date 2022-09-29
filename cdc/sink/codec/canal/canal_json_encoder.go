@@ -15,9 +15,9 @@ package canal
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,6 +28,8 @@ import (
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 )
+
+//var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
