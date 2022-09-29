@@ -378,6 +378,7 @@ const (
 	codeLoadUnitGenBAList
 	codeLoadTaskWorkerNotMatch
 	codeLoadCheckPointNotMatch
+	codeLoadLightningRuntime
 )
 
 // Sync unit error code.
@@ -1067,6 +1068,7 @@ var (
 	ErrLoadUnitGenBAList           = New(codeLoadUnitGenBAList, ClassLoadUnit, ScopeInternal, LevelHigh, "generate block allow list", "Please check the `block-allow-list` config in task configuration file.")
 	ErrLoadTaskWorkerNotMatch      = New(codeLoadTaskWorkerNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "different worker in load stage, previous worker: %s, current worker: %s", "Please check if the previous worker is online.")
 	ErrLoadTaskCheckPointNotMatch  = New(codeLoadCheckPointNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "inconsistent checkpoints between loader and target database", "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command.")
+	ErrLoadLightningRuntime        = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeNotSet, LevelHigh, "", "")
 
 	// Sync unit error.
 	ErrSyncerUnitPanic                   = New(codeSyncerUnitPanic, ClassSyncUnit, ScopeInternal, LevelHigh, "panic error: %v", "")
