@@ -208,10 +208,11 @@ func TestValidatorDeadLock(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer func() {
-			// ignore panic when try to insert error to a closed channel
-			// which will happen after the validator is successfully stop.
+			// ignore panic when try to insert error to a closed channel,
+			// which will happen after the validator is successfully stopped.
 			// The panic is expected.
 			wg.Done()
+			// nolint:errcheck
 			recover()
 		}()
 		for i := 0; i < 100; i++ {
