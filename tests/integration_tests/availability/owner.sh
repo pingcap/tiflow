@@ -244,7 +244,7 @@ function test_gap_between_watch_capture() {
 
 # make sure when owner key in etcd is deleted, the owner will resign,
 # and only one owner exists in the cluster at the same time.
-function delete_owner_key() {
+function test_delete_owner_key() {
 	echo "run test case delete_owner_key"
 
 	# start a capture server
