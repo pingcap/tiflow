@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -333,7 +334,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
+		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor)
 		log.Info("processor routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
 		return err
@@ -444,7 +445,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		err = c.runEtcdWorker(ownerCtx, owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+			ownerFlushInterval, util.RoleOwner)
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,
@@ -483,14 +484,14 @@ func (c *captureImpl) runEtcdWorker(
 	reactor orchestrator.Reactor,
 	reactorState orchestrator.ReactorState,
 	timerInterval time.Duration,
-	role string,
+	role putil.Role,
 ) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
-		etcd.BaseKey(c.EtcdClient.GetClusterID()), reactor, reactorState, c.migrator)
+		etcd.BaseKey(c.EtcdClient.GetClusterID()), reactor, reactorState, c.migrator, c.info.ID, role)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, role); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as

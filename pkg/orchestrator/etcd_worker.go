@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tiflow/cdc/model"
 	"strconv"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
-	pkgutil "github.com/pingcap/tiflow/pkg/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -48,8 +49,10 @@ const (
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
 	clusterID string
+	captureID model.CaptureID
 	client    *etcd.Client
 	reactor   Reactor
+	role      putil.Role
 	state     ReactorState
 	// rawState is the local cache of the latest Etcd state.
 	rawState map[util.EtcdKey]rawStateEntry
@@ -104,9 +107,13 @@ func NewEtcdWorker(
 	reactor Reactor,
 	initState ReactorState,
 	migrator migrate.Migrator,
+	captureID model.CaptureID,
+	role putil.Role,
 ) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		clusterID:  client.GetClusterID(),
+		captureID:  captureID,
+		role:       role,
 		client:     client.GetEtcdClient(),
 		reactor:    reactor,
 		state:      initState,
@@ -129,11 +136,11 @@ func (worker *EtcdWorker) initMetrics() {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 
 	// migrate data here
-	err := worker.checkAndMigrateMetaData(ctx, role)
+	err := worker.checkAndMigrateMetaData(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -152,9 +159,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), worker.role.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
-	if role == pkgutil.RoleProcessor.String() {
+	if worker.role == putil.RoleProcessor {
 		failpoint.Inject("ProcessorEtcdDelay", func() {
 			delayer := chdelay.NewChannelDelayer(time.Second*3, watchCh, 1024, 16)
 			defer delayer.Close()
@@ -217,7 +224,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 					zap.Int64("eventRevision", response.Header.GetRevision()),
 					zap.Int64("previousRevision", worker.revision),
 					zap.Any("events", response.Events),
-					zap.String("role", role))
+					zap.String("role", worker.role.String()))
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
@@ -269,7 +276,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if costTime > etcdWorkerLogsWarnDuration {
 				log.Warn("EtcdWorker reactor tick took too long",
 					zap.Duration("duration", costTime),
-					zap.String("role", role))
+					zap.String("role", worker.role.String()))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
 			if err != nil {
@@ -536,9 +543,7 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 
 // checkAndMigrateMetaData check if we should migrate meta, if true, it will block
 // until migrate done
-func (worker *EtcdWorker) checkAndMigrateMetaData(
-	ctx context.Context, role string,
-) error {
+func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context) error {
 	shouldMigrate, err := worker.migrator.ShouldMigrate(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -547,7 +552,7 @@ func (worker *EtcdWorker) checkAndMigrateMetaData(
 		return nil
 	}
 
-	if role != pkgutil.RoleOwner.String() {
+	if worker.role != putil.RoleOwner {
 		err := worker.migrator.WaitMetaVersionMatched(ctx)
 		return errors.Trace(err)
 	}
