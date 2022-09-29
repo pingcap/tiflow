@@ -265,9 +265,9 @@ func (c *Case) randDML(source int, table string) (string, error) {
 			return "", err
 		}
 		for _, ok := c.keySet[table][uk.GetValueHash()]; ok; {
-			log.L().Info("again gen insert row")
+			log.L().Info("again gen insert row", zap.String("hash", uk.GetValueHash()), zap.Int("len", len(c.keySet[table])))
 			sql, uk, err = generator.GenInsertRow()
-			log.L().Info("again finish gen insert row")
+			log.L().Info("again finish gen insert row", zap.String("hash", uk.GetValueHash()), zap.Int("len", len(c.keySet[table])))
 			if err != nil {
 				return "", err
 			}
