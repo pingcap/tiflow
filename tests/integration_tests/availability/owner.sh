@@ -241,3 +241,48 @@ function test_gap_between_watch_capture() {
 	echo "test_gap_between_watch_capture pass"
 	cleanup_process $CDC_BINARY
 }
+
+
+# make sure when owner key in etcd is deleted, the owner will resign,
+# and only one owner exists in the cluster at the same time.
+function test_delete_owner_key() {
+	echo "run test case delete_owner_key"
+
+	# start a capture server
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_gap_between_watch_capture.server1
+	# ensure the server become the owner
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
+	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+	owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
+	owner_key=$(etcdctl get /tidb/cdc/default/__cdc_meta__/owner --prefix | grep -B 1 "$owner_id" | head -n 1)
+	echo "owner pid:" $owner_pid
+	echo "owner id" $owner_id
+	echo "owner key" $owner_key
+
+	# run another server
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_gap_between_watch_capture.server2
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
+	capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
+	capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+	echo "capture_id:" $capture_id
+
+	etcdctl del $owner_key
+	ensure $MAX_RETRIES "ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/owner --prefix | grep  '$capture_id'"
+	# ensure the first capture has resign owner
+	ensure $MAX_RETRIES "curl -X GET http://127.0.0.1:8300/status | grep '\"is_owner\": false'"
+
+	sleep 3
+
+	for i in $(seq 1 3); do
+		run_sql "INSERT INTO test.availability$i(id, val) VALUES (1, 1);"
+		ensure $MAX_RETRIES nonempty "select id, val from test.availability$i where id=1 and val=1"
+		run_sql "UPDATE test.availability$i set val = 22 where id = 1;"
+		ensure $MAX_RETRIES nonempty "select id, val from test.availability$i where id=1 and val=22"
+		run_sql "DELETE from test.availability$i where id=1;"
+		ensure $MAX_RETRIES empty "select id, val from test.availability$i where id=1"
+	done
+
+	export GO_FAILPOINTS=''
+	echo "delete_owner_key pass"
+	cleanup_process $CDC_BINARY
+}
