@@ -377,7 +377,7 @@ func TestServerClosed(t *testing.T) {
 		_, clientErr = stream.Recv()
 		return clientErr != nil
 	}, time.Second*1, time.Millisecond*10)
-	require.Regexp(t, ".*CDC capture closing.*", clientErr.Error())
+	require.Regexp(t, ".*message server is closing.*", clientErr.Error())
 
 	wg.Wait()
 }
