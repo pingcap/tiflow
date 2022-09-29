@@ -765,6 +765,7 @@ func (t *testServer) TestServerDataRace(c *C) {
 		}()
 		wg.Wait()
 	}
+}
 
 func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
 	t.Helper()
