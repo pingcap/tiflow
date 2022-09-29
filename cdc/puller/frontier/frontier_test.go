@@ -44,7 +44,7 @@ func TestSpanFrontier(t *testing.T) {
 	checkFrontier(t, f)
 
 	f.Forward(
-		regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")},
+		0, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")},
 		100,
 	)
 	require.Equal(t, uint64(5), f.Frontier())
@@ -52,7 +52,7 @@ func TestSpanFrontier(t *testing.T) {
 	checkFrontier(t, f)
 
 	f.Forward(
-		regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")},
+		0, regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")},
 		200,
 	)
 	require.Equal(t, uint64(5), f.Frontier())
@@ -61,7 +61,7 @@ func TestSpanFrontier(t *testing.T) {
 
 	// Forward the tracked span space.
 	f.Forward(
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+		0, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	require.Equal(t, uint64(1), f.Frontier())
@@ -70,7 +70,7 @@ func TestSpanFrontier(t *testing.T) {
 
 	// // Forward it again
 	f.Forward(
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+		0, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		2,
 	)
 	require.Equal(t, uint64(2), f.Frontier())
@@ -79,7 +79,7 @@ func TestSpanFrontier(t *testing.T) {
 
 	// // Forward to smaller ts
 	f.Forward(
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+		0, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	require.Equal(t, uint64(1), f.Frontier())
@@ -87,70 +87,70 @@ func TestSpanFrontier(t *testing.T) {
 	checkFrontier(t, f)
 
 	// // Forward b-c
-	f.Forward(spBC, 3)
+	f.Forward(0, spBC, 3)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, `[a @ 1] [b @ 3] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward b-c more to be 4
-	f.Forward(spBC, 4)
+	f.Forward(0, spBC, 4)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, `[a @ 1] [b @ 4] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward all to at least 3
-	f.Forward(spAD, 3)
+	f.Forward(0, spAD, 3)
 	require.Equal(t, uint64(3), f.Frontier())
 	require.Equal(t, `[a @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward AB and CD to be 5, keep BC at 4
-	f.Forward(spAB, 5)
+	f.Forward(0, spAB, 5)
 	require.Equal(t, uint64(3), f.Frontier())
 	require.Equal(t, `[a @ 5] [b @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
-	f.Forward(spCD, 5)
+	f.Forward(0, spCD, 5)
 	require.Equal(t, uint64(3), f.Frontier())
 	require.Equal(t, `[a @ 5] [b @ 3] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Catch BC to be 5 too
-	f.Forward(spBC, 5)
+	f.Forward(0, spBC, 5)
 	require.Equal(t, uint64(5), f.Frontier())
 	require.Equal(t, `[a @ 5] [b @ 5] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward all to be 6
-	f.Forward(spAD, 6)
+	f.Forward(0, spAD, 6)
 	require.Equal(t, uint64(6), f.Frontier())
 	require.Equal(t, `[a @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward ac to 7
-	f.Forward(spAC, 7)
+	f.Forward(0, spAC, 7)
 	require.Equal(t, uint64(6), f.Frontier())
 	require.Equal(t, `[a @ 7] [c @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward bd to 8
-	f.Forward(spBD, 8)
+	f.Forward(0, spBD, 8)
 	require.Equal(t, uint64(7), f.Frontier())
 	require.Equal(t, `[a @ 7] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Forward ab to 8
-	f.Forward(spAB, 8)
+	f.Forward(0, spAB, 8)
 	require.Equal(t, uint64(8), f.Frontier())
 	require.Equal(t, `[a @ 8] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
-	f.Forward(regionspan.ComparableSpan{Start: []byte("1"), End: []byte("g")}, 9)
+	f.Forward(0, regionspan.ComparableSpan{Start: []byte("1"), End: []byte("g")}, 9)
 	require.Equal(t, uint64(9), f.Frontier())
 	require.Equal(t, `[1 @ 9] [g @ 200] [h @ Max] `, f.String())
 	checkFrontier(t, f)
 
-	f.Forward(regionspan.ComparableSpan{Start: []byte("g"), End: []byte("i")}, 10)
+	f.Forward(0, regionspan.ComparableSpan{Start: []byte("g"), End: []byte("i")}, 10)
 	require.Equal(t, uint64(9), f.Frontier())
 	require.Equal(t, `[1 @ 9] [g @ 10] [i @ Max] `, f.String())
 	checkFrontier(t, f)
@@ -170,9 +170,9 @@ func TestSpanFrontierFallback(t *testing.T) {
 	spDE := regionspan.ComparableSpan{Start: keyD, End: keyE}
 
 	f := NewFrontier(20, spAB).(*spanFrontier)
-	f.Forward(spBC, 20)
-	f.Forward(spCD, 10)
-	f.Forward(spDE, 20)
+	f.Forward(0, spBC, 20)
+	f.Forward(0, spCD, 10)
+	f.Forward(0, spDE, 20)
 
 	// [A, B) [B, C) [C, D) [D, E)
 	// 20     20     10     20
@@ -187,7 +187,7 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// [A, B) [B, C) [C, D) [D, E)
 	// 20     10     10     20
 	// [B, C) does not forward, because of merge into [A, C) immediately
-	f.Forward(spCD, 20)
+	f.Forward(0, spCD, 20)
 	require.Equal(t, uint64(20), f.Frontier())
 	// the frontier stoes [A, B) and [B, C) but they are not correct exactly
 	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ Max] `, f.String())
@@ -216,22 +216,22 @@ func TestMinMax(t *testing.T) {
 	require.Equal(t, "[ @ 0] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
 
-	f.Forward(spMinMax, 1)
+	f.Forward(0, spMinMax, 1)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, "[ @ 1] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
 
-	f.Forward(spMinMid, 2)
+	f.Forward(0, spMinMid, 2)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, "[ @ 2] [m @ 1] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
 
-	f.Forward(spMidMax, 2)
+	f.Forward(0, spMidMax, 2)
 	require.Equal(t, uint64(2), f.Frontier())
 	require.Equal(t, "[ @ 2] [m @ 2] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
 
-	f.Forward(spMinMax, 3)
+	f.Forward(0, spMinMax, 3)
 	require.Equal(t, uint64(3), f.Frontier())
 	require.Equal(t, "[ @ 3] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
@@ -262,41 +262,41 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	checkFrontier(t, f)
 
 	// Advance the tracked spans
-	f.Forward(spAB, 1)
+	f.Forward(0, spAB, 1)
 	require.Equal(t, uint64(0), f.Frontier())
 	require.Equal(t, `[a @ 1] [b @ Max] [c @ 0] [e @ Max] `, f.String())
 	checkFrontier(t, f)
-	f.Forward(spCE, 1)
+	f.Forward(0, spCE, 1)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, `[a @ 1] [b @ Max] [c @ 1] [e @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Advance d-e split c-e to c-d and d-e
-	f.Forward(spDE, 2)
+	f.Forward(0, spDE, 2)
 	require.Equal(t, uint64(1), f.Frontier())
 	require.Equal(t, `[a @ 1] [b @ Max] [c @ 1] [d @ 2] [e @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Advance a-d cover a-b and c-d
-	f.Forward(spAD, 3)
+	f.Forward(0, spAD, 3)
 	require.Equal(t, uint64(2), f.Frontier())
 	require.Equal(t, `[a @ 3] [d @ 2] [e @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Advance one cover all 3 span
-	f.Forward(spAE, 4)
+	f.Forward(0, spAE, 4)
 	require.Equal(t, uint64(4), f.Frontier())
 	require.Equal(t, `[a @ 4] [e @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Advance all with a larger span
-	f.Forward(sp1F, 5)
+	f.Forward(0, sp1F, 5)
 	require.Equal(t, uint64(5), f.Frontier())
 	require.Equal(t, `[1 @ 5] [f @ Max] `, f.String())
 	checkFrontier(t, f)
 
 	// Advance span smaller than all tracked spans
-	f.Forward(sp12, 6)
+	f.Forward(0, sp12, 6)
 	require.Equal(t, uint64(5), f.Frontier())
 	require.Equal(t, `[1 @ 6] [2 @ 5] [f @ Max] `, f.String())
 	checkFrontier(t, f)
@@ -328,7 +328,7 @@ func TestSpanFrontierRandomly(t *testing.T) {
 
 		ts := rand.Uint64()
 
-		f.Forward(span, ts)
+		f.Forward(0, span, ts)
 		checkFrontier(t, f)
 	}
 }

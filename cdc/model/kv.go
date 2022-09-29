@@ -38,7 +38,7 @@ const (
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
-	Resolved []*ResolvedSpan
+	Resolved *ResolvedSpan
 
 	// Additional debug info, not used
 	RegionID uint64
@@ -60,13 +60,18 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 //
 //msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
-	Span       regionspan.ComparableSpan
+	Spans      []ResolvedComparableSpan
 	ResolvedTs uint64
+}
+
+type ResolvedComparableSpan struct {
+	Span   regionspan.ComparableSpan
+	Region uint64
 }
 
 // String implements fmt.Stringer interface.
 func (rs *ResolvedSpan) String() string {
-	return fmt.Sprintf("span: %s, resolved-ts: %d", rs.Span, rs.ResolvedTs)
+	return fmt.Sprintf("span: %v, resolved-ts: %d", rs.Spans, rs.ResolvedTs)
 }
 
 // RawKVEntry notify the KV operator
