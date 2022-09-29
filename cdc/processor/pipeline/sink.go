@@ -399,7 +399,15 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 		return
 	}
 
-	n.sinkV2.Close(ctx)
+	if err := n.sinkV2.Close(ctx); err != nil {
+		switch errors.Cause(err) {
+		case context.Canceled, context.DeadlineExceeded:
+			// ignore context canceled error
+		default:
+		}
+		return errors.Trace(err)
+	}
+
 	log.Info("sinkV2 is closed",
 		zap.String("namespace", n.changefeed.Namespace),
 		zap.String("changefeed", n.changefeed.ID),
