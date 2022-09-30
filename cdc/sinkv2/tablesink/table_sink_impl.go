@@ -146,7 +146,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	err := e.progressTracker.close(ctx)
 	if err != nil {
 		failedCheckpointTs := e.GetCheckpointTs()
-		log.Error("Failed to frozen table sink",
+		log.Error("Failed to stop table sink",
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
 			zap.Int64("tableID", e.tableID),
@@ -156,7 +156,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	}
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
-	log.Info("Table sink frozened",
+	log.Info("Table sink stopped",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),

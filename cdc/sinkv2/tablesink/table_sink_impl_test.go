@@ -288,7 +288,7 @@ func TestClose(t *testing.T) {
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be frozened")
+	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
 func TestCloseCancellable(t *testing.T) {
