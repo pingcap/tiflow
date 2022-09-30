@@ -89,8 +89,9 @@ const (
 var reconnectInterval = 60 * time.Minute
 
 type singleRegionInfo struct {
-	verID  tikv.RegionVerID
-	span   regionspan.ComparableSpan
+	verID tikv.RegionVerID
+	span  regionspan.ComparableSpan
+	// region's checkpoint ts.
 	ts     uint64
 	rpcCtx *tikv.RPCContext
 }
@@ -231,13 +232,10 @@ func newSyncRegionFeedStateMap() *syncRegionFeedStateMap {
 	}
 }
 
-func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) bool {
+func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	_, ok := m.regionInfoMap[requestID]
 	m.regionInfoMap[requestID] = state
-	return ok
 }
 
 func (m *syncRegionFeedStateMap) take(requestID uint64) (*regionFeedState, bool) {
@@ -266,7 +264,7 @@ type regionEventFeedLimiters struct {
 	limiters map[uint64]*rate.Limiter
 }
 
-var defaultRegionEventFeedLimiters *regionEventFeedLimiters = &regionEventFeedLimiters{
+var defaultRegionEventFeedLimiters = &regionEventFeedLimiters{
 	limiters: make(map[uint64]*rate.Limiter),
 }
 
@@ -699,7 +697,12 @@ func (s *eventFeedSession) requestRegionToStore(
 	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
 	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
 	storePendingRegions := make(map[string]*syncRegionFeedStateMap)
-	version := version.ReleaseSemver()
+
+	header := &cdcpb.Header{
+		ClusterId:    s.client.clusterID,
+		TicdcVersion: version.ReleaseSemver(),
+	}
+	extraOp := kvrpcpb.ExtraOp_ReadOldValue
 
 	var sri singleRegionInfo
 	for {
@@ -711,14 +714,10 @@ func (s *eventFeedSession) requestRegionToStore(
 		requestID := allocID()
 
 		// Always read old value.
-		extraOp := kvrpcpb.ExtraOp_ReadOldValue
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
 		req := &cdcpb.ChangeDataRequest{
-			Header: &cdcpb.Header{
-				ClusterId:    s.client.clusterID,
-				TicdcVersion: version,
-			},
+			Header:       header,
 			RegionId:     regionID,
 			RequestId:    requestID,
 			RegionEpoch:  rpcCtx.Meta.RegionEpoch,

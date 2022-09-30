@@ -159,15 +159,12 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
-	// get a slot for the given region
-	inputCalcSlot func(regionID uint64) int
+
 	// total input slots
 	inputSlots int
 }
 
-func newRegionWorker(
-	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
-) *regionWorker {
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -188,6 +185,12 @@ func newRegionWorker(
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
+	return metrics
+}
+
+func newRegionWorker(
+	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+) *regionWorker {
 	return &regionWorker{
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
@@ -198,11 +201,15 @@ func newRegionWorker(
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
 		concurrent:    s.client.config.WorkerConcurrent,
-		metrics:       metrics,
+		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
-		inputCalcSlot: func(regionID uint64) int { return int(regionID) % s.client.config.WorkerConcurrent },
 		inputSlots:    s.client.config.WorkerConcurrent,
 	}
+}
+
+// get a slot for the given region
+func (w *regionWorker) inputCalcSlot(regionID uint64) int {
+	return int(regionID) % w.concurrent
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
