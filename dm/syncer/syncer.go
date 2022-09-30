@@ -1726,9 +1726,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
 	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
 	// 3. then we initiate schema tracker
-	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
-	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
-	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker,
+	//      and flush them into checkpoint again.
 	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
 	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
 	// 5. finally clean the dump files
