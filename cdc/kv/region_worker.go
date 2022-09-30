@@ -35,6 +35,7 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -298,6 +299,9 @@ type rtsUpdateEvent struct {
 	resolvedTs uint64
 }
 
+// too many repeated logs when TiDB OOM
+var resolveLockLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*2000), 10)
+
 func (w *regionWorker) resolveLock(ctx context.Context) error {
 	// tikv resolved update interval is 1s, use half of the resolve lock interval
 	// as lock penalty.
@@ -376,22 +380,25 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						w.rtsManager.Insert(rts)
 						continue
 					}
-					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.String("namespace", w.session.client.changefeed.Namespace),
-						zap.String("changefeed", w.session.client.changefeed.ID),
-						zap.String("addr", w.storeAddr),
-						zap.Uint64("regionID", rts.regionID),
-						zap.Stringer("span", state.getRegionSpan()),
-						zap.Duration("duration", sinceLastResolvedTs),
-						zap.Duration("lastEvent", sinceLastEvent),
-						zap.Uint64("resolvedTs", lastResolvedTs),
-					)
+					if resolveLockLogRateLimiter.Allow() {
+						log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+							zap.String("namespace", w.session.client.changefeed.Namespace),
+							zap.String("changefeed", w.session.client.changefeed.ID),
+							zap.String("addr", w.storeAddr),
+							zap.Uint64("regionID", rts.regionID),
+							zap.Stringer("span", state.getRegionSpan()),
+							zap.Duration("duration", sinceLastResolvedTs),
+							zap.Duration("lastEvent", sinceLastEvent),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+						)
+					}
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock",
-							zap.Uint64("regionID", rts.regionID), zap.Error(err),
+							zap.Uint64("regionID", rts.regionID),
 							zap.String("namespace", w.session.client.changefeed.Namespace),
-							zap.String("changefeed", w.session.client.changefeed.ID))
+							zap.String("changefeed", w.session.client.changefeed.ID),
+							zap.Error(err))
 						continue
 					}
 					rts.ts.penalty = 0
