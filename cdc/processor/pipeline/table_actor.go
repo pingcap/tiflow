@@ -156,7 +156,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
-		table.stop()
+		table.stop(err)
 		return nil, errors.Trace(err)
 	}
 	err := globalVars.TableActorSystem.System().Spawn(mb, table)
@@ -420,7 +420,8 @@ func (t *tableActor) stop(err error) {
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID))
+		zap.Int64("tableID", t.tableID),
+		zap.Error(err))
 }
 
 // handleError stops the table actor at first and then reports the error to processor

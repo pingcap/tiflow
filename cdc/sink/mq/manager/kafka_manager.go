@@ -148,7 +148,6 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 		)
 		return nil, err
 	}
-
 	log.Info(
 		"Kafka admin client describe topics success",
 		zap.Duration("duration", time.Since(start)))
