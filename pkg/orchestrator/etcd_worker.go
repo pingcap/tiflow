@@ -240,7 +240,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 		} else {
 			if exiting {
-				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
+				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick,
+				// and all pending patches is applied.
 				return nil
 			}
 			if worker.revision < worker.barrierRev {

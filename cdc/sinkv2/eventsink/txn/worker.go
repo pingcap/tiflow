@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -73,10 +73,10 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		backend: backend,
 		errCh:   errCh,
 
-		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerHandledRows:   metrics.TxnWorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
+		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
 		flushInterval:     backend.MaxFlushInterval(),
 		hasPending:        false,
