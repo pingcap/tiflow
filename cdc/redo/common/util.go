@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
+
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/pingcap/errors"
@@ -159,4 +161,24 @@ func defaultS3Retryer() request.Retryer {
 			MinThrottleDelay: 2 * time.Second,
 		},
 	}
+}
+
+// GetChangefeedFiles return the files that belong to the changefeed.
+func GetChangefeedFiles(files []string, changefeedID model.ChangeFeedID) []string {
+	var (
+		matcher string
+		res     []string
+	)
+
+	if changefeedID.Namespace == "default" {
+		matcher = fmt.Sprintf("_%s_", changefeedID.ID)
+	} else {
+		matcher = fmt.Sprintf("_%s_%s_", changefeedID.Namespace, changefeedID.ID)
+	}
+	for _, file := range files {
+		if strings.Contains(file, matcher) {
+			res = append(res, file)
+		}
+	}
+	return res
 }
