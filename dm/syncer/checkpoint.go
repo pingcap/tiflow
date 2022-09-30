@@ -576,7 +576,11 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(tctx *tcontext.Context, exceptTabl
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
+<<<<<<< HEAD
 	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+=======
+	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, cp.metricProxies, sqls, args...)
+>>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
 	if err != nil {
 		return err
 	}
