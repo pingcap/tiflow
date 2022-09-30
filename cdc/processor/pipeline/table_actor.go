@@ -405,11 +405,15 @@ func (t *tableActor) stop(err error) {
 	t.cancel()
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
-			log.Warn("close sink failed",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.String("tableName", t.tableName),
-				zap.Error(err))
+			switch errors.Cause(err) {
+			case context.Canceled, cerror.ErrTableProcessorStoppedSafely:
+			default:
+				log.Warn("close sink failed",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.String("tableName", t.tableName),
+					zap.Error(err))
+			}
 		}
 	}
 	log.Info("table actor stopped",
@@ -506,7 +510,7 @@ func (t *tableActor) Name() string {
 // Cancel stops this table pipeline immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	// cancel wait group, release resource and mark the status as stopped
+	// cancel wait group, release resource and mark the state as stopped
 	t.stop(nil)
 	// actor is closed, tick actor to remove this actor router
 	msg := pmessage.TickMessage()

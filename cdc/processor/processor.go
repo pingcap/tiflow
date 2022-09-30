@@ -330,7 +330,11 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return state, nil
 	}
 	if isProcessorIgnorableError(err) {
-		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+		log.Info("processor exited",
+			cdcContext.ZapFieldCapture(ctx),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
@@ -493,7 +497,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeedID.ID))
 
 	start := time.Now()
-	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -501,6 +505,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
+	p.sink = s
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
