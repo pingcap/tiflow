@@ -188,9 +188,9 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 }
 
 func TestValidatorDeadLock(t *testing.T) {
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
 	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
 	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
