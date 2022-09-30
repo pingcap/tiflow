@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -72,4 +73,28 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	}
 
 	return "", nil
+}
+
+// RunCheckOnConfigs returns the check result for given subtask configs. Caller
+// should be noticed that result may be very large.
+// check result may be nil when check is not run.
+func RunCheckOnConfigs(ctx context.Context, cfgs []*config.SubTaskConfig) (*checker.Results, error) {
+	if len(cfgs) == 0 {
+		return nil, nil
+	}
+
+	ignoreCheckingItems := cfgs[0].IgnoreCheckingItems
+	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
+	if len(checkingItems) == 0 {
+		return nil, nil
+	}
+
+	c := NewChecker(cfgs, checkingItems, 0, 0)
+
+	if err := c.Init(ctx); err != nil {
+		return nil, terror.Annotate(err, "fail to initialize checker")
+	}
+	defer c.Close()
+
+	return checker.Do(ctx, c.checkList)
 }
