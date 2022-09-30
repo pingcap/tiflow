@@ -315,15 +315,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case rtsUpdate := <-w.rtsUpdateCh:
-<<<<<<< HEAD
-			w.rtsManager.Upsert(rtsUpdate)
-=======
 			resolvedTs := rtsUpdate.resolvedTs
 			eventTime := time.Now()
 			for _, regionID := range rtsUpdate.regions {
 				w.rtsManager.Upsert(regionID, resolvedTs, eventTime)
 			}
->>>>>>> 7cd8d5125 (puller(ticdc):  region worker batch process events (#7079))
 		case <-advanceCheckTicker.C:
 			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
@@ -339,7 +335,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
 				// region does not reach resolve lock boundary, put it back
 				if sinceLastResolvedTs < resolveLockInterval {
-					w.rtsManager.Upsert(item)
+					w.rtsManager.Insert(item)
 					break
 				}
 				expired = append(expired, item)
@@ -378,7 +374,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							rts.ts.eventTime = time.Now()
 							rts.ts.penalty = 0
 						}
-						w.rtsManager.Upsert(rts)
+						w.rtsManager.Insert(rts)
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
@@ -402,7 +398,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					rts.ts.penalty = 0
 				}
 				rts.ts.resolvedTs = lastResolvedTs
-				w.rtsManager.Upsert(rts)
+				w.rtsManager.Insert(rts)
 			}
 		}
 	}
@@ -820,23 +816,10 @@ func (w *regionWorker) handleResolvedTs(
 	case w.rtsUpdateCh <- &rtsUpdateEvent{resolvedTs: resolvedTs, regions: regions}:
 	default:
 	}
-<<<<<<< HEAD
-
-	if resolvedTs < state.lastResolvedTs {
-		log.Debug("The resolvedTs is fallen back in kvclient",
-			zap.String("namesapce", w.session.client.changefeed.Namespace),
-			zap.String("changefeed", w.session.client.changefeed.ID),
-			zap.String("EventType", "RESOLVED"),
-			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
-			zap.Uint64("regionID", regionID))
-		return nil
-=======
 	for _, state := range revents.regions {
 		state.lock.Lock()
 		state.lastResolvedTs = resolvedTs
 		state.lock.Unlock()
->>>>>>> 7cd8d5125 (puller(ticdc):  region worker batch process events (#7079))
 	}
 	// emit a checkpointTs
 	revent := model.RegionFeedEvent{Resolved: resolvedSpans}

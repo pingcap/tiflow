@@ -197,36 +197,15 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-<<<<<<< HEAD
-				metricTxnCollectCounterResolved.Inc()
-				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Reflect("resolved", e.Resolved),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("spans", p.spans),
-					)
-				}
-				// Forward is called in a single thread
-				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
-				resolvedTs := p.tsTracker.Frontier()
-				if resolvedTs > 0 && !initialized {
-					// Advancing to a non-zero value means the puller level
-					// resolved ts is initialized.
-					atomic.StoreInt64(&p.initialized, 1)
-					initialized = true
-=======
 				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved)))
 				for _, resolvedSpan := range e.Resolved {
 					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
 						log.Panic("the resolved span is not in the total span",
-							zap.String("namespace", p.changefeed.Namespace),
-							zap.String("changefeed", p.changefeed.ID),
-							zap.Int64("tableID", p.tableID),
-							zap.String("tableName", p.tableName),
-							zap.Any("resolved", e.Resolved),
-							zap.Any("spans", p.spans),
+							zap.String("namespace", changefeedID.Namespace),
+							zap.String("changefeed", changefeedID.ID),
+							zap.Reflect("resolved", e.Resolved),
+							zap.Int64("tableID", tableID),
+							zap.Reflect("spans", p.spans),
 						)
 					}
 					// Forward is called in a single thread
@@ -237,48 +216,33 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						// resolved ts is initialized.
 						atomic.StoreInt64(&p.initialized, 1)
 						initialized = true
->>>>>>> 7cd8d5125 (puller(ticdc):  region worker batch process events (#7079))
-
 						spans := make([]string, 0, len(p.spans))
 						for i := range p.spans {
 							spans = append(spans, p.spans[i].String())
 						}
 						log.Info("puller is initialized",
-							zap.String("namespace", p.changefeed.Namespace),
-							zap.String("changefeed", p.changefeed.ID),
-							zap.Int64("tableID", p.tableID),
-							zap.String("tableName", p.tableName),
-							zap.Uint64("resolvedTs", resolvedTs),
+							zap.String("namespace", changefeedID.Namespace),
+							zap.String("changefeed", changefeedID.ID),
 							zap.Duration("duration", time.Since(start)),
-							zap.Strings("spans", spans))
+							zap.Int64("tableID", tableID),
+							zap.Strings("spans", spans),
+							zap.Uint64("resolvedTs", resolvedTs))
 					}
-<<<<<<< HEAD
-					log.Info("puller is initialized",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Duration("duration", time.Since(start)),
-						zap.Int64("tableID", tableID),
-						zap.Strings("spans", spans),
-						zap.Uint64("resolvedTs", resolvedTs))
-				}
-				if !initialized || resolvedTs == lastResolvedTs {
-					continue
-				}
-				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-				if err != nil {
-					return errors.Trace(err)
-=======
 					if !initialized || resolvedTs == lastResolvedTs {
 						continue
 					}
 					lastResolvedTs = resolvedTs
-					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+					err := output(
+						&model.RawKVEntry{
+							CRTs:     resolvedTs,
+							OpType:   model.OpTypeResolved,
+							RegionID: e.RegionID,
+						},
+					)
 					if err != nil {
 						return errors.Trace(err)
 					}
 					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
->>>>>>> 7cd8d5125 (puller(ticdc):  region worker batch process events (#7079))
 				}
 			}
 		}
