@@ -76,8 +76,8 @@ const (
   "gc-ttl": 86400,
   "tz": "System",
   "capture-session-ttl": 10,
-  "owner-flush-interval": 200000000,
-  "processor-flush-interval": 100000000,
+  "owner-flush-interval": 50000000,
+  "processor-flush-interval": 50000000,
   "sorter": {
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
