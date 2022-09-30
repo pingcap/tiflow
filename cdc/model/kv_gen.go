@@ -318,3 +318,135 @@ func (z *RawKVEntry) Msgsize() (s int) {
 	s = 1 + 8 + msgp.IntSize + 4 + msgp.BytesPrefixSize + len(z.Key) + 6 + msgp.BytesPrefixSize + len(z.Value) + 10 + msgp.BytesPrefixSize + len(z.OldValue) + 9 + msgp.Uint64Size + 5 + msgp.Uint64Size + 10 + msgp.Uint64Size
 	return
 }
+
+// DecodeMsg implements msgp.Decodable
+func (z *RegionComparableSpan) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "Span":
+			err = z.Span.DecodeMsg(dc)
+			if err != nil {
+				err = msgp.WrapError(err, "Span")
+				return
+			}
+		case "Region":
+			z.Region, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "Region")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *RegionComparableSpan) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 2
+	// write "Span"
+	err = en.Append(0x82, 0xa4, 0x53, 0x70, 0x61, 0x6e)
+	if err != nil {
+		return
+	}
+	err = z.Span.EncodeMsg(en)
+	if err != nil {
+		err = msgp.WrapError(err, "Span")
+		return
+	}
+	// write "Region"
+	err = en.Append(0xa6, 0x52, 0x65, 0x67, 0x69, 0x6f, 0x6e)
+	if err != nil {
+		return
+	}
+	err = en.WriteUint64(z.Region)
+	if err != nil {
+		err = msgp.WrapError(err, "Region")
+		return
+	}
+	return
+}
+
+// MarshalMsg implements msgp.Marshaler
+func (z *RegionComparableSpan) MarshalMsg(b []byte) (o []byte, err error) {
+	o = msgp.Require(b, z.Msgsize())
+	// map header, size 2
+	// string "Span"
+	o = append(o, 0x82, 0xa4, 0x53, 0x70, 0x61, 0x6e)
+	o, err = z.Span.MarshalMsg(o)
+	if err != nil {
+		err = msgp.WrapError(err, "Span")
+		return
+	}
+	// string "Region"
+	o = append(o, 0xa6, 0x52, 0x65, 0x67, 0x69, 0x6f, 0x6e)
+	o = msgp.AppendUint64(o, z.Region)
+	return
+}
+
+// UnmarshalMsg implements msgp.Unmarshaler
+func (z *RegionComparableSpan) UnmarshalMsg(bts []byte) (o []byte, err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, bts, err = msgp.ReadMapKeyZC(bts)
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "Span":
+			bts, err = z.Span.UnmarshalMsg(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Span")
+				return
+			}
+		case "Region":
+			z.Region, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Region")
+				return
+			}
+		default:
+			bts, err = msgp.Skip(bts)
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	o = bts
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *RegionComparableSpan) Msgsize() (s int) {
+	s = 1 + 5 + z.Span.Msgsize() + 7 + msgp.Uint64Size
+	return
+}

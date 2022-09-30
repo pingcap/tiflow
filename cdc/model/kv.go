@@ -60,18 +60,19 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 //
 //msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
-	Spans      []ResolvedComparableSpan
+	Spans      []RegionComparableSpan
 	ResolvedTs uint64
-}
-
-type ResolvedComparableSpan struct {
-	Span   regionspan.ComparableSpan
-	Region uint64
 }
 
 // String implements fmt.Stringer interface.
 func (rs *ResolvedSpan) String() string {
 	return fmt.Sprintf("span: %v, resolved-ts: %d", rs.Spans, rs.ResolvedTs)
+}
+
+// RegionComparableSpan contains a comparable span and a region id of that span
+type RegionComparableSpan struct {
+	Span   regionspan.ComparableSpan
+	Region uint64
 }
 
 // RawKVEntry notify the KV operator

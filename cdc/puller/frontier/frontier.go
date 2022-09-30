@@ -32,24 +32,29 @@ type Frontier interface {
 
 // spanFrontier tracks the minimum timestamp of a set of spans.
 type spanFrontier struct {
-	spanList                                  skipList
-	minTsHeap                                 fibonacciHeap
-	result                                    []*skipListNode
-	nodes                                     map[uint64]*skipListNode
-	metricResolvedRegionCachedCounterResolved prometheus.Counter
+	spanList  skipList
+	minTsHeap fibonacciHeap
+
+	seekTempResult []*skipListNode
+
+	cachedRegions                     map[uint64]*skipListNode
+	metricResolvedRegionCachedCounter prometheus.Counter
 }
 
 // NewFrontier creates Frontier from the given spans.
 // spanFrontier don't support use Nil as the maximum key of End range
 // So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 // End key bigger than util.UpperBoundKey
-func NewFrontier(checkpointTs uint64, metricResolvedRegionCachedCounterResolved prometheus.Counter, spans ...regionspan.ComparableSpan) Frontier {
+func NewFrontier(checkpointTs uint64,
+	metricResolvedRegionCachedCounter prometheus.Counter,
+	spans ...regionspan.ComparableSpan,
+) Frontier {
 	s := &spanFrontier{
-		spanList: *newSpanList(),
-		result:   make(seekResult, maxHeight),
-		nodes:    map[uint64]*skipListNode{},
+		spanList:       *newSpanList(),
+		seekTempResult: make(seekResult, maxHeight),
+		cachedRegions:  map[uint64]*skipListNode{},
 
-		metricResolvedRegionCachedCounterResolved: metricResolvedRegionCachedCounterResolved,
+		metricResolvedRegionCachedCounter: metricResolvedRegionCachedCounter,
 	}
 	firstSpan := true
 	for _, span := range spans {
@@ -72,10 +77,12 @@ func (s *spanFrontier) Frontier() uint64 {
 
 // Forward advances the timestamp for a span.
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
-	if n, ok := s.nodes[regionID]; ok && n.regionID > 0 && n.end != nil {
+	// it's the fast part to detect if the region is split or merged,
+	// if not we can update the minTsHeap with use new ts directly
+	if n, ok := s.cachedRegions[regionID]; ok && n.regionID > 0 && n.end != nil {
 		if regionID == n.regionID && bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
-			s.metricResolvedRegionCachedCounterResolved.Inc()
+			s.metricResolvedRegionCachedCounter.Inc()
 			return
 		}
 	}
@@ -83,10 +90,11 @@ func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, 
 }
 
 func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
-	for i := 0; i < len(s.result); i++ {
-		s.result[i] = nil
+	// clear the  seek result
+	for i := 0; i < len(s.seekTempResult); i++ {
+		s.seekTempResult[i] = nil
 	}
-	seekRes := s.spanList.Seek(span.Start, s.result)
+	seekRes := s.spanList.Seek(span.Start, s.seekTempResult)
 	// if there is no change in the region span
 	// We just need to update the ts corresponding to the span in list
 	next := seekRes.Node().Next()
@@ -94,9 +102,9 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
 			if regionID > 0 {
-				s.nodes[regionID] = seekRes.Node()
-				s.nodes[regionID].regionID = regionID
-				s.nodes[regionID].end = next.key
+				s.cachedRegions[regionID] = seekRes.Node()
+				s.cachedRegions[regionID].regionID = regionID
+				s.cachedRegions[regionID].end = next.key
 			}
 			return
 		}
@@ -104,14 +112,14 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 
 	// regions are merged or split, overwrite span into list
 	node := seekRes.Node()
-	delete(s.nodes, node.regionID)
+	delete(s.cachedRegions, node.regionID)
 	lastNodeTs := uint64(math.MaxUint64)
 	shouldInsertStartNode := true
 	if node.Value() != nil {
 		lastNodeTs = node.Value().key
 	}
 	for ; node != nil; node = node.Next() {
-		delete(s.nodes, node.regionID)
+		delete(s.cachedRegions, node.regionID)
 		cmpStart := bytes.Compare(node.Key(), span.Start)
 		if cmpStart < 0 {
 			continue

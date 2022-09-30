@@ -354,7 +354,7 @@ func checkFrontier(t *testing.T, f Frontier) {
 	require.Equal(t, tsInList[0], f.Frontier())
 }
 
-func TestMinMaxWithRegion(t *testing.T) {
+func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	t.Parallel()
 
 	ab := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}

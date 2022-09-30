@@ -785,7 +785,7 @@ func (w *regionWorker) handleResolvedTs(
 	revents *resolvedTsEvent,
 ) error {
 	resolvedTs := revents.resolvedTs
-	resolvedSpans := make([]model.ResolvedComparableSpan, 0, len(revents.regions))
+	resolvedSpans := make([]model.RegionComparableSpan, 0, len(revents.regions))
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
@@ -805,7 +805,7 @@ func (w *regionWorker) handleResolvedTs(
 			continue
 		}
 		// emit a checkpointTs
-		resolvedSpans = append(resolvedSpans, model.ResolvedComparableSpan{
+		resolvedSpans = append(resolvedSpans, model.RegionComparableSpan{
 			Span:   state.sri.span,
 			Region: regionID,
 		})
