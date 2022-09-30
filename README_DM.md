@@ -19,7 +19,7 @@ To check the code style and build binaries, you can simply run:
 make build
 ```
 
-Note that DM supports building with Go version `Go >= 1.16`, and unit test preparation can be found in [Running/Unit Test](dm/tests/README.md#Unit-Test)
+Note that DM supports building with Go version `Go >= 1.19`, and unit test preparation can be found in [Running/Unit Test](dm/tests/README.md#Unit-Test)
 
 If you only want to build binaries, you can run:
 

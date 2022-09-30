@@ -300,7 +300,7 @@ type rtsUpdateEvent struct {
 }
 
 // too many repeated logs when TiDB OOM
-var resolveLockLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*500), 10)
+var resolveLockLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*2000), 10)
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
 	// tikv resolved update interval is 1s, use half of the resolve lock interval
