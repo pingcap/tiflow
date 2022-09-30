@@ -129,6 +129,12 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		return nil
 	}
 
+	// Notice: We have to set the state to stopping first,
+	// otherwise the progressTracker may be advanced incorrectly.
+	// For example, if we do not freeze it and set the state to stooping
+	// then the progressTracker may be advanced to the checkpointTs
+	// because backend sink drops some events.
+	e.progressTracker.frozenProcess()
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
 	stoppingCheckpointTs := e.GetCheckpointTs()
@@ -140,7 +146,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	err := e.progressTracker.close(ctx)
 	if err != nil {
 		failedCheckpointTs := e.GetCheckpointTs()
-		log.Error("Failed to stop table sink",
+		log.Error("Failed to frozen table sink",
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
 			zap.Int64("tableID", e.tableID),
@@ -150,7 +156,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	}
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
-	log.Info("Table sink stopped",
+	log.Info("Table sink frozened",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),

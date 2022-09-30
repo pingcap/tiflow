@@ -168,7 +168,7 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
-	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
+	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
