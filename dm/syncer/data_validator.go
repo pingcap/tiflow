@@ -728,6 +728,7 @@ func (v *DataValidator) stopInner() {
 	v.L.Info("stopping")
 	if v.Stage() != pb.Stage_Running {
 		v.L.Warn("not started")
+		v.Unlock()
 		return
 	}
 
