@@ -41,7 +41,7 @@ function run_with_prepared_source_config() {
 
 	# with a 5 rows insert txn: 1 * FormatDesc + 1 * PreviousGTID + 1 * GTID + 1 * BEGIN + 5 * (Table_map + Write_rows) + 1 * XID
 	# here we fail at the third write rows event, sync should retry and auto recover without any duplicate event
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/RelayGetEventFailed=return(3);github.com/pingcap/tiflow/dm/relay/RelayAllowRetry=return"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/RelayGetEventFailedAt=return(3);github.com/pingcap/tiflow/dm/relay/RelayAllowRetry=return"
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
@@ -73,11 +73,22 @@ function run_with_prepared_source_config() {
 	run_sql_source2 "show master status;"
 	binlog_file=$(grep "File" $TEST_DIR/sql_res.$TEST_NAME.txt | awk -F: '{print $2}' | xargs)
 	binlog_pos=$(grep "Position" $TEST_DIR/sql_res.$TEST_NAME.txt | awk -F: '{print $2}' | xargs)
-
 	server_uuid=$(tail -n 1 $WORK_DIR/worker2/relay-dir/server-uuid.index)
-	relay_log_size=$(ls -al $WORK_DIR/worker2/relay-dir/$server_uuid/$binlog_file | awk '{print $5}')
-	echo "binlog_pos: $binlog_pos relay_log_size: $relay_log_size"
-	[ "$binlog_pos" -eq "$relay_log_size" ]
+
+	succ=0
+	for ((k = 1; k < 6; k++)); do
+		relay_log_size=$(ls -al $WORK_DIR/worker2/relay-dir/$server_uuid/$binlog_file | awk '{print $5}')
+		echo "binlog_pos: $binlog_pos relay_log_size: $relay_log_size"
+		if [[ "$binlog_pos" -eq "$relay_log_size" ]]; then
+			succ=1
+			break
+		fi
+		sleep 1
+	done
+	if [[ $succ -eq 0 ]]; then
+		echo "binlog_pos is not equal to relay_log_size"
+		exit 1
+	fi
 
 	echo "============== run_with_prepared_source_config success ==================="
 }

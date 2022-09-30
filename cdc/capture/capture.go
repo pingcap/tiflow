@@ -52,7 +52,7 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	pdEnpoints      []string
+	pdEndpoints     []string
 	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -91,7 +91,7 @@ func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEnpoints:          pdEnpoints,
+		pdEndpoints:         pdEnpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -128,7 +128,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
@@ -315,10 +315,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	// when c.reset has not been called yet, c.info is nil.
+	if c.info != nil {
+		return *c.info, nil
+	}
+	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
@@ -482,7 +486,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by unregistering it from etcd
+// AsyncClose closes the capture by deregister it from etcd
 // Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()

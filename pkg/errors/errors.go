@@ -304,7 +304,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(
@@ -556,6 +556,10 @@ var (
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
 	)
+	ErrCaptureNotInitialized = errors.Normalize(
+		"capture has not been initialized yet",
+		errors.RFCCodeText("CDC:ErrCaptureNotInitialized"),
+	)
 	ErrNewProcessorFailed = errors.Normalize(
 		"new processor failed",
 		errors.RFCCodeText("CDC:ErrNewProcessorFailed"),
@@ -670,7 +674,7 @@ var (
 		errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"),
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
-		"fail to create changefeed because start-ts %d is earlier than GC safepoint at %d",
+		"fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(

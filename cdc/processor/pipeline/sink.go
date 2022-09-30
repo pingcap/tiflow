@@ -167,32 +167,34 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
-
-		// fail fast check, the happens before relationship is:
-		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
-		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
-		redoTs := n.redoManager.GetMinResolvedTs()
-		if redoTs < currentBarrierTs {
-			log.Warn("redoTs should not less than current barrierTs",
-				zap.Int64("tableID", n.tableID),
-				zap.Uint64("redoTs", redoTs),
-				zap.Uint64("barrierTs", currentBarrierTs))
-		}
-
-		// TODO: remove this check after SchedulerV3 become the first choice.
-		if resolved.Ts > redoTs {
-			resolved = model.NewResolvedTs(redoTs)
-		}
 	}
 
+	// Flush sink with barrierTs, which is broadcasted by owner.
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > currentBarrierTs {
 		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+		if currentBarrierTs > redoFlushed {
+			// NOTE: How can barrierTs be greater than rodoTs?
+			// When scheduler moves a table from one place to another place, the table
+			// start position will be checkpointTs instead of resolvedTs, which means
+			// redoTs can be less than barrierTs.
+			log.Info("redo flushedTs is less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("barrierTs", currentBarrierTs),
+				zap.Uint64("tableRedoFlushed", redoFlushed))
+
+			// The latest above comment shows why barrierTs can be greater than redoTs.
+			// So here the aim is to avoid slow tables holding back the whole processor.
+			resolved = model.NewResolvedTs(redoFlushed)
+		}
 	}
 
 	currentCheckpointTs := n.getCheckpointTs()
@@ -287,10 +289,12 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	handleKeyCount := 0
 	equivalentHandleKeyCount := 0
 	for i := range updateEvent.Row.Columns {
-		if updateEvent.Row.Columns[i].Flag.IsHandleKey() && updateEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+		col := updateEvent.Row.Columns[i]
+		preCol := updateEvent.Row.PreColumns[i]
+		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
 			handleKeyCount++
-			colValueString := model.ColumnValueString(updateEvent.Row.Columns[i].Value)
-			preColValueString := model.ColumnValueString(updateEvent.Row.PreColumns[i].Value)
+			colValueString := model.ColumnValueString(col.Value)
+			preColValueString := model.ColumnValueString(preCol.Value)
 			if colValueString == preColValueString {
 				equivalentHandleKeyCount++
 			}
@@ -320,7 +324,8 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	deleteEvent.Row.Columns = nil
 	for i := range deleteEvent.Row.PreColumns {
 		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+		if deleteEvent.Row.PreColumns[i] != nil &&
+			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 			deleteEvent.Row.PreColumns[i] = nil
 		}
 	}
@@ -354,7 +359,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		if err := n.verifySplitTxn(event); err != nil {
 			return false, errors.Trace(err)
 		}
-
 		if event.IsResolved() {
 			if n.status.Load() == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)

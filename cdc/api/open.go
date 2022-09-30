@@ -28,6 +28,9 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -223,11 +226,15 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
 		}
 	}
+	sinkURI, err := util.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink URI", zap.Error(err))
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
-		SinkURI:        info.SinkURI,
+		SinkURI:        sinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
@@ -274,8 +281,29 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	infoStr, err := info.Marshal()
+	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	defer up.Release()
+
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			up.PDClient,
+			gc.EnsureGCServiceCreating,
+			model.DefaultChangeFeedID(changefeedConfig.ID),
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
+
+	infoStr := info.String()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -283,6 +311,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -741,8 +770,12 @@ func (h *openAPI) ListCapture(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	ownerID := h.capture.Info().ID
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	ownerID := info.ID
 
 	captures := make([]*model.Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
@@ -769,7 +802,12 @@ func (h *openAPI) ServerStatus(c *gin.Context) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
-	status.ID = h.capture.Info().ID
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status.ID = info.ID
 	status.IsOwner = h.capture.IsOwner()
 	c.IndentedJSON(http.StatusOK, status)
 }
@@ -831,11 +869,18 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
-	c.Header(forWardFromCapture, h.capture.Info().ID)
+
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.Header(forWardFromCapture, info.ID)
 
 	var owner *model.CaptureInfo
 	// get owner
-	owner, err := h.capture.GetOwnerCaptureInfo(ctx)
+	owner, err = h.capture.GetOwnerCaptureInfo(ctx)
 	if err != nil {
 		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)

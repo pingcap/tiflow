@@ -375,7 +375,12 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	// Ensure the start ts is validate in the next 1 hour.
 	const ensureTTL = 60 * 60.
 	return gc.EnsureChangefeedStartTsSafety(
-		ctx, o.pdClient, model.DefaultChangeFeedID(o.changefeedID), ensureTTL, o.startTs)
+		ctx,
+		o.pdClient,
+		gc.EnsureGCServiceCreating,
+		model.DefaultChangeFeedID(o.changefeedID),
+		ensureTTL,
+		o.startTs)
 }
 
 // validateTargetTs checks if targetTs is a valid value.
@@ -450,7 +455,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		return err
 	}
 
-	infoStr, err := info.Marshal()
+	infoStr := info.String()
 	if err != nil {
 		return err
 	}

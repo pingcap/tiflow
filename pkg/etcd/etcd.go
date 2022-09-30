@@ -252,7 +252,7 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 }
 
 // GetCaptureInfo get capture info from etcd.
-// return errCaptureNotExist if the capture not exists.
+// return ErrCaptureNotExist if the capture not exists.
 func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *model.CaptureInfo, err error) {
 	key := GetEtcdKeyCaptureInfo(id)
 

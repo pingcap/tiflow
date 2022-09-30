@@ -27,20 +27,23 @@ import (
 )
 
 const (
-	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
-	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
+	// EnsureGCServiceCreating is a tag of GC service id for changefeed creation
+	EnsureGCServiceCreating = "ticdc-creating-"
+	// EnsureGCServiceInitializing is a tag of GC service id for changefeed initialization
+	EnsureGCServiceInitializing = "ticdc-initializing-"
 )
 
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
 // service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(
 	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
 	changefeedID model.ChangeFeedID,
 	TTL int64, startTs uint64,
 ) error {
 	minServiceGCTs, err := setServiceGCSafepoint(
 		ctx, pdCli,
-		cdcChangefeedCreatingServiceGCSafePointID+changefeedID.Namespace+"_"+changefeedID.ID,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID,
 		TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -48,6 +51,24 @@ func EnsureChangefeedStartTsSafety(
 	if startTs < minServiceGCTs {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
+	return nil
+}
+
+// UndoEnsureChangefeedStartTsSafety cleans the service GC safepoint of a changefeed
+// if something goes wrong after successfully calling EnsureChangefeedStartTsSafety().
+func UndoEnsureChangefeedStartTsSafety(
+	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
+	changefeedID model.ChangeFeedID,
+) error {
+	err := RemoveServiceGCSafepoint(
+		ctx,
+		pdCli,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
