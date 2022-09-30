@@ -331,7 +331,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
-			zap.String("capture", p.captureInfo.ID),
+			cdcContext.ZapFieldCapture(ctx),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Error(err))

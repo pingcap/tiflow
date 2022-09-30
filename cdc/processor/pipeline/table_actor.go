@@ -383,8 +383,8 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
-func (t *tableActor) stop() {
-	log.Debug("table actor begin to stop....",
+func (t *tableActor) stop(err error) {
+	log.Info("table actor begin to stop....",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName))
@@ -404,7 +404,7 @@ func (t *tableActor) stop() {
 	}
 	t.cancel()
 	if t.sinkNode != nil {
-		if err := t.sinkNode.stop(t.stopCtx); err != nil {
+		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled, cerror.ErrTableProcessorStoppedSafely:
 			default:
@@ -425,7 +425,7 @@ func (t *tableActor) stop() {
 
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
-	t.stop()
+	t.stop(err)
 	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
 		t.reportErr(err)
 	}
@@ -510,7 +510,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// cancel wait group, release resource and mark the state as stopped
-	t.stop()
+	t.stop(nil)
 	// actor is closed, tick actor to remove this actor router
 	msg := pmessage.TickMessage()
 	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
