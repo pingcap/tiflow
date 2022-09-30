@@ -15,7 +15,7 @@ function clean_gtid() {
 	# delete SOURCE1 checkpoint's gtid info
 	run_sql "update dm_meta.${TASK_NAME}_syncer_checkpoint set binlog_gtid=\"\" where id=\"$SOURCE_ID1\" and is_global=1" $TIDB_PORT $TIDB_PASSWORD
 	# set SOURCE2 incremental metadata without checkpoint
-	run_sql "delete from dm_meta.${TASK_NAME}_syncer_checkpoint where id=\"$SOURCE_ID2\" and is_global=1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql "delete from dm_meta.${TASK_NAME}_syncer_checkpoint where id=\"$SOURCE_ID2\"" $TIDB_PORT $TIDB_PASSWORD
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/task-mode-placeholder/incremental/g" $WORK_DIR/dm-task.yaml
