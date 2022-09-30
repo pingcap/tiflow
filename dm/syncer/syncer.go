@@ -1403,13 +1403,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
 				// simulate the value of affected along with the injected error due to the adding of SET SQL of timezone and timestamp
-				if affected > 3 {
-					// for multi-schema change integration test
-					// simulate error for the first DDL among the multi-schema change DDL
-					affected -= 3
-				} else if affected == 3 {
-					// for single-schema change integration test
-					affected -= 2
+				if affected == 0 {
+					affected++
 				}
 			})
 			if err != nil {
