@@ -155,22 +155,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
 	}
 
-<<<<<<< HEAD
 	s.Protocol = params.Get(ProtocolKey)
-=======
-	protocolFromURI := params.Get(ProtocolKey)
-	if protocolFromURI != "" {
-		if s.Protocol != "" {
-			log.Warn(
-				fmt.Sprintf("protocol is specified in both sink URI and config file "+
-					"the value in sink URI will be used "+
-					"protocol in sink URI:%s, protocol in config file:%s",
-					protocolFromURI, s.Protocol))
-		}
-		s.Protocol = protocolFromURI
-	}
-
->>>>>>> 6e9b29190 (mq(ticdc): do not assign nil to interface value to prenvent panic on close sink v1 (#7122))
 	// validate that protocol is compatible with the scheme
 	if IsMqScheme(sinkURI.Scheme) {
 		var protocol Protocol

@@ -330,17 +330,12 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return state, nil
 	}
 	if isProcessorIgnorableError(err) {
-<<<<<<< HEAD
-		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
-		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
-=======
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Error(err))
-		return cerror.ErrReactorFinished.GenWithStackByArgs()
->>>>>>> 6e9b29190 (mq(ticdc): do not assign nil to interface value to prenvent panic on close sink v1 (#7122))
+		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
@@ -483,7 +478,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		contextutil.TimezoneFromCtx(ctx),
 		p.changefeed.Info.Config.EnableOldValue)
 
-<<<<<<< HEAD
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
 		opts[k] = v
@@ -496,53 +490,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		opts[mark.OptCyclicConfig] = cyclicCfg
-=======
-	start := time.Now()
-	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableNewSink {
-		log.Info("Try to create sinkV1")
-		s, err := sinkv1.New(
-			stdCtx,
-			p.changefeedID,
-			p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh,
-		)
-		if err != nil {
-			log.Info("processor creates sink failed",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err),
-				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
-		}
-		// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
-		// See: https://go.dev/play/p/sDlHncxO3Nz
-		if s != nil {
-			p.sinkV1 = s
-		}
-	} else {
-		log.Info("Try to create sinkV2")
-		sinkV2Factory, err := factory.New(stdCtx, p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh)
-		if err != nil {
-			log.Info("processor creates sink failed",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err),
-				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
-		}
-		p.sinkV2Factory = sinkV2Factory
->>>>>>> 6e9b29190 (mq(ticdc): do not assign nil to interface value to prenvent panic on close sink v1 (#7122))
 	}
 	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
-<<<<<<< HEAD
 	start := time.Now()
 	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
@@ -553,11 +506,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	log.Info("processor try new sink success",
-=======
-	log.Info("processor creates sink",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID),
->>>>>>> 6e9b29190 (mq(ticdc): do not assign nil to interface value to prenvent panic on close sink v1 (#7122))
 		zap.Duration("duration", time.Since(start)))
 
 	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
