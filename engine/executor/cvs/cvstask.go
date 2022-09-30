@@ -113,7 +113,7 @@ type cvsTask struct {
 // RegisterWorker is used to register cvs task worker into global registry
 func RegisterWorker() {
 	factory := registry.NewSimpleWorkerFactory(newCvsTask)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.CvsTask, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.CvsTask, factory)
 }
 
 func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID frameModel.MasterID, conf *Config) *cvsTask {
@@ -225,11 +225,10 @@ func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl(ctx context.Context) error {
+func (task *cvsTask) CloseImpl(ctx context.Context) {
 	if task.cancelFn != nil {
 		task.cancelFn()
 	}
-	return nil
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {

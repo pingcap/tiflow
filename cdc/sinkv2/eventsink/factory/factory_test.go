@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -104,7 +105,8 @@ func TestSinkFactory(t *testing.T) {
 	require.Equal(t, sink.RowSink, sinkFactory.sinkType)
 	require.NotNil(t, sinkFactory.rowSink)
 
-	tableSink := sinkFactory.CreateTableSink(1, prometheus.NewCounter(prometheus.CounterOpts{}))
+	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
+		1, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
 	err = sinkFactory.Close()

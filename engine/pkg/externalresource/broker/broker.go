@@ -21,8 +21,9 @@ import (
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
@@ -31,35 +32,43 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ResourceManagerClient is a type alias for a client connecting to
-// the resource manager (which is part of the Servermaster).
-type ResourceManagerClient = client.ResourceManagerClient
+// DefaultBroker must implement Broker.
+var _ Broker = (*DefaultBroker)(nil)
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
-	config     *storagecfg.Config
+	config     *resModel.Config
 	executorID resModel.ExecutorID
-	client     ResourceManagerClient
+	client     client.ResourceManagerClient
 
-	fileManager FileManager
+	fileManagers map[resModel.ResourceType]internal.FileManager
 }
 
 // NewBroker creates a new Impl instance
 func NewBroker(
-	config *storagecfg.Config,
+	config *resModel.Config,
 	executorID resModel.ExecutorID,
-	client ResourceManagerClient,
+	client client.ResourceManagerClient,
 ) *DefaultBroker {
 	log.Info("Create new resource broker",
 		zap.String("executor-id", string(executorID)),
 		zap.Any("config", config))
 
-	fm := NewLocalFileManager(config.Local)
+	fileManagers := make(map[resModel.ResourceType]internal.FileManager)
+	fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
+	if config.S3Enabled() {
+		log.Info("S3 is enabled")
+		// TODO：add s3 file manager
+		// fileManagers[resModel.ResourceTypeS3] = s3.NewFileManagerWithConfig(executorID, config.S3)
+	} else {
+		log.Info("S3 config is not complete, will not use s3 as external storage")
+	}
+
 	return &DefaultBroker{
-		config:      config,
-		executorID:  executorID,
-		client:      client,
-		fileManager: fm,
+		config:       config,
+		executorID:   executorID,
+		client:       client,
+		fileManagers: fileManagers,
 	}
 }
 
@@ -69,45 +78,91 @@ func (b *DefaultBroker) OpenStorage(
 	projectInfo tenant.ProjectInfo,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
-	resourcePath resModel.ResourceID,
+	resID resModel.ResourceID,
 ) (Handle, error) {
-	tp, _, err := resModel.ParseResourcePath(resourcePath)
+	// Note the semantics of ParseResourcePath:
+	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
+	// and resName == "my-resource".
+	tp, resName, err := resModel.PasreResourceID(resID)
 	if err != nil {
 		return nil, err
 	}
 
-	switch tp {
-	case resModel.ResourceTypeLocalFile:
-		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
-	case resModel.ResourceTypeS3:
-		log.Panic("resource type s3 is not supported for now")
-	default:
-		log.Panic("unsupported resource type", zap.String("resource-path", resourcePath))
+	fm, ok := b.fileManagers[tp]
+	if !ok {
+		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
-	return nil, errors.New("unreachable")
+
+	record, exists, err := b.checkForExistingResource(ctx,
+		resModel.ResourceKey{JobID: jobID, ID: resID})
+	if err != nil {
+		return nil, err
+	}
+
+	var desc internal.ResourceDescriptor
+	if !exists {
+		desc, err = b.createResource(ctx, fm, projectInfo, workerID, resName)
+	} else {
+		desc, err = b.getPersistResource(ctx, fm, record, resName)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info(fmt.Sprintf("Using %s storage with path", string(tp)),
+		zap.String("path", desc.URI()))
+	return newResourceHandle(jobID, b.executorID, fm, desc, exists, b.client)
+}
+
+func (b *DefaultBroker) createResource(
+	ctx context.Context, fm internal.FileManager,
+	projectInfo tenant.ProjectInfo, workerID resModel.WorkerID,
+	resName resModel.ResourceName,
+) (internal.ResourceDescriptor, error) {
+	ident := internal.ResourceIdent{
+		Name: resName,
+		ResourceScope: internal.ResourceScope{
+			ProjectInfo: projectInfo,
+			Executor:    b.executorID, /* executor id where resource is created */
+			WorkerID:    workerID,     /* creator id*/
+		},
+	}
+	desc, err := fm.CreateResource(ctx, ident)
+	if err != nil {
+		//nolint:errcheck
+		_ = fm.RemoveResource(ctx, ident)
+		return nil, err
+	}
+	return desc, nil
 }
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
 func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
-	err := b.fileManager.RemoveTemporaryFiles(workerID)
-	if err != nil {
-		// TODO when we have a cloud-based error collection service, we need
-		// to report this.
-		// However, since an error here is unlikely to indicate a correctness
-		// problem, we do not take further actions.
-		log.Warn("Failed to remove temporary files for worker",
-			zap.String("worker-id", workerID),
-			zap.String("job-id", jobID),
-			zap.Error(err))
+	scope := internal.ResourceScope{
+		Executor: b.executorID,
+		WorkerID: workerID,
+	}
+	for _, fm := range b.fileManagers {
+		err := fm.RemoveTemporaryFiles(ctx, scope)
+		if err != nil {
+			// TODO when we have a cloud-based error collection service, we need
+			// to report this.
+			// However, since an error here is unlikely to indicate a correctness
+			// problem, we do not take further actions.
+			log.Warn("Failed to remove temporary files for worker",
+				zap.String("worker-id", workerID),
+				zap.String("job-id", jobID),
+				zap.Error(err))
+		}
 	}
 }
 
 // RemoveResource implements pb.BrokerServiceServer.
 func (b *DefaultBroker) RemoveResource(
-	_ context.Context,
+	ctx context.Context,
 	request *pb.RemoveLocalResourceRequest,
 ) (*pb.RemoveLocalResourceResponse, error) {
-	tp, resName, err := resModel.ParseResourcePath(request.GetResourceId())
+	tp, resName, err := resModel.PasreResourceID(request.GetResourceId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -117,12 +172,19 @@ func (b *DefaultBroker) RemoveResource(
 			fmt.Sprintf("unexpected resource type %s", tp))
 	}
 
+	fm := b.fileManagers[tp]
 	if request.GetCreatorId() == "" {
-		return nil, status.Error(codes.InvalidArgument,
-			fmt.Sprintf("empty creatorID"))
+		return nil, status.Error(codes.InvalidArgument, "empty creatorID")
 	}
 
-	err = b.fileManager.RemoveResource(request.GetCreatorId(), resName)
+	ident := internal.ResourceIdent{
+		Name: resName,
+		ResourceScope: internal.ResourceScope{
+			Executor: b.executorID,
+			WorkerID: request.GetCreatorId(),
+		},
+	}
+	err = fm.RemoveResource(ctx, ident)
 	if err != nil {
 		if derrors.ErrResourceDoesNotExist.Equal(err) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -131,55 +193,6 @@ func (b *DefaultBroker) RemoveResource(
 	}
 
 	return &pb.RemoveLocalResourceResponse{}, nil
-}
-
-func (b *DefaultBroker) newHandleForLocalFile(
-	ctx context.Context,
-	projectInfo tenant.ProjectInfo,
-	jobID resModel.JobID,
-	workerID resModel.WorkerID,
-	resourceID resModel.ResourceID,
-) (hdl Handle, retErr error) {
-	// Note the semantics of ParseResourcePath:
-	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
-	// and resName == "my-resource".
-	tp, resName, err := resModel.ParseResourcePath(resourceID)
-	if err != nil {
-		return nil, err
-	}
-	if tp != resModel.ResourceTypeLocalFile {
-		log.Panic("unexpected resource type", zap.String("type", string(tp)))
-	}
-
-	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
-	if err != nil {
-		return nil, err
-	}
-
-	var desc *LocalFileResourceDescriptor
-
-	if !exists {
-		desc, err = b.fileManager.CreateResource(workerID, resName)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if retErr != nil {
-				//nolint:errcheck
-				_ = b.fileManager.RemoveResource(workerID, resName)
-			}
-		}()
-	} else {
-		desc, err = b.fileManager.GetPersistedResource(record.Worker, resName)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	filePath := desc.AbsolutePath()
-	log.Info("Using local storage with path", zap.String("path", filePath))
-
-	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(
@@ -216,4 +229,25 @@ func (b *DefaultBroker) checkForExistingResource(
 	default:
 		return nil, false, errors.Trace(err)
 	}
+}
+
+func (b *DefaultBroker) getPersistResource(
+	ctx context.Context, fm internal.FileManager,
+	record *resModel.ResourceMeta,
+	resName resModel.ResourceName,
+) (internal.ResourceDescriptor, error) {
+	ident := internal.ResourceIdent{
+		Name: resName,
+		ResourceScope: internal.ResourceScope{
+			ProjectInfo: tenant.NewProjectInfo("", record.ProjectID),
+			Executor:    record.Executor, /* executor id where the resource is persisted */
+			WorkerID:    record.Worker,   /* creator id*/
+		},
+	}
+	return fm.GetPersistedResource(ctx, ident)
+}
+
+// PreCheckConfig does a preflight check on the executor's storage configurations.
+func PreCheckConfig(config resModel.Config) error {
+	return local.PreCheckConfig(config)
 }

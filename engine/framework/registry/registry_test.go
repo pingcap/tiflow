@@ -20,8 +20,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
-	frame "github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -29,7 +29,7 @@ import (
 var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
 
 const (
-	fakeWorkerType = frame.FakeJobMaster
+	fakeWorkerType = frameModel.FakeJobMaster
 )
 
 func TestGlobalRegistry(t *testing.T) {
@@ -135,19 +135,19 @@ func TestIsRetryableError(t *testing.T) {
 	t.Parallel()
 
 	registry := NewRegistry()
-	ok := registry.RegisterWorkerType(framework.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
+	ok := registry.RegisterWorkerType(frameModel.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
 	require.True(t, ok)
 
 	testCases := []struct {
 		err         error
 		isRetryable bool
 	}{
-		{NewDeserializeConfigError(errors.New("inner err")), false},
+		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
 		{errors.New("normal error"), true},
 	}
 
 	for _, tc := range testCases {
-		retryable, err := registry.IsRetryableError(tc.err, framework.FakeJobMaster)
+		retryable, err := registry.IsRetryableError(tc.err, frameModel.FakeJobMaster)
 		require.NoError(t, err)
 		require.Equal(t, tc.isRetryable, retryable)
 	}

@@ -24,7 +24,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
@@ -713,9 +713,9 @@ func (c *metaOpsClient) SetJobCanceling(ctx context.Context, jobID string) (Resu
 }
 
 // SetJobCanceled sets a cancelled status if a cancelling op exists.
-// - If cancelling operation is not found, it can be triggered by unexpected
-//   SetJobCanceled don't make any change and return nil error.
-// - If a job is already cancelled, don't make any change and return nil error.
+//   - If cancelling operation is not found, it can be triggered by unexpected
+//     SetJobCanceled don't make any change and return nil error.
+//   - If a job is already cancelled, don't make any change and return nil error.
 func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Result, error) {
 	result := &ormResult{}
 	ops := &model.JobOp{

@@ -41,7 +41,7 @@ function run() {
 
 	run_sql_file $cur/data/db.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'enable safe-mode because of task initialization.*"duration in seconds"=60'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'enable safe-mode because of task initialization.*duration=1m0s'
 }
 
 function check_print_status() {
@@ -67,6 +67,8 @@ function check_print_status() {
 	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59637\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
 	[ $status_count -eq 1 ]
+	# must have a non-zero speed in log
+	grep 'current speed (bytes / seconds)' $WORK_DIR/worker1/log/dm-worker.log | grep -vq '"current speed (bytes / seconds)"=0'
 	echo "check load unit print status success"
 
 	# check sync unit print status

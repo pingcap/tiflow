@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -27,6 +26,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -750,17 +750,28 @@ func (t *testServer) TestServerDataRace(c *C) {
 
 	s := NewServer(cfg)
 	defer s.Close()
-	go func() {
-		err1 := s.Start()
-		c.Assert(err1, IsNil)
-	}()
-	for i := 0; i < 10; i++ {
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
 		go func() {
-			fmt.Println("111")
+			defer wg.Done()
+			err1 := s.Start()
+			c.Assert(err1 == nil || err1 == terror.ErrWorkerServerClosed, IsTrue)
+		}()
+		go func() {
+			defer wg.Done()
 			s.Close()
 		}()
+		wg.Wait()
 	}
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return !s.closed.Load()
-	}), IsTrue)
+}
+
+func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
+	t.Helper()
+
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	sourceCfg.From.Password = "" // no password set
+	return sourceCfg
 }

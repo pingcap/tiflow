@@ -48,6 +48,31 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 	return leader, topic
 }
 
+func TestNewKafkaDDLSinkFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
+	defer leader.Close()
+	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
+		"&max-message-bytes=1048576&partition-num=1" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=avro"
+	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+
+	sinkURI, err := url.Parse(uri)
+	require.Nil(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+
+	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
+	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
+		"should report error when protocol is avro but schema-registry is not set")
+	require.Nil(t, s)
+}
+
 func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	t.Parallel()
 

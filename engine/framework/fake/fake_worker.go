@@ -213,13 +213,12 @@ func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, mess
 	return nil
 }
 
-func (d *dummyWorker) CloseImpl(ctx context.Context) error {
+func (d *dummyWorker) CloseImpl(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&d.closed, 0, 1) {
 		if d.cancel != nil {
 			d.cancel()
 		}
 	}
-	return nil
 }
 
 func (d *dummyWorker) setState(code frameModel.WorkerState) {

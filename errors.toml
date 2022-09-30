@@ -151,6 +151,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedUnretryable"]
+error = '''
+changefeed is in unretryable state, please check the error message, and you should manually handle it
+'''
+
 ["CDC:ErrChangefeedUpdateFailed"]
 error = '''
 changefeed update failed due to unexpected etcd transaction failure: %s
@@ -324,6 +329,11 @@ single event feed aborted
 ["CDC:ErrEventFeedEventError"]
 error = '''
 eventfeed returns event error
+'''
+
+["CDC:ErrExchangePartition"]
+error = '''
+exchange partition failed, %s
 '''
 
 ["CDC:ErrExecDDLFailed"]
@@ -884,16 +894,6 @@ table not found in processor cache
 ["CDC:ErrProcessorUnknown"]
 error = '''
 processor running unknown error
-'''
-
-["CDC:ErrPulsarNewProducer"]
-error = '''
-new pulsar producer
-'''
-
-["CDC:ErrPulsarSendMessage"]
-error = '''
-pulsar send message failed
 '''
 
 ["CDC:ErrReachMaxTry"]
@@ -1484,6 +1484,11 @@ master config contains unknown configuration options: %s
 ["DFLOW:ErrMasterCreateWorkerBackoff"]
 error = '''
 create worker is being backoff, retry later
+'''
+
+["DFLOW:ErrMasterCreateWorkerTerminate"]
+error = '''
+create worker is terminated, won't backoff any more
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]

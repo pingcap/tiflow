@@ -760,7 +760,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&model.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&model.Capture{
+				ID:            c.ID,
+				IsOwner:       isOwner,
+				AdvertiseAddr: c.AdvertiseAddr,
+				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
+			})
 	}
 
 	c.IndentedJSON(http.StatusOK, captures)
@@ -872,8 +877,12 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
-	ctx := c.Request.Context()
+	if !h.capture.IsOwner() {
+		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+		return
+	}
 
+	ctx := c.Request.Context()
 	health, err := h.statusProvider().IsHealthy(ctx)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

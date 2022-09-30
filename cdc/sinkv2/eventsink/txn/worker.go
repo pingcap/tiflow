@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,14 +51,16 @@ type worker struct {
 	metricConflictDetectDuration prometheus.Observer
 	metricTxnWorkerFlushDuration prometheus.Observer
 	metricTxnWorkerBusyRatio     prometheus.Counter
+	metricTxnWorkerHandledRows   prometheus.Counter
 
 	// Fields only used in the background loop.
 	flushInterval     time.Duration
-	timer             *time.Timer
+	hasPending        bool
 	wantMoreCallbacks []func()
 }
 
 func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error, workerCount int) *worker {
+	wid := fmt.Sprintf("%d", ID)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
 		ctx:         ctx,
@@ -73,11 +76,17 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerHandledRows:   metrics.TxnWorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
-		flushInterval: backend.MaxFlushInterval(),
+		flushInterval:     backend.MaxFlushInterval(),
+		hasPending:        false,
+		wantMoreCallbacks: make([]func(), 0, 1024),
 	}
 }
 
+// Add adds a txnEvent to the worker.
+// The worker will call unlock() when it's ready to receive more events.
+// In other words, it maybe advances the conflict detector.
 func (w *worker) Add(txn *txnEvent, unlock func()) {
 	w.txnCh.In() <- txnWithNotifier{txn, unlock}
 }
@@ -116,15 +125,14 @@ func (w *worker) runBackgroundLoop() {
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID))
 
-		w.timer = time.NewTimer(w.flushInterval)
-		w.wantMoreCallbacks = make([]func(), 0, 1024)
-
+		timer := time.NewTicker(w.flushInterval)
 		var flushTimeSlice, totalTimeSlice time.Duration
-		overseerTimer := time.NewTicker(2 * time.Second)
-		startToWork := time.Now()
+		overseerTimer := time.NewTicker(time.Second)
 		defer overseerTimer.Stop()
-	LOOP:
+		startToWork := time.Now()
+	Loop:
 		for {
+			// There is no pending events, so use a blocking `select`.
 			select {
 			case <-w.ctx.Done():
 				log.Info("Transaction sink worker exits as canceled",
@@ -137,12 +145,13 @@ func (w *worker) runBackgroundLoop() {
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
+				w.hasPending = true
 				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
-					break LOOP
+					break Loop
 				}
-			case <-w.timer.C:
+			case <-timer.C:
 				if w.doFlush(&flushTimeSlice) {
-					break LOOP
+					break Loop
 				}
 			case now := <-overseerTimer.C:
 				totalTimeSlice = now.Sub(startToWork)
@@ -159,48 +168,57 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
+	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
+		// The table where the event comes from is in stopping, so it's safe
+		// to drop the event directly.
+		txn.txnEvent.Callback()
+		// Still necessary to append the wantMore callback into the pending list.
+		w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
+		return false
+	}
+
 	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-		if !w.timer.Stop() {
-			<-w.timer.C
-		}
 		return true
 	}
 	return false
 }
 
-// doFlush flushes the backend. Returns true if the goroutine can exit.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) bool {
-	start := time.Now()
-	defer func() {
-		elapsed := time.Since(start)
-		*flushTimeSlice += elapsed
-		w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
-	}()
+// doFlush flushes the backend.
+// It returns true only if it can no longer be flushed.
+func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
+	if w.hasPending {
+		start := time.Now()
+		defer func() {
+			elapsed := time.Since(start)
+			*flushTimeSlice += elapsed
+			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+		}()
 
-	if err := w.backend.Flush(w.ctx); err != nil {
-		log.Warn("Transaction sink backend flush fail",
-			zap.String("changefeedID", w.changefeed),
-			zap.Int("workerID", w.ID),
-			zap.Error(err))
-		select {
-		case <-w.ctx.Done():
-		case w.errCh <- err:
+		if err := w.backend.Flush(w.ctx); err != nil {
+			log.Warn("Transaction sink backend flush fail",
+				zap.String("changefeedID", w.changefeed),
+				zap.Int("workerID", w.ID),
+				zap.Error(err))
+			select {
+			case <-w.ctx.Done():
+			case w.errCh <- err:
+			}
+			return true
 		}
-		return true
+		// Flush successfully, call callbacks to notify conflict detector.
+		for _, wantMore := range w.wantMoreCallbacks {
+			wantMore()
+		}
+		w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
+		if cap(w.wantMoreCallbacks) > 1024 {
+			// Resize the buffer if it's too big.
+			w.wantMoreCallbacks = make([]func(), 0, 1024)
+		}
 	}
 
-	// Flush successfully, call callbacks to notify conflict detector.
-	for _, wantMore := range w.wantMoreCallbacks {
-		wantMore()
-	}
-	w.wantMoreCallbacks = w.wantMoreCallbacks[:0]
-	if cap(w.wantMoreCallbacks) > 1024 {
-		// Resize the buffer if it's too big.
-		w.wantMoreCallbacks = make([]func(), 0, 1024)
-	}
-
-	w.timer.Reset(w.flushInterval)
+	w.hasPending = false
 	return false
 }

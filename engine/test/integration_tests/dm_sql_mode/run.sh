@@ -16,36 +16,25 @@ function run() {
 	wait_mysql_online.sh --port 4000
 
 	# prepare MySQL global variables and data
-
 	run_sql "SET @@GLOBAL.SQL_MODE='PIPES_AS_CONCAT,IGNORE_SPACE,ONLY_FULL_GROUP_BY,NO_UNSIGNED_SUBTRACTION,NO_DIR_IN_CREATE,NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ALLOW_INVALID_DATES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,HIGH_NOT_PRECEDENCE,NO_ENGINE_SUBSTITUTION,REAL_AS_FLOAT'"
 	run_sql --port 3307 "SET @@GLOBAL.SQL_MODE=''"
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 
-	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
-
-	# wait for dump and load finished
-
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == 12'"
+	# create job & wait for job finished
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_sql_mode")
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
 
 	# check data
-
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 
 	# insert increment data
-
 	run_sql_file $CUR_DIR/data/db1.increment.sql
 	run_sql_file --port 3307 $CUR_DIR/data/db2.increment.sql
 	run_sql_file $CUR_DIR/data/timezone.Asia-Shanghai.sql
 	run_sql_file $CUR_DIR/data/timezone.America-Phoenix.sql
 
 	# check data
-
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 }
 

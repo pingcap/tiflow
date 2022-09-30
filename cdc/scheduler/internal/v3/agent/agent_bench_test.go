@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 func benchmarkHeartbeatResponse(b *testing.B, bench func(b *testing.B, a *agent)) {

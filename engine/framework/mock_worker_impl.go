@@ -102,7 +102,7 @@ func (w *mockWorkerImpl) OnMasterMessage(ctx context.Context, topic p2p.Topic, m
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
+func (w *mockWorkerImpl) CloseImpl(ctx context.Context) {
 	if w.closed.Swap(true) {
 		panic("CloseImpl called twice")
 	}
@@ -110,6 +110,5 @@ func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called()
-	return args.Error(0)
+	w.Called()
 }

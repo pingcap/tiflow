@@ -31,19 +31,15 @@ const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 type AtomicityLevel string
 
 const (
-	// unknowTxnAtomicity is the default atomicity level, which is invalid and will
+	// unknownTxnAtomicity is the default atomicity level, which is invalid and will
 	// be set to a valid value when initializing sink in processor.
-	unknowTxnAtomicity AtomicityLevel = ""
+	unknownTxnAtomicity AtomicityLevel = ""
 
 	// noneTxnAtomicity means atomicity of transactions is not guaranteed
 	noneTxnAtomicity AtomicityLevel = "none"
 
 	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
 	tableTxnAtomicity AtomicityLevel = "table"
-
-	// globalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
-	// is currently not supported by TiCDC.
-	// globalTxnAtomicity AtomicityLevel = "global"
 
 	defaultMqTxnAtomicity    = noneTxnAtomicity
 	defaultMysqlTxnAtomicity = tableTxnAtomicity
@@ -130,7 +126,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 
 	txnAtomicity := params.Get("transaction-atomicity")
 	switch AtomicityLevel(txnAtomicity) {
-	case unknowTxnAtomicity:
+	case unknownTxnAtomicity:
 		// Set default value according to scheme.
 		if sink.IsMQScheme(sinkURI.Scheme) {
 			s.TxnAtomicity = defaultMqTxnAtomicity
@@ -160,8 +156,8 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	if protocolFromURI != "" {
 		if s.Protocol != "" {
 			log.Warn(
-				fmt.Sprintf("protocol is specified in both sink URI and config file"+
-					"the value in sink URI will be used"+
+				fmt.Sprintf("protocol is specified in both sink URI and config file "+
+					"the value in sink URI will be used "+
 					"protocol in sink URI:%s, protocol in config file:%s",
 					protocolFromURI, s.Protocol))
 		}

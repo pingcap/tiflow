@@ -28,6 +28,7 @@ import (
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -88,15 +89,15 @@ func TestFactory(t *testing.T) {
 	RegisterWorker()
 
 	_, err = registry.GlobalWorkerRegistry().CreateWorker(
-		dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id",
+		dctx, frameModel.WorkerDMDump, "worker-id", "dm-jobmaster-id",
 		content, int64(2))
 	require.NoError(t, err)
 	_, err = registry.GlobalWorkerRegistry().CreateWorker(
-		dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id",
+		dctx, frameModel.WorkerDMLoad, "worker-id", "dm-jobmaster-id",
 		content, int64(3))
 	require.NoError(t, err)
 	_, err = registry.GlobalWorkerRegistry().CreateWorker(
-		dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id",
+		dctx, frameModel.WorkerDMSync, "worker-id", "dm-jobmaster-id",
 		content, int64(4))
 	require.NoError(t, err)
 }
@@ -108,7 +109,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
 		return p2p.NewMockMessageHandlerManager()
 	}))
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0)
+	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
@@ -135,7 +136,6 @@ func TestWorker(t *testing.T) {
 
 	// placeholder
 	require.Equal(t, model.RescUnit(0), dmWorker.Workload())
-	require.NoError(t, dmWorker.OnMasterFailover(framework.MasterFailoverReason{}))
 	require.NoError(t, dmWorker.OnMasterMessage(context.Background(), "", nil))
 
 	// Finished
