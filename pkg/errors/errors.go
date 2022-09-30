@@ -747,6 +747,11 @@ var (
 		"patch ops:%d of a single changefeed exceed etcd txn max ops:%d",
 		errors.RFCCodeText("CDC:ErrEtcdTxnOpsExceed"),
 	)
+	ErrChangefeedUnretryable = errors.Normalize(
+		"changefeed is in unretryable state, please check the error message"+
+			", and you should manually handle it",
+		errors.RFCCodeText("CDC:ErrChangefeedUnretryable"),
+	)
 
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize(
