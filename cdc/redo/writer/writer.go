@@ -358,25 +358,15 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 	}
 	filteredFiles := common.GetChangefeedFiles(fileNames, l.cfg.ChangeFeedID)
 
-	for _, file := range filteredFiles {
-		if err = os.RemoveAll(filepath.Join(l.cfg.Dir, file)); err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
-	}
-
-	remainFiles, err := os.ReadDir(l.cfg.Dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.Warn("read removed log dir fail", zap.Error(err))
-			return nil
-		}
-		return cerror.WrapError(cerror.ErrRedoFileOp,
-			errors.Annotatef(err, "can't read log file directory: %s", l.cfg.Dir))
-	}
-	// if the log dir is empty, we can remove it
-	if len(remainFiles) == 0 {
+	if len(filteredFiles) == len(fileNames) {
 		if err = os.RemoveAll(l.cfg.Dir); err != nil {
 			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
+	} else {
+		for _, file := range filteredFiles {
+			if err = os.RemoveAll(filepath.Join(l.cfg.Dir, file)); err != nil {
+				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			}
 		}
 	}
 
