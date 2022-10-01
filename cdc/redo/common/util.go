@@ -39,7 +39,9 @@ const (
 // s3URI should be like s3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	if len(uri.Host) == 0 {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %v", uri))
+		return nil, cerror.WrapChangefeedUnretryableErr(
+			cerror.WrapError(cerror.ErrS3StorageInitialize,
+				errors.Errorf("please specify the bucket for s3 in %v", uri)))
 	}
 
 	prefix := strings.Trim(uri.Path, "/")
@@ -47,7 +49,8 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(&uri, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
+		return nil, cerror.WrapChangefeedUnretryableErr(
+			cerror.WrapError(cerror.ErrS3StorageInitialize, err))
 	}
 
 	// we should set this to true, since br set it by default in parseBackend
@@ -60,7 +63,8 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 		HTTPClient:      nil,
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
+		return nil, cerror.WrapChangefeedUnretryableErr(
+			cerror.WrapError(cerror.ErrS3StorageInitialize, err))
 	}
 
 	return s3storage, nil
