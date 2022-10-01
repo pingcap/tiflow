@@ -15,6 +15,7 @@ package errors
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/errors"
 )
@@ -92,4 +93,31 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 	return true
+}
+
+// WrapChangefeedUnretryableErr wraps an error into ErrChangefeedUnRetryable.
+func WrapChangefeedUnretryableErr(err error, args ...interface{}) error {
+	return WrapError(ErrChangefeedUnretryable, err, args...)
+}
+
+var changefeedUnRetryableErrors = []*errors.Error{
+	ErrChangefeedUnretryable,
+}
+
+// IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
+func IsChangefeedUnRetryableError(err error) bool {
+	for _, e := range changefeedUnRetryableErrors {
+		if e.Equal(err) {
+			return true
+		}
+		if code, ok := RFCCode(err); ok {
+			if code == e.RFCCode() {
+				return true
+			}
+		}
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
+			return true
+		}
+	}
+	return false
 }
