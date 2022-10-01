@@ -72,20 +72,18 @@ func (m *testJobMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.Called(ctx)
 }
 
-func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) StopImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.Called(ctx)
 }
 
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
@@ -263,7 +261,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
 
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("CloseImpl", mock.Anything).Return()
 	jobMaster.mu.Unlock()
 
 	status := jobMaster.Status()
@@ -400,7 +398,7 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.ExpectedCalls = nil
 		jobMaster.Calls = nil
 
-		jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+		jobMaster.On("CloseImpl", mock.Anything).Return()
 		jobMaster.mu.Unlock()
 
 		// test exit status
@@ -442,7 +440,7 @@ func TestJobMasterInitReturnError(t *testing.T) {
 	// clean status
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("CloseImpl", mock.Anything).Return()
 	jobMaster.mu.Unlock()
 
 	err = jobMaster.base.Close(ctx)
@@ -495,7 +493,7 @@ func TestJobMasterPollReturnError(t *testing.T) {
 	// clean status
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("CloseImpl", mock.Anything).Return()
 	jobMaster.mu.Unlock()
 
 	err = jobMaster.base.Close(ctx)

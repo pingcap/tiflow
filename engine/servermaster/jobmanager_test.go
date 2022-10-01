@@ -668,6 +668,60 @@ func TestJobOperatorBgLoop(t *testing.T) {
 		return tickCounter.Load() > 0
 	}, time.Second, time.Millisecond*100)
 
-	require.NoError(t, mgr.CloseImpl(ctx))
+	mgr.CloseImpl(ctx)
 	require.NoError(t, mgr.wg.Wait())
+}
+
+func TestJobManagerIterPendingJobs(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	masterImpl := framework.NewMockMasterImpl(t, "", "iter-pending-jobs-test")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
+	mockMaster := &mockBaseMasterCreateWorkerFailed{
+		MockMasterImpl: masterImpl,
+	}
+	mockBackoffMgr := jobopMock.NewMockBackoffManager(gomock.NewController(t))
+	mgr := &JobManagerImpl{
+		BaseMaster:      mockMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		jobHTTPClient:   jobMock.NewMockNilReturnJobHTTPClient(),
+		JobBackoffMgr:   mockBackoffMgr,
+	}
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.NoError(t, err)
+
+	// save job master meta
+	jobID := "job-backoff-test"
+	meta := &frameModel.MasterMeta{
+		ID:    jobID,
+		State: frameModel.MasterStateInit,
+	}
+	err = mgr.frameMetaClient.UpsertJob(ctx, meta)
+	require.NoError(t, err)
+
+	// dispatch job, meet error and move it to pending job list
+	mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: jobID}, false)
+	require.NotNil(t, mgr.QueryJob(jobID))
+	mockHandle := &framework.MockHandle{WorkerID: jobID}
+	mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
+
+	// job is being backoff
+	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(false)
+	mockBackoffMgr.EXPECT().Allow(jobID).Times(1).Return(false)
+	err = mgr.Tick(ctx)
+	require.NoError(t, err)
+
+	// job will be terminated
+	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(true)
+	err = mgr.Tick(ctx)
+	require.NoError(t, err)
+	meta, err = mgr.frameMetaClient.GetJobByID(ctx, jobID)
+	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateFailed, meta.State)
 }

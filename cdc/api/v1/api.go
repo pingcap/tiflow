@@ -760,7 +760,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&model.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&model.Capture{
+				ID:            c.ID,
+				IsOwner:       isOwner,
+				AdvertiseAddr: c.AdvertiseAddr,
+				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
+			})
 	}
 
 	c.IndentedJSON(http.StatusOK, captures)
