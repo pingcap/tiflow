@@ -55,7 +55,7 @@ type ResourceKey struct {
 
 // ToResourceKeys converts resource requirements in pb to resource keys
 func ToResourceKeys(requires []*pb.ResourceKey) []ResourceKey {
-	if requires == nil || len(requires) == 0 {
+	if len(requires) == 0 {
 		return nil
 	}
 	rks := make([]ResourceKey, 0, len(requires))

@@ -94,8 +94,5 @@ func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (Worke
 // IsRetryableError implements WorkerFactory.IsRetryableError
 func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
 	var errOut *fake.JobUnRetryableError
-	if libErrors.As(err, &errOut) {
-		return false
-	}
-	return true
+	return !libErrors.As(err, &errOut)
 }
