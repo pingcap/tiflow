@@ -27,9 +27,10 @@ func TestRegionFeedEvent(t *testing.T) {
 		CRTs:   1,
 		OpType: OpTypePut,
 	}
-	resolved := &ResolvedSpan{
-		Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-		ResolvedTs: 111,
+	resolved := &ResolvedSpans{
+		Spans: []RegionComparableSpan{{
+			Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		}}, ResolvedTs: 111,
 	}
 
 	ev := &RegionFeedEvent{}
@@ -38,8 +39,8 @@ func TestRegionFeedEvent(t *testing.T) {
 	ev = &RegionFeedEvent{Val: raw}
 	require.Equal(t, raw, ev.GetValue())
 
-	ev = &RegionFeedEvent{Resolved: []*ResolvedSpan{resolved}}
-	require.Equal(t, resolved, ev.GetValue().([]*ResolvedSpan)[0])
+	ev = &RegionFeedEvent{Resolved: resolved}
+	require.Equal(t, resolved, ev.GetValue().([]*ResolvedSpans)[0])
 
 	require.Equal(t, "span: [61, 62), resolved-ts: 111", resolved.String())
 }

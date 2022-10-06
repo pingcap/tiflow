@@ -828,7 +828,7 @@ func (w *regionWorker) handleResolvedTs(
 		state.lock.Unlock()
 	}
 	// emit a checkpointTs
-	revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpan{ResolvedTs: resolvedTs, Spans: resolvedSpans}}
+	revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: resolvedTs, Spans: resolvedSpans}}
 	select {
 	case w.outputCh <- revent:
 		w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
