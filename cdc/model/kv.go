@@ -71,7 +71,7 @@ func (rs *ResolvedSpans) String() string {
 
 // RegionComparableSpan contains a comparable span and a region id of that span
 //
-//msgp:ignore ResolvedSpans
+//msgp:ignore RegionComparableSpan
 type RegionComparableSpan struct {
 	Span   regionspan.ComparableSpan
 	Region uint64
