@@ -1082,7 +1082,8 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
 				}}, ResolvedTs: 100,
 			},
 		},
@@ -1154,14 +1155,16 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
 				}}, ResolvedTs: 135,
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
 				}}, ResolvedTs: 145,
 			},
 		},
@@ -1174,7 +1177,8 @@ func testHandleFeedEvent(t *testing.T) {
 	}
 	for i := range multipleExpected.Resolved.Spans {
 		multipleExpected.Resolved.Spans[i] = model.RegionComparableSpan{
-			Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			Region: 3,
 		}
 	}
 
@@ -1438,14 +1442,16 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
 		},
@@ -1919,21 +1925,24 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 130,
 			},
 		},
@@ -2022,14 +2031,16 @@ func TestResolveLock(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
 		},
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: tso,
 			},
 		},
@@ -2356,7 +2367,8 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
 			RegionID: regionID,
@@ -2364,7 +2376,8 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
 			RegionID: regionID,
@@ -2383,7 +2396,8 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
 			RegionID: regionID,
@@ -2559,7 +2573,8 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
 				}}, ResolvedTs: 100,
 			},
 		},
@@ -2588,7 +2603,8 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
 				}}, ResolvedTs: 145,
 			},
 		},
@@ -3044,7 +3060,8 @@ func testKVClientForceReconnect(t *testing.T) {
 	expected := model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				Region: regionID3,
 			}}, ResolvedTs: 135,
 		},
 	}
@@ -3283,8 +3300,9 @@ func TestEvTimeUpdate(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				}}, ResolvedTs: 10,
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 100,
 			},
 		},
 		{
