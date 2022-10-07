@@ -237,8 +237,8 @@ func (r *progressTracker) trackingCount() int {
 	return int(r.nextEventID - r.nextToResolvePos)
 }
 
-// frozenProcess marks we do not advance checkpoint ts anymore.
-func (r *progressTracker) frozenProcess() {
+// freezeProcess marks we do not advance checkpoint ts anymore.
+func (r *progressTracker) freezeProcess() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.frozen = true
