@@ -799,7 +799,6 @@ func (w *regionWorker) evictAllRegions() {
 			w.delRegionState(state.getRegionID())
 			state.updateCheckpoint()
 			revokeToken := !state.isInitialized()
-			state.lock.Unlock()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
