@@ -749,19 +749,6 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
-// member returns member information of the server
-func (s *Server) member() string {
-	m := &rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-	}
-	val, err := m.String()
-	if err != nil {
-		return s.name()
-	}
-	return val
-}
-
 // name is a shortcut to etcd name
 func (s *Server) name() string {
 	return s.id

@@ -107,7 +107,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		duration := time.Since(start)
 		log.Info("update key and check test", zap.Int("round", i), zap.Duration("duration", duration))
 		if duration < interval {
-			time.Sleep(start.Add(interval).Sub(time.Now()))
+			time.Sleep(time.Until(start.Add(interval)))
 		}
 	}
 
