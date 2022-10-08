@@ -603,11 +603,11 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
 // This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
-// - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
-//   When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
-//   When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
-//   to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
-// - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
+//   - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
+//     When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
+//     When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
+//     to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
+//   - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
 func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location) bool {
 	cp.RLock()
 	defer cp.RUnlock()
@@ -731,12 +731,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-<<<<<<< HEAD
-	// TODO: refine dbConn and add ExecuteSQLAutoSplit
-	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
-=======
-	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, cp.metricProxies, sqls, args...)
->>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
+	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, sqls, args...)
 	if err != nil {
 		return err
 	}

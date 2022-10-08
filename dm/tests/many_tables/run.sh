@@ -16,11 +16,8 @@ function prepare_data() {
 		for j in $(seq 2); do
 			run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
-<<<<<<< HEAD
-=======
 		# to make the tables have odd number of lines before 'ALTER TABLE' command, for check_sync_diff to work correctly
 		run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES (9, 90009);" $MYSQL_PORT1 $MYSQL_PASSWORD1
->>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
 	done
 }
 
@@ -40,8 +37,6 @@ function incremental_data_2() {
 }
 
 function run() {
-<<<<<<< HEAD
-=======
 	pkill -hup tidb-server 2>/dev/null || true
 	wait_process_exit tidb-server
 
@@ -52,15 +47,6 @@ function run() {
 	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
 	sleep 2
 
-	run_sql_source1 "SET GLOBAL TIME_ZONE = '+02:00'"
-	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
-	check_contains "time: 02:00:00"
-	run_sql_tidb "SET GLOBAL TIME_ZONE = '+06:00'"
-	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
-	check_contains "time: 06:00:00"
-	trap restore_timezone EXIT
-
->>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
 	echo "start prepare_data"
 	prepare_data
 	echo "finish prepare_data"

@@ -208,7 +208,6 @@ func (conn *DBConn) ExecuteSQL(tctx *tcontext.Context, queries []string, args ..
 // TODO: refine DBConn and BaseConn.
 func (conn *DBConn) ExecuteSQLAutoSplit(
 	tctx *tcontext.Context,
-	metricProxies *metrics.Proxies,
 	queries []string,
 	args ...[]interface{},
 ) error {
@@ -216,11 +215,7 @@ func (conn *DBConn) ExecuteSQLAutoSplit(
 		// only happens in test
 		return nil
 	}
-	var m *prometheus.HistogramVec
-	if metricProxies != nil {
-		m = metricProxies.StmtHistogram
-	}
-	return conn.baseConn.ExecuteSQLsAutoSplit(tctx, m, conn.cfg.Name, queries, args...)
+	return conn.baseConn.ExecuteSQLsAutoSplit(tctx, nil, conn.cfg.Name, queries, args...)
 }
 
 func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
