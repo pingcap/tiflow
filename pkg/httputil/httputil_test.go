@@ -70,25 +70,55 @@ func TestHttputilNewClient(t *testing.T) {
 	require.Equal(t, httputilServerMsg, string(body))
 }
 
+func TestStatusCodeCreated(t *testing.T) {
+	t.Parallel()
+
+	port := 8305
+	ctx, cancel := context.WithCancel(context.Background())
+
+	server := runServer(nil, port, t)
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+	cli, err := NewClient(nil)
+	require.Nil(t, err)
+	url := fmt.Sprintf("http://127.0.0.1:%d/create", port)
+	respBody, err := cli.DoRequest(ctx, url, http.MethodPost, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []byte(`"{"id": "value"}"`), respBody)
+}
+
 func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	//nolint:errcheck
 	w.Write([]byte(httputilServerMsg))
 }
 
+func createHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	//nolint:errcheck
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(`"{"id": "value"}"`))
+}
+
 func runServer(tlsCfg *tls.Config, port int, t *testing.T) *http.Server {
-	http.HandleFunc("/", handler)
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: nil}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handler)
+	mux.HandleFunc("/create", createHandler)
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
 
 	conn, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		require.Nil(t, err)
 	}
+	if tlsCfg != nil {
+		conn = tls.NewListener(conn, tlsCfg)
+	}
 
-	tlsListener := tls.NewListener(conn, tlsCfg)
 	go func() {
 		//nolint:errcheck
-		server.Serve(tlsListener)
+		server.Serve(conn)
 	}()
 	return server
 }
