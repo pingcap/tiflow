@@ -351,7 +351,6 @@ func testSimpleAllModeTask(
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, nil)
-		t.Logf("jobStatus: %v\nerr:%s", jobStatus, err)
 		return err == nil && !jobStatus.TaskStatus[source1].ConfigOutdated && jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*30, time.Second)
 
@@ -372,6 +371,8 @@ func testSimpleAllModeTask(
 }
 
 func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tasks []string) (*dm.JobStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
 	u := fmt.Sprintf(baseURL+"/status", jobID)
 	v := url.Values{}
 	for _, task := range tasks {
