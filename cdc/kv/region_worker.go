@@ -368,12 +368,10 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 		w.metrics.metricReceivedEventSize.Observe(float64(event.changeEvent.Event.Size()))
 		switch x := event.changeEvent.Event.(type) {
 		case *cdcpb.Event_Entries_:
-			event.state.lock.Lock()
 			err = w.handleEventEntry(ctx, x, event.state)
 			if err != nil {
 				err = w.handleSingleRegionError(err, event.state)
 			}
-			event.state.lock.Unlock()
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event",
 				zap.Stringer("event", event.changeEvent),
@@ -620,7 +618,7 @@ func (w *regionWorker) handleEventEntry(
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
 ) error {
-	regionID := state.sri.verID.GetID()
+	regionID := state.getRegionID()
 	for _, entry := range x.Entries.GetEntries() {
 		// if a region with kv range [a, z)
 		// and we only want the get [b, c) from this region,
@@ -628,24 +626,25 @@ func (w *regionWorker) handleEventEntry(
 		// we can make tikv only return the events about the keys in the specified range.
 		comparableKey := regionspan.ToComparableKey(entry.GetKey())
 		// key for initialized event is nil
-		if !regionspan.KeyInSpan(comparableKey, state.sri.span) && entry.Type != cdcpb.Event_INITIALIZED {
+		if !regionspan.KeyInSpan(comparableKey, state.getRegionSpan()) && entry.Type != cdcpb.Event_INITIALIZED {
 			w.metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
 			continue
 		}
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
-			if time.Since(state.startFeedTime) > 20*time.Second {
+			startTime := state.getStartTime()
+			if time.Since(startTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
 					zap.String("namespace", w.session.client.changefeed.Namespace),
 					zap.String("changefeed", w.session.client.changefeed.ID),
-					zap.Duration("duration", time.Since(state.startFeedTime)),
+					zap.Duration("duration", time.Since(startTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
-			state.initialized = true
-			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
-			cachedEvents := state.matcher.matchCachedRow(state.initialized)
+			state.setInitialized()
+			w.session.regionRouter.Release(state.getStoreAddr())
+			cachedEvents := state.matcher.matchCachedRow(state.isInitialized())
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
@@ -658,7 +657,7 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(ctx.Err())
 				}
 			}
-			state.matcher.matchCachedRollbackRow(state.initialized)
+			state.matcher.matchCachedRollbackRow(state.isInitialized())
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
 			revent, err := assembleRowEvent(regionID, entry)
@@ -666,11 +665,12 @@ func (w *regionWorker) handleEventEntry(
 				return errors.Trace(err)
 			}
 
-			if entry.CommitTs <= state.lastResolvedTs {
+			resolvedTs := state.getLastResolvedTs()
+			if entry.CommitTs <= resolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
-					zap.Uint64("resolvedTs", state.lastResolvedTs),
+					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
@@ -685,17 +685,18 @@ func (w *regionWorker) handleEventEntry(
 			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
 			w.metrics.metricPullEventCommitCounter.Inc()
-			if entry.CommitTs <= state.lastResolvedTs {
+			resolvedTs := state.getLastResolvedTs()
+			if entry.CommitTs <= resolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
-					zap.Uint64("resolvedTs", state.lastResolvedTs),
+					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			ok := state.matcher.matchRow(entry, state.initialized)
+			ok := state.matcher.matchRow(entry, state.isInitialized())
 			if !ok {
-				if !state.initialized {
+				if !state.isInitialized() {
 					state.matcher.cacheCommitRow(entry)
 					continue
 				}
@@ -718,7 +719,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
-			if !state.initialized {
+			if !state.isInitialized() {
 				state.matcher.cacheRollbackRow(entry)
 				continue
 			}

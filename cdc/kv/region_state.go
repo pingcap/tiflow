@@ -75,6 +75,12 @@ func (s *regionFeedState) start() {
 	s.matcher = newMatcher()
 }
 
+func (s *regionFeedState) getStartTime() time.Time {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.startFeedTime
+}
+
 func (s *regionFeedState) markStopped() {
 	atomic.StoreInt32(&s.stopped, 1)
 }
@@ -101,6 +107,12 @@ func (s *regionFeedState) isInitialized() bool {
 	return s.initialized
 }
 
+func (s *regionFeedState) setInitialized() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.initialized = true
+}
+
 func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -108,9 +120,15 @@ func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	return s.sri.verID.GetID()
+}
+
+func (s *regionFeedState) getStoreAddr() string {
+	s.lock.RLock()
+	defer s.lock.Unlock()
+	return s.sri.rpcCtx.Addr
 }
 
 func (s *regionFeedState) updateCheckpoint() {
