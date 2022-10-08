@@ -632,6 +632,10 @@ func (s *eventFeedSession) requestRegionToStore(
 		// each TiKV store has an independent pendingRegions.
 		storeAddr := rpcCtx.Addr
 		storeID := rpcCtx.Peer.GetStoreId()
+		var (
+			stream *eventFeedStream
+			err    error
+		)
 		stream, ok := s.getStream(storeAddr)
 		if !ok {
 			// when a new stream is established, always create a new pending
@@ -641,7 +645,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			storePendingRegions[storeAddr] = pendingRegions
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
-			stream, err := s.client.newStream(streamCtx, storeAddr, storeID)
+			stream, err = s.client.newStream(streamCtx, storeAddr, storeID)
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
@@ -702,7 +706,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			zap.String("addr", storeAddr),
 			zap.Any("request", req))
 
-		err := stream.client.Send(req)
+		err = stream.client.Send(req)
 
 		// If Send error, the receiver should have received error too or will receive error soon. So we don't need
 		// to do extra work here.
