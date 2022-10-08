@@ -1196,6 +1196,11 @@ error = '''
 updating service safepoint failed
 '''
 
+["CDC:ErrUpstreamClosed"]
+error = '''
+upstream has been closed
+'''
+
 ["CDC:ErrUpstreamManagerNotReady"]
 error = '''
 upstream manager not ready
