@@ -71,8 +71,7 @@ function run() {
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	run_sql_tidb "select count(*) from dm_meta.test_syncer_checkpoint"
-	check_contains "count(*): 501"
+	run_sql_tidb_with_retry_times "select count(*) from dm_meta.test_syncer_checkpoint" "count(*): 501" 60
 
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004: Transaction is too large'
 
