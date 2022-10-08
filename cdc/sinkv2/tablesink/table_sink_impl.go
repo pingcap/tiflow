@@ -72,13 +72,13 @@ func New[E eventsink.TableEvent](
 	}
 }
 
-// AppendRowChangedEvents implements the TableSink interface.
+// AppendRowChangedEvents appends row changed or txn events to the table sink.
 func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
-// UpdateResolvedTs implements the TableSink interface.
+// UpdateResolvedTs advances the resolved ts of the table sink.
 func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
@@ -116,7 +116,7 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
-// GetCheckpointTs implements the TableSink interface.
+// GetCheckpointTs returns the checkpoint ts of the table sink.
 func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
