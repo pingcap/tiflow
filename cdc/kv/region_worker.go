@@ -51,61 +51,9 @@ var (
 )
 
 const (
-	minRegionStateBucket = 4
-	maxRegionStateBucket = 16
-
 	maxWorkerPoolSize      = 64
 	maxResolvedLockPerLoop = 64
 )
-
-// regionStateManager provides the get/put way like a sync.Map, and it is divided
-// into several buckets to reduce lock contention
-type regionStateManager struct {
-	bucket int
-	states []*sync.Map
-}
-
-func newRegionStateManager(bucket int) *regionStateManager {
-	if bucket <= 0 {
-		bucket = runtime.NumCPU()
-		if bucket > maxRegionStateBucket {
-			bucket = maxRegionStateBucket
-		}
-		if bucket < minRegionStateBucket {
-			bucket = minRegionStateBucket
-		}
-	}
-	rsm := &regionStateManager{
-		bucket: bucket,
-		states: make([]*sync.Map, bucket),
-	}
-	for i := range rsm.states {
-		rsm.states[i] = new(sync.Map)
-	}
-	return rsm
-}
-
-func (rsm *regionStateManager) getBucket(regionID uint64) int {
-	return int(regionID) % rsm.bucket
-}
-
-func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool) {
-	bucket := rsm.getBucket(regionID)
-	if val, ok := rsm.states[bucket].Load(regionID); ok {
-		return val.(*regionFeedState), true
-	}
-	return nil, false
-}
-
-func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
-	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Store(regionID, state)
-}
-
-func (rsm *regionStateManager) delState(regionID uint64) {
-	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Delete(regionID)
-}
 
 type regionWorkerMetrics struct {
 	// kv events related metrics

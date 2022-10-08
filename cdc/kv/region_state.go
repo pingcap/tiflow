@@ -14,12 +14,18 @@
 package kv
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/tikv/client-go/v2/tikv"
+)
+
+const (
+	minRegionStateBucket = 4
+	maxRegionStateBucket = 16
 )
 
 type singleRegionInfo struct {
@@ -90,30 +96,30 @@ func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
 }
 
 type syncRegionFeedStateMap struct {
-	mu            sync.RWMutex
-	regionInfoMap map[uint64]*regionFeedState
+	mu     sync.RWMutex
+	states map[uint64]*regionFeedState
 }
 
 func newSyncRegionFeedStateMap() *syncRegionFeedStateMap {
 	return &syncRegionFeedStateMap{
-		mu:            sync.RWMutex{},
-		regionInfoMap: make(map[uint64]*regionFeedState),
+		mu:     sync.RWMutex{},
+		states: make(map[uint64]*regionFeedState),
 	}
 }
 
-func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) {
+func (m *syncRegionFeedStateMap) setByRequestID(requestID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.regionInfoMap[requestID] = state
+	m.states[requestID] = state
 }
 
-func (m *syncRegionFeedStateMap) take(requestID uint64) (*regionFeedState, bool) {
+func (m *syncRegionFeedStateMap) takeByRequestID(requestID uint64) (*regionFeedState, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	state, ok := m.regionInfoMap[requestID]
+	state, ok := m.states[requestID]
 	if ok {
-		delete(m.regionInfoMap, requestID)
+		delete(m.states, requestID)
 	}
 	return state, ok
 }
@@ -122,7 +128,85 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	state := m.regionInfoMap
-	m.regionInfoMap = make(map[uint64]*regionFeedState)
+	state := m.states
+	m.states = make(map[uint64]*regionFeedState)
 	return state
+}
+
+func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFeedState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.states[regionID] = state
+}
+
+func (m *syncRegionFeedStateMap) getByRequestID(regionID uint64) (*regionFeedState, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result, ok := m.states[regionID]
+	return result, ok
+}
+
+func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.states, regionID)
+}
+
+func (m *syncRegionFeedStateMap) readOnlyRange(f func(key, value interface{}) bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for key, value := range m.states {
+		if !f(key, value) {
+			return
+		}
+	}
+}
+
+// regionStateManager provides the get/put way like a sync.Map, and it is divided
+// into several buckets to reduce lock contention
+type regionStateManager struct {
+	bucket int
+	states []*sync.Map
+}
+
+func newRegionStateManager(bucket int) *regionStateManager {
+	if bucket <= 0 {
+		bucket = runtime.NumCPU()
+		if bucket > maxRegionStateBucket {
+			bucket = maxRegionStateBucket
+		}
+		if bucket < minRegionStateBucket {
+			bucket = minRegionStateBucket
+		}
+	}
+	rsm := &regionStateManager{
+		bucket: bucket,
+		states: make([]*sync.Map, bucket),
+	}
+	for i := range rsm.states {
+		rsm.states[i] = new(sync.Map)
+	}
+	return rsm
+}
+
+func (rsm *regionStateManager) getBucket(regionID uint64) int {
+	return int(regionID) % rsm.bucket
+}
+
+func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool) {
+	bucket := rsm.getBucket(regionID)
+	if val, ok := rsm.states[bucket].Load(regionID); ok {
+		return val.(*regionFeedState), true
+	}
+	return nil, false
+}
+
+func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
+	bucket := rsm.getBucket(regionID)
+	rsm.states[bucket].Store(regionID, state)
+}
+
+func (rsm *regionStateManager) delState(regionID uint64) {
+	bucket := rsm.getBucket(regionID)
+	rsm.states[bucket].Delete(regionID)
 }

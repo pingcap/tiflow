@@ -696,7 +696,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		}
 
 		state := newRegionFeedState(sri, requestID)
-		pendingRegions.insert(requestID, state)
+		pendingRegions.setByRequestID(requestID, state)
 
 		log.Debug("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
@@ -738,7 +738,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			// Remove the region from pendingRegions. If it's already removed, it should be already retried by
 			// `receiveFromStream`, so no need to retry here.
-			_, ok := pendingRegions.take(requestID)
+			_, ok := pendingRegions.takeByRequestID(requestID)
 			if !ok {
 				// since this pending region has been removed, the token has been
 				// released in advance, re-add one token here.
@@ -1188,7 +1188,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
 			// a new goroutine to handle messages from this region.
 			// Firstly load the region info.
-			state, valid = pendingRegions.take(event.RequestId)
+			state, valid = pendingRegions.takeByRequestID(event.RequestId)
 			if !valid {
 				log.Warn("drop event due to region feed is removed",
 					zap.String("namespace", s.changefeed.Namespace),
