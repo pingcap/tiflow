@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package kv
 
 import (
@@ -77,24 +90,21 @@ func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
 }
 
 type syncRegionFeedStateMap struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	regionInfoMap map[uint64]*regionFeedState
 }
 
 func newSyncRegionFeedStateMap() *syncRegionFeedStateMap {
 	return &syncRegionFeedStateMap{
-		mu:            sync.Mutex{},
+		mu:            sync.RWMutex{},
 		regionInfoMap: make(map[uint64]*regionFeedState),
 	}
 }
 
-func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) bool {
+func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	_, ok := m.regionInfoMap[requestID]
 	m.regionInfoMap[requestID] = state
-	return ok
 }
 
 func (m *syncRegionFeedStateMap) take(requestID uint64) (*regionFeedState, bool) {
