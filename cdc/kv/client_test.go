@@ -2146,7 +2146,7 @@ func TestCommitFallback(t *testing.T) {
 						Entries: []*cdcpb.Event_Row{{
 							Type:     cdcpb.Event_COMMIT,
 							OpType:   cdcpb.Event_Row_PUT,
-							Key:      []byte("a-commit-event-checkpointTs-fallback"),
+							Key:      []byte("a-commit-event-ts-fallback"),
 							StartTs:  92,
 							CommitTs: 98,
 						}},

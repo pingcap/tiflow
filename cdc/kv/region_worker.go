@@ -77,7 +77,7 @@ corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
 from gRPC stream receiving goroutine, processes event as soon as possible and
 sends `RegionFeedEvent` to output channel.
 Besides the `regionWorker` maintains a background lock resolver, the lock resolver
-maintains a resolved-checkpointTs based min heap to manager region resolved ts, so it doesn't
+maintains a resolved-ts based min heap to manager region resolved ts, so it doesn't
 need to iterate each region every time when resolving lock.
 Note: There exist two locks, one is lock for region states map, the other one is
 lock for each region state(each region state has one lock).
@@ -317,7 +317,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
 					}
-					// Only resolve lock if the resolved-checkpointTs keeps unchanged for
+					// Only resolve lock if the resolved-ts keeps unchanged for
 					// more than resolveLockPenalty times.
 					if rts.ts.penalty < resolveLockPenalty {
 						if lastResolvedTs > rts.ts.resolvedTs {
