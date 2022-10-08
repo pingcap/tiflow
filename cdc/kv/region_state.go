@@ -89,10 +89,43 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 	return s.lastResolvedTs
 }
 
+func (s *regionFeedState) setResolvedTs(resolvedTs uint64) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.lastResolvedTs = resolvedTs
+}
+
+func (s *regionFeedState) isInitialized() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.initialized
+}
+
 func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	return s.sri.span
+}
+
+func (s *regionFeedState) getRegionID() uint64 {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.sri.verID.GetID()
+}
+
+func (s *regionFeedState) updateCheckpoint() {
+	s.lock.RLock()
+	resolvedTs := s.lastResolvedTs
+	checkpointTs := s.sri.checkpointTs
+	if resolvedTs <= checkpointTs {
+		s.lock.RUnlock()
+		return
+	}
+	s.lock.RUnlock()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.sri.checkpointTs = resolvedTs
 }
 
 type syncRegionFeedStateMap struct {

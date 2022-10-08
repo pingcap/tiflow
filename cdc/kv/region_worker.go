@@ -771,9 +771,7 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		state.lock.Lock()
-		state.lastResolvedTs = resolvedTs
-		state.lock.Unlock()
+		state.setResolvedTs(resolvedTs)
 	}
 	// emit a checkpointTs
 	revent := model.RegionFeedEvent{Resolved: resolvedSpans}
@@ -792,18 +790,14 @@ func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
-			state.lock.Lock()
 			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
 			if state.isStopped() {
-				state.lock.Unlock()
 				return true
 			}
 			state.markStopped()
-			w.delRegionState(state.sri.verID.GetID())
-			if state.lastResolvedTs > state.sri.checkpointTs {
-				state.sri.checkpointTs = state.lastResolvedTs
-			}
-			revokeToken := !state.initialized
+			w.delRegionState(state.getRegionID())
+			state.updateCheckpoint()
+			revokeToken := !state.isInitialized()
 			state.lock.Unlock()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
