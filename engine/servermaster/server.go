@@ -49,8 +49,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/election"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
@@ -751,19 +749,6 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
-// member returns member information of the server
-func (s *Server) member() string {
-	m := &rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-	}
-	val, err := m.String()
-	if err != nil {
-		return s.name()
-	}
-	return val
-}
-
 // name is a shortcut to etcd name
 func (s *Server) name() string {
 	return s.id
@@ -887,9 +872,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("job manager exited")
 	}()
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(executorClients).GCHandler(),
-	})
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	// TODO refactor this method to make it more readable and maintainable.

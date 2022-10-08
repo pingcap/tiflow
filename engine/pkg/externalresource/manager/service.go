@@ -15,7 +15,6 @@ package manager
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -25,7 +24,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -37,9 +36,6 @@ type Service struct {
 	metaclient pkgOrm.Client
 
 	executors ExecutorInfoProvider
-
-	wg       sync.WaitGroup
-	cancelCh chan struct{}
 
 	preRPCHook rpcutil.PreRPCHook
 }
@@ -197,7 +193,7 @@ func (s *Service) GetPlacementConstraint(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 
-	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
+	rType, _, err := resModel.PasreResourceID(resourceKey.ID)
 	if err != nil {
 		return "", false, err
 	}

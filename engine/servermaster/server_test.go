@@ -297,6 +297,8 @@ func TestHTTPErrorHandler(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	err = resp.Body.Close()
+	require.NoError(t, err)
 
 	var pbStatus spb.Status
 	err = protojson.Unmarshal(body, &pbStatus)

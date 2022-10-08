@@ -158,8 +158,13 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 	for oldJobID, job := range fsm.pendingJobs {
 		id, err := dispatchJobFn(job)
 		if err != nil {
+			// This job is being backoff, skip it and process other jobs.
 			if derrors.ErrMasterCreateWorkerBackoff.Equal(err) {
-				return nil
+				continue
+			}
+			if derrors.ErrMasterCreateWorkerTerminate.Equal(err) {
+				delete(fsm.pendingJobs, oldJobID)
+				continue
 			}
 			return err
 		}

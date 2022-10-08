@@ -333,8 +333,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
 	require.Nil(t, err)
 	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{ReplicationFactor: 1}, false)
-	require.Regexp(t, ".*kafka server: Request parameters do not satisfy the configured policy.",
-		err.Error())
+	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.

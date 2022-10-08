@@ -17,3 +17,4 @@ level = "debug"
 reset-interval = "2s"
 initial-interval = "1s"
 max-interval = "15s"
+max-try-time = 100
