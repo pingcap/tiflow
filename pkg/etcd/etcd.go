@@ -415,9 +415,9 @@ func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string
 }
 
 // GetTaskStatus queries task status from etcd, returns
-//  - ModRevision of the given key
-//  - *model.TaskStatus unmarshalled from the value
-//  - error if error happens
+//   - ModRevision of the given key
+//   - *model.TaskStatus unmarshalled from the value
+//   - error if error happens
 func (c CDCEtcdClient) GetTaskStatus(
 	ctx context.Context,
 	changefeedID string,
@@ -468,9 +468,9 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 }
 
 // GetTaskPosition queries task process from etcd, returns
-//  - ModRevision of the given key
-//  - *model.TaskPosition unmarshaled from the value
-//  - error if error happens
+//   - ModRevision of the given key
+//   - *model.TaskPosition unmarshaled from the value
+//   - error if error happens
 func (c CDCEtcdClient) GetTaskPosition(
 	ctx context.Context,
 	changefeedID string,
@@ -503,9 +503,23 @@ func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureIn
 }
 
 // DeleteCaptureInfo delete capture info from etcd.
-func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
-	key := GetEtcdKeyCaptureInfo(id)
+func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, captureID string) error {
+	key := GetEtcdKeyCaptureInfo(captureID)
 	_, err := c.Client.Delete(ctx, key)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+
+	// we need to clean all task position related to this capture when the capture is offline
+	// otherwise the task positions may leak
+	// the taskKey format is /tidb/cdc/task/position/{captureID}
+	taskKey := fmt.Sprintf("%s/%s", TaskPositionKeyPrefix, captureID)
+	_, err = c.Client.Delete(ctx, taskKey, clientv3.WithPrefix())
+	if err != nil {
+		log.Warn("delete task position failed",
+			zap.String("captureID", captureID),
+			zap.String("key", key), zap.Error(err))
+	}
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
