@@ -127,7 +127,7 @@ func (s *regionFeedState) getRegionID() uint64 {
 
 func (s *regionFeedState) getStoreAddr() string {
 	s.lock.RLock()
-	defer s.lock.Unlock()
+	defer s.lock.RUnlock()
 	return s.sri.rpcCtx.Addr
 }
 
