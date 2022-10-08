@@ -759,7 +759,6 @@ func (jm *JobManagerImpl) CloseImpl(ctx context.Context) {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
 	jm.jobOperatorNotifier.Close()
-	return
 }
 
 // StopImpl implements frame.MasterImpl.StopImpl
