@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"sync"
 	"testing"
 	"time"
 
@@ -216,14 +215,13 @@ func TestValidatorDeadLock(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	require.Equal(t, pb.Stage_Running, validator.Stage())
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+	validator.wg.Add(1)
 	go func() {
 		defer func() {
 			// ignore panic when try to insert error to a closed channel,
 			// which will happen after the validator is successfully stopped.
 			// The panic is expected.
-			wg.Done()
+			validator.wg.Done()
 			// nolint:errcheck
 			recover()
 		}()
@@ -231,9 +229,9 @@ func TestValidatorDeadLock(t *testing.T) {
 			validator.sendError(context.Canceled) // prevent from stopping the validator
 		}
 	}()
-	// stuck
+	// stuck if the validator doesn't unlock before waiting wg
 	validator.Stop()
-	wg.Wait()
+	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 }
 
 type mockedCheckPointForValidator struct {
