@@ -700,6 +700,13 @@ func (s *eventFeedSession) requestRegionToStore(
 	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
 	storePendingRegions := make(map[string]*syncRegionFeedStateMap)
 
+	header := &cdcpb.Header{
+		ClusterId:    s.client.clusterID,
+		TicdcVersion: version.ReleaseSemver(),
+	}
+	// Always read old value.
+	extraOp := kvrpcpb.ExtraOp_ReadOldValue
+
 	var sri singleRegionInfo
 	for {
 		select {
@@ -709,18 +716,14 @@ func (s *eventFeedSession) requestRegionToStore(
 		}
 		requestID := allocID()
 
-		// Always read old value.
-		extraOp := kvrpcpb.ExtraOp_ReadOldValue
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
+		regionEpoch := rpcCtx.Meta.RegionEpoch
 		req := &cdcpb.ChangeDataRequest{
-			Header: &cdcpb.Header{
-				ClusterId:    s.client.clusterID,
-				TicdcVersion: version.ReleaseSemver(),
-			},
+			Header:       header,
 			RegionId:     regionID,
 			RequestId:    requestID,
-			RegionEpoch:  rpcCtx.Meta.RegionEpoch,
+			RegionEpoch:  regionEpoch,
 			CheckpointTs: sri.ts,
 			StartKey:     sri.span.Start,
 			EndKey:       sri.span.End,
@@ -731,36 +734,38 @@ func (s *eventFeedSession) requestRegionToStore(
 
 		// each TiKV store has an independent pendingRegions.
 		var pendingRegions *syncRegionFeedStateMap
-
 		var err error
-		stream, ok := s.getStream(rpcCtx.Addr)
+
+		storeAddr := rpcCtx.Addr
+		storeID := rpcCtx.Peer.GetStoreId()
+		stream, ok := s.getStream(storeAddr)
 		if ok {
 			var ok bool
-			pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
+			pendingRegions, ok = storePendingRegions[storeAddr]
 			if !ok {
 				// Should never happen
 				log.Panic("pending regions is not found for store",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Int64("tableID", s.tableID), zap.String("tableName", s.tableName),
-					zap.String("store", rpcCtx.Addr))
+					zap.Int64("tableID", s.tableID),
+					zap.String("tableName", s.tableName),
+					zap.String("store", storeAddr))
 			}
 		} else {
 			// when a new stream is established, always create a new pending
 			// regions map, the old map will be used in old `receiveFromStream`
 			// and won't be deleted until that goroutine exits.
 			pendingRegions = newSyncRegionFeedStateMap()
-			storePendingRegions[rpcCtx.Addr] = pendingRegions
-			storeID := rpcCtx.Peer.GetStoreId()
+			storePendingRegions[storeAddr] = pendingRegions
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
-			stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
+			stream, err = s.client.newStream(streamCtx, storeAddr, storeID)
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", sri.verID.GetID()),
+					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", requestID),
 					zap.Uint64("storeID", storeID),
 					zap.Error(err))
@@ -778,18 +783,18 @@ func (s *eventFeedSession) requestRegionToStore(
 				s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 				continue
 			}
-			s.addStream(rpcCtx.Addr, stream, streamCancel)
+			s.addStream(storeAddr, stream, streamCancel)
 			log.Info("creating new stream to store to send request",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", requestID),
 				zap.Uint64("storeID", storeID),
-				zap.String("addr", rpcCtx.Addr))
+				zap.String("addr", storeAddr))
 
 			g.Go(func() error {
-				defer s.deleteStream(rpcCtx.Addr)
-				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
+				defer s.deleteStream(storeAddr)
+				return s.receiveFromStream(ctx, g, storeAddr, storeID, stream.client, pendingRegions)
 			})
 		}
 
@@ -799,8 +804,10 @@ func (s *eventFeedSession) requestRegionToStore(
 		log.Debug("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Int64("tableID", s.tableID), zap.String("tableName", s.tableName),
-			zap.Any("request", req), zap.String("addr", rpcCtx.Addr))
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.String("addr", storeAddr),
+			zap.Any("request", req))
 
 		err = stream.client.Send(req)
 
@@ -810,26 +817,27 @@ func (s *eventFeedSession) requestRegionToStore(
 			log.Warn("send request to stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Int64("tableID", s.tableID), zap.String("tableName", s.tableName),
-				zap.String("addr", rpcCtx.Addr),
-				zap.Uint64("storeID", getStoreID(rpcCtx)),
-				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.String("addr", storeAddr),
+				zap.Uint64("storeID", storeID),
+				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", requestID),
 				zap.Error(err))
 			if err := stream.client.CloseSend(); err != nil {
 				log.Warn("failed to close stream",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.String("addr", rpcCtx.Addr))
+					zap.String("addr", storeAddr))
 			}
 			// Delete the stream from the map so that the next time the store is accessed, the stream will be
 			// re-established.
-			s.deleteStream(rpcCtx.Addr)
+			s.deleteStream(storeAddr)
 			// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
 			// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
 			// pending regions, the new pending regions that are requested after reconnecting won't be stopped
 			// incorrectly.
-			delete(storePendingRegions, rpcCtx.Addr)
+			delete(storePendingRegions, storeAddr)
 
 			// Remove the region from pendingRegions. If it's already removed, it should be already retried by
 			// `receiveFromStream`, so no need to retry here.
@@ -837,14 +845,14 @@ func (s *eventFeedSession) requestRegionToStore(
 			if !ok {
 				// since this pending region has been removed, the token has been
 				// released in advance, re-add one token here.
-				s.regionRouter.Acquire(rpcCtx.Addr)
+				s.regionRouter.Acquire(storeAddr)
 				continue
 			}
 
 			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
 			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 		} else {
-			s.regionRouter.Acquire(rpcCtx.Addr)
+			s.regionRouter.Acquire(storeAddr)
 		}
 	}
 }
