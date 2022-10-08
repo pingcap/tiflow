@@ -45,6 +45,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
+const cleanMetaDuration = 10 * time.Second
+
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	// captureMu is used to protect the capture info and processorManager.
@@ -254,7 +256,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), cleanMetaDuration)
 		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
 			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 		}
