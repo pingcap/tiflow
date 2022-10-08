@@ -186,7 +186,7 @@ func (w *worker) asyncSend(
 		rowsCount := 0
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.GetTableSinkState() == state.TableSinkStopping {
+			if event.GetTableSinkState() != state.TableSinkSinking {
 				event.Callback()
 				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
