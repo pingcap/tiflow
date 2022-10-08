@@ -364,7 +364,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	require.Nil(t, err)
 	ch2 <- makeEvent(ver.Ver)
 	var event model.RegionFeedEvent
-	// consume the first resolved ts event, which is sent before region starts
+	// consume the first resolved checkpointTs event, which is sent before region starts
 	<-eventCh
 	select {
 	case event = <-eventCh:
@@ -631,9 +631,9 @@ consumePreResolvedTs:
 			},
 		}
 	}
-	// fallback resolved ts event from TiKV
+	// fallback resolved checkpointTs event from TiKV
 	ch2 <- makeEvent(90)
-	// normal resolved ts event
+	// normal resolved checkpointTs event
 	ch2 <- makeEvent(120)
 	select {
 	case event = <-eventCh:
@@ -1059,7 +1059,7 @@ func testHandleFeedEvent(t *testing.T) {
 			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 135},
 		},
 	}}
-	// batch resolved ts
+	// batch resolved checkpointTs
 	eventResolvedBatch := &cdcpb.ChangeDataEvent{
 		ResolvedTs: &cdcpb.ResolvedTs{
 			Regions: []uint64{3},
@@ -2121,7 +2121,7 @@ func TestCommittedFallback(t *testing.T) {
 							Type:     cdcpb.Event_COMMITTED,
 							OpType:   cdcpb.Event_Row_PUT,
 							Key:      []byte("a"),
-							Value:    []byte("committed with commit ts before resolved ts"),
+							Value:    []byte("committed with commit checkpointTs before resolved checkpointTs"),
 							StartTs:  92,
 							CommitTs: 98,
 						}},
@@ -2146,7 +2146,7 @@ func TestCommitFallback(t *testing.T) {
 						Entries: []*cdcpb.Event_Row{{
 							Type:     cdcpb.Event_COMMIT,
 							OpType:   cdcpb.Event_Row_PUT,
-							Key:      []byte("a-commit-event-ts-fallback"),
+							Key:      []byte("a-commit-event-checkpointTs-fallback"),
 							StartTs:  92,
 							CommitTs: 98,
 						}},
@@ -2532,7 +2532,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 			},
 		},
 	}}
-	// batch resolved ts
+	// batch resolved checkpointTs
 	eventResolvedBatch := &cdcpb.ChangeDataEvent{
 		ResolvedTs: &cdcpb.ResolvedTs{
 			Regions: []uint64{3},
@@ -2594,7 +2594,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	cancel()
 }
 
-// TestResolveLockNoCandidate tests the resolved ts manager can work normally
+// TestResolveLockNoCandidate tests the resolved checkpointTs manager can work normally
 // when no region exceeds resolve lock interval, that is what candidate means.
 func TestResolveLockNoCandidate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3143,7 +3143,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 
 	require.Nil(t, err)
 
-	// send initialized event and a resolved ts event to each region
+	// send initialized event and a resolved checkpointTs event to each region
 	requestIDs.Range(func(key, value interface{}) bool {
 		regionID := key.(uint64)
 		requestID := value.(uint64)

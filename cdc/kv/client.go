@@ -88,13 +88,6 @@ const (
 // time interval to force kv client to terminate gRPC stream and reconnect
 var reconnectInterval = 60 * time.Minute
 
-type singleRegionInfo struct {
-	verID  tikv.RegionVerID
-	span   regionspan.ComparableSpan
-	ts     uint64
-	rpcCtx *tikv.RPCContext
-}
-
 type regionStatefulEvent struct {
 	changeEvent     *cdcpb.Event
 	resolvedTsEvent *resolvedTsEvent
@@ -132,15 +125,6 @@ var (
 	logPanic     = log.Panic
 )
 
-func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
-	return singleRegionInfo{
-		verID:  verID,
-		span:   span,
-		ts:     ts,
-		rpcCtx: rpcCtx,
-	}
-}
-
 type regionErrorInfo struct {
 	singleRegionInfo
 	err error
@@ -173,100 +157,13 @@ func (r *regionErrorInfo) logRateLimitedHint() bool {
 	return false
 }
 
-type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	stopped   int32
-
-	lock           sync.RWMutex
-	initialized    bool
-	matcher        *matcher
-	startFeedTime  time.Time
-	lastResolvedTs uint64
-}
-
-func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
-	return &regionFeedState{
-		sri:       sri,
-		requestID: requestID,
-		stopped:   0,
-	}
-}
-
-func (s *regionFeedState) start() {
-	s.startFeedTime = time.Now()
-	s.lastResolvedTs = s.sri.ts
-	s.matcher = newMatcher()
-}
-
-func (s *regionFeedState) markStopped() {
-	atomic.StoreInt32(&s.stopped, 1)
-}
-
-func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) getLastResolvedTs() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.lastResolvedTs
-}
-
-func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.sri.span
-}
-
-type syncRegionFeedStateMap struct {
-	mu            *sync.Mutex
-	regionInfoMap map[uint64]*regionFeedState
-}
-
-func newSyncRegionFeedStateMap() *syncRegionFeedStateMap {
-	return &syncRegionFeedStateMap{
-		mu:            &sync.Mutex{},
-		regionInfoMap: make(map[uint64]*regionFeedState),
-	}
-}
-
-func (m *syncRegionFeedStateMap) insert(requestID uint64, state *regionFeedState) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	_, ok := m.regionInfoMap[requestID]
-	m.regionInfoMap[requestID] = state
-	return ok
-}
-
-func (m *syncRegionFeedStateMap) take(requestID uint64) (*regionFeedState, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	state, ok := m.regionInfoMap[requestID]
-	if ok {
-		delete(m.regionInfoMap, requestID)
-	}
-	return state, ok
-}
-
-func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	state := m.regionInfoMap
-	m.regionInfoMap = make(map[uint64]*regionFeedState)
-	return state
-}
-
 type regionEventFeedLimiters struct {
 	sync.Mutex
 	// TODO replace with a LRU cache.
 	limiters map[uint64]*rate.Limiter
 }
 
-var defaultRegionEventFeedLimiters *regionEventFeedLimiters = &regionEventFeedLimiters{
+var defaultRegionEventFeedLimiters = &regionEventFeedLimiters{
 	limiters: make(map[uint64]*rate.Limiter),
 }
 
@@ -575,7 +472,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 						zap.Int64("tableID", s.tableID),
 						zap.String("tableName", s.tableName),
 						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
-						zap.Uint64("ts", errInfo.singleRegionInfo.ts),
+						zap.Uint64("checkpointTs", errInfo.singleRegionInfo.checkpointTs),
 						zap.Error(errInfo.err),
 						zapFieldAddr)
 				}
@@ -620,7 +517,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
-			sri.ts = res.CheckpointTs
+			sri.checkpointTs = res.CheckpointTs
 			select {
 			case s.regionCh <- sri:
 				s.regionChSizeGauge.Inc()
@@ -632,12 +529,12 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", sri.span),
-				zap.Uint64("ts", sri.ts),
+				zap.Uint64("checkpointTs", sri.checkpointTs),
 				zap.Any("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
 				// This call is always blocking, otherwise if scheduling in a new
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.checkpointTs)
 			}
 		case regionspan.LockRangeStatusCancel:
 			return
@@ -650,7 +547,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
 		// short sleep to wait region has split
 		time.Sleep(time.Second)
-		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.ts)
+		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.checkpointTs)
 		regionNum := val.(int)
 		retryRanges := make([]regionspan.ComparableSpan, 0, regionNum)
 		start := []byte("a")
@@ -678,7 +575,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // error handling. This function is non-blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked its range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
-	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
+	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.checkpointTs)
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
 	}
@@ -724,7 +621,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			RegionId:     regionID,
 			RequestId:    requestID,
 			RegionEpoch:  regionEpoch,
-			CheckpointTs: sri.ts,
+			CheckpointTs: sri.checkpointTs,
 			StartKey:     sri.span.Start,
 			EndKey:       sri.span.End,
 			ExtraOp:      extraOp,
@@ -871,20 +768,20 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 			s.regionChSizeGauge.Dec()
 		}
 
-		// Send a resolved ts to event channel first, for two reasons:
+		// Send a resolved checkpointTs to event channel first, for two reasons:
 		// 1. Since we have locked the region range, and have maintained correct
-		//    checkpoint ts for the range, it is safe to report the resolved ts
+		//    checkpoint checkpointTs for the range, it is safe to report the resolved checkpointTs
 		//    to puller at this moment.
 		// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
 		//    receives the first kv event from TiKV, the region could split or
-		//    merge in advance, which should cause the change of resolved ts
-		//    distribution in puller, so this resolved ts event is needed.
-		// After this resolved ts event is sent, we don't need to send one more
-		// resolved ts event when the region starts to work.
+		//    merge in advance, which should cause the change of resolved checkpointTs
+		//    distribution in puller, so this resolved checkpointTs event is needed.
+		// After this resolved checkpointTs event is sent, we don't need to send one more
+		// resolved checkpointTs event when the region starts to work.
 		resolvedEv := model.RegionFeedEvent{
 			Resolved: []*model.ResolvedSpan{{
 				Span:       sri.span,
-				ResolvedTs: sri.ts,
+				ResolvedTs: sri.checkpointTs,
 			}},
 		}
 		select {
@@ -906,7 +803,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", sri.span),
-				zap.Uint64("ts", sri.ts))
+				zap.Uint64("checkpointTs", sri.checkpointTs))
 			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
 			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 			continue
@@ -1043,11 +940,11 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.checkpointTs)
 			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.checkpointTs)
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
@@ -1077,7 +974,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.checkpointTs)
 		return nil
 	case *connectToStoreErr:
 		metricConnectToStoreErr.Inc()
@@ -1334,7 +1231,7 @@ func (s *eventFeedSession) sendResolvedTs(
 	addr string,
 ) error {
 	statefulEvents := make([]*regionStatefulEvent, worker.inputSlots)
-	// split resolved ts
+	// split resolved checkpointTs
 	for i := 0; i < worker.inputSlots; i++ {
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
 		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
@@ -1350,7 +1247,7 @@ func (s *eventFeedSession) sendResolvedTs(
 		state, ok := worker.getRegionState(regionID)
 		if ok {
 			if state.isStopped() {
-				log.Debug("drop resolved ts due to region feed stopped",
+				log.Debug("drop resolved checkpointTs due to region feed stopped",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("regionID", regionID),

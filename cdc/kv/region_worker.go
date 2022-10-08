@@ -129,7 +129,7 @@ corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
 from gRPC stream receiving goroutine, processes event as soon as possible and
 sends `RegionFeedEvent` to output channel.
 Besides the `regionWorker` maintains a background lock resolver, the lock resolver
-maintains a resolved-ts based min heap to manager region resolved ts, so it doesn't
+maintains a resolved-checkpointTs based min heap to manager region resolved checkpointTs, so it doesn't
 need to iterate each region every time when resolving lock.
 Note: There exist two locks, one is lock for region states map, the other one is
 lock for each region state(each region state has one lock).
@@ -247,8 +247,8 @@ func (w *regionWorker) checkShouldExit() error {
 }
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
-	if state.lastResolvedTs > state.sri.ts {
-		state.sri.ts = state.lastResolvedTs
+	if state.lastResolvedTs > state.sri.checkpointTs {
+		state.sri.checkpointTs = state.lastResolvedTs
 	}
 	regionID := state.sri.verID.GetID()
 	log.Info("single region event feed disconnected",
@@ -257,7 +257,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
-		zap.Uint64("checkpoint", state.sri.ts),
+		zap.Uint64("checkpoint", state.sri.checkpointTs),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
@@ -354,10 +354,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				state, ok := w.getRegionState(rts.regionID)
 				if !ok || state.isStopped() {
 					// state is already deleted or stopped, just continue,
-					// and don't need to push resolved ts back to heap.
+					// and don't need to push resolved checkpointTs back to heap.
 					continue
 				}
-				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
+				// recheck resolved checkpointTs from region state, which may be larger than that in resolved checkpointTs heap
 				lastResolvedTs := state.getLastResolvedTs()
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval {
@@ -369,7 +369,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
 					}
-					// Only resolve lock if the resolved-ts keeps unchanged for
+					// Only resolve lock if the resolved-checkpointTs keeps unchanged for
 					// more than resolveLockPenalty times.
 					if rts.ts.penalty < resolveLockPenalty {
 						if lastResolvedTs > rts.ts.resolvedTs {
@@ -381,7 +381,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					if resolveLockLogRateLimiter.Allow() {
-						log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+						log.Warn("region not receiving resolved event from tikv or resolved checkpointTs is not pushing for too long time, try to resolve lock",
 							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.String("addr", w.storeAddr),
@@ -813,8 +813,8 @@ func (w *regionWorker) handleResolvedTs(
 	if len(resolvedSpans) == 0 {
 		return nil
 	}
-	// Send resolved ts update in non-blocking way, since we can re-query real
-	// resolved ts from region state even if resolved ts update is discarded.
+	// Send resolved checkpointTs update in non-blocking way, since we can re-query real
+	// resolved checkpointTs from region state even if resolved checkpointTs update is discarded.
 	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
 	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;
 	// (2) if it is a normal one, update rtsManager and check sinceLastResolvedTs
@@ -852,8 +852,8 @@ func (w *regionWorker) evictAllRegions() {
 			}
 			state.markStopped()
 			w.delRegionState(state.sri.verID.GetID())
-			if state.lastResolvedTs > state.sri.ts {
-				state.sri.ts = state.lastResolvedTs
+			if state.lastResolvedTs > state.sri.checkpointTs {
+				state.sri.checkpointTs = state.lastResolvedTs
 			}
 			revokeToken := !state.initialized
 			state.lock.Unlock()
