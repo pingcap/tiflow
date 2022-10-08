@@ -32,7 +32,7 @@ function incremental_data() {
 function incremental_data_2() {
 	j=6
 	for i in $(seq $TABLE_NUM); do
-		run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "INSERT INTO many_tables_db.t$i (i, j) VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
