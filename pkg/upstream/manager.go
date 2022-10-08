@@ -175,10 +175,7 @@ func (m *Manager) Visit(visitor func(up *Upstream) error) error {
 	var err error
 	m.ups.Range(func(k, v interface{}) bool {
 		err = visitor(v.(*Upstream))
-		if err != nil {
-			return false
-		}
-		return true
+		return err == nil
 	})
 	return err
 }

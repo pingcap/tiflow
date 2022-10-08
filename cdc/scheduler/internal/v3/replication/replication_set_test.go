@@ -800,6 +800,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	affected := false
 	// Secondary shutdown during Prepare, Prepare -> Absent
 	t.Run("AddTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
+		t.Parallel()
 		rClone := clone(r)
 		msgs, affected, err = rClone.handleCaptureShutdown(from)
 		require.Nil(t, err)
