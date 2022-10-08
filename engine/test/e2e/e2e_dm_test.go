@@ -351,6 +351,7 @@ func testSimpleAllModeTask(
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, nil)
+		t.Logf("jobStatus: %v\nerr:%s", jobStatus, err)
 		return err == nil && !jobStatus.TaskStatus[source1].ConfigOutdated && jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*30, time.Second)
 
