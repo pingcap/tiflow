@@ -40,9 +40,9 @@ func TestRegionFeedEvent(t *testing.T) {
 	require.Equal(t, raw, ev.GetValue())
 
 	ev = &RegionFeedEvent{Resolved: resolved}
-	require.Equal(t, resolved, ev.GetValue().([]*ResolvedSpans)[0])
+	require.Equal(t, resolved, ev.GetValue().(*ResolvedSpans))
 
-	require.Equal(t, "span: [61, 62), resolved-ts: 111", resolved.String())
+	require.Equal(t, "span: [{[61, 62) 0}], resolved-ts: 111", resolved.String())
 }
 
 func TestRawKVEntry(t *testing.T) {
