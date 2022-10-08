@@ -96,6 +96,7 @@ func TestJobOperator(t *testing.T) {
 	err = router.jobOnline(ctx, jobID, meta)
 	require.NoError(t, err)
 
+	require.False(t, oper.IsJobCanceling(ctx, jobID))
 	err = oper.MarkJobCanceling(ctx, jobID)
 	require.NoError(t, err)
 	// cancel job repeatly is ok
@@ -107,6 +108,7 @@ func TestJobOperator(t *testing.T) {
 		require.NoError(t, err)
 		router.checkCancelCalls(t, jobID, i+1)
 		checkJobOpWithStatus(ctx, t, metaCli, ormModel.JobOpStatusCanceling, 1)
+		require.True(t, oper.IsJobCanceling(ctx, jobID))
 	}
 
 	// mock job master is canceled and status persisted
@@ -117,6 +119,7 @@ func TestJobOperator(t *testing.T) {
 	err = oper.Tick(ctx)
 	require.NoError(t, err)
 	checkJobOpWithStatus(ctx, t, metaCli, ormModel.JobOpStatusCanceled, 1)
+	require.False(t, oper.IsJobCanceling(ctx, jobID))
 }
 
 func TestJobOperatorMetOrphanJob(t *testing.T) {
