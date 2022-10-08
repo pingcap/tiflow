@@ -1452,6 +1452,29 @@ func TestJobOp(t *testing.T) {
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
+		// QueryJobOp
+		{
+			fn: "QueryJobOp",
+			inputs: []interface{}{
+				"job-1",
+			},
+			output: &model.JobOp{
+				Model: model.Model{
+					SeqID:     1,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+				JobID: "job-1",
+				Op:    model.JobOpStatusCanceling,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "SELECT * FROM `job_ops` WHERE job_id = ?"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).
+					WillReturnRows(
+						sqlmock.NewRows([]string{"created_at", "updated_at", "op", "job_id", "seq_id"}).
+							AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-1", 1))
+			},
+		},
 		// QueryJobOpsByStatus
 		{
 			fn: "QueryJobOpsByStatus",
