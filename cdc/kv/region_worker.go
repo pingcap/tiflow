@@ -129,7 +129,7 @@ corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
 from gRPC stream receiving goroutine, processes event as soon as possible and
 sends `RegionFeedEvent` to output channel.
 Besides the `regionWorker` maintains a background lock resolver, the lock resolver
-maintains a resolved-checkpointTs based min heap to manager region resolved checkpointTs, so it doesn't
+maintains a resolved-checkpointTs based min heap to manager region resolved ts, so it doesn't
 need to iterate each region every time when resolving lock.
 Note: There exist two locks, one is lock for region states map, the other one is
 lock for each region state(each region state has one lock).
@@ -354,10 +354,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				state, ok := w.getRegionState(rts.regionID)
 				if !ok || state.isStopped() {
 					// state is already deleted or stopped, just continue,
-					// and don't need to push resolved checkpointTs back to heap.
+					// and don't need to push resolved ts back to heap.
 					continue
 				}
-				// recheck resolved checkpointTs from region state, which may be larger than that in resolved checkpointTs heap
+				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
 				lastResolvedTs := state.getLastResolvedTs()
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval {
@@ -381,7 +381,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					if resolveLockLogRateLimiter.Allow() {
-						log.Warn("region not receiving resolved event from tikv or resolved checkpointTs is not pushing for too long time, try to resolve lock",
+						log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.String("addr", w.storeAddr),
@@ -813,8 +813,8 @@ func (w *regionWorker) handleResolvedTs(
 	if len(resolvedSpans) == 0 {
 		return nil
 	}
-	// Send resolved checkpointTs update in non-blocking way, since we can re-query real
-	// resolved checkpointTs from region state even if resolved checkpointTs update is discarded.
+	// Send resolved ts update in non-blocking way, since we can re-query real
+	// resolved ts from region state even if resolved ts update is discarded.
 	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
 	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;
 	// (2) if it is a normal one, update rtsManager and check sinceLastResolvedTs

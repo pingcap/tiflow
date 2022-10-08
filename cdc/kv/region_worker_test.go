@@ -95,8 +95,8 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 		require.Greater(t, s.lastResolvedTs, uint64(1000))
 		totalResolvedTs += s.lastResolvedTs
 	}
-	// 100 regions, initial resolved checkpointTs 1000;
-	// 2000 * resolved checkpointTs forward, increased by 10 each time, routine number is `concurrency`.
+	// 100 regions, initial resolved ts 1000;
+	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
 	require.Equal(t, uint64(100*1000+2000*10*concurrency), totalResolvedTs)
 }
 

@@ -41,12 +41,12 @@ func TestRegionTsManagerResolvedTs(t *testing.T) {
 	rts := mgr.Pop()
 	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
-	// resolved checkpointTs is not updated
+	// resolved ts is not updated
 	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
 	rts = mgr.Pop()
 	checkRegionTsInfoWithoutEvTime(t, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
-	// resolved checkpointTs updated
+	// resolved ts updated
 	rts.ts.resolvedTs = 1001
 	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
 	mgr.Upsert(100, 1100, time.Now())
@@ -72,7 +72,7 @@ func TestRegionTsManagerPenalty(t *testing.T) {
 	}
 	require.Equal(t, 1, mgr.Len())
 
-	// test penalty increases if resolved checkpointTs keeps unchanged
+	// test penalty increases if resolved ts keeps unchanged
 	for i := 0; i < 6; i++ {
 		rts := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000)}
 		mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
@@ -81,7 +81,7 @@ func TestRegionTsManagerPenalty(t *testing.T) {
 	require.Equal(t, uint64(1000), rts.ts.resolvedTs)
 	require.Equal(t, 6, rts.ts.penalty)
 
-	// test penalty is cleared to zero if resolved checkpointTs is advanced
+	// test penalty is cleared to zero if resolved ts is advanced
 	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
 	rtsNew := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(2000)}
 	mgr.Upsert(rtsNew.regionID, rtsNew.ts.resolvedTs, rtsNew.ts.eventTime)
@@ -111,7 +111,7 @@ func TestRegionTsManagerPenaltyForFallBackEvent(t *testing.T) {
 	require.Equal(t, uint64(1000), rts.ts.resolvedTs)
 	require.Equal(t, 6, rts.ts.penalty)
 
-	// test penalty is cleared to zero if resolved checkpointTs is advanced
+	// test penalty is cleared to zero if resolved ts is advanced
 	mgr.Upsert(rts.regionID, rts.ts.resolvedTs, rts.ts.eventTime)
 	rtsNew := &regionTsInfo{regionID: 100, ts: newResolvedTsItem(2000)}
 	mgr.Upsert(rtsNew.regionID, rtsNew.ts.resolvedTs, rtsNew.ts.eventTime)

@@ -65,7 +65,7 @@ func (rh *regionTsHeap) Pop() interface{} {
 	return item
 }
 
-// regionTsManager is a used to maintain resolved checkpointTs information for N regions.
+// regionTsManager is a used to maintain resolved ts information for N regions.
 // This struct is not thread safe
 type regionTsManager struct {
 	// mapping from regionID to regionTsInfo object
@@ -85,7 +85,7 @@ func newRegionTsManager() *regionTsManager {
 // otherwise, insert a new regionTsInfo with penalty 0
 func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Time) {
 	if old, ok := rm.m[regionID]; ok {
-		// in a single resolved checkpointTs manager, we should not expect a fallback resolved event
+		// in a single resolved ts manager, we should not expect a fallback resolved event
 		// but, it's ok that we use fallback resolved event to increase penalty
 		if resolvedTs <= old.ts.resolvedTs && eventTime.After(old.ts.eventTime) {
 			old.ts.penalty++
