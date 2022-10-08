@@ -79,7 +79,6 @@ const (
 // use a slice instead of map because in small data size, slice search is faster
 // than map search.
 var masterRPCLimiterAllowList = []string{
-	"GetJob",
 	"CreateJob",
 	"CancelJob",
 	"ScheduleTask",
