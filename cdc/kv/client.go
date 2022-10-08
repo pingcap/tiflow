@@ -733,33 +733,18 @@ func (s *eventFeedSession) requestRegionToStore(
 		failpoint.Inject("kvClientPendingRegionDelay", nil)
 
 		// each TiKV store has an independent pendingRegions.
-		var pendingRegions *syncRegionFeedStateMap
-		var err error
-
 		storeAddr := rpcCtx.Addr
 		storeID := rpcCtx.Peer.GetStoreId()
 		stream, ok := s.getStream(storeAddr)
-		if ok {
-			var ok bool
-			pendingRegions, ok = storePendingRegions[storeAddr]
-			if !ok {
-				// Should never happen
-				log.Panic("pending regions is not found for store",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.Int64("tableID", s.tableID),
-					zap.String("tableName", s.tableName),
-					zap.String("store", storeAddr))
-			}
-		} else {
+		if !ok {
 			// when a new stream is established, always create a new pending
 			// regions map, the old map will be used in old `receiveFromStream`
 			// and won't be deleted until that goroutine exits.
-			pendingRegions = newSyncRegionFeedStateMap()
+			pendingRegions := newSyncRegionFeedStateMap()
 			storePendingRegions[storeAddr] = pendingRegions
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
-			stream, err = s.client.newStream(streamCtx, storeAddr, storeID)
+			stream, err := s.client.newStream(streamCtx, storeAddr, storeID)
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
@@ -798,6 +783,17 @@ func (s *eventFeedSession) requestRegionToStore(
 			})
 		}
 
+		pendingRegions, ok := storePendingRegions[storeAddr]
+		if !ok {
+			// Should never happen
+			log.Panic("pending regions is not found for store",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.String("store", storeAddr))
+		}
+
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.insert(requestID, state)
 
@@ -809,7 +805,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			zap.String("addr", storeAddr),
 			zap.Any("request", req))
 
-		err = stream.client.Send(req)
+		err := stream.client.Send(req)
 
 		// If Send error, the receiver should have received error too or will receive error soon. So we don't need
 		// to do extra work here.
@@ -1468,10 +1464,3 @@ func (e *connectToStoreErr) Error() string { return "connect to store error" }
 type sendRequestToStoreErr struct{}
 
 func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
-
-func getStoreID(rpcCtx *tikv.RPCContext) uint64 {
-	if rpcCtx != nil && rpcCtx.Peer != nil {
-		return rpcCtx.Peer.GetStoreId()
-	}
-	return 0
-}
