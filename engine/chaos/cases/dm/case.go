@@ -133,7 +133,7 @@ func NewCase(ctx context.Context, addr string, name string, cfgPath string) (*Ca
 				UniqueKeyColumnNames: []string{"id"},
 			}
 			generators[tableName] = sqlgen.NewSQLGeneratorImpl(tableConfig)
-			mcps[tableName] = mcp.NewModificationCandidatePool(1000000)
+			mcps[tableName] = mcp.NewModificationCandidatePool(100000000)
 			c.keySet[tableName] = make(map[string]struct{})
 			c.tables = append(c.tables, tableName)
 		}
