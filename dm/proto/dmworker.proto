@@ -125,6 +125,7 @@ message LoadStatus {
     string progress = 3;
     string metaBinlog = 4;
     string metaBinlogGTID = 5;
+    int64 currentSpeedBytesPerSecond = 6;
 }
 
 // ShardingGroup represents a DDL sharding group, this is used by SyncStatus, and is differ from ShardingGroup in syncer pkg

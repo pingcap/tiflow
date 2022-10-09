@@ -23,9 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// This test case aims to check MasterMetaExt implements
+// Scan() correctly so that it can work with the SQL driver.
 func TestMasterMetaExtScan(t *testing.T) {
-	// This test case aims to check MasterMetaExt implements
-	// Scan() correctly so that it can work with the SQL driver.
 	t.Parallel()
 
 	expectNoError := func(t *testing.T, err error) {
@@ -99,6 +99,7 @@ func TestMasterMetaExtScan(t *testing.T) {
 
 	for i := range cases {
 		t.Run(fmt.Sprintf("subcase-%d", i), func(t *testing.T) {
+			t.Parallel()
 			var ext MasterMetaExt
 			c := cases[i]
 			c.checkErr(t, ext.Scan(c.input))

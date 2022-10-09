@@ -274,6 +274,21 @@ func (mr *MockClientMockRecorder) GetWorkerByID(arg0, arg1, arg2 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerByID", reflect.TypeOf((*MockClient)(nil).GetWorkerByID), arg0, arg1, arg2)
 }
 
+// QueryJobOp mocks base method.
+func (m *MockClient) QueryJobOp(arg0 context.Context, arg1 string) (*model2.JobOp, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryJobOp", arg0, arg1)
+	ret0, _ := ret[0].(*model2.JobOp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryJobOp indicates an expected call of QueryJobOp.
+func (mr *MockClientMockRecorder) QueryJobOp(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryJobOp", reflect.TypeOf((*MockClient)(nil).QueryJobOp), arg0, arg1)
+}
+
 // QueryJobOpsByStatus mocks base method.
 func (m *MockClient) QueryJobOpsByStatus(arg0 context.Context, arg1 model2.JobOpStatus) ([]*model2.JobOp, error) {
 	m.ctrl.T.Helper()

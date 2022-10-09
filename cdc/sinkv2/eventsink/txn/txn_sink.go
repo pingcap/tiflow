@@ -97,7 +97,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	}
 
 	for _, row := range rows {
-		if row.GetTableSinkState() == state.TableSinkStopping {
+		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
 			// to drop the event directly.
 			row.Callback()

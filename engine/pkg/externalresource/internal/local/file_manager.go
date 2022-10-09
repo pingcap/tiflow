@@ -207,9 +207,7 @@ func (m *FileManager) RemoveResource(
 	defer m.mu.Unlock()
 
 	if resources := m.persistedResourcesByCreator[creator]; resources != nil {
-		if _, ok := resources[resName]; ok {
-			delete(resources, resName)
-		}
+		delete(resources, resName)
 	}
 	return nil
 }
