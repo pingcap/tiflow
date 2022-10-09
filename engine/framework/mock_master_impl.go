@@ -101,7 +101,7 @@ func (m *MockMasterImpl) GetFrameMetaClient() pkgOrm.Client {
 }
 
 // Reset resets the mock data.
-func (m *MockMasterImpl) Reset() context.CancelFunc {
+func (m *MockMasterImpl) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -110,8 +110,6 @@ func (m *MockMasterImpl) Reset() context.CancelFunc {
 
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
-	broker := broker.NewBrokerForTesting("executor-1")
-	cancelFn := func() { broker.Close() }
 	err := dp.Provide(func() masterParamListForTest {
 		return masterParamListForTest{
 			MessageHandlerManager: m.messageHandlerManager,
@@ -120,7 +118,7 @@ func (m *MockMasterImpl) Reset() context.CancelFunc {
 			BusinessClientConn:    metaMock.NewMockClientConn(),
 			ExecutorGroup:         m.executorGroup,
 			ServerMasterClient:    m.serverMasterClient,
-			ResourceBroker:        broker,
+			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}
 	})
 	if err != nil {
@@ -134,7 +132,6 @@ func (m *MockMasterImpl) Reset() context.CancelFunc {
 		m.id,
 		m.tp,
 	).(*DefaultBaseMaster)
-	return cancelFn
 }
 
 // TickCount returns tick invoke time

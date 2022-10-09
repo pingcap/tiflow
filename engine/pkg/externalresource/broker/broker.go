@@ -86,7 +86,7 @@ func NewBroker(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go broker.runGCClosedWorker(ctx)
+	go broker.tick(ctx)
 	broker.cancel = cancel
 
 	// Initialize local file managers
@@ -175,16 +175,18 @@ func (b *DefaultBroker) createResource(
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
 func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
-	timer := time.NewTimer(defaultTimeout)
 	select {
+	case <-ctx.Done():
+		return
 	case b.closedWorkerCh <- closedWorker{workerID: workerID, jobID: jobID}:
 		return
-	case <-timer.C:
+	case <-time.After(defaultTimeout):
 		log.Error("closed worker channel is full, broker may be stuck")
 	}
 }
 
-func (b *DefaultBroker) runGCClosedWorker(ctx context.Context) {
+// tick periodically cleans up resources created by closed worker.
+func (b *DefaultBroker) tick(ctx context.Context) {
 	// We run a gc loop at the max frequency of once per second.
 	rl := ratelimit.New(1 /* once per second */)
 	for {

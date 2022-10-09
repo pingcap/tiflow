@@ -14,6 +14,7 @@
 package model
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -135,6 +136,12 @@ const (
 	ResourceTypeLocalFile = ResourceType("local")
 	ResourceTypeS3        = ResourceType("s3")
 )
+
+// BuildPrefix returns the prefix of the resource type.
+func (r ResourceType) BuildPrefix() string {
+	// For local file, the prefix is `/local%`. For S3, the prefix is `/s3%`.
+	return fmt.Sprintf("/%s%%", r)
+}
 
 // PasreResourceID returns the ResourceType and the path suffix.
 func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {

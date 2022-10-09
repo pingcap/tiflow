@@ -174,11 +174,11 @@ func GetDefaultMasterConfig() *Config {
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
+		JobBackoff:           jobop.NewDefaultBackoffConfig(),
 		Storage: resModel.Config{
 			Local: resModel.LocalFileConfig{BaseDir: ""},
 			S3:    resModel.S3Config{Bucket: ""},
 		},
-		JobBackoff: jobop.NewDefaultBackoffConfig(),
 	}
 }
 
