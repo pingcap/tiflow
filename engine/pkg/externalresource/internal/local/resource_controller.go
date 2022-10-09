@@ -50,7 +50,7 @@ func (r *resourceController) removeFilesOnExecutor(ctx context.Context, resource
 	return cli.RemoveResource(ctx, resource.Worker, resource.ID)
 }
 
-// GCExecutors removes all temporary resources created by the offlined exectors.
+// GCExecutors removes all temporary resources created by the offlined executors.
 func (r *resourceController) GCExecutor(
 	_ context.Context, _ []*resModel.ResourceMeta, _ model.ExecutorID,
 ) error {

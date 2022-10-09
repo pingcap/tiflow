@@ -25,6 +25,6 @@ import (
 type ResourceController interface {
 	// GCSingleResource remove a persisted resource.
 	GCSingleResource(context.Context, *resModel.ResourceMeta) error
-	// GCExecutor removes all temporary resources created by the offlined exectors.
+	// GCExecutor removes all temporary resources created by the offlined executors.
 	GCExecutor(context.Context, []*resModel.ResourceMeta, model.ExecutorID) error
 }
