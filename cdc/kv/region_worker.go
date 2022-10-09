@@ -782,23 +782,23 @@ func (w *regionWorker) handleResolvedTs(
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
-		states.readOnlyRange(func(_, value interface{}) bool {
-			state := value.(*regionFeedState)
-			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
-			if state.isStopped() {
-				return true
+		states.mu.Lock()
+		for regionID, regionState := range states.states {
+			if regionState.isStopped() {
+				continue
 			}
-			state.markStopped()
-			w.delRegionState(state.getRegionID())
-			state.updateCheckpoint()
-			revokeToken := !state.isInitialized()
+			regionState.markStopped()
+			w.delRegionState(regionID)
+			regionState.updateCheckpoint()
+			revokeToken := !regionState.isInitialized()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
-			errInfo := newRegionErrorInfo(state.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
+			errInfo := newRegionErrorInfo(regionState.sri,
+				cerror.ErrEventFeedAborted.FastGenByArgs())
 			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
-			return true
-		})
+		}
+		states.mu.Unlock()
 	}
 }
 
