@@ -47,7 +47,7 @@ func TestHttputilNewClient(t *testing.T) {
 		[]string{},
 	)
 	require.Nil(t, err)
-	server := runServer(serverTLS)
+	server, addr := runServer(serverTLS)
 	defer func() {
 		cancel()
 		server.Close()
@@ -60,7 +60,7 @@ func TestHttputilNewClient(t *testing.T) {
 	}
 	cli, err := NewClient(credential)
 	require.Nil(t, err)
-	url := fmt.Sprintf("https://%s/", server.Listener.Addr().String())
+	url := fmt.Sprintf("https://%s/", addr)
 	resp, err := cli.Get(context.Background(), url)
 	require.Nil(t, err)
 	defer resp.Body.Close()
@@ -74,14 +74,14 @@ func TestStatusCodeCreated(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	server := runServer(nil)
+	server, addr := runServer(nil)
 	defer func() {
 		cancel()
 		server.Close()
 	}()
 	cli, err := NewClient(nil)
 	require.Nil(t, err)
-	url := fmt.Sprintf("http://%s/create", server.Listener.Addr().String())
+	url := fmt.Sprintf("http://%s/create", addr)
 	respBody, err := cli.DoRequest(ctx, url, http.MethodPost, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, []byte(`"{"id": "value"}"`), respBody)
@@ -100,11 +100,12 @@ func createHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(`"{"id": "value"}"`))
 }
 
-func runServer(tlsCfg *tls.Config) *httptest.Server {
+func runServer(tlsCfg *tls.Config) (*httptest.Server, string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handler)
 	mux.HandleFunc("/create", createHandler)
 	server := httptest.NewUnstartedServer(mux)
+	addr := server.Listener.Addr().String()
 
 	if tlsCfg != nil {
 		server.TLS = tlsCfg
@@ -112,5 +113,5 @@ func runServer(tlsCfg *tls.Config) *httptest.Server {
 	} else {
 		go func() { server.Start() }()
 	}
-	return server
+	return server, addr
 }
