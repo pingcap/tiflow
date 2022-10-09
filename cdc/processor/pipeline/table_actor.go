@@ -458,6 +458,7 @@ func (t *tableActor) AsyncStop() bool {
 func (t *tableActor) Stats() tablepb.Stats {
 	pullerStats := t.pullerNode.plr.Stats()
 	sorterStats := t.sortNode.sorter.Stats()
+	sinkStats := t.sinkNode.Stats()
 
 	return tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
@@ -466,13 +467,17 @@ func (t *tableActor) Stats() tablepb.Stats {
 				CheckpointTs: pullerStats.CheckpointTs,
 				ResolvedTs:   pullerStats.ResolvedTs,
 			},
-			"sorter": {
-				CheckpointTs: sorterStats.CheckpointTs,
-				ResolvedTs:   sorterStats.ResolvedTs,
+			"sorter-ingress": {
+				CheckpointTs: sorterStats.CheckpointTsIngress,
+				ResolvedTs:   sorterStats.ResolvedTsIngress,
+			},
+			"sorter-egress": {
+				CheckpointTs: sorterStats.CheckpointTsEgress,
+				ResolvedTs:   sorterStats.ResolvedTsEgress,
 			},
 			"sink": {
-				CheckpointTs: sorterStats.CheckpointTs,
-				ResolvedTs:   sorterStats.ResolvedTs,
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 		},
 	}

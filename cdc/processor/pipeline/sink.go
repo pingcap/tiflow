@@ -432,7 +432,7 @@ func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
 	return nil
 }
 
-func (n *sinkNode) stats() Stats {
+func (n *sinkNode) Stats() Stats {
 	return Stats{
 		CheckpointTs: n.CheckpointTs(),
 		ResolvedTs:   n.getResolvedTs().Ts,

@@ -41,10 +41,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerV2FromCtx(
-	ctx cdcContext.Context, startTs uint64,
+func newSchedulerFromCtx(
+	ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -52,10 +52,11 @@ func newSchedulerV2FromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
+	clock := upstream.PDClock
 	if cfg.EnableSchedulerV3 {
 		ret, err = scheduler.NewSchedulerV3(
 			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
+			messageServer, messageRouter, ownerRev, clock, cfg.Scheduler)
 	} else {
 		ret, err = scheduler.NewScheduler(
 			ctx, captureID, changeFeedID, startTs,
@@ -64,8 +65,10 @@ func newSchedulerV2FromCtx(
 	return ret, errors.Trace(err)
 }
 
-func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
-	return newSchedulerV2FromCtx(ctx, startTs)
+func newScheduler(
+	ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+) (scheduler.Scheduler, error) {
+	return newSchedulerFromCtx(ctx, startTs, upstream)
 }
 
 type changefeed struct {
@@ -132,7 +135,9 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+	newScheduler func(
+		ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -170,7 +175,9 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+	) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
@@ -518,7 +525,7 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs, c.upstream)
 	if err != nil {
 		return errors.Trace(err)
 	}

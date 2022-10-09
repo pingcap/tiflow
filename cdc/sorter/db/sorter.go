@@ -34,7 +34,7 @@ import (
 
 const (
 	// Capacity of db sorter input and output channels.
-	sorterInputCap, sorterOutputCap = 64, 64
+	sorterInputCap, sorterOutputCap = 1, 64
 	// Max size of received event batch.
 	batchReceiveEventSize = 32
 )
@@ -75,6 +75,7 @@ type Sorter struct {
 
 	writerRouter  *actor.Router[message.Task]
 	writerActorID actor.ID
+	writer        *writer
 
 	readerRouter  *actor.Router[message.Task]
 	ReaderActorID actor.ID
@@ -153,6 +154,7 @@ func NewSorter(
 			iterMaxAliveDuration:  time.Duration(cfg.IteratorMaxAliveDuration) * time.Millisecond,
 			iterFirstSlowDuration: time.Duration(cfg.IteratorSlowReadDuration) * time.Millisecond,
 
+			metricIterRequest: metricIterDuration.WithLabelValues("request"),
 			metricIterFirst:   metricIterDuration.WithLabelValues("first"),
 			metricIterRelease: metricIterDuration.WithLabelValues("release"),
 		},
@@ -180,6 +182,7 @@ func NewSorter(
 		common:        c,
 		writerRouter:  writerRouter,
 		writerActorID: actorID,
+		writer:        w,
 		readerRouter:  readerRouter,
 		ReaderActorID: actorID,
 		reader:        r,
@@ -266,4 +269,13 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 }
 
 // Stats implement sorter interface
-func (ls *Sorter) Stats() sorter.Stats { return ls.reader.stats() }
+func (ls *Sorter) Stats() sorter.Stats {
+	ingress := ls.writer.stats()
+	egress := ls.reader.stats()
+	return sorter.Stats{
+		CheckpointTsEgress:  egress.CheckpointTsEgress,
+		ResolvedTsEgress:    egress.ResolvedTsEgress,
+		CheckpointTsIngress: ingress.CheckpointTsIngress,
+		ResolvedTsIngress:   ingress.ResolvedTsIngress,
+	}
+}

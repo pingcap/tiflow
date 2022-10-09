@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -115,11 +116,12 @@ func NewSchedulerV3(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	clock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return v3.NewCoordinator(
 		ctx, captureID, changeFeedID, checkpointTs,
-		messageServer, messageRouter, ownerRevision, cfg)
+		messageServer, messageRouter, ownerRevision, clock, cfg)
 }
 
 // InitMetrics registers all metrics used in scheduler

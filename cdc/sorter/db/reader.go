@@ -55,8 +55,8 @@ var _ actor.Actor[message.Task] = (*reader)(nil)
 
 func (r *reader) stats() sorter.Stats {
 	return sorter.Stats{
-		CheckpointTs: atomic.LoadUint64(&r.lastSentCommitTs),
-		ResolvedTs:   atomic.LoadUint64(&r.lastSentResolvedTs),
+		CheckpointTsEgress: atomic.LoadUint64(&r.lastSentCommitTs),
+		ResolvedTsEgress:   atomic.LoadUint64(&r.lastSentResolvedTs),
 	}
 }
 
@@ -270,6 +270,8 @@ type pollState struct {
 	// Iterator is released once it exceeds `iterMaxAliveDuration`.
 	iterAliveTime        time.Time
 	iterMaxAliveDuration time.Duration
+	// A timestamp when we request an iterator.
+	iterRequestTime time.Time
 	// A channel for receiving iterator asynchronously.
 	iterCh chan *message.LimitedIterator
 	// An iterator for reading resolved events, up to the `iterResolvedTs`.
@@ -278,6 +280,7 @@ type pollState struct {
 	// A flag to mark whether the current position has been read.
 	iterHasRead bool
 
+	metricIterRequest prometheus.Observer
 	metricIterFirst   prometheus.Observer
 	metricIterRelease prometheus.Observer
 }
@@ -339,6 +342,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		// We haven't sent request.
 		iterCh := make(chan *message.LimitedIterator, 1)
 		state.iterCh = iterCh
+		state.iterRequestTime = time.Now()
 		readerRouter := state.readerRouter
 		readerID := state.readerID
 		lowerBoundTs := atomic.LoadUint64(&state.startTs)
@@ -373,6 +377,8 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		state.iterCh = nil
 		state.iter = iter
 		start := time.Now()
+		requestDuration := start.Sub(state.iterRequestTime)
+		state.metricIterRequest.Observe(float64(requestDuration.Seconds()))
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false

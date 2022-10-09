@@ -21,8 +21,10 @@ import (
 
 // Stats of a sorter.
 type Stats struct {
-	CheckpointTs model.Ts
-	ResolvedTs   model.Ts
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
+	CheckpointTsEgress  model.Ts
+	ResolvedTsEgress    model.Ts
 }
 
 // EventSorter accepts unsorted PolymorphicEvents, sort them in background and returns

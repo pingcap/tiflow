@@ -30,7 +30,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -56,6 +58,7 @@ type coordinator struct {
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
+	clock           pdutil.Clock
 }
 
 // NewCoordinator returns a two phase scheduler.
@@ -67,6 +70,7 @@ func NewCoordinator(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	clock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
@@ -74,7 +78,7 @@ func NewCoordinator(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
+	coord := newCoordinator(captureID, changefeedID, ownerRevision, clock, cfg)
 	coord.trans = trans
 	return coord, nil
 }
@@ -83,6 +87,7 @@ func newCoordinator(
 	captureID model.CaptureID,
 	changefeedID model.ChangeFeedID,
 	ownerRevision int64,
+	clock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
@@ -97,6 +102,7 @@ func newCoordinator(
 			captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
+		clock:        clock,
 	}
 }
 
@@ -351,7 +357,9 @@ func (c *coordinator) maybeCollectMetrics() {
 	}
 	c.lastCollectTime = now
 
+	pdTime, _ := c.clock.CurrentTime()
+	currentTs := oracle.GetPhysical(pdTime)
 	c.schedulerM.CollectMetrics()
-	c.replicationM.CollectMetrics()
+	c.replicationM.CollectMetrics(currentTs)
 	c.captureM.CollectMetrics()
 }
