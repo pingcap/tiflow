@@ -41,9 +41,11 @@ const (
 	defaultPullerOutputChanSize = 128
 )
 
-// Workload of a puller.
-type Workload struct {
-	RegionCount uint64
+// Stats of a puller.
+type Stats struct {
+	RegionCount  uint64
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
 }
 
 // Puller pull data from tikv and push changes into a buffer.
@@ -52,17 +54,19 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
-	Workload() Workload
+	Stats() Stats
 }
 
 type pullerImpl struct {
-	kvCli        kv.CDCKVClient
-	kvStorage    tikv.Storage
+	kvCli     kv.CDCKVClient
+	kvStorage tikv.Storage
+	spans     []regionspan.ComparableSpan
+	outputCh  chan *model.RawKVEntry
+	tsTracker frontier.Frontier
+	// The commit ts of the latest raw kv event that puller has sent.
 	checkpointTs uint64
-	spans        []regionspan.ComparableSpan
-	outputCh     chan *model.RawKVEntry
-	tsTracker    frontier.Frontier
-	resolvedTs   uint64
+	// The latest resolved ts that puller has sent.
+	resolvedTs uint64
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
@@ -175,10 +179,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					zap.Any("row", raw))
 				return nil
 			}
+			commitTs := raw.CRTs
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case p.outputCh <- raw:
+				if atomic.LoadUint64(&p.checkpointTs) < commitTs {
+					atomic.StoreUint64(&p.checkpointTs, commitTs)
+				}
 			}
 			return nil
 		}
@@ -262,6 +270,10 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
 }
 
-func (p *pullerImpl) Workload() Workload {
-	return Workload{RegionCount: p.kvCli.RegionCount()}
+func (p *pullerImpl) Stats() Stats {
+	return Stats{
+		RegionCount:  p.kvCli.RegionCount(),
+		ResolvedTs:   atomic.LoadUint64(&p.resolvedTs),
+		CheckpointTs: atomic.LoadUint64(&p.checkpointTs),
+	}
 }

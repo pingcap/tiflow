@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -51,6 +52,13 @@ type reader struct {
 }
 
 var _ actor.Actor[message.Task] = (*reader)(nil)
+
+func (r *reader) stats() sorter.Stats {
+	return sorter.Stats{
+		CheckpointTs: atomic.LoadUint64(&r.lastSentCommitTs),
+		ResolvedTs:   atomic.LoadUint64(&r.lastSentResolvedTs),
+	}
+}
 
 // setTaskDelete set delete range if there are too many events can be deleted or
 // it has been a long time since last delete.
@@ -84,7 +92,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	select {
 	case r.outputCh <- event:
 		r.lastEvent = event
-		r.lastSentCommitTs = event.CRTs
+		atomic.StoreUint64(&r.lastSentCommitTs, event.CRTs)
 		return true
 	default:
 		return false
@@ -96,7 +104,7 @@ func (r *reader) outputResolvedTs(rts model.Ts) {
 	ok := r.output(model.NewResolvedPolymorphicEvent(0, rts))
 	if ok {
 		r.metricTotalEventsResolved.Inc()
-		r.lastSentResolvedTs = rts
+		atomic.StoreUint64(&r.lastSentResolvedTs, rts)
 	}
 }
 

@@ -119,6 +119,7 @@ type changefeed struct {
 	metricsChangefeedResolvedTsGauge       prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
 	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge                prometheus.Gauge
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
@@ -549,6 +550,7 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsCurrentPDTsGauge = currentPDTsGauge.WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
@@ -615,9 +617,11 @@ func (c *changefeed) cleanupMetrics() {
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	currentPDTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 	c.metricsChangefeedResolvedTsLagDuration = nil
+	c.metricsCurrentPDTsGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -903,6 +907,8 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	resolvedLag := float64(currentTs-phyRTs) / 1e3
 	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
 	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
+
+	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {

@@ -81,8 +81,8 @@ func (m *mockPuller) Output() <-chan *model.RawKVEntry {
 	return m.outCh
 }
 
-func (m *mockPuller) Workload() Workload {
-	return Workload{}
+func (m *mockPuller) Stats() Stats {
+	return Stats{}
 }
 
 func (m *mockPuller) append(e *model.RawKVEntry) {

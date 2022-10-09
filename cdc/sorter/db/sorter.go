@@ -78,6 +78,7 @@ type Sorter struct {
 
 	readerRouter  *actor.Router[message.Task]
 	ReaderActorID actor.ID
+	reader        *reader
 
 	outputCh chan *model.PolymorphicEvent
 	closed   int32
@@ -181,6 +182,7 @@ func NewSorter(
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
 		ReaderActorID: actorID,
+		reader:        r,
 		outputCh:      r.outputCh,
 	}, nil
 }
@@ -262,3 +264,6 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
 }
+
+// Stats implement sorter interface
+func (ls *Sorter) Stats() sorter.Stats { return ls.reader.stats() }

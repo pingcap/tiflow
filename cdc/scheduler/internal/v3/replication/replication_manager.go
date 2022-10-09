@@ -518,6 +518,16 @@ func (r *Manager) CollectMetrics() {
 		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
 		slowestTableResolvedTsGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
+		for stage, checkpoint := range table.Stats.StageCheckpoints {
+			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
+			slowestTableStageCheckpointTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
+			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
+			slowestTableStageResolvedTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
+		}
+		slowestTableRegionGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 	}
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,
@@ -593,6 +603,9 @@ func (r *Manager) CleanMetrics() {
 		tableStateGauge.
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
+	slowestTableStageCheckpointTsGaugeVec.Reset()
+	slowestTableStageResolvedTsGaugeVec.Reset()
+	slowestTableRegionGaugeVec.Reset()
 }
 
 // SetReplicationSetForTests is only used in tests.

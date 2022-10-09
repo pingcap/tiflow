@@ -48,7 +48,7 @@ message Stats {
     // Number of captured regions.
     uint64 region_count = 1;
     // Checkponits at each stage.
-    map<string, Checkpoint> stage_checkpoints = 2;
+    map<string, Checkpoint> stage_checkpoints = 2 [(gogoproto.nullable) = false];
 }
 
 // TableStatus is the running status of a table.

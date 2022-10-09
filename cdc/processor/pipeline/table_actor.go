@@ -454,10 +454,28 @@ func (t *tableActor) AsyncStop() bool {
 	return true
 }
 
-// Workload returns the workload of this table pipeline
+// Stats returns the statistics of this table pipeline
 func (t *tableActor) Stats() tablepb.Stats {
-	// We temporarily set the value to constant 1
-	return workload
+	pullerStats := t.pullerNode.plr.Stats()
+	sorterStats := t.sortNode.sorter.Stats()
+
+	return tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller": {
+				CheckpointTs: pullerStats.CheckpointTs,
+				ResolvedTs:   pullerStats.ResolvedTs,
+			},
+			"sorter": {
+				CheckpointTs: sorterStats.CheckpointTs,
+				ResolvedTs:   sorterStats.ResolvedTs,
+			},
+			"sink": {
+				CheckpointTs: sorterStats.CheckpointTs,
+				ResolvedTs:   sorterStats.ResolvedTs,
+			},
+		},
+	}
 }
 
 // State returns the state of this table pipeline
