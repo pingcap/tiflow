@@ -610,11 +610,11 @@ func (c *metaOpsClient) DeleteResourcesByTypeAndExecutorIDs(
 	var result *gorm.DB
 	if len(executorIDs) == 1 {
 		result = c.db.WithContext(ctx).
-			Where("executor_id = ? and id like ?", executorIDs[0], resType.BuildPrefix()).
+			Where("executor_id = ? and id like ?", executorIDs[0], resType.BuildPrefix()+"%").
 			Delete(&resModel.ResourceMeta{})
 	} else {
 		result = c.db.WithContext(ctx).
-			Where("executor_id in ? and id like ?", executorIDs, resType.BuildPrefix()).
+			Where("executor_id in ? and id like ?", executorIDs, resType.BuildPrefix()+"%").
 			Delete(&resModel.ResourceMeta{})
 	}
 	if result.Error == nil {

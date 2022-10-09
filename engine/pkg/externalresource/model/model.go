@@ -140,7 +140,7 @@ const (
 // BuildPrefix returns the prefix of the resource type.
 func (r ResourceType) BuildPrefix() string {
 	// For local file, the prefix is `/local%`. For S3, the prefix is `/s3%`.
-	return fmt.Sprintf("/%s%%", r)
+	return fmt.Sprintf("/%s", r)
 }
 
 // PasreResourceID returns the ResourceType and the path suffix.
