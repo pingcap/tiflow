@@ -475,7 +475,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
 // Input: map of schema --> list of tables
 // Output: schema names map: lower_case_schema_name --> schema_name
-//         tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
+//	tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
 // Note: the result will skip the schemas and tables that their lower_case_name are the same.
 func buildLowerCaseTableNamesMap(tables map[string][]string) (map[string]string, map[string]map[string]string) {
 	schemaMap := make(map[string]string)
@@ -1144,10 +1146,11 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 
 // flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in four cases:
-//   1. DDL executed
-//   2. pausing / stopping the sync (driven by `s.flushJobs`)
-//   3. IsFreshTask return true
-//   4. Heartbeat event received
+//  1. DDL executed
+//  2. pausing / stopping the sync (driven by `s.flushJobs`)
+//  3. IsFreshTask return true
+//  4. Heartbeat event received
+//
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
@@ -1666,9 +1669,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
 	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
 	// 3. then we initiate schema tracker
-	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
-	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
-	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker,
+	//      and flush them into checkpoint again.
 	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
 	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
 	// 5. finally clean the dump files
@@ -1695,9 +1697,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		if err != nil {
 			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
 			cleanDumpFile = false
-		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			s.flushOptimisticTableInfos(s.runCtx)
+		} else {
+			err = s.flushCheckPoints()
+			if err != nil {
+				s.tctx.L().Warn("error happened when flush table structure from dump files", zap.Error(err))
+				cleanDumpFile = false
+			}
 		}
 	} else {
 		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
@@ -3459,6 +3464,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	var dbs, tables []string
 	var tableFiles [][2]string // [db, filename]
 	for f := range files {
+		// TODO: handle db/table name escaped bu dumpling.
 		if db, ok := utils.GetDBFromDumpFilename(f); ok {
 			dbs = append(dbs, db)
 			continue
@@ -3488,6 +3494,13 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			firstErr = err
 		}
 	}
+	p, err := utils.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
+	if err != nil {
+		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
+			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
+			zap.Error(err))
+		return err
+	}
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
@@ -3507,6 +3520,17 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
 				continue
 			}
+			stmtNode, err3 := p.ParseOneStmt(string(stmt), "", "")
+			if err3 != nil {
+				logger.Warn("fail to parse statement for creating table in schema tracker",
+					zap.String("db", db),
+					zap.String("path", s.cfg.LoaderConfig.Dir),
+					zap.String("file", file),
+					zap.ByteString("statement", stmt),
+					zap.Error(err3))
+				setFirstErr(err3)
+				continue
+			}
 			err = s.schemaTracker.Exec(ctx, db, string(stmt))
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
@@ -3515,10 +3539,12 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)
+				continue
 			}
-			// TODO: we should save table checkpoint here, but considering when
-			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
-			// we should fix that problem first.
+			s.saveTablePoint(
+				&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
+				s.getFlushedGlobalPoint(),
+			)
 		}
 	}
 	return firstErr
@@ -4066,26 +4092,6 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 		chanSize /= 2
 	}
 	return chanSize
-}
-
-func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
-	tbls := s.optimist.Tables()
-	sourceTables := make([]*filter.Table, 0, len(tbls))
-	tableInfos := make([]*model.TableInfo, 0, len(tbls))
-	for _, tbl := range tbls {
-		sourceTable := tbl[0]
-		targetTable := tbl[1]
-		tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
-		if err != nil {
-			tctx.L().Error("failed to get table  infos", log.ShortError(err))
-			continue
-		}
-		sourceTables = append(sourceTables, &sourceTable)
-		tableInfos = append(tableInfos, tableInfo)
-	}
-	if err := s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos); err != nil {
-		tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
-	}
 }
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
