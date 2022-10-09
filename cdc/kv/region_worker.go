@@ -195,17 +195,15 @@ func (w *regionWorker) checkShouldExit() error {
 }
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
-	if state.lastResolvedTs > state.sri.checkpointTs {
-		state.sri.checkpointTs = state.lastResolvedTs
-	}
-	regionID := state.sri.verID.GetID()
+	state.updateCheckpoint()
+	regionID := state.getRegionID()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
-		zap.Uint64("requestID", state.requestID),
-		zap.Stringer("span", state.sri.span),
-		zap.Uint64("checkpoint", state.sri.checkpointTs),
+		zap.Uint64("requestID", state.getRequestID()),
+		zap.Stringer("span", state.getRegionSpan()),
+		zap.Uint64("checkpoint", state.getCheckpointTs()),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
@@ -233,10 +231,10 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		w.cancelStream(time.Second)
 	}
 
-	revokeToken := !state.initialized
+	revokeToken := !state.isInitialized()
 	// since the context used in region worker will be cancelled after region
 	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
-	errInfo := newRegionErrorInfo(state.sri, err)
+	errInfo := newRegionErrorInfo(state.getRegionInfo(), err)
 	w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 
 	return retErr
@@ -374,16 +372,14 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 			}
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event",
-				zap.Stringer("event", event.changeEvent),
 				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID))
+				zap.String("changefeed", w.session.client.changefeed.ID),
+				zap.Stringer("event", event.changeEvent))
 		case *cdcpb.Event_Error:
-			event.state.lock.Lock()
 			err = w.handleSingleRegionError(
 				cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
 				event.state,
 			)
-			event.state.lock.Unlock()
 		case *cdcpb.Event_ResolvedTs:
 			err = w.handleResolvedTs(ctx, &resolvedTsEvent{
 				resolvedTs: x.ResolvedTs,

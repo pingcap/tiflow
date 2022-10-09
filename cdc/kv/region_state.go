@@ -125,6 +125,18 @@ func (s *regionFeedState) getRegionID() uint64 {
 	return s.sri.verID.GetID()
 }
 
+func (s *regionFeedState) getRequestID() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.requestID
+}
+
+func (s *regionFeedState) getCheckpointTs() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.checkpointTs
+}
+
 func (s *regionFeedState) getStoreAddr() string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -144,6 +156,12 @@ func (s *regionFeedState) updateCheckpoint() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.sri.checkpointTs = resolvedTs
+}
+
+func (s *regionFeedState) getRegionInfo() singleRegionInfo {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri
 }
 
 type syncRegionFeedStateMap struct {
