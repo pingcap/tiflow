@@ -80,7 +80,7 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	path := d.generateSchemaPath(def)
 	err = d.statistics.RecordDDLExecution(func() error {
 		err1 := d.storage.WriteFile(ctx, path, encodedDef)
-		if err != nil {
+		if err1 != nil {
 			return err1
 		}
 
