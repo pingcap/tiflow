@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 const (
@@ -93,6 +95,7 @@ func (s *SQLStorage) Update(ctx context.Context, record *Record) error {
 		return errors.Trace(err)
 	}
 	if rowsAffected != 1 {
+		log.Warn("update leader election meta failed", zap.Any("record", record))
 		return errors.Trace(ErrRecordConflict)
 	}
 	return nil
