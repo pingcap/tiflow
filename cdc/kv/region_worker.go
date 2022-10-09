@@ -107,8 +107,6 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
-	// get a slot for the given region
-	inputCalcSlot func(regionID uint64) int
 	// total input slots
 	inputSlots int
 }
@@ -148,9 +146,12 @@ func newRegionWorker(
 		concurrent:    s.client.config.WorkerConcurrent,
 		metrics:       metrics,
 		inputPending:  0,
-		inputCalcSlot: func(regionID uint64) int { return int(regionID) % s.client.config.WorkerConcurrent },
 		inputSlots:    s.client.config.WorkerConcurrent,
 	}
+}
+
+func (w *regionWorker) inputCalcSlot(regionID uint64) int {
+	return int(regionID) % w.concurrent
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
