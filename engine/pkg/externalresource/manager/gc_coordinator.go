@@ -132,6 +132,14 @@ func (c *DefaultGCCoordinator) runGCEventLoop(
 func (c *DefaultGCCoordinator) initializeGC(
 	ctx context.Context,
 ) (*notifier.Receiver[JobStatusChangeEvent], *notifier.Receiver[model.ExecutorStatusChange], error) {
+	// we must query meta before get snapshot, otherwise temporary resources created
+	// by a newly added executor or all resources created by a newly added job may
+	// be cleaned incorrectly.
+	resources, err := c.metaClient.QueryResources(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	jobSnapshot, jobWatchCh, err := c.jobInfos.WatchJobStatuses(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -142,7 +150,7 @@ func (c *DefaultGCCoordinator) initializeGC(
 		return nil, nil, err
 	}
 
-	if err := c.gcByStatusSnapshots(ctx, jobSnapshot, executorSnapshot); err != nil {
+	if err := c.gcByStatusSnapshots(ctx, resources, jobSnapshot, executorSnapshot); err != nil {
 		return nil, nil, err
 	}
 
@@ -151,6 +159,7 @@ func (c *DefaultGCCoordinator) initializeGC(
 
 func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	ctx context.Context,
+	resources []*resModel.ResourceMeta,
 	jobSnapshot JobStatusesSnapshot,
 	executorSnapshot map[model.ExecutorID]string,
 ) error {
@@ -160,11 +169,6 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		log.Info("gcByStatusSnapshots finished",
 			zap.Duration("duration", duration))
 	}()
-
-	resources, err := c.metaClient.QueryResources(ctx)
-	if err != nil {
-		return err
-	}
 
 	executorSet := make(map[model.ExecutorID]struct{}, len(executorSnapshot))
 	for id := range executorSnapshot {
@@ -184,7 +188,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 
 		if _, exists := executorSet[resMeta.Executor]; !exists {
 			// The resource belongs to an offlined executor.
-			tp, resName, err := resModel.PasreResourceID(resMeta.ID)
+			tp, resName, err := resModel.ParseResourceID(resMeta.ID)
 			if err != nil {
 				return err
 			}
