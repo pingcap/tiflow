@@ -90,7 +90,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
-	conf.Sink.TxnAtomicity = unknowTxnAtomicity
+	conf.Sink.TxnAtomicity = unknownTxnAtomicity
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }

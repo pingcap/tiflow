@@ -840,6 +840,9 @@ var doc = `{
                 "address": {
                     "type": "string"
                 },
+                "cluster_id": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },

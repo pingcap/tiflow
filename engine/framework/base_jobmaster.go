@@ -130,11 +130,13 @@ type JobMasterImpl interface {
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
 	OnCancel(ctx context.Context) error
-	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
-	// This is used to for JobMaster to register its OpenAPI handler.
-	// The implementation must not retain the apiGroup. It must register
-	// its OpenAPI handler before this function returns.
+	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
+	// instance, the business logic should only register the OpenAPI handler in it.
+	// The implementation must not retain the apiGroup.
 	// Note: this function is called before Init().
+	// Concurrent safety:
+	// - this function is called as the first callback function of an JobMasterImpl
+	//   instance, and it's not concurrent with other callbacks.
 	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
@@ -252,10 +254,7 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[frameModel.WorkerID]WorkerHandle
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
-		if err != nil {
-			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
-		}
+		d.impl.CloseImpl(ctx)
 	})
 
 	d.master.persistMetaError()
@@ -269,9 +268,7 @@ func (d *DefaultBaseJobMaster) Stop(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	if err := d.impl.StopImpl(ctx); err != nil {
-		d.Logger().Error("Failed to stop JobMasterImpl", zap.Error(err))
-	}
+	d.impl.StopImpl(ctx)
 	d.master.doClose()
 	d.worker.doClose()
 	return nil
@@ -287,10 +284,7 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	}
 
 	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
-		if err != nil {
-			log.Error("Failed to close JobMasterImpl", zap.Error(err))
-		}
+		d.impl.CloseImpl(ctx)
 	})
 
 	startTime := time.Now()
@@ -436,9 +430,8 @@ func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
 	return nil
 }
 
-func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) {
 	log.Panic("unexpected Close call")
-	return nil
 }
 
 type jobMasterImplAsMasterImpl struct {
@@ -479,12 +472,10 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 	return j.inner.OnWorkerMessage(worker, topic, message)
 }
 
-func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) {
 	log.Panic("unexpected Close call")
-	return nil
 }
 
-func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) error {
+func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) {
 	log.Panic("unexpected StopImpl call")
-	return nil
 }
