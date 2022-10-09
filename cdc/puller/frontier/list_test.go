@@ -40,7 +40,7 @@ func TestInsertAndRemove(t *testing.T) {
 
 	// check all the keys are exist in list
 	for _, k := range keys {
-		a := list.Seek(k).Node().Key()
+		a := list.Seek(k, make(seekResult, maxHeight)).Node().Key()
 		cmp := bytes.Compare(a, k)
 		require.Equal(t, 0, cmp)
 	}
@@ -48,7 +48,7 @@ func TestInsertAndRemove(t *testing.T) {
 
 	for i := 0; i < 10000; i++ {
 		indexToRemove := rand.Intn(10000)
-		seekRes := list.Seek(keys[indexToRemove])
+		seekRes := list.Seek(keys[indexToRemove], make(seekResult, maxHeight))
 		if seekRes.Node().Next() == nil {
 			break
 		}
@@ -56,7 +56,7 @@ func TestInsertAndRemove(t *testing.T) {
 		list.Remove(seekRes, seekRes.Node().Next())
 
 		// check the node is already removed
-		a := list.Seek(removedKey).Node().Key()
+		a := list.Seek(removedKey, make(seekResult, maxHeight)).Node().Key()
 		cmp := bytes.Compare(a, removedKey)
 		require.LessOrEqual(t, cmp, 0)
 	}
@@ -105,53 +105,53 @@ func TestSeek(t *testing.T) {
 
 	list := newSpanList()
 
-	require.Nil(t, list.Seek(keyA).Node())
+	require.Nil(t, list.Seek(keyA, make(seekResult, maxHeight)).Node())
 
 	// insert keyA to keyH
 	insertIntoList(list, keyC, keyF, keyE, keyH, keyG, keyD, keyA, keyB)
 
 	// Point to the first node, if seek key is smaller than the first key in list.
-	require.Nil(t, list.Seek(key1).Node().Key())
+	require.Nil(t, list.Seek(key1, make(seekResult, maxHeight)).Node().Key())
 
 	// Point to the last node with key smaller than seek key.
-	require.Equal(t, keyH, list.Seek(keyH).Node().key)
+	require.Equal(t, keyH, list.Seek(keyH, make(seekResult, maxHeight)).Node().key)
 
 	// Point to itself.
-	require.Equal(t, keyG, list.Seek(keyG).Node().key)
+	require.Equal(t, keyG, list.Seek(keyG, make(seekResult, maxHeight)).Node().key)
 
 	// Ensure there is no problem to seek a larger key.
-	require.Equal(t, keyH, list.Seek(keyZ).Node().key)
+	require.Equal(t, keyH, list.Seek(keyZ, make(seekResult, maxHeight)).Node().key)
 
-	require.Equal(t, keyA, list.Seek([]byte("b0")).Node().key)
-	require.Equal(t, keyB, list.Seek([]byte("c0")).Node().key)
-	require.Equal(t, keyC, list.Seek([]byte("d0")).Node().key)
-	require.Equal(t, keyD, list.Seek([]byte("e0")).Node().key)
-	require.Equal(t, keyE, list.Seek([]byte("f0")).Node().key)
-	require.Equal(t, keyF, list.Seek([]byte("g0")).Node().key)
-	require.Equal(t, keyG, list.Seek([]byte("h0")).Node().key)
-	require.Equal(t, keyH, list.Seek([]byte("i0")).Node().key)
+	require.Equal(t, keyA, list.Seek([]byte("b0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("c0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyC, list.Seek([]byte("d0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyD, list.Seek([]byte("e0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyE, list.Seek([]byte("f0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyF, list.Seek([]byte("g0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyG, list.Seek([]byte("h0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyH, list.Seek([]byte("i0"), make(seekResult, maxHeight)).Node().key)
 	require.Equal(t, "[a5] [b5] [c5] [d5] [e5] [f5] [g5] [h5] ", list.String())
 	checkList(t, list)
 
 	// remove c5
-	seekRes := list.Seek([]byte("c0"))
+	seekRes := list.Seek([]byte("c0"), make(seekResult, maxHeight))
 	list.Remove(seekRes, seekRes.Node().Next())
-	require.Equal(t, keyB, list.Seek([]byte("c0")).Node().key)
-	require.Equal(t, keyB, list.Seek([]byte("d0")).Node().key)
-	require.Equal(t, keyD, list.Seek([]byte("e0")).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("c0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("d0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyD, list.Seek([]byte("e0"), make(seekResult, maxHeight)).Node().key)
 	require.Equal(t, "[a5] [b5] [d5] [e5] [f5] [g5] [h5] ", list.String())
 	checkList(t, list)
 
 	// remove d5
 	list.Remove(seekRes, seekRes.Node().Next())
-	require.Equal(t, keyB, list.Seek([]byte("d0")).Node().key)
-	require.Equal(t, keyB, list.Seek([]byte("e0")).Node().key)
-	require.Equal(t, keyE, list.Seek([]byte("f0")).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("d0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("e0"), make(seekResult, maxHeight)).Node().key)
+	require.Equal(t, keyE, list.Seek([]byte("f0"), make(seekResult, maxHeight)).Node().key)
 	require.Equal(t, "[a5] [b5] [e5] [f5] [g5] [h5] ", list.String())
 	checkList(t, list)
 
 	// remove the first node
-	seekRes = list.Seek([]byte("10"))
+	seekRes = list.Seek([]byte("10"), make(seekResult, maxHeight))
 	list.Remove(seekRes, seekRes.Node().Next())
 	require.Equal(t, "[b5] [e5] [f5] [g5] [h5] ", list.String())
 	checkList(t, list)
