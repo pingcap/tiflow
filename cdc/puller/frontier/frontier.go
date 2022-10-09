@@ -23,6 +23,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// fakeRegionID when the frontier is initializing, there is no region ID
+// use fakeRegionID ,so this span will be cached
+const fakeRegionID = 0
+
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
 type Frontier interface {
 	Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64)
@@ -38,7 +42,7 @@ type spanFrontier struct {
 	seekTempResult []*skipListNode
 
 	cachedRegions                     map[uint64]*skipListNode
-	metricResolvedRegionCachedCounter prometheus.Counter
+	metricResolvedRegionMissedCounter prometheus.Counter
 }
 
 // NewFrontier creates Frontier from the given spans.
@@ -46,7 +50,7 @@ type spanFrontier struct {
 // So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 // End key bigger than util.UpperBoundKey
 func NewFrontier(checkpointTs uint64,
-	metricResolvedRegionCachedCounter prometheus.Counter,
+	metricResolvedRegionMissedCounter prometheus.Counter,
 	spans ...regionspan.ComparableSpan,
 ) Frontier {
 	s := &spanFrontier{
@@ -54,7 +58,7 @@ func NewFrontier(checkpointTs uint64,
 		seekTempResult: make(seekResult, maxHeight),
 		cachedRegions:  map[uint64]*skipListNode{},
 
-		metricResolvedRegionCachedCounter: metricResolvedRegionCachedCounter,
+		metricResolvedRegionMissedCounter: metricResolvedRegionMissedCounter,
 	}
 	firstSpan := true
 	for _, span := range spans {
@@ -79,13 +83,13 @@ func (s *spanFrontier) Frontier() uint64 {
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
-	if n, ok := s.cachedRegions[regionID]; ok && n.regionID > 0 && n.end != nil {
-		if regionID == n.regionID && bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
+	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
+		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
-			s.metricResolvedRegionCachedCounter.Inc()
 			return
 		}
 	}
+	s.metricResolvedRegionMissedCounter.Inc()
 	s.insert(regionID, span, ts)
 }
 
@@ -101,7 +105,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
-			if regionID > 0 {
+			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
 				s.cachedRegions[regionID].end = next.key

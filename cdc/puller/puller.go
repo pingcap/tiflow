@@ -92,9 +92,9 @@ func New(ctx context.Context,
 	if len(spans) > 1 {
 		pullerType = "ddl"
 	}
-	metricCachedRegionCollectCounter := cachedRegionCollectCounter.
+	metricMissedRegionCollectCounter := missedRegionCollectCounter.
 		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
-	tsTracker := frontier.NewFrontier(0, metricCachedRegionCollectCounter, comparableSpans...)
+	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName)
 	p := &pullerImpl{
