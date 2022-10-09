@@ -351,7 +351,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, "executor-1", "executor-2")
 		require.NoError(t, err)
 		for _, meta := range metas {
-			tp, resName, err := resModel.PasreResourceID(meta.ID)
+			tp, resName, err := resModel.ParseResourceID(meta.ID)
 			require.NoError(t, err)
 			require.Equal(t, resModel.ResourceTypeS3, tp)
 			require.NotEqual(t, s3.DummyResourceName, resName)

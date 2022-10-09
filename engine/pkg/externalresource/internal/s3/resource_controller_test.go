@@ -118,7 +118,7 @@ func TestS3ResourceController(t *testing.T) {
 
 	// test GCSingleResource
 	for _, res := range persistedResources {
-		_, resName, err := resModel.PasreResourceID(res.ID)
+		_, resName, err := resModel.ParseResourceID(res.ID)
 		require.NoError(t, err)
 		ident := internal.ResourceIdent{
 			ResourceScope: internal.ResourceScope{

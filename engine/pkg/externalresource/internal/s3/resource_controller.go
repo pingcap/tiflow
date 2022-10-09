@@ -42,7 +42,7 @@ func NewResourceController(config resModel.S3Config) *resourceController {
 
 // GCSingleResource returns a closure to the invoker to perform GC.
 func (r *resourceController) GCSingleResource(ctx context.Context, res *resModel.ResourceMeta) error {
-	tp, resName, err := resModel.PasreResourceID(res.ID)
+	tp, resName, err := resModel.ParseResourceID(res.ID)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (r *resourceController) GCExecutor(
 			log.Panic("unexpected resource which is persisted by other exeuctor",
 				zap.Any("resource", res), zap.Any("expectedeExecutor", executorID))
 		}
-		tp, resName, err := resModel.PasreResourceID(res.ID)
+		tp, resName, err := resModel.ParseResourceID(res.ID)
 		if err != nil {
 			return err
 		}

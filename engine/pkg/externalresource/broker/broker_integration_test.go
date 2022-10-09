@@ -144,7 +144,7 @@ func checkS3ResourceForWorker(
 	creator resModel.WorkerID, resID resModel.ResourceID,
 	expected bool, testFiles ...string,
 ) {
-	tp, resName, err := resModel.PasreResourceID(resID)
+	tp, resName, err := resModel.ParseResourceID(resID)
 	require.NoError(t, err)
 	require.Equal(t, resModel.ResourceTypeS3, tp)
 
@@ -161,7 +161,7 @@ func createS3ResourceForWorker(
 	rootStrorage brStorage.ExternalStorage, creator resModel.WorkerID, resID resModel.ResourceID,
 	isPersisted bool, newTestFiles ...string,
 ) {
-	tp, resName, err := resModel.PasreResourceID(resID)
+	tp, resName, err := resModel.ParseResourceID(resID)
 	require.NoError(t, err)
 	require.Equal(t, resModel.ResourceTypeS3, tp)
 

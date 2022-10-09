@@ -143,8 +143,8 @@ func (r ResourceType) BuildPrefix() string {
 	return fmt.Sprintf("/%s", r)
 }
 
-// PasreResourceID returns the ResourceType and the path suffix.
-func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
+// ParseResourceID returns the ResourceType and the path suffix.
+func ParseResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
