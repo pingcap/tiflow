@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-func TestFromTiColumnInfo(t *testing.T) {
+func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 	testCases := []struct {
 		name      string
 		filedType byte
@@ -311,18 +311,16 @@ func TestFromTiColumnInfo(t *testing.T) {
 
 }
 
-func TestBuildTableDefFromDDLEvent(t *testing.T) {
+func TestBuildTableDefFromTableInfo(t *testing.T) {
 	var columns []*timodel.ColumnInfo
 	var def tableDef
 
-	ddlEvent := &model.DDLEvent{
-		TableInfo: &model.TableInfo{
-			TableInfoVersion: 100,
-			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 20,
-			},
+	tableInfo := &model.TableInfo{
+		TableInfoVersion: 100,
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 20,
 		},
 	}
 	ft := types.NewFieldType(mysql.TypeLong)
@@ -345,8 +343,8 @@ func TestBuildTableDefFromDDLEvent(t *testing.T) {
 	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("Birthday"), FieldType: *ft}
 	columns = append(columns, col)
 
-	ddlEvent.TableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
-	def.fromTableInfo(ddlEvent.TableInfo)
+	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
+	def.fromTableInfo(tableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	require.Nil(t, err)
 	fmt.Println(string(encodedDef))
