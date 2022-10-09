@@ -37,6 +37,7 @@ func TestS3ResourceController(t *testing.T) {
 	fm, factory := newFileManagerForUT(t)
 	workers := []string{"worker-1", "worker-2", "worker-3"}
 	persistedResources := []*resModel.ResourceMeta{}
+	// generate mock data
 	for _, worker := range workers {
 		scope := internal.ResourceScope{
 			Executor: MockExecutorID,
@@ -129,7 +130,12 @@ func TestS3ResourceController(t *testing.T) {
 		_, err = fm.GetPersistedResource(ctx, ident)
 		require.NoError(t, err)
 
-		controller.GCSingleResource(ctx, res)
+		require.NoError(t, controller.GCSingleResource(ctx, res))
+		_, err = fm.GetPersistedResource(ctx, ident)
+		require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+
+		// test for idempotency
+		require.NoError(t, controller.GCSingleResource(ctx, res))
 		_, err = fm.GetPersistedResource(ctx, ident)
 		require.ErrorContains(t, err, "ResourceFilesNotFoundError")
 	}

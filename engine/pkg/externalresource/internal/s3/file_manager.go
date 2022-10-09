@@ -154,20 +154,10 @@ func (m *FileManager) removeTemporaryFilesForWorker(
 
 	log.Info("Removing temporary resources for single worker", zap.Any("scope", scope))
 	if !ok {
-		return m.removeFilesIf(ctx, scope, func(_ string) bool {
-			// remove all files within this scope since no persisted files are found
-			return true
-		})
+		return m.removeFilesIf(ctx, scope, getPathPredAlwaysTrue())
 	}
 
-	return m.removeFilesIf(ctx, scope, func(path string) bool {
-		resName, _, ok := strings.Cut(path, "/")
-		if !ok {
-			return false
-		}
-		_, ok = resources[resName]
-		return !ok
-	})
+	return m.removeFilesIf(ctx, scope, getPathPredByPersistedResources(resources, 1))
 }
 
 func (m *FileManager) removeTemporaryFilesForExecutor(
@@ -197,22 +187,7 @@ func (m *FileManager) removeAllTemporaryFilesByMeta(
 ) error {
 	log.Info("Removing temporary resources for executor", zap.Any("scope", scope))
 
-	return m.removeFilesIf(ctx, scope, func(path string) bool {
-		workerID, filePath, ok := strings.Cut(path, "/")
-		if !ok {
-			return false
-		}
-		resName, _, ok := strings.Cut(filePath, "/")
-		if !ok {
-			return false
-		}
-		resPath := fmt.Sprintf("%s/%s", workerID, resName)
-		if !ok {
-			return false
-		}
-		_, ok = persistedResSet[resPath]
-		return !ok
-	})
+	return m.removeFilesIf(ctx, scope, getPathPredByPersistedResources(persistedResSet, 2))
 }
 
 // RemoveResource removes a resource from s3.
@@ -223,13 +198,7 @@ func (m *FileManager) RemoveResource(
 	log.Info("Removing resource",
 		zap.Any("ident", ident))
 
-	err := m.removeFilesIf(ctx, ident.Scope(), func(path string) bool {
-		resName, _, ok := strings.Cut(path, "/")
-		if !ok {
-			return false
-		}
-		return resName == ident.Name
-	})
+	err := m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name))
 	if err != nil {
 		return err
 	}
