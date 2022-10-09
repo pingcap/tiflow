@@ -725,7 +725,13 @@ func (s *eventFeedSession) requestRegionToStore(
 				log.Warn("failed to close stream",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.String("addr", storeAddr))
+					zap.Int64("tableID", s.tableID),
+					zap.String("tableName", s.tableName),
+					zap.String("addr", storeAddr),
+					zap.Uint64("storeID", storeID),
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("requestID", requestID),
+					zap.Error(err))
 			}
 			// Delete the stream from the map so that the next time the store is accessed, the stream will be
 			// re-established.
