@@ -89,31 +89,35 @@ func newRegionTsManager() *regionTsManager {
 }
 
 // Upsert implements insert	and update on duplicated key
-func (rm *regionTsManager) Upsert(item *regionTsInfo) {
-	if old, ok := rm.m[item.regionID]; ok {
+// Upsert implements insert	and update on duplicated key
+// if the region is exists update the resolvedTs, eventTime, penalty, and fixed heap order
+// otherwise, insert a new regionTsInfo with penalty 0
+func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Time) {
+	if old, ok := rm.m[regionID]; ok {
 		// in a single resolved ts manager, we should not expect a fallback resolved event
-		// but it's ok that we use fallback resolved event to increase penalty
-		if !item.ts.sortByEvTime {
-			if item.ts.resolvedTs <= old.ts.resolvedTs && item.ts.eventTime.After(old.ts.eventTime) {
-				old.ts.penalty++
-				old.ts.eventTime = item.ts.eventTime
-				heap.Fix(&rm.h, old.index)
-			} else if item.ts.resolvedTs > old.ts.resolvedTs {
-				old.ts.resolvedTs = item.ts.resolvedTs
-				old.ts.eventTime = item.ts.eventTime
-				old.ts.penalty = 0
-				heap.Fix(&rm.h, old.index)
-			}
-		} else {
-			if item.ts.eventTime.After(old.ts.eventTime) {
-				old.ts.eventTime = item.ts.eventTime
-				heap.Fix(&rm.h, old.index)
-			}
+		// but, it's ok that we use fallback resolved event to increase penalty
+		if resolvedTs <= old.ts.resolvedTs && eventTime.After(old.ts.eventTime) {
+			old.ts.penalty++
+			old.ts.eventTime = eventTime
+		} else if resolvedTs > old.ts.resolvedTs {
+			old.ts.resolvedTs = resolvedTs
+			old.ts.eventTime = eventTime
+			old.ts.penalty = 0
+			heap.Fix(&rm.h, old.index)
 		}
 	} else {
-		heap.Push(&rm.h, item)
-		rm.m[item.regionID] = item
+		item := &regionTsInfo{
+			regionID: regionID,
+			ts:       tsItem{resolvedTs: resolvedTs, eventTime: eventTime, penalty: 0},
+		}
+		rm.Insert(item)
 	}
+}
+
+// Insert inserts a regionTsInfo to rts heap
+func (rm *regionTsManager) Insert(item *regionTsInfo) {
+	heap.Push(&rm.h, item)
+	rm.m[item.regionID] = item
 }
 
 // Pop pops a regionTsInfo from rts heap, delete it from region rts map

@@ -197,46 +197,53 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Inc()
-				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Reflect("resolved", e.Resolved),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("spans", p.spans),
-					)
-				}
-				// Forward is called in a single thread
-				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
-				resolvedTs := p.tsTracker.Frontier()
-				if resolvedTs > 0 && !initialized {
-					// Advancing to a non-zero value means the puller level
-					// resolved ts is initialized.
-					atomic.StoreInt64(&p.initialized, 1)
-					initialized = true
-
-					spans := make([]string, 0, len(p.spans))
-					for i := range p.spans {
-						spans = append(spans, p.spans[i].String())
+				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved)))
+				for _, resolvedSpan := range e.Resolved {
+					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
+						log.Panic("the resolved span is not in the total span",
+							zap.String("namespace", changefeedID.Namespace),
+							zap.String("changefeed", changefeedID.ID),
+							zap.Reflect("resolved", e.Resolved),
+							zap.Int64("tableID", tableID),
+							zap.Reflect("spans", p.spans),
+						)
 					}
-					log.Info("puller is initialized",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Duration("duration", time.Since(start)),
-						zap.Int64("tableID", tableID),
-						zap.Strings("spans", spans),
-						zap.Uint64("resolvedTs", resolvedTs))
+					// Forward is called in a single thread
+					p.tsTracker.Forward(resolvedSpan.Span, resolvedSpan.ResolvedTs)
+					resolvedTs := p.tsTracker.Frontier()
+					if resolvedTs > 0 && !initialized {
+						// Advancing to a non-zero value means the puller level
+						// resolved ts is initialized.
+						atomic.StoreInt64(&p.initialized, 1)
+						initialized = true
+						spans := make([]string, 0, len(p.spans))
+						for i := range p.spans {
+							spans = append(spans, p.spans[i].String())
+						}
+						log.Info("puller is initialized",
+							zap.String("namespace", changefeedID.Namespace),
+							zap.String("changefeed", changefeedID.ID),
+							zap.Duration("duration", time.Since(start)),
+							zap.Int64("tableID", tableID),
+							zap.Strings("spans", spans),
+							zap.Uint64("resolvedTs", resolvedTs))
+					}
+					if !initialized || resolvedTs == lastResolvedTs {
+						continue
+					}
+					lastResolvedTs = resolvedTs
+					err := output(
+						&model.RawKVEntry{
+							CRTs:     resolvedTs,
+							OpType:   model.OpTypeResolved,
+							RegionID: e.RegionID,
+						},
+					)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 				}
-				if !initialized || resolvedTs == lastResolvedTs {
-					continue
-				}
-				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-				if err != nil {
-					return errors.Trace(err)
-				}
-				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})
