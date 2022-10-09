@@ -105,7 +105,7 @@ func TestDMJob(t *testing.T) {
 	cli, err := httputil.NewClient(nil)
 	require.NoError(t, err)
 	for _, metricsURL := range metricsURLs {
-		resp, err := cli.Get(ctx, metricsURL) //nolint:bodyclose
+		resp, err := cli.Get(ctx, metricsURL)
 		require.NoError(t, err)
 		content, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -379,12 +379,16 @@ func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tas
 		v.Add("tasks", task)
 	}
 	u += "?" + v.Encode()
-	resp, err := client.Get(ctx, u) //nolint: bodyclose
+	resp, err := client.Get(ctx, u)
 	if err != nil {
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body) //nolint: bodyclose
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -422,12 +426,16 @@ func operateJob(
 }
 
 func getJobCfg(ctx context.Context, client *httputil.Client, jobID string) (string, error) {
-	resp, err := client.Get(ctx, fmt.Sprintf(baseURL+"/config", jobID)) //nolint:bodyclose
+	resp, err := client.Get(ctx, fmt.Sprintf(baseURL+"/config", jobID))
 	if err != nil {
 		return "", err
 	}
 
 	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	err = resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
@@ -459,12 +467,16 @@ func getBinlogOperator(ctx context.Context, client *httputil.Client, jobID strin
 		v.Add("binlog_pos", binlogPos)
 	}
 	u += "?" + v.Encode()
-	resp, err := client.Get(ctx, u) //nolint:bodyclose
+	resp, err := client.Get(ctx, u)
 	if err != nil {
 		return nil, err
 	}
 
 	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -517,12 +529,16 @@ func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 		v.Add("table", table)
 	}
 	u += "?" + v.Encode()
-	resp, err := client.Get(ctx, u) //nolint:bodyclose
+	resp, err := client.Get(ctx, u)
 	if err != nil {
 		return nil, err
 	}
 
 	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
