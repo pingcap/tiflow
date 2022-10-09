@@ -234,7 +234,7 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedT
 // EmitCheckpointTs emits the checkpointTs to
 // default topic or the topics of all tables.
 // Concurrency Note: EmitCheckpointTs is thread-safe.
-func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*model.TableInfo) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
@@ -257,7 +257,11 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	topics := k.eventRouter.GetActiveTopics(tables)
+	var tableNames []model.TableName
+	for _, table := range tables {
+		tableNames = append(tableNames, table.TableName)
+	}
+	topics := k.eventRouter.GetActiveTopics(tableNames)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)

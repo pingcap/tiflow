@@ -191,7 +191,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
 	return nil
 }

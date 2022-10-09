@@ -27,7 +27,7 @@ type DDLEventSink interface {
 	// WriteCheckpointTs writes a checkpoint timestamp to the sink.
 	// Note: This is a synchronous and thread-safe method.
 	// This only for MQSink for now.
-	WriteCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
+	WriteCheckpointTs(ctx context.Context, ts uint64, tables []*model.TableInfo) error
 	// Close closes the sink.
 	Close() error
 }

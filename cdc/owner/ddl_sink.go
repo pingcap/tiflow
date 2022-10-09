@@ -48,7 +48,7 @@ type DDLSink interface {
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
-	emitCheckpointTs(ts uint64, tableNames []model.TableName)
+	emitCheckpointTs(ts uint64, tables []*model.TableInfo)
 	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -67,7 +67,7 @@ type ddlSinkImpl struct {
 	mu struct {
 		sync.Mutex
 		checkpointTs      model.Ts
-		currentTableNames []model.TableName
+		currentTableNames []*model.TableInfo
 	}
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
@@ -272,11 +272,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 	}()
 }
 
-func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) {
+func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.checkpointTs = ts
-	s.mu.currentTableNames = tableNames
+	s.mu.currentTableNames = tables
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.
