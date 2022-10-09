@@ -169,17 +169,12 @@ func (w *regionWorker) delRegionState(regionID uint64) {
 // checkRegionStateEmpty returns true if there is no region state maintained.
 // Note this function is not thread-safe
 func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
-	empty = true
 	for _, states := range w.statesManager.states {
-		states.Range(func(_, _ interface{}) bool {
-			empty = false
+		if states.len() != 0 {
 			return false
-		})
-		if !empty {
-			return
 		}
 	}
-	return
+	return true
 }
 
 // checkShouldExit checks whether the region worker should exit, if should exit
@@ -787,7 +782,7 @@ func (w *regionWorker) handleResolvedTs(
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
-		states.Range(func(_, value interface{}) bool {
+		states.readOnlyRange(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
 			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
 			if state.isStopped() {

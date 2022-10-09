@@ -208,7 +208,7 @@ func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFee
 	m.states[regionID] = state
 }
 
-func (m *syncRegionFeedStateMap) getByRequestID(regionID uint64) (*regionFeedState, bool) {
+func (m *syncRegionFeedStateMap) getByRegionID(regionID uint64) (*regionFeedState, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	result, ok := m.states[regionID]
@@ -219,6 +219,12 @@ func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.states, regionID)
+}
+
+func (m *syncRegionFeedStateMap) len() int {
+	m.mu.RLock()
+	defer m.mu.Unlock()
+	return len(m.states)
 }
 
 func (m *syncRegionFeedStateMap) readOnlyRange(f func(key, value interface{}) bool) {
@@ -235,7 +241,7 @@ func (m *syncRegionFeedStateMap) readOnlyRange(f func(key, value interface{}) bo
 // into several buckets to reduce lock contention
 type regionStateManager struct {
 	bucket int
-	states []*sync.Map
+	states []*syncRegionFeedStateMap
 }
 
 func newRegionStateManager(bucket int) *regionStateManager {
@@ -250,10 +256,10 @@ func newRegionStateManager(bucket int) *regionStateManager {
 	}
 	rsm := &regionStateManager{
 		bucket: bucket,
-		states: make([]*sync.Map, bucket),
+		states: make([]*syncRegionFeedStateMap, bucket),
 	}
 	for i := range rsm.states {
-		rsm.states[i] = new(sync.Map)
+		rsm.states[i] = newSyncRegionFeedStateMap()
 	}
 	return rsm
 }
@@ -264,18 +270,16 @@ func (rsm *regionStateManager) getBucket(regionID uint64) int {
 
 func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool) {
 	bucket := rsm.getBucket(regionID)
-	if val, ok := rsm.states[bucket].Load(regionID); ok {
-		return val.(*regionFeedState), true
-	}
-	return nil, false
+	state, ok := rsm.states[bucket].getByRegionID(regionID)
+	return state, ok
 }
 
 func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
 	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Store(regionID, state)
+	rsm.states[bucket].setByRegionID(regionID, state)
 }
 
 func (rsm *regionStateManager) delState(regionID uint64) {
 	bucket := rsm.getBucket(regionID)
-	rsm.states[bucket].Delete(regionID)
+	rsm.states[bucket].delByRegionID(regionID)
 }
