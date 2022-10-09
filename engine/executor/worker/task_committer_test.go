@@ -41,11 +41,11 @@ type taskCommitterTestSuite struct {
 	Runner    *mockWrappedTaskAdder
 }
 
-func newTaskCommitterTestSuite(ttl time.Duration) *taskCommitterTestSuite {
+func newTaskCommitterTestSuite() *taskCommitterTestSuite {
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 	runner := &mockWrappedTaskAdder{}
-	committer := newTaskCommitterWithClock(runner, ttl, clk)
+	committer := newTaskCommitterWithClock(runner, preDispatchTTLForTest, clk)
 	return &taskCommitterTestSuite{
 		Committer: committer,
 		Clock:     clk,
@@ -60,7 +60,7 @@ func (s *taskCommitterTestSuite) Close() {
 const preDispatchTTLForTest = 10 * time.Second
 
 func TestTaskCommitterSuccessCase(t *testing.T) {
-	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
+	suite := newTaskCommitterTestSuite()
 
 	submitTime := time.Now()
 	suite.Clock.Set(submitTime)
@@ -81,7 +81,7 @@ func TestTaskCommitterSuccessCase(t *testing.T) {
 }
 
 func TestTaskCommitterNoConfirmUntilTTL(t *testing.T) {
-	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
+	suite := newTaskCommitterTestSuite()
 
 	task := newDummyWorker("task-1")
 	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
@@ -102,7 +102,7 @@ func TestTaskCommitterNoConfirmUntilTTL(t *testing.T) {
 }
 
 func TestTaskCommitterSameTaskIDOverwrites(t *testing.T) {
-	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
+	suite := newTaskCommitterTestSuite()
 
 	task := newDummyWorker("task-1")
 	submitTime1 := time.Now()
@@ -133,7 +133,7 @@ func TestTaskCommitterSameTaskIDOverwrites(t *testing.T) {
 }
 
 func TestTaskCommitterDuplicatePreDispatch(t *testing.T) {
-	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
+	suite := newTaskCommitterTestSuite()
 
 	task := newDummyWorker("task-1")
 	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
@@ -146,7 +146,7 @@ func TestTaskCommitterDuplicatePreDispatch(t *testing.T) {
 }
 
 func TestTaskCommitterFailToSubmit(t *testing.T) {
-	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
+	suite := newTaskCommitterTestSuite()
 
 	submitTime := time.Now()
 	suite.Clock.Set(submitTime)
