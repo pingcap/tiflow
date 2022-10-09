@@ -107,7 +107,6 @@ func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p
 
 func (e *exampleMaster) CloseImpl(ctx context.Context) {
 	log.Info("CloseImpl")
-	return
 }
 
 func (e *exampleMaster) StopImpl(ctx context.Context) {
