@@ -223,18 +223,8 @@ func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
 
 func (m *syncRegionFeedStateMap) len() int {
 	m.mu.RLock()
-	defer m.mu.Unlock()
-	return len(m.states)
-}
-
-func (m *syncRegionFeedStateMap) readOnlyRange(f func(key, value interface{}) bool) {
-	m.mu.RLock()
 	defer m.mu.RUnlock()
-	for key, value := range m.states {
-		if !f(key, value) {
-			return
-		}
-	}
+	return len(m.states)
 }
 
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
