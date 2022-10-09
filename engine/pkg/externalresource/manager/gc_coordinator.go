@@ -175,14 +175,12 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		executorSet[id] = struct{}{}
 	}
 
-	var (
-		toGCJobs      []engineModel.JobID
-		toGCExecutors []model.ExecutorID
-	)
+	toGCJobSet := make(map[engineModel.JobID]struct{})
+	toGCExecutorSet := make(map[model.ExecutorID]struct{})
 	for _, resMeta := range resources {
 		if _, exists := jobSnapshot[resMeta.Job]; !exists {
 			// The resource belongs to a deleted job.
-			toGCJobs = append(toGCJobs, resMeta.Job)
+			toGCJobSet[resMeta.Job] = struct{}{}
 			continue
 		}
 
@@ -194,14 +192,23 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 			}
 			if tp == resModel.ResourceTypeLocalFile ||
 				tp == resModel.ResourceTypeS3 && resName == s3.DummyResourceName {
-				toGCExecutors = append(toGCExecutors, resMeta.Executor)
+				toGCExecutorSet[resMeta.Executor] = struct{}{}
 			}
 			continue
 		}
 	}
 
+	toGCJobs := make([]engineModel.JobID, 0, len(toGCJobSet))
+	for jobID := range toGCJobSet {
+		toGCJobs = append(toGCJobs, jobID)
+	}
 	if err := c.gcByOfflineJobIDs(ctx, toGCJobs...); err != nil {
 		return err
+	}
+
+	toGCExecutors := make([]model.ExecutorID, 0, len(toGCExecutorSet))
+	for executorID := range toGCExecutorSet {
+		toGCExecutors = append(toGCExecutors, executorID)
 	}
 	return c.gcByOfflineExecutorIDs(ctx, toGCExecutors...)
 }
