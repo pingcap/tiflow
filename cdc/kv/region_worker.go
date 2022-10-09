@@ -734,18 +734,19 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if !state.initialized {
+		if !state.isInitialized() {
 			continue
 		}
-		regionID := state.sri.verID.GetID()
+		regionID := state.getRegionID()
 		regions = append(regions, regionID)
-		if resolvedTs < state.lastResolvedTs {
+		regionResolvedTs := state.getLastResolvedTs()
+		if resolvedTs < regionResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID),
 				zap.String("EventType", "RESOLVED"),
 				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Uint64("lastResolvedTs", state.lastResolvedTs),
+				zap.Uint64("lastResolvedTs", regionResolvedTs),
 				zap.Uint64("regionID", regionID))
 			continue
 		}
