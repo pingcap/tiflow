@@ -129,34 +129,4 @@ func TestWriteCheckpointTs(t *testing.T) {
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))
 	require.Nil(t, err)
 	require.JSONEq(t, `{"checkpoint-ts":100}`, string(metadata))
-
-	// assume that we drop col2 drom test.table1 and the table version is changed
-	// from 100 to 999.
-	tables = []*model.TableInfo{
-		{
-			TableInfoVersion: 999,
-			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 20,
-			},
-			TableInfo: &timodel.TableInfo{
-				Columns: []*timodel.ColumnInfo{
-					{
-						Name:      timodel.NewCIStr("col1"),
-						FieldType: *types.NewFieldType(mysql.TypeLong),
-					},
-				},
-			},
-		},
-	}
-	table1Dir = path.Join(parentDir, "test/table1/999")
-	os.MkdirAll(table1Dir, 0o755)
-	err = sink.WriteCheckpointTs(ctx, 200, tables)
-	require.Nil(t, err)
-	_, err = os.Stat(path.Join(table1Dir, "schema.json"))
-	require.Nil(t, err)
-	metadata, err = os.ReadFile(path.Join(parentDir, "metadata"))
-	require.Nil(t, err)
-	require.JSONEq(t, `{"checkpoint-ts":200}`, string(metadata))
 }

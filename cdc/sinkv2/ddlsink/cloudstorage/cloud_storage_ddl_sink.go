@@ -37,7 +37,7 @@ type ddlSink struct {
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
-	tableCache map[int64]uint64
+	tableSet   map[int64]struct{}
 }
 
 func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, error) {
@@ -57,7 +57,7 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	d := &ddlSink{
 		id:         changefeedID,
 		storage:    storage,
-		tableCache: map[int64]uint64{},
+		tableSet:   make(map[int64]struct{}),
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 	}
 
@@ -84,7 +84,7 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 			return err1
 		}
 
-		d.tableCache[ddl.TableInfo.ID] = ddl.TableInfo.TableInfoVersion
+		d.tableSet[ddl.TableInfo.ID] = struct{}{}
 		return nil
 	})
 
@@ -95,8 +95,8 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	for _, table := range tables {
-		ver, ok := d.tableCache[table.ID]
-		if !ok || table.TableInfoVersion != ver {
+		_, ok := d.tableSet[table.ID]
+		if !ok {
 			var def tableDef
 			def.fromTableInfo(table)
 
@@ -110,7 +110,7 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 			if err != nil {
 				return errors.Trace(err)
 			}
-			d.tableCache[table.ID] = table.TableInfoVersion
+			d.tableSet[table.ID] = struct{}{}
 		}
 	}
 

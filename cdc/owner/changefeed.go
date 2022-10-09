@@ -99,10 +99,10 @@ type changefeed struct {
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
 	ddlEventCache []*model.DDLEvent
-	// currentTableNames is the table names that the changefeed is watching.
+	// currentTables is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
-	currentTableNames []model.TableName
+	currentTables []*model.TableInfo
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -287,15 +287,15 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	// This means that the cached DDL has been executed,
 	// and we need to use the latest table names.
-	if c.currentTableNames == nil {
-		c.currentTableNames = c.schema.AllTableNames()
+	if c.currentTables == nil {
+		c.currentTables = c.schema.AllTables()
 		log.Debug("changefeed current table names updated",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
-			zap.Any("tables", c.currentTableNames),
+			zap.Any("tables", c.currentTables),
 		)
 	}
-	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
@@ -793,10 +793,10 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
-		c.currentTableNames = c.schema.AllTableNames()
+		c.currentTables = c.schema.AllTables()
 		checkpointTs := c.state.Status.CheckpointTs
-		// refresh checkpointTs and currentTableNames when a ddl job is received
-		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// refresh checkpointTs and currentTables when a ddl job is received
+		c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
@@ -828,7 +828,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = nil
 		// It has expired.
 		// We should use the latest table names now.
-		c.currentTableNames = nil
+		c.currentTables = nil
 	}
 
 	return jobDone, nil

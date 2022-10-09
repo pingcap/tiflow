@@ -66,8 +66,8 @@ type ddlSinkImpl struct {
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
 		sync.Mutex
-		checkpointTs      model.Ts
-		currentTableNames []*model.TableInfo
+		checkpointTs  model.Ts
+		currentTables []*model.TableInfo
 	}
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
@@ -194,7 +194,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					s.mu.Unlock()
 					continue
 				}
-				tables := s.mu.currentTableNames
+				tables := s.mu.currentTables
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
 				if s.sinkV1 != nil {
@@ -240,7 +240,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						s.mu.Unlock()
 						continue
 					}
-					tables := s.mu.currentTableNames
+					tables := s.mu.currentTables
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
 					if s.sinkV1 != nil {
@@ -276,7 +276,7 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.checkpointTs = ts
-	s.mu.currentTableNames = tables
+	s.mu.currentTables = tables
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.
