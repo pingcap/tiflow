@@ -37,7 +37,7 @@ const (
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
-	Resolved []*ResolvedSpan
+	Resolved *ResolvedSpans
 
 	// Additional debug info, not used
 	RegionID uint64
@@ -54,17 +54,32 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 	}
 }
 
-// ResolvedSpan guarantees all the KV value event
+// ResolvedSpans guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
+<<<<<<< HEAD
 //msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
 	Span       regionspan.ComparableSpan
+=======
+//
+//msgp:ignore ResolvedSpans
+type ResolvedSpans struct {
+	Spans      []RegionComparableSpan
+>>>>>>> 0f2a2539a (frontier(ticdc):  fast check if region is split or merged when forwarding resolvedTs (#7280))
 	ResolvedTs uint64
 }
 
 // String implements fmt.Stringer interface.
-func (rs *ResolvedSpan) String() string {
-	return fmt.Sprintf("span: %s, resolved-ts: %d", rs.Span, rs.ResolvedTs)
+func (rs *ResolvedSpans) String() string {
+	return fmt.Sprintf("span: %v, resolved-ts: %d", rs.Spans, rs.ResolvedTs)
+}
+
+// RegionComparableSpan contains a comparable span and a region id of that span
+//
+//msgp:ignore RegionComparableSpan
+type RegionComparableSpan struct {
+	Span   regionspan.ComparableSpan
+	Region uint64
 }
 
 // RawKVEntry notify the KV operator

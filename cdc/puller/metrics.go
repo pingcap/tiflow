@@ -32,6 +32,13 @@ var (
 			Name:      "txn_collect_event_count",
 			Help:      "The number of events received from txn collector",
 		}, []string{"namespace", "changefeed", "type"})
+	missedRegionCollectCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "region_resolved_missed_count",
+			Help:      "The number of regions not cached when forward resolved ts",
+		}, []string{"namespace", "changefeed", "type"})
 	pullerResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -68,6 +75,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(kvEventCounter)
 	registry.MustRegister(txnCollectCounter)
+	registry.MustRegister(missedRegionCollectCounter)
 	registry.MustRegister(pullerResolvedTsGauge)
 	registry.MustRegister(memBufferSizeGauge)
 	registry.MustRegister(outputChanSizeHistogram)
