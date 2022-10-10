@@ -558,8 +558,6 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 		m.postFlush(tableRtsMap, minResolvedTs)
 		m.postFlushMeta(metaCheckpoint, metaResolved)
 	}()
-
-	return
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {

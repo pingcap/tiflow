@@ -361,7 +361,6 @@ func (o *ownerImpl) updateMetrics() {
 			continue
 		}
 	}
-	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
