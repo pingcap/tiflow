@@ -109,7 +109,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
 		return p2p.NewMockMessageHandlerManager()
 	}))
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0)
+	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0, false)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)

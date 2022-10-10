@@ -111,7 +111,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	dmWorker := newDMWorker(dctx, "", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0, false)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 
@@ -148,7 +148,7 @@ func TestStopWorker(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0, false)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
@@ -169,7 +169,7 @@ func TestOperateTask(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0, false)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}
