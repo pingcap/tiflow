@@ -255,7 +255,10 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
 			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
-		} else {
+		}
+
+		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+		if nextUnit == frameModel.WorkerDMSync && !isFresh {
 			taskCfg.NoNeedExtStorage = true
 		}
 
