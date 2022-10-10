@@ -40,7 +40,8 @@ const (
 	tableNum     = 5
 	rowNum       = 1000
 	batch        = 100
-	diffTimes    = 60
+	// 5 minutes
+	diffTimes    = 150
 	diffInterval = 2 * time.Second
 )
 
