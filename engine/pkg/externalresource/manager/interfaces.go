@@ -83,4 +83,5 @@ type GCCoordinator interface {
 type GCRunner interface {
 	Run(ctx context.Context) error
 	GCNotify()
+	GCExecutors(context.Context, ...model.ExecutorID) error
 }

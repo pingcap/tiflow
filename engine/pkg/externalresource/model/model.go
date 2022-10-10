@@ -14,6 +14,7 @@
 package model
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -40,6 +41,7 @@ type (
 var ResourceUpdateColumns = []string{
 	"updated_at",
 	"project_id",
+	"tenant_id",
 	"id",
 	"job_id",
 	"worker_id",
@@ -83,6 +85,7 @@ func ToResourceRequirement(jobID JobID, resourceIDs ...ResourceID) []*pb.Resourc
 type ResourceMeta struct {
 	ormModel.Model
 	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;"`
+	TenantID  tenant.Tenant    `json:"tenant-id" gorm:"column:tenant_id;type:varchar(128) not null;"`
 	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:2;index:idx_rei,priority:2"`
 	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:1"`
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(128) not null"`
@@ -112,6 +115,7 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 func (m *ResourceMeta) Map() map[string]interface{} {
 	return map[string]interface{}{
 		"project_id":  m.ProjectID,
+		"tenant_id":   m.TenantID,
 		"id":          m.ID,
 		"job_id":      m.Job,
 		"worker_id":   m.Worker,
@@ -133,8 +137,14 @@ const (
 	ResourceTypeS3        = ResourceType("s3")
 )
 
-// PasreResourceID returns the ResourceType and the path suffix.
-func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
+// BuildPrefix returns the prefix of the resource type.
+func (r ResourceType) BuildPrefix() string {
+	// For local file, the prefix is `/local`. For S3, the prefix is `/s3`.
+	return fmt.Sprintf("/%s", r)
+}
+
+// ParseResourceID returns the ResourceType and the path suffix.
+func ParseResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
