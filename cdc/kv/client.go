@@ -1249,35 +1249,42 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
+	// Allocate a buffer with 1.5x length than average to reduce reallocate.
+	buffLen := len(events) / worker.inputSlots * 3 / 2
 	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
 	for i := 0; i < worker.inputSlots; i++ {
-		// Allocate a buffer with 1.5x length than average to reduce reallocate.
-		buffLen := len(events) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
+	eventsByRegion := make(map[uint64][]*cdcpb.Event)
 	for _, event := range events {
-		state, valid := worker.getRegionState(event.RegionId)
+		eventsByRegion[event.RegionId] = append(eventsByRegion[event.RegionId], event)
+	}
+
+	for regionID, events := range eventsByRegion {
+		regionState, valid := worker.getRegionState(regionID)
 		// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
-		// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
+		// is allocated while holding the range lock. Therefore, the requestID is always incrementing. If a region
 		// is receiving messages with different requestID, only the messages with the larges requestID is valid.
+		// all events from the same request
+		eventsRequestID := events[0].RequestId
 		if valid {
-			if state.requestID < event.RequestId {
+			if regionState.requestID < eventsRequestID {
 				log.Debug("region state entry will be replaced because received message of newer requestID",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("oldRequestID", state.requestID),
-					zap.Uint64("requestID", event.RequestId),
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("oldRequestID", regionState.requestID),
+					zap.Uint64("requestID", eventsRequestID),
 					zap.String("addr", addr))
 				valid = false
-			} else if state.requestID > event.RequestId {
+			} else if regionState.requestID > eventsRequestID {
 				log.Warn("drop event due to event belongs to a stale request",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("requestID", event.RequestId),
-					zap.Uint64("currRequestID", state.requestID),
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("requestID", eventsRequestID),
+					zap.Uint64("currRequestID", regionState.requestID),
 					zap.String("addr", addr))
 				continue
 			}
@@ -1288,35 +1295,38 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
 			// a new goroutine to handle messages from this region.
 			// Firstly load the region info.
-			state, valid = pendingRegions.take(event.RequestId)
+			regionState, valid = pendingRegions.take(eventsRequestID)
 			if !valid {
 				log.Warn("drop event due to region feed is removed",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("requestID", event.RequestId),
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("requestID", eventsRequestID),
 					zap.String("addr", addr))
 				continue
 			}
-			state.start()
-			worker.setRegionState(event.RegionId, state)
-		} else if state.isStopped() {
+			regionState.start()
+			worker.setRegionState(regionID, regionState)
+		} else if regionState.isStopped() {
 			log.Warn("drop event due to region feed stopped",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("regionID", event.RegionId),
-				zap.Uint64("requestID", event.RequestId),
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("requestID", eventsRequestID),
 				zap.String("addr", addr))
 			continue
 		}
 
-		slot := worker.inputCalcSlot(event.RegionId)
-		statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
-			changeEvent: event,
-			regionID:    event.RegionId,
-			state:       state,
-		})
+		slot := worker.inputCalcSlot(regionID)
+		for _, event := range events {
+			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
+				changeEvent: event,
+				regionID:    regionID,
+				state:       regionState,
+			})
+		}
 	}
+
 	for _, events := range statefulEvents {
 		if len(events) > 0 {
 			err := worker.sendEvents(ctx, events)
