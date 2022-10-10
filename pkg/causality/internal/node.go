@@ -224,7 +224,6 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 			n.assignTo(workerNum)
 		}
 	}
-	return
 }
 
 // tryResolve try to find a worker to assign the node to.

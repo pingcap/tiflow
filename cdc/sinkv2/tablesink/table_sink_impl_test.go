@@ -274,8 +274,8 @@ func TestClose(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		err := tb.Close(context.Background())
 		require.NoError(t, err, "close should not return error")
 		wg.Done()
@@ -305,8 +305,8 @@ func TestCloseCancellable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		err := tb.Close(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()

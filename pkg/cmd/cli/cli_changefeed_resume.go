@@ -116,9 +116,7 @@ func (o *resumeChangefeedOptions) getUpstreamConfig() *v2.UpstreamConfig {
 	}
 }
 
-func (o *resumeChangefeedOptions) getResumeChangefeedConfig(
-	cmd *cobra.Command,
-) *v2.ResumeChangefeedConfig {
+func (o *resumeChangefeedOptions) getResumeChangefeedConfig() *v2.ResumeChangefeedConfig {
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: o.checkpointTs,
@@ -148,7 +146,7 @@ func (o *resumeChangefeedOptions) getChangefeedInfo(ctx context.Context) (
 }
 
 // confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
-func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
+func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(cmd *cobra.Command) error {
 	if !o.noConfirm {
 		if len(o.overwriteCheckpointTs) == 0 {
 			return confirmLargeDataGap(cmd, o.currentTso.Timestamp,
@@ -160,7 +158,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 	return nil
 }
 
-func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra.Command) error {
+func (o *resumeChangefeedOptions) validateParams(ctx context.Context) error {
 	// check whether the changefeed to be resumed is existing
 	detail, err := o.getChangefeedInfo(ctx)
 	if err != nil {
@@ -205,12 +203,12 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	if err := o.validateParams(ctx, cmd); err != nil {
+	if err := o.validateParams(ctx); err != nil {
 		return err
 	}
 
-	cfg := o.getResumeChangefeedConfig(cmd)
-	if err := o.confirmResumeChangefeedCheck(ctx, cmd); err != nil {
+	cfg := o.getResumeChangefeedConfig()
+	if err := o.confirmResumeChangefeedCheck(cmd); err != nil {
 		return err
 	}
 	err := o.apiV2Client.Changefeeds().Resume(ctx, cfg, o.changefeedID)
