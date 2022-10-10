@@ -1319,6 +1319,11 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 
 		slot := worker.inputCalcSlot(regionID)
 		for _, event := range events {
+			if event.RequestId != eventsRequestID {
+				log.Panic("event requestID not match in one received batch events",
+					zap.Uint64("eventsRequestID", eventsRequestID),
+					zap.Uint64("mismatchedRequestID", event.RequestId))
+			}
 			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 				changeEvent: event,
 				regionID:    regionID,
