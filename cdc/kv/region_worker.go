@@ -817,8 +817,13 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
+		if !state.initialized {
+			continue
+		}
 		state.lock.Lock()
-		state.lastResolvedTs = resolvedTs
+		if resolvedTs > state.lastResolvedTs {
+			state.lastResolvedTs = resolvedTs
+		}
 		state.lock.Unlock()
 	}
 	// emit a checkpointTs
