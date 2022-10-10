@@ -129,6 +129,12 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		return nil
 	}
 
+	// Notice: We have to set the state to stopping first,
+	// otherwise the progressTracker may be advanced incorrectly.
+	// For example, if we do not freeze it and set the state to stooping
+	// then the progressTracker may be advanced to the checkpointTs
+	// because backend sink drops some events.
+	e.progressTracker.freezeProcess()
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
 	stoppingCheckpointTs := e.GetCheckpointTs()

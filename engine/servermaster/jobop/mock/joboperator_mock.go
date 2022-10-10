@@ -34,6 +34,20 @@ func (m *MockJobOperator) EXPECT() *MockJobOperatorMockRecorder {
 	return m.recorder
 }
 
+// IsJobCanceling mocks base method.
+func (m *MockJobOperator) IsJobCanceling(arg0 context.Context, arg1 string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsJobCanceling", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsJobCanceling indicates an expected call of IsJobCanceling.
+func (mr *MockJobOperatorMockRecorder) IsJobCanceling(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsJobCanceling", reflect.TypeOf((*MockJobOperator)(nil).IsJobCanceling), arg0, arg1)
+}
+
 // MarkJobCanceled mocks base method.
 func (m *MockJobOperator) MarkJobCanceled(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()

@@ -112,7 +112,8 @@ func (c *Client) DoRequest(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if resp.StatusCode != http.StatusOK {
+	// treat http 2xx as valid
+	if resp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("[%d] %s", resp.StatusCode, content)
 	}
 	return content, nil

@@ -15,7 +15,6 @@ package manager
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -37,9 +36,6 @@ type Service struct {
 	metaclient pkgOrm.Client
 
 	executors ExecutorInfoProvider
-
-	wg       sync.WaitGroup
-	cancelCh chan struct{}
 
 	preRPCHook rpcutil.PreRPCHook
 }

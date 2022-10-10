@@ -733,6 +733,40 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 	return sourceCfg
 }
 
+func (t *testServer) TestServerDataRace(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	defer s.Close()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			err1 := s.Start()
+			c.Assert(err1 == nil || err1 == terror.ErrWorkerServerClosed, IsTrue)
+		}()
+		go func() {
+			defer wg.Done()
+			s.Close()
+		}()
+		wg.Wait()
+	}
+}
+
 func loadSourceConfigWithoutPassword2(t *testing.T) *config.SourceConfig {
 	t.Helper()
 

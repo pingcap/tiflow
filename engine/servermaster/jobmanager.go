@@ -596,8 +596,13 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *frameModel.MasterMeta) (string, error) {
-			if jm.JobBackoffMgr.Terminate(job.ID) {
-				if err := jm.terminateJob(ctx, job.ErrorMsg, job.ID); err != nil {
+			isJobCanceling := jm.jobOperator.IsJobCanceling(ctx, job.ID)
+			if isJobCanceling || jm.JobBackoffMgr.Terminate(job.ID) {
+				state := frameModel.MasterStateFailed
+				if isJobCanceling {
+					state = frameModel.MasterStateStopped
+				}
+				if err := jm.terminateJob(ctx, job.ErrorMsg, job.ID, state); err != nil {
 					return "", err
 				}
 				return "", derrors.ErrMasterCreateWorkerTerminate.FastGenByArgs()
@@ -685,7 +690,9 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		if errIn, ok := pkgClient.ErrCreateWorkerTerminate.Convert(result); ok {
-			if err := jm.terminateJob(context.Background(), errIn.Details, worker.ID()); err != nil {
+			if err := jm.terminateJob(
+				context.Background(), errIn.Details, worker.ID(), frameModel.MasterStateFailed,
+			); err != nil {
 				return err
 			}
 			jm.JobFsm.JobOffline(worker, false /* needFailover */)
@@ -752,7 +759,6 @@ func (jm *JobManagerImpl) CloseImpl(ctx context.Context) {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
 	jm.jobOperatorNotifier.Close()
-	return
 }
 
 // StopImpl implements frame.MasterImpl.StopImpl
@@ -820,10 +826,12 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 	})
 }
 
-func (jm *JobManagerImpl) terminateJob(ctx context.Context, errMsg string, jobID string) error {
-	log.Info("job master terminated",
-		zap.String("job-id", jobID), zap.String("error", errMsg))
+func (jm *JobManagerImpl) terminateJob(
+	ctx context.Context, errMsg string, jobID string, state frameModel.MasterState,
+) error {
+	log.Info("job master terminated", zap.String("job-id", jobID),
+		zap.String("error", errMsg), zap.Any("state", state))
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
-	return jm.UpdateJobStatus(ctx, jobID, errMsg, frameModel.MasterStateFailed)
+	return jm.UpdateJobStatus(ctx, jobID, errMsg, state)
 }
