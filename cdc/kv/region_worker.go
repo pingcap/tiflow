@@ -823,6 +823,9 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
+		if !state.initialized {
+			continue
+		}
 		state.lock.Lock()
 		if resolvedTs > state.lastResolvedTs {
 			state.lastResolvedTs = resolvedTs
