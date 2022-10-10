@@ -48,7 +48,7 @@ func TestMinGTIDSet(t *testing.T) {
 	require.IsType(t, &mysql.MariadbGTIDSet{}, gset)
 	require.Len(t, gset.String(), 0)
 
-	_, err = ZeroGTIDSet("wrong flavor")
+	gset, err = ZeroGTIDSet("wrong flavor")
 	require.Error(t, err)
 }
 
