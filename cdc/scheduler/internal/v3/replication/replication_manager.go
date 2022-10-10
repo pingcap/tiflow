@@ -92,7 +92,6 @@ type Manager struct { //nolint:revive
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
-	acceptScheduleTask     int
 	slowestTableID         model.TableID
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int

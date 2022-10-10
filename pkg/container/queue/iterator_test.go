@@ -106,7 +106,7 @@ func BenchmarkIterate(b *testing.B) {
 
 	b.Run("Iterate-Slice-byLoop", func(b *testing.B) {
 		n := b.N
-		q := make([]int, n, n)
+		q := make([]int, n)
 		for i := 0; i < n; i++ {
 			q[i] = i
 		}
