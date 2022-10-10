@@ -35,7 +35,8 @@ func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error
 	}
 	ls, err := brStorage.New(context.Background(), backend, nil)
 	if err != nil {
-		return nil, derrors.ErrFailToCreateExternalStorage.Wrap(err)
+		retErr := derrors.ErrFailToCreateExternalStorage.Wrap(err)
+		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for local file")
 	}
 	return ls, nil
 }

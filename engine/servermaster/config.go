@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -76,6 +77,8 @@ type Config struct {
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
+
+	Storage resModel.Config `toml:"storage" json:"storage"`
 
 	Security *security.Credential `toml:"security" json:"security"`
 
@@ -172,6 +175,10 @@ func GetDefaultMasterConfig() *Config {
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
 		JobBackoff:           jobop.NewDefaultBackoffConfig(),
+		Storage: resModel.Config{
+			Local: resModel.LocalFileConfig{BaseDir: ""},
+			S3:    resModel.S3Config{Bucket: ""},
+		},
 	}
 }
 
