@@ -21,7 +21,6 @@ import (
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/spf13/cobra"
 )
 
@@ -32,12 +31,10 @@ type processorMeta struct {
 
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
-	etcdClient *etcd.CDCEtcdClientImpl
-	apiClient  apiv1client.APIV1Interface
+	apiClient apiv1client.APIV1Interface
 
-	changefeedID     string
-	captureID        string
-	runWithAPIClient bool
+	changefeedID string
+	captureID    string
 }
 
 // newQueryProcessorOptions creates new options for the `cli changefeed query` command.

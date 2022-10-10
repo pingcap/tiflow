@@ -638,8 +638,8 @@ func TestRowToAvroSchema(t *testing.T) {
 		Table:  "rowtoavroschema",
 	}
 	namespace := getAvroNamespace(model.DefaultNamespace, &table)
-	var cols []*model.Column = make([]*model.Column, 0)
-	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
 
 	for _, v := range avroTestColumns {
 		cols = append(cols, &v.col)
@@ -684,8 +684,8 @@ func TestRowToAvroSchema(t *testing.T) {
 func TestRowToAvroData(t *testing.T) {
 	t.Parallel()
 
-	var cols []*model.Column = make([]*model.Column, 0)
-	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
 
 	for _, v := range avroTestColumns {
 		cols = append(cols, &v.col)
@@ -725,8 +725,8 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
-	var cols []*model.Column = make([]*model.Column, 0)
-	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
 
 	cols = append(
 		cols,
