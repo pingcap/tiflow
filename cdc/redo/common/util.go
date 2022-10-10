@@ -125,42 +125,6 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 	return commitTs, fileType, nil
 }
-<<<<<<< HEAD
-=======
-
-// retryerWithLog wraps the client.DefaultRetryer, and logs when retrying.
-type retryerWithLog struct {
-	client.DefaultRetryer
-}
-
-func isDeadlineExceedError(err error) bool {
-	return strings.Contains(err.Error(), "context deadline exceeded")
-}
-
-func (rl retryerWithLog) ShouldRetry(r *request.Request) bool {
-	if isDeadlineExceedError(r.Error) {
-		return false
-	}
-	return rl.DefaultRetryer.ShouldRetry(r)
-}
-
-func (rl retryerWithLog) RetryRules(r *request.Request) time.Duration {
-	backoffTime := rl.DefaultRetryer.RetryRules(r)
-	if backoffTime > 0 {
-		log.Warn("failed to request s3, retrying", zap.Error(r.Error), zap.Duration("backoff", backoffTime))
-	}
-	return backoffTime
-}
-
-func defaultS3Retryer() request.Retryer {
-	return retryerWithLog{
-		DefaultRetryer: client.DefaultRetryer{
-			NumMaxRetries:    3,
-			MinRetryDelay:    1 * time.Second,
-			MinThrottleDelay: 2 * time.Second,
-		},
-	}
-}
 
 // FilterChangefeedFiles return the files that match to the changefeed.
 func FilterChangefeedFiles(files []string, changefeedID model.ChangeFeedID) []string {
@@ -181,4 +145,3 @@ func FilterChangefeedFiles(files []string, changefeedID model.ChangeFeedID) []st
 	}
 	return res
 }
->>>>>>> 3ede032f5 (redo (ticdc): only delete changefeed related file when changefeed was removed (#7279))

@@ -17,9 +17,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-
 	"github.com/google/uuid"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
