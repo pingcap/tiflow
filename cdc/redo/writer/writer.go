@@ -360,11 +360,19 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 
 	if len(filteredFiles) == len(fileNames) {
 		if err = os.RemoveAll(l.cfg.Dir); err != nil {
+			if os.IsNotExist(err) {
+				log.Warn("removed log dir fail", zap.Error(err))
+				return nil
+			}
 			return cerror.WrapError(cerror.ErrRedoFileOp, err)
 		}
 	} else {
 		for _, file := range filteredFiles {
 			if err = os.RemoveAll(filepath.Join(l.cfg.Dir, file)); err != nil {
+				if os.IsNotExist(err) {
+					log.Warn("removed log dir fail", zap.Error(err))
+					return nil
+				}
 				return cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
 		}
