@@ -35,7 +35,7 @@ const (
 
 type persistedResources map[resModel.ResourceName]struct{}
 
-func newpersistedResources() persistedResources {
+func newPersistedResources() persistedResources {
 	return make(map[resModel.ResourceName]struct{})
 }
 
@@ -225,7 +225,7 @@ func (m *FileManager) SetPersisted(
 	defer m.mu.Unlock()
 	resources, ok := m.persistedResMap[ident.WorkerID]
 	if !ok {
-		resources = newpersistedResources()
+		resources = newPersistedResources()
 		m.persistedResMap[ident.WorkerID] = resources
 	}
 
