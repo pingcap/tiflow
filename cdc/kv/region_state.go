@@ -96,9 +96,11 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 }
 
 func (s *regionFeedState) setResolvedTs(resolvedTs uint64) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.lastResolvedTs = resolvedTs
+	if resolvedTs > s.getLastResolvedTs() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		s.lastResolvedTs = resolvedTs
+	}
 }
 
 func (s *regionFeedState) isInitialized() bool {

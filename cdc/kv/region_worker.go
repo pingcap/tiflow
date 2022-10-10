@@ -764,6 +764,9 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
+		if !state.isInitialized() {
+			continue
+		}
 		state.setResolvedTs(resolvedTs)
 	}
 	// emit a checkpointTs
