@@ -446,7 +446,6 @@ func (w *Writer) newPageWriter() error {
 	return nil
 }
 
-// why we call it rotate?
 func (w *Writer) rotate() error {
 	if err := w.close(); err != nil {
 		return err

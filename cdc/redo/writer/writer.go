@@ -51,7 +51,7 @@ type RedoLogWriter interface {
 	// Regressions on them will be ignored.
 	FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error
 
-	// GetMeta get current meta.
+	// GetMeta gets current meta.
 	GetMeta() (checkpointTs, resolvedTs model.Ts)
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only.
@@ -93,8 +93,8 @@ type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter fileWriter
 	ddlWriter fileWriter
-	// storage in LogWriter is used to clean up the
-	// redo log files when a changefeed is created or deleted.
+	// storage in LogWriter is used to write meta and clean up
+	// the redo log files when changefeed is created or deleted.
 	storage storage.ExternalStorage
 
 	meta *common.LogMeta
@@ -356,7 +356,7 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 	for _, file := range localFiles {
 		fileNames = append(fileNames, file.Name())
 	}
-	filteredFiles := common.GetChangefeedFiles(fileNames, l.cfg.ChangeFeedID)
+	filteredFiles := common.FilterChangefeedFiles(fileNames, l.cfg.ChangeFeedID)
 
 	if len(filteredFiles) == len(fileNames) {
 		if err = os.RemoveAll(l.cfg.Dir); err != nil {
@@ -379,7 +379,7 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	filteredFiles = common.GetChangefeedFiles(remoteFiles, l.cfg.ChangeFeedID)
+	filteredFiles = common.FilterChangefeedFiles(remoteFiles, l.cfg.ChangeFeedID)
 	err = l.deleteFilesInS3(ctx, filteredFiles)
 	if err != nil {
 		return
@@ -573,7 +573,7 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	defer dirFile.Close()
-	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	// sync the dir to guarantee the renamed file is persisted to disk.
 	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

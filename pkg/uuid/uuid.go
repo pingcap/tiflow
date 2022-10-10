@@ -15,7 +15,7 @@ package uuid
 
 import guuid "github.com/google/uuid"
 
-// Generator defines an interface that can generate a uuid
+// Generator defines an interface that can generate an uuid
 type Generator interface {
 	NewString() string
 }

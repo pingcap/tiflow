@@ -201,7 +201,7 @@ func TestGetChangefeedFiles(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got := GetChangefeedFiles(c.fileNames, c.changefeed)
+		got := FilterChangefeedFiles(c.fileNames, c.changefeed)
 		require.Equal(t, c.want, got)
 	}
 }
