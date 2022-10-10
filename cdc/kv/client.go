@@ -1262,6 +1262,9 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	}
 
 	for regionID, events := range eventsByRegion {
+		log.Warn("kv client receive events",
+			zap.Uint64("regionID", regionID),
+			zap.Int("eventCount", len(events)))
 		regionState, valid := worker.getRegionState(regionID)
 		// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 		// is allocated while holding the range lock. Therefore, the requestID is always incrementing. If a region
@@ -1354,6 +1357,19 @@ func (s *eventFeedSession) sendResolvedTs(
 				resolvedTs: resolvedTs.Ts,
 				regions:    make([]*regionFeedState, 0, buffLen),
 			},
+		}
+	}
+
+	memo := make(map[uint64]int)
+	for _, regionID := range resolvedTs.Regions {
+		memo[regionID]++
+	}
+
+	for regionID, count := range memo {
+		if count != 1 {
+			log.Warn("kv client receive resolved ts for one region multiple times",
+				zap.Uint64("regionID", regionID),
+				zap.Int("count", count))
 		}
 	}
 
