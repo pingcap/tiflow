@@ -878,10 +878,15 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		// After this resolved ts event is sent, we don't need to send one more
 		// resolved ts event when the region starts to work.
 		resolvedEv := model.RegionFeedEvent{
-			Resolved: []*model.ResolvedSpan{{
-				Span:       sri.span,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{
+					{
+						Span:   sri.span,
+						Region: sri.verID.GetID(),
+					},
+				},
 				ResolvedTs: sri.ts,
-			}},
+			},
 		}
 		select {
 		case s.eventCh <- resolvedEv:
