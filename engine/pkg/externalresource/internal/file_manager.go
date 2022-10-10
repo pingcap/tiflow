@@ -15,6 +15,8 @@ package internal
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -35,6 +37,18 @@ type ResourceScope struct {
 	WorkerID frameModel.WorkerID
 }
 
+// BuildResPath builds a resource path from the given scope.
+func (s ResourceScope) BuildResPath() string {
+	if s.Executor == "" {
+		return ""
+	}
+	resPath := url.QueryEscape(string(s.Executor))
+	if s.WorkerID != "" {
+		resPath += fmt.Sprintf("/%s", url.QueryEscape(s.WorkerID))
+	}
+	return resPath
+}
+
 // ResourceIdent provides information for the file manager to
 // uniquely determine where and how the resource is stored.
 type ResourceIdent struct {
@@ -48,6 +62,11 @@ type ResourceIdent struct {
 // Scope returns the Scope of the ResourceIdent.
 func (i ResourceIdent) Scope() ResourceScope {
 	return i.ResourceScope
+}
+
+// BuildResPath builds a resource path from the given ident.
+func (i ResourceIdent) BuildResPath() string {
+	return fmt.Sprintf("%s/%s", i.Scope().BuildResPath(), url.QueryEscape(i.Name))
 }
 
 // FileManager abstracts the operations on the underlying storage.
@@ -66,7 +85,4 @@ type FileManager interface {
 
 	// SetPersisted sets a resource as persisted.
 	SetPersisted(ctx context.Context, ident ResourceIdent) error
-
-	// Close shuts down the FileManager.
-	Close()
 }
