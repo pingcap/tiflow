@@ -17,7 +17,6 @@ import (
 	"context"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestUpstream(t *testing.T) {
@@ -57,12 +57,12 @@ func TestUpstream(t *testing.T) {
 	// test Tick
 	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	mockClock.Add(maxIdleDuration * 2)
-	manager.lastTickTime = time.Time{}
+	manager.lastTickTime = atomic.Time{}
 	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	// wait until up2 is closed
 	for !up2.IsClosed() {
 	}
-	manager.lastTickTime = time.Time{}
+	manager.lastTickTime = atomic.Time{}
 	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	up, ok = manager.Get(testID)
