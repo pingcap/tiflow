@@ -46,16 +46,6 @@ type spanFrontier struct {
 }
 
 // NewFrontier creates Frontier from the given spans.
-<<<<<<< HEAD
-func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Frontier {
-	// spanFrontier don't support use Nil as the maximum key of End range
-	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
-	// End key bigger than util.UpperBoundKey
-	for i, span := range spans {
-		spans[i] = span.Hack()
-	}
-
-=======
 // spanFrontier don't support use Nil as the maximum key of End range
 // So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 // End key bigger than util.UpperBoundKey
@@ -63,7 +53,6 @@ func NewFrontier(checkpointTs uint64,
 	metricResolvedRegionMissedCounter prometheus.Counter,
 	spans ...regionspan.ComparableSpan,
 ) Frontier {
->>>>>>> 0f2a2539a (frontier(ticdc):  fast check if region is split or merged when forwarding resolvedTs (#7280))
 	s := &spanFrontier{
 		spanList:       *newSpanList(),
 		seekTempResult: make(seekResult, maxHeight),
@@ -91,11 +80,6 @@ func (s *spanFrontier) Frontier() uint64 {
 }
 
 // Forward advances the timestamp for a span.
-<<<<<<< HEAD
-func (s *spanFrontier) Forward(span regionspan.ComparableSpan, ts uint64) {
-	span = span.Hack()
-	s.insert(span, ts)
-=======
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
@@ -107,7 +91,6 @@ func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, 
 	}
 	s.metricResolvedRegionMissedCounter.Inc()
 	s.insert(regionID, span, ts)
->>>>>>> 0f2a2539a (frontier(ticdc):  fast check if region is split or merged when forwarding resolvedTs (#7280))
 }
 
 func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, ts uint64) {

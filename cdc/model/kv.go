@@ -34,6 +34,7 @@ const (
 
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be set.
+//
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
@@ -56,16 +57,10 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 
 // ResolvedSpans guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
-<<<<<<< HEAD
-//msgp:ignore ResolvedSpan
-type ResolvedSpan struct {
-	Span       regionspan.ComparableSpan
-=======
 //
 //msgp:ignore ResolvedSpans
 type ResolvedSpans struct {
 	Spans      []RegionComparableSpan
->>>>>>> 0f2a2539a (frontier(ticdc):  fast check if region is split or merged when forwarding resolvedTs (#7280))
 	ResolvedTs uint64
 }
 
