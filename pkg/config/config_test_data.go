@@ -173,6 +173,14 @@ const (
       }
     ],
     "schema-registry": "",
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "terminator": "",
+      "null": "\\N",
+      "date-separator": "month",
+      "include-commit-ts": true
+    },
     "transaction-atomicity": ""
   },
   "consistent": {
@@ -213,7 +221,15 @@ const (
           "b"
         ]
       }
-    ]
+    ],
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "terminator": "",
+      "null": "\\N",
+      "date-separator": "month",
+      "include-commit-ts": true
+    }
   },
   "consistent": {
     "level": "none",
