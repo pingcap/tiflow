@@ -1055,7 +1055,6 @@ func (s *snapshot) iterPartitions(includeIneligible bool, f func(id int64, i *mo
 		}
 		return true
 	})
-	return
 }
 
 func (s *snapshot) iterSchemas(f func(i *timodel.DBInfo)) {
@@ -1128,7 +1127,7 @@ func (s *snapshot) drop() {
 
 	schemas := make([]versionedID, 0, s.schemas.Len())
 	var schemaID int64 = -1
-	var schemaDroped bool = false
+	schemaDroped := false
 	s.schemas.Ascend(func(x versionedID) bool {
 		if x.tag >= tag {
 			if x.id != schemaID {
@@ -1148,7 +1147,7 @@ func (s *snapshot) drop() {
 
 	tables := make([]versionedID, 0, s.tables.Len())
 	var tableID int64 = -1
-	var tableDroped bool = false
+	tableDroped := false
 	s.tables.Ascend(func(x versionedID) bool {
 		if x.tag >= tag {
 			if x.id != tableID {
@@ -1178,7 +1177,7 @@ func (s *snapshot) drop() {
 
 	partitions := make([]versionedID, 0, s.partitions.Len())
 	var partitionID int64 = -1
-	var partitionDroped bool = false
+	partitionDroped := false
 	s.partitions.Ascend(func(x versionedID) bool {
 		if x.tag >= tag {
 			if x.id != partitionID {
@@ -1204,8 +1203,8 @@ func (s *snapshot) drop() {
 	}
 
 	schemaNames := make([]versionedEntityName, 0, s.schemaNameToID.Len())
-	var schemaName string = ""
-	var schemaNameDroped bool = false
+	schemaName := ""
+	schemaNameDroped := false
 	s.schemaNameToID.Ascend(func(x versionedEntityName) bool {
 		if x.tag >= tag {
 			if x.entity != schemaName {
@@ -1225,8 +1224,8 @@ func (s *snapshot) drop() {
 
 	tableNames := make([]versionedEntityName, 0, s.tableNameToID.Len())
 	schemaID = -1
-	var tableName string = ""
-	var tableNameDroped bool = false
+	tableName := ""
+	tableNameDroped := false
 	s.tableNameToID.Ascend(func(x versionedEntityName) bool {
 		if x.tag >= tag {
 			if x.prefix != schemaID || x.entity != tableName {

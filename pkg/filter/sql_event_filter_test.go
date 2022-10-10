@@ -295,6 +295,7 @@ func TestShouldSkipDML(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f, err := newSQLEventFilter(tc.cfg)
 			require.NoError(t, err)
 			for _, c := range tc.cases {
