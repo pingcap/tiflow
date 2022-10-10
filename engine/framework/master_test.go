@@ -19,15 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -60,7 +59,7 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -113,7 +112,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		return master.TickCount() > 10
 	}, time.Millisecond*2000, time.Millisecond*10)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -150,7 +149,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		masterName,
 		workerID1,
 		executorNodeID1,
-		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		[]resModel.ResourceID{"resource-1", "resource-2"},
 		// call GenEpoch three times, including create master meta, master init
 		// refresh meta, create worker.
 		epoch+3,

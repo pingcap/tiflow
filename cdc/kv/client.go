@@ -878,10 +878,15 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		// After this resolved ts event is sent, we don't need to send one more
 		// resolved ts event when the region starts to work.
 		resolvedEv := model.RegionFeedEvent{
-			Resolved: []*model.ResolvedSpan{{
-				Span:       sri.span,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{
+					{
+						Span:   sri.span,
+						Region: sri.verID.GetID(),
+					},
+				},
 				ResolvedTs: sri.ts,
-			}},
+			},
 		}
 		select {
 		case s.eventCh <- resolvedEv:
@@ -963,6 +968,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				return errors.Trace(err)
 			}
 			nextSpan.Start = region.EndKey
+			// the End key return by the PD API will be nil to represent the biggest key,
+			partialSpan = partialSpan.Hack()
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)

@@ -31,7 +31,6 @@ import (
 type jobCreateOptions struct {
 	generalOpts *jobGeneralOptions
 
-	jobTypeStr   string
 	jobConfigStr string
 
 	jobID     string

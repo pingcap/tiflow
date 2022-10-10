@@ -36,7 +36,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -64,20 +64,40 @@ type Worker interface {
 // the implementation struct must embed the framework.BaseWorker interface, this
 // interface will be initialized by the framework.
 type WorkerImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
+	// InitImpl is called as the consequence of CreateWorker from jobmaster or failover,
+	// business logic is expected to do initialization here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is called as the first callback function of an WorkerImpl
+	//   instance, and it's not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
+	// Tick is called on a fixed interval after WorkerImpl is initialized, business
+	// logic can do some periodic tasks here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
 
-	// OnMasterMessage is called when worker receives master message
+	// OnMasterMessage is called when worker receives master message, business developer
+	// does not need to implement it.
+	// TODO: move it out of WorkerImpl and should not be concurrent with CloseImpl.
 	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
-	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
-	CloseImpl(ctx context.Context) error
+	// CloseImpl is called as the consequence of returning error from InitImpl or
+	// Tick, the Tick will be stopped after entering this function. Business logic
+	// is expected to release resources here, but business developer should be aware
+	// that when the runtime is crashed, CloseImpl has no time to be called.
+	// CloseImpl will only be called for once.
+	// TODO: no other callbacks will be called after CloseImpl
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
+	CloseImpl(ctx context.Context)
 }
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
@@ -103,7 +123,7 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error)
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -420,12 +440,7 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
 	defer cancel()
 
-	err := w.Impl.CloseImpl(closeCtx)
-	if err != nil {
-		w.Logger().Warn("Failed to close worker",
-			zap.String("worker-id", w.id),
-			logutil.ShortError(err))
-	}
+	w.Impl.CloseImpl(closeCtx)
 }
 
 // Stop implements Worker.Stop, works the same as Worker.Close
@@ -493,7 +508,7 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)

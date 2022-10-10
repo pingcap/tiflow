@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
@@ -50,8 +49,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/election"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
@@ -161,7 +158,7 @@ func newServerMasterMetric() *serverMasterMetric {
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
-	id := "server-master-" + uuid.New().String()
+	id := generateNodeID(cfg.Name)
 	msgService := p2p.NewMessageRPCServiceWithRPCServer(id, nil, nil)
 	p2pMsgRouter := p2p.NewMessageRouter(id, cfg.AdvertiseAddr)
 
@@ -445,7 +442,7 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-func (s *Server) startForTest(ctx context.Context) (err error) {
+func (s *Server) startForTest() (err error) {
 	// TODO: implement mock-etcd and leader election
 
 	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
@@ -486,7 +483,7 @@ func (s *Server) Stop() {
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
-		return s.startForTest(ctx)
+		return s.startForTest()
 	}
 
 	err := s.registerMetaStore(ctx)
@@ -697,7 +694,8 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 	registerRoutes(router, grpcMux, s.forwardJobAPI)
 
 	return &http.Server{
-		Handler: router,
+		Handler:           router,
+		ReadHeaderTimeout: time.Minute,
 	}, nil
 }
 
@@ -750,19 +748,6 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.ServeHTTP(w, r)
 	return nil
-}
-
-// member returns member information of the server
-func (s *Server) member() string {
-	m := &rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-	}
-	val, err := m.String()
-	if err != nil {
-		return s.name()
-	}
-	return val
 }
 
 // name is a shortcut to etcd name
@@ -888,9 +873,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("job manager exited")
 	}()
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(executorClients).GCHandler(),
-	})
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	// TODO refactor this method to make it more readable and maintainable.

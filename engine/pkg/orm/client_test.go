@@ -33,7 +33,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
@@ -1450,6 +1450,29 @@ func TestJobOp(t *testing.T) {
 				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
 					WithArgs(model.JobOpStatusCanceled, anyTime{}, "job-111", model.JobOpStatusCanceling).
 					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		// QueryJobOp
+		{
+			fn: "QueryJobOp",
+			inputs: []interface{}{
+				"job-1",
+			},
+			output: &model.JobOp{
+				Model: model.Model{
+					SeqID:     1,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+				JobID: "job-1",
+				Op:    model.JobOpStatusCanceling,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "SELECT * FROM `job_ops` WHERE job_id = ?"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).
+					WillReturnRows(
+						sqlmock.NewRows([]string{"created_at", "updated_at", "op", "job_id", "seq_id"}).
+							AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-1", 1))
 			},
 		},
 		// QueryJobOpsByStatus

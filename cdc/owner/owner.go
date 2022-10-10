@@ -337,7 +337,6 @@ func (o *ownerImpl) cleanStaleMetrics() {
 	changefeedCheckpointTsLagGauge.Reset()
 	changefeedResolvedTsGauge.Reset()
 	changefeedResolvedTsLagGauge.Reset()
-	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
 }
 
@@ -361,22 +360,7 @@ func (o *ownerImpl) updateMetrics() {
 			// The scheduler has not been initialized yet.
 			continue
 		}
-
-		totalCounts := infoProvider.GetTotalTableCounts()
-		pendingCounts := infoProvider.GetPendingTableCounts()
-
-		for captureID, info := range o.captures {
-			ownerMaintainTableNumGauge.
-				WithLabelValues(cfID.Namespace, cfID.ID,
-					info.AdvertiseAddr, maintainTableTypeTotal).
-				Set(float64(totalCounts[captureID]))
-			ownerMaintainTableNumGauge.
-				WithLabelValues(cfID.Namespace, cfID.ID,
-					info.AdvertiseAddr, maintainTableTypeWip).
-				Set(float64(pendingCounts[captureID]))
-		}
 	}
-	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
@@ -727,6 +711,9 @@ func (o *ownerImpl) updateGCSafepoint(
 }
 
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
+// Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
+// to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
+// GcSafepoint is the minimum checkpointTs of all changefeeds that replicating a same upstream TiDB cluster.
 func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {

@@ -34,6 +34,7 @@ type JobOperator interface {
 	MarkJobCanceling(ctx context.Context, jobID string) error
 	MarkJobCanceled(ctx context.Context, jobID string) error
 	Tick(ctx context.Context) error
+	IsJobCanceling(ctx context.Context, jobID string) bool
 }
 
 // JobOperatorImpl implements JobOperator
@@ -111,6 +112,18 @@ func (oper *JobOperatorImpl) Tick(ctx context.Context) error {
 	return errs
 }
 
+// IsJobCanceling implements JobOperator
+func (oper *JobOperatorImpl) IsJobCanceling(ctx context.Context, jobID string) bool {
+	op, err := oper.frameMetaClient.QueryJobOp(ctx, jobID)
+	if err != nil {
+		if !pkgOrm.IsNotFoundError(err) {
+			log.Warn("failed to query job canceling state", zap.Error(err))
+		}
+		return false
+	}
+	return op.Op == ormModel.JobOpStatusCanceling
+}
+
 // check job status, if job is in terminated, return true, otherwise return false
 // and the upper logic needs to send canceling message. Return value
 // - whether job is in terminated state
@@ -128,9 +141,9 @@ func (oper *JobOperatorImpl) checkJobStatus(
 		}
 		return isJobTerminated, err
 	}
-	// TODO: add MasterStateFailed
 	switch meta.State {
-	case frameworkModel.MasterStateFinished, frameworkModel.MasterStateStopped:
+	case frameworkModel.MasterStateFinished,
+		frameworkModel.MasterStateStopped, frameworkModel.MasterStateFailed:
 		isJobTerminated = true
 		return isJobTerminated, oper.MarkJobCanceled(ctx, jobID)
 	}

@@ -52,7 +52,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -356,7 +356,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
-	require.NoError(t.T(), jm.CloseImpl(context.Background()))
+	jm.CloseImpl(context.Background())
 
 	// OnCancel
 	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
@@ -385,7 +385,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	wg.Wait()
 
 	// Stop
-	require.NoError(t.T(), jm.StopImpl(context.Background()))
+	jm.StopImpl(context.Background())
 
 	mockBaseJobmaster.AssertExpectations(t.T())
 	workerHandle1.AssertExpectations(t.T())

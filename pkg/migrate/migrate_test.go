@@ -198,7 +198,7 @@ func TestMigration(t *testing.T) {
 	migrator.createPDClientFunc = func(ctx context.Context,
 		pdEndpoints []string, conf *security.Credential,
 	) (pd.Client, error) {
-		mock := newMockPDClient(ctx, true)
+		mock := newMockPDClient(true)
 		mock.respData = "{}"
 		mock.clusterID = 1
 		return mock, nil
@@ -494,7 +494,7 @@ func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
-func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
+func newMockPDClient(normal bool) *mockPDClient {
 	mock := &mockPDClient{}
 	status := http.StatusOK
 	if !normal {
@@ -515,7 +515,7 @@ func TestMigrateGcServiceSafePoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	m := &migrator{}
-	mockClient := newMockPDClient(ctx, true)
+	mockClient := newMockPDClient(true)
 
 	data := &pdutil.ListServiceGCSafepoint{
 		ServiceGCSafepoints: []*pdutil.ServiceSafePoint{
@@ -565,7 +565,7 @@ func TestMigrateGcServiceSafePoint(t *testing.T) {
 func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockClient := newMockPDClient(ctx, true)
+	mockClient := newMockPDClient(true)
 
 	m := &migrator{}
 	data := &pdutil.ListServiceGCSafepoint{
@@ -605,7 +605,7 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 func TestListServiceSafePointFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockClient := newMockPDClient(ctx, true)
+	mockClient := newMockPDClient(true)
 
 	m := &migrator{}
 	mockClient.respData = "xxx"
@@ -616,7 +616,7 @@ func TestListServiceSafePointFailed(t *testing.T) {
 func TestNoServiceSafePoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockClient := newMockPDClient(ctx, true)
+	mockClient := newMockPDClient(true)
 
 	m := &migrator{}
 	data := &pdutil.ListServiceGCSafepoint{

@@ -24,7 +24,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
@@ -140,6 +140,7 @@ type JobOpClient interface {
 	SetJobNoop(ctx context.Context, jobID string) (Result, error)
 	SetJobCanceling(ctx context.Context, JobID string) (Result, error)
 	SetJobCanceled(ctx context.Context, jobID string) (Result, error)
+	QueryJobOp(ctx context.Context, jobID string) (*model.JobOp, error)
 	QueryJobOpsByStatus(ctx context.Context, op model.JobOpStatus) ([]*model.JobOp, error)
 }
 
@@ -730,6 +731,18 @@ func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Resul
 	}
 	result.rowsAffected = exec.RowsAffected
 	return result, nil
+}
+
+// QueryJobOp queries a JobOp based on jobID
+func (c *metaOpsClient) QueryJobOp(
+	ctx context.Context, jobID string,
+) (*model.JobOp, error) {
+	var op *model.JobOp
+	err := c.db.WithContext(ctx).Where("job_id = ?", jobID).Find(&op).Error
+	if err != nil {
+		return nil, err
+	}
+	return op, nil
 }
 
 // QueryJobOpsByStatus query all jobOps with given `op`

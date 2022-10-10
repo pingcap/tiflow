@@ -55,7 +55,7 @@ type ResourceKey struct {
 
 // ToResourceKeys converts resource requirements in pb to resource keys
 func ToResourceKeys(requires []*pb.ResourceKey) []ResourceKey {
-	if requires == nil || len(requires) == 0 {
+	if len(requires) == 0 {
 		return nil
 	}
 	rks := make([]ResourceKey, 0, len(requires))
@@ -133,8 +133,8 @@ const (
 	ResourceTypeS3        = ResourceType("s3")
 )
 
-// ParseResourcePath returns the ResourceType and the path suffix.
-func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
+// PasreResourceID returns the ResourceType and the path suffix.
+func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
@@ -156,4 +156,9 @@ func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 
 	suffix := path.Join(segments[1:]...)
 	return resourceType, suffix, nil
+}
+
+// BuildResourceID returns an ResourceID based on given ResourceType and ResourceName.
+func BuildResourceID(rtype ResourceType, name ResourceName) ResourceID {
+	return path.Join("/"+string(rtype), name)
 }
