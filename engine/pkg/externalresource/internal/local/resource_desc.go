@@ -17,17 +17,16 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-var _ internal.ResourceDescriptor = (*FileResourceDescriptor)(nil)
+var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 
-// FileResourceDescriptor contains necessary data
+// resourceDescriptor contains necessary data
 // to access a local file resource.
-type FileResourceDescriptor struct {
+type resourceDescriptor struct {
 	BasePath string
 	Ident    internal.ResourceIdent
 
@@ -36,18 +35,18 @@ type FileResourceDescriptor struct {
 
 // AbsolutePath returns the absolute path of the given resource
 // in the local file system.
-func (d *FileResourceDescriptor) AbsolutePath() string {
+func (d *resourceDescriptor) AbsolutePath() string {
 	encodedName := ResourceNameToFilePathName(d.Ident.Name)
 	return filepath.Join(d.BasePath, d.Ident.WorkerID, encodedName)
 }
 
 // ExternalStorage creates the storage object if one has not been created yet, and returns the
 // created storage object.
-func (d *FileResourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+func (d *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
 	if d.storage == nil {
 		storage, err := newBrStorageForLocalFile(d.AbsolutePath())
 		if err != nil {
-			return nil, errors.Annotate(err, "creating ExternalStorage for local file")
+			return nil, err
 		}
 		d.storage = storage
 	}
@@ -55,16 +54,16 @@ func (d *FileResourceDescriptor) ExternalStorage(ctx context.Context) (brStorage
 }
 
 // URI returns the URI of the local file resource.
-func (d *FileResourceDescriptor) URI() string {
+func (d *resourceDescriptor) URI() string {
 	return d.AbsolutePath()
 }
 
 // ID returns the resource ID of the local file resource.
-func (d *FileResourceDescriptor) ID() resModel.ResourceID {
+func (d *resourceDescriptor) ID() resModel.ResourceID {
 	return resModel.BuildResourceID(resModel.ResourceTypeLocalFile, d.Ident.Name)
 }
 
 // ResourceIdent returns the resource identity of the local file resource.
-func (d *FileResourceDescriptor) ResourceIdent() internal.ResourceIdent {
+func (d *resourceDescriptor) ResourceIdent() internal.ResourceIdent {
 	return d.Ident
 }

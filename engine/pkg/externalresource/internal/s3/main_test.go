@@ -10,7 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package broker
+package s3
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// TODO: remove this after fixing leak goroutine in s3 filemanager.
+	// Ref: https://github.com/pingcap/tidb/blob/master/br/pkg/storage/s3.go#L366
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
 		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),

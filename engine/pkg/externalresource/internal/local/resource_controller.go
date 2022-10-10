@@ -17,31 +17,44 @@ import (
 	"context"
 
 	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-// FileResourceController defines operations specific to the local file type.
-type FileResourceController struct {
+var _ internal.ResourceController = &resourceController{}
+
+// resourceController defines operations specific to the local file type.
+type resourceController struct {
 	// clientManager is used to communicate with executors.
 	clientGroup client.ExecutorGroup
 }
 
 // NewFileResourceController creates a new LocalFileResourceController.
-func NewFileResourceController(clientGroup client.ExecutorGroup) *FileResourceController {
-	return &FileResourceController{clientGroup: clientGroup}
+func NewFileResourceController(clientGroup client.ExecutorGroup) *resourceController {
+	return &resourceController{clientGroup: clientGroup}
 }
 
-// GCHandler returns a closure to the invoker to perform GC.
-func (r *FileResourceController) GCHandler() func(context.Context, *resModel.ResourceMeta) error {
-	return r.removeFilesOnExecutor
+// GCSingleResource remove a persisted resource on executor.
+func (r *resourceController) GCSingleResource(ctx context.Context, res *resModel.ResourceMeta) error {
+	return r.removeFilesOnExecutor(ctx, res)
 }
 
-func (r *FileResourceController) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
+func (r *resourceController) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
 	cli, err := r.clientGroup.GetExecutorClientB(ctx, resource.Executor)
 	if err != nil {
 		return perrors.Annotate(err, "removeFilesOnExecutor")
 	}
 
 	return cli.RemoveResource(ctx, resource.Worker, resource.ID)
+}
+
+// GCExecutors removes all temporary resources created by the offlined executors.
+func (r *resourceController) GCExecutor(
+	_ context.Context, _ []*resModel.ResourceMeta, _ model.ExecutorID,
+) error {
+	// There is no need to clean up temporary files, because no persistent volumes are
+	// mounted to executor.
+	return nil
 }
