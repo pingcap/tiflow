@@ -100,7 +100,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 					"/changefeed/status/test1",
 				etcd.DefaultClusterAndNamespacePrefix +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"%s", etcd.DefaultClusterAndMetaPrefix +
+				etcd.DefaultClusterAndMetaPrefix +
 					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
@@ -138,7 +138,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			updateKey: []string{
 				etcd.DefaultClusterAndNamespacePrefix +
 					"/changefeed/info/test1",
-				"%s", etcd.DefaultClusterAndNamespacePrefix +
+				etcd.DefaultClusterAndNamespacePrefix +
 					"/changefeed/status/test1",
 				etcd.DefaultClusterAndNamespacePrefix +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
