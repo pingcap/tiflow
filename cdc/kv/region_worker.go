@@ -393,9 +393,9 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 	return err
 }
 
-func (w *regionWorker) initPoolHandles(handleCount int) {
-	handles := make([]workerpool.EventHandle, 0, handleCount)
-	for i := 0; i < handleCount; i++ {
+func (w *regionWorker) initPoolHandles() {
+	handles := make([]workerpool.EventHandle, 0, w.concurrent)
+	for i := 0; i < w.concurrent; i++ {
 		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
 			event := eventI.(*regionStatefulEvent)
 			return w.processEvent(ctx, event)
@@ -455,11 +455,11 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		regionEventsBatchSize.Observe(float64(len(events)))
 
-		intputPending := atomic.LoadInt32(&w.inputPending)
+		inputPending := atomic.LoadInt32(&w.inputPending)
 		if highWatermarkMet {
-			highWatermarkMet = int(intputPending) >= regionWorkerLowWatermark
+			highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
 		} else {
-			highWatermarkMet = int(intputPending) >= regionWorkerHighWatermark
+			highWatermarkMet = int(inputPending) >= regionWorkerHighWatermark
 		}
 		atomic.AddInt32(&w.inputPending, -int32(len(events)))
 
@@ -576,7 +576,7 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	w.parentCtx = parentCtx
 	ctx, cancel := context.WithCancel(parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
-	w.initPoolHandles(w.concurrent)
+	w.initPoolHandles()
 
 	var retErr error
 	once := sync.Once{}
@@ -610,21 +610,20 @@ func (w *regionWorker) handleEventEntry(
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
 ) error {
-	regionID := state.getRegionID()
+	regionID, regionSpan, startTime, storeAddr := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
-		// if a region with kv range [a, z)
-		// and we only want the get [b, c) from this region,
-		// tikv will return all key events in the region although we specified [b, c) int the request.
+		// if a region with kv range [a, z), and we only want the get [b, c) from this region,
+		// tikv will return all key events in the region, although specified [b, c) int the request.
 		// we can make tikv only return the events about the keys in the specified range.
 		comparableKey := regionspan.ToComparableKey(entry.GetKey())
 		// key for initialized event is nil
-		if !regionspan.KeyInSpan(comparableKey, state.getRegionSpan()) && entry.Type != cdcpb.Event_INITIALIZED {
+		if entry.Type != cdcpb.Event_INITIALIZED &&
+			!regionspan.KeyInSpan(comparableKey, regionSpan) {
 			w.metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
 			continue
 		}
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
-			startTime := state.getStartTime()
 			if time.Since(startTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
 					zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -635,8 +634,9 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			state.setInitialized()
-			w.session.regionRouter.Release(state.getStoreAddr())
-			cachedEvents := state.matcher.matchCachedRow(state.isInitialized())
+			w.session.regionRouter.Release(storeAddr)
+			// state is just initialized, so we know this must be true
+			cachedEvents := state.matcher.matchCachedRow(true)
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
@@ -649,7 +649,7 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(ctx.Err())
 				}
 			}
-			state.matcher.matchCachedRollbackRow(state.isInitialized())
+			state.matcher.matchCachedRollbackRow(true)
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
 			revent, err := assembleRowEvent(regionID, entry)

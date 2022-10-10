@@ -164,6 +164,12 @@ func (s *regionFeedState) getRegionInfo() singleRegionInfo {
 	return s.sri
 }
 
+func (s *regionFeedState) getRegionMeta() (uint64, regionspan.ComparableSpan, time.Time, string) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.verID.GetID(), s.sri.span, s.startFeedTime, s.sri.rpcCtx.Addr
+}
+
 type syncRegionFeedStateMap struct {
 	mu     sync.RWMutex
 	states map[uint64]*regionFeedState
