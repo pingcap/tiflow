@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -165,5 +167,41 @@ func TestParseLogFileName(t *testing.T) {
 			require.EqualValues(t, tt.wantTs, ts, tt.name)
 			require.Equal(t, tt.wantFileType, fileType, tt.name)
 		}
+	}
+}
+
+func TestGetChangefeedFiles(t *testing.T) {
+	cases := []struct {
+		fileNames  []string
+		changefeed model.ChangeFeedID
+		want       []string
+	}{
+		{
+			fileNames: []string{
+				"captureID_test-2_uuid1.log",
+				"captureID_test-3_uuid2.log",
+				"captureID_test-1_uuid3.log",
+			},
+			changefeed: model.DefaultChangeFeedID("test-1"),
+			want: []string{
+				"captureID_test-1_uuid3.log",
+			},
+		},
+		{
+			fileNames: []string{
+				"captureID_n1_test-2_uuid4.log",
+				"captureID_n2_test-2_uuid5.log",
+				"captureID_n1_test-1_uuid6.log",
+			},
+			changefeed: model.ChangeFeedID{Namespace: "n1", ID: "test-2"},
+			want: []string{
+				"captureID_n1_test-2_uuid4.log",
+			},
+		},
+	}
+
+	for _, c := range cases {
+		got := FilterChangefeedFiles(c.fileNames, c.changefeed)
+		require.Equal(t, c.want, got)
 	}
 }
