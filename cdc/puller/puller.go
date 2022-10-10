@@ -219,6 +219,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 				resolvedTs := p.tsTracker.Frontier()
 				if resolvedTs > 0 && !initialized {
+					// Advancing to a non-zero value means the puller level
+					// resolved ts is initialized.
+					atomic.StoreInt64(&p.initialized, 1)
 					initialized = true
 
 					spans := make([]string, 0, len(p.spans))
