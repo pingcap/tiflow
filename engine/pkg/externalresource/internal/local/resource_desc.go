@@ -17,7 +17,6 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -47,7 +46,7 @@ func (d *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 	if d.storage == nil {
 		storage, err := newBrStorageForLocalFile(d.AbsolutePath())
 		if err != nil {
-			return nil, errors.Annotate(err, "creating ExternalStorage for local file")
+			return nil, err
 		}
 		d.storage = storage
 	}

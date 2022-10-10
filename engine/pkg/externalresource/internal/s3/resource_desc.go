@@ -17,11 +17,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
+
+var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 
 // resourceDescriptor is a handle for a s3-backed resource used
 // internally in engine/pkg/externalresource.
@@ -52,7 +53,7 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 	if r.storage == nil {
 		storage, err := r.makeExternalStorage(ctx)
 		if err != nil {
-			return nil, errors.Annotate(err, "creating ExternalStorage for s3")
+			return nil, err
 		}
 		r.storage = storage
 	}

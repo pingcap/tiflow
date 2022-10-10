@@ -19,12 +19,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -119,7 +119,7 @@ func (m *FileManager) GetPersistedResource(
 
 	ok, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return nil, errors.Annotate(err, "check placeholder file")
+		return nil, derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("check placeholder file")
 	}
 	if !ok {
 		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
@@ -266,7 +266,7 @@ func (m *FileManager) removeFilesIf(
 		return nil
 	})
 	if err != nil {
-		return errors.Annotate(err, "RemoveTemporaryFiles")
+		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("RemoveTemporaryFiles")
 	}
 
 	log.Info("Removing resources",
@@ -275,7 +275,7 @@ func (m *FileManager) removeFilesIf(
 
 	for _, path := range toRemoveFiles {
 		if err := storage.DeleteFile(ctx, path); err != nil {
-			return err
+			return derrors.ErrS3StorageAPI.Wrap(err)
 		}
 	}
 	return nil
@@ -284,25 +284,25 @@ func (m *FileManager) removeFilesIf(
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
 	exists, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return errors.Annotate(err, "checking placeholder file")
+		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")
 	}
 	if exists {
 		// This should not happen in production. Unless the caller of the FileManager has a bug.
-		return errors.New("resource already exists")
+		return derrors.ErrS3StorageAPI.GenWithStackByArgs("resource already exists")
 	}
 
 	writer, err := storage.Create(ctx, placeholderFileName)
 	if err != nil {
-		return errors.Annotate(err, "creating placeholder file")
+		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("creating placeholder file")
 	}
 
 	_, err = writer.Write(ctx, []byte("placeholder"))
 	if err != nil {
-		return errors.Annotate(err, "writing placeholder file")
+		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("writing placeholder file")
 	}
 
 	if err := writer.Close(ctx); err != nil {
-		return errors.Annotate(err, "closing placeholder file")
+		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("closing placeholder file")
 	}
 	return nil
 }
@@ -313,5 +313,8 @@ func PreCheckConfig(config resModel.S3Config) error {
 	factory := NewExternalStorageFactory(config.Bucket,
 		config.Prefix, &config.S3BackendOptions)
 	_, err := factory.newS3ExternalStorageForScope(context.Background(), internal.ResourceScope{})
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
