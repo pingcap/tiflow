@@ -44,8 +44,7 @@ const (
 // -auto-compaction-mode: revision
 // -auto-compaction-retention: 100
 type etcdKVClientImpl struct {
-	cli     *clientv3.Client
-	closeMu sync.Mutex
+	cli *clientv3.Client
 }
 
 // NewEtcdKVClientImpl creates a new etcdKVClientImpl instance

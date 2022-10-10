@@ -37,6 +37,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
@@ -89,8 +90,11 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/goroutine?debug=1",
 		"/debug/pprof/mutex?debug=1",
 	}
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	for _, uri := range urls {
-		resp, err := http.Get(addr + uri)
+		resp, err := cli.Get(ctx, addr+uri)
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -103,8 +107,11 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	urls := []string{
 		"/metrics",
 	}
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	for _, uri := range urls {
-		resp, err := http.Get(addr + uri)
+		resp, err := cli.Get(ctx, addr+uri)
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -137,8 +144,11 @@ func TestCollectMetric(t *testing.T) {
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		resp, err := http.Get(addr + "/metrics")
+		resp, err := cli.Get(ctx, addr+"/metrics")
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
