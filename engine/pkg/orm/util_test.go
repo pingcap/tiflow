@@ -106,10 +106,10 @@ func TestInitialize(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
-			"`project_id` varchar(128) not null,`id` varchar(128) not null,"+
-			"`job_id` varchar(128) not null,`worker_id` varchar(128) not null,"+
-			"`executor_id` varchar(128) not null,`gc_pending` BOOLEAN,"+
-			"`deleted` BOOLEAN,PRIMARY KEY (`seq_id`),") +
+			"`project_id` varchar(128) not null,`tenant_id` varchar(128) not null,"+
+			"`id` varchar(128) not null,`job_id` varchar(128) not null,"+
+			"`worker_id` varchar(128) not null,`executor_id` varchar(128) not null,"+
+			"`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`),") +
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
