@@ -206,8 +206,11 @@ func TestMinMax(t *testing.T) {
 	keyMid := []byte("m")
 
 	spMinMid := regionspan.ComparableSpan{Start: keyMin, End: keyMid}
+	spMinMid = spMinMid.Hack()
 	spMidMax := regionspan.ComparableSpan{Start: keyMid, End: keyMax}
+	spMidMax = spMidMax.Hack()
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
+	spMinMax = spMinMax.Hack()
 
 	f := NewFrontier(0, c, spMinMax)
 	require.Equal(t, uint64(0), f.Frontier())
