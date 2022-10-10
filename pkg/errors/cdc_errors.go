@@ -1043,10 +1043,13 @@ var (
 		"upstream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
-
 	ErrUpstreamManagerNotReady = errors.Normalize(
 		"upstream manager not ready",
 		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
+	)
+	ErrUpstreamClosed = errors.Normalize(
+		"upstream has been closed",
+		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
 	)
 
 	// ReplicationSet error

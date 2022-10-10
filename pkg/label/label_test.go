@@ -52,6 +52,7 @@ func TestNewKey(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
+			t.Parallel()
 			res, err := NewKey(tc.str)
 			if tc.allowed {
 				require.NoError(t, err)
@@ -68,6 +69,7 @@ func TestNewValue(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
+			t.Parallel()
 			res, err := NewValue(tc.str)
 			if tc.allowed {
 				require.NoError(t, err)
