@@ -56,9 +56,9 @@ func TestFileManagerBasics(t *testing.T) {
 	res, err := fm.CreateResource(ctx,
 		newResourceIdentForTesting("", "worker-1", "resource-1"))
 	require.NoError(t, err)
-	res1, ok := res.(*FileResourceDescriptor)
+	res1, ok := res.(*resourceDescriptor)
 	require.True(t, ok)
-	require.Equal(t, &FileResourceDescriptor{
+	require.Equal(t, &resourceDescriptor{
 		BasePath: dir,
 		Ident: internal.ResourceIdent{
 			Name: "resource-1",
@@ -82,9 +82,9 @@ func TestFileManagerBasics(t *testing.T) {
 	// Creates resource-2
 	res, err = fm.CreateResource(ctx, newResourceIdentForTesting("", "worker-1", "resource-2"))
 	require.NoError(t, err)
-	res2, ok := res.(*FileResourceDescriptor)
+	res2, ok := res.(*resourceDescriptor)
 	require.True(t, ok)
-	require.Equal(t, &FileResourceDescriptor{
+	require.Equal(t, &resourceDescriptor{
 		BasePath: dir,
 		Ident: internal.ResourceIdent{
 			Name: "resource-2",
@@ -136,7 +136,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 			fmt.Sprintf("worker-%d", i),
 			fmt.Sprintf("resource-%d-1", i)))
 		require.NoError(t, err)
-		res1, ok := res.(*FileResourceDescriptor)
+		res1, ok := res.(*resourceDescriptor)
 		require.True(t, ok)
 
 		storage, err := newBrStorageForLocalFile(res1.AbsolutePath())
@@ -156,7 +156,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 			fmt.Sprintf("worker-%d", i),
 			fmt.Sprintf("resource-%d-2", i)))
 		require.NoError(t, err)
-		res2, ok := res.(*FileResourceDescriptor)
+		res2, ok := res.(*resourceDescriptor)
 		require.True(t, ok)
 
 		storage, err = newBrStorageForLocalFile(res2.AbsolutePath())
@@ -265,18 +265,18 @@ func TestPreCheckConfig(t *testing.T) {
 
 	// Happy path
 	dir := t.TempDir()
-	err := PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: dir}})
+	err := PreCheckConfig(resModel.LocalFileConfig{BaseDir: dir})
 	require.NoError(t, err)
 
 	// Directory does not exist but can be created.
 	baseDir := filepath.Join(dir, "not-exist")
-	err = PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}})
+	err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
 	require.NoError(t, err)
 
 	// Directory exists but not writable
 	baseDir = filepath.Join(dir, "not-writable")
 	require.NoError(t, os.MkdirAll(baseDir, 0o400))
-	err = PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}})
+	err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrLocalFileDirNotWritable.*", err)
 }

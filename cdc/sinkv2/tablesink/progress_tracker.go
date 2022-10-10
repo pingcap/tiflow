@@ -28,7 +28,7 @@ import (
 
 const (
 	// waitingInterval is the interval to wait for the all callbacks be called.
-	// It used for close the table sink.
+	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
@@ -229,7 +229,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 	return r.lastMinResolvedTs
 }
 
-// trackingCount returns the number of pending events and resolved tss.
+// trackingCount returns the number of pending events and resolved timestamps.
 // Notice: must hold the lock.
 func (r *progressTracker) trackingCount() int {
 	r.mu.Lock()
