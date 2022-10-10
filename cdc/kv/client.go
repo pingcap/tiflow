@@ -1344,11 +1344,11 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
+	// Allocate a buffer with 1.5x length than average to reduce reallocate.
+	buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
 	statefulEvents := make([]*regionStatefulEvent, worker.inputSlots)
 	// split resolved ts
 	for i := 0; i < worker.inputSlots; i++ {
-		// Allocate a buffer with 1.5x length than average to reduce reallocate.
-		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = &regionStatefulEvent{
 			resolvedTsEvent: &resolvedTsEvent{
 				resolvedTs: resolvedTs.Ts,
