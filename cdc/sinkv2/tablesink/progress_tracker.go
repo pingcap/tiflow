@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +57,9 @@ type pendingResolvedTs struct {
 // Every event is associated with a `eventID` which is a continuous number. `eventID`
 // can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
+	// changefeedID is used to identify the changefeed.
+	changefeedID model.ChangeFeedID
+
 	// tableID is the table ID of the table sink.
 	tableID model.TableID
 
@@ -86,23 +91,29 @@ type progressTracker struct {
 	resolvedTsCache []pendingResolvedTs
 
 	lastMinResolvedTs model.ResolvedTs
+
+	// Metrics.
+	progressAdvanceDuration prometheus.Observer
 }
 
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker(tableID model.TableID, bufferSize uint64) *progressTracker {
+func newProgressTracker(changefeedID model.ChangeFeedID, tableID model.TableID, bufferSize uint64) *progressTracker {
 	if bufferSize%8 != 0 {
 		panic("bufferSize must be align to 8 bytes")
 	}
 
 	return &progressTracker{
-		tableID:    tableID,
-		bufferSize: bufferSize / 8,
+		changefeedID: changefeedID,
+		tableID:      tableID,
+		bufferSize:   bufferSize / 8,
 		// It means the start of the table.
 		// It's Ok to use 0 here.
 		// Because sink node only update the checkpoint when it's growing.
 		lastMinResolvedTs: model.NewResolvedTs(0),
+		progressAdvanceDuration: metrics.TableSinkProgressAdvanceHistogram.WithLabelValues(
+			changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -157,6 +168,11 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 
 // advance tries to move forward the tracker and returns the latest resolved timestamp.
 func (r *progressTracker) advance() model.ResolvedTs {
+	start := time.Now()
+	defer func() {
+		r.progressAdvanceDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -263,6 +279,8 @@ func (r *progressTracker) close(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-blockTicker.C:
 			log.Warn("Close process doesn't return in time, may be stuck",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID),
 				zap.Int64("tableID", r.tableID),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.advance()),

@@ -44,13 +44,13 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 10), // 128K~128M
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecDDLHistogram records the exexution time of a DDL.
+	// ExecDDLHistogram records the execution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
 			Name:      "ddl_exec_duration",
-			Help:      "Bucketed histogram of processing time (s) of a ddl.",
+			Help:      "Bucketed histogram of processing time of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
@@ -62,6 +62,16 @@ var (
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+
+	// TableSinkProgressAdvanceHistogram records the duration of advancing table sink progress.
+	TableSinkProgressAdvanceHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "table_sink_progress_advance_duration",
+			Help:      "Bucketed histogram of processing time of advancing table sink progress.",
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file.
@@ -70,6 +80,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
+	registry.MustRegister(TableSinkProgressAdvanceHistogram)
 
 	txn.InitMetrics(registry)
 	mq.InitMetrics(registry)

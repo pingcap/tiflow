@@ -64,7 +64,7 @@ func New[E eventsink.TableEvent](
 		eventID:                   0,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
-		progressTracker:           newProgressTracker(tableID, defaultBufferSize),
+		progressTracker:           newProgressTracker(changefeedID, tableID, defaultBufferSize),
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
