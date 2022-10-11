@@ -159,6 +159,7 @@ func (c *Case) Run(ctx context.Context) error {
 	if err := c.diffDataLoop(ctx); err != nil {
 		return err
 	}
+	log.L().Info("full mode of the task has completed", zap.String("name", c.name), zap.String("job_id", c.jobID))
 	return c.incrLoop(ctx)
 }
 

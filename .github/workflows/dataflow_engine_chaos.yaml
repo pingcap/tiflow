@@ -256,6 +256,17 @@ jobs:
           kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
           kubectl get pods
 
+      # FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+      - name: Wait DM enter sync stage
+        run: |
+          for idx in $(seq 0 300); do
+            echo "wait dm enter sync stage"
+            if kubectl logs job.batch/chaos-test-case | grep "full mode of the task has completed" ; then
+              break
+            fi
+            sleep 1
+          done
+
       - name: Encode chaos-mesh action
         run: |
           echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
