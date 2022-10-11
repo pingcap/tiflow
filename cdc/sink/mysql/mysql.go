@@ -341,7 +341,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 
 		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Failed to rollback", zap.Error(err))
@@ -368,7 +368,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) == 0 {
+	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
 	}
 	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
