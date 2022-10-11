@@ -8,7 +8,6 @@ echo "start deploying engine cluster..."
 
 retry_times=3
 i=1
-set -e
 while [ $i -le $retry_times ]; do
 	echo "The ${i} times to try to start engine cluster..."
 	run_engine.sh deploy "$@" && break
@@ -17,7 +16,6 @@ while [ $i -le $retry_times ]; do
 	echo "start engine cluster failed, retry later..."
     sleep 3
 done
-set +e
 
 if [ $i -gt $retry_times ]; then
 	echo -e "\n\n[$(date)] <<<<<< fail to start engine cluster after $retry_times times >>>>>>"
