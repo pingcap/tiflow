@@ -41,19 +41,27 @@ var privNeedGlobal = map[mysql.PrivilegeType]struct{}{
 
 // SourceDumpPrivilegeChecker checks dump privileges of source DB.
 type SourceDumpPrivilegeChecker struct {
-	db          *sql.DB
-	dbinfo      *dbutil.DBConfig
-	checkTables []*filter.Table
-	consistency string
+	db                *sql.DB
+	dbinfo            *dbutil.DBConfig
+	checkTables       []*filter.Table
+	consistency       string
+	dumpWholeInstance bool
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
-func NewSourceDumpPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, checkTables []*filter.Table, consistency string) RealChecker {
+func NewSourceDumpPrivilegeChecker(
+	db *sql.DB,
+	dbinfo *dbutil.DBConfig,
+	checkTables []*filter.Table,
+	consistency string,
+	dumpWholeInstance bool,
+) RealChecker {
 	return &SourceDumpPrivilegeChecker{
-		db:          db,
-		dbinfo:      dbinfo,
-		checkTables: checkTables,
-		consistency: consistency,
+		db:                db,
+		dbinfo:            dbinfo,
+		checkTables:       checkTables,
+		consistency:       consistency,
+		dumpWholeInstance: dumpWholeInstance,
 	}
 }
 
@@ -84,6 +92,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		dumpPrivileges[mysql.LockTablesPriv] = struct{}{}
 	}
 
+	// How to express global priv?
 	lackPriv := genDumpPriv(dumpPrivileges, pc.checkTables)
 	err2 := verifyPrivilegesWithResult(result, grants, lackPriv)
 	if err2 != nil {
@@ -201,7 +210,9 @@ func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]map[string]map[strin
 
 // VerifyPrivileges verify user privileges, returns lacked privileges. this function modifies lackPriv in place.
 // we expose it so other component can reuse it.
-func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{},
+func VerifyPrivileges(
+	grants []string,
+	lackPriv map[mysql.PrivilegeType]map[string]map[string]struct{},
 ) (map[mysql.PrivilegeType]map[string]map[string]struct{}, error) {
 	if len(grants) == 0 {
 		return nil, errors.New("there is no such grant defined for current user on host '%%'")
@@ -341,7 +352,10 @@ func VerifyPrivileges(grants []string, lackPriv map[mysql.PrivilegeType]map[stri
 }
 
 // lackPriv map privilege => schema => table.
-func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables []*filter.Table) map[mysql.PrivilegeType]map[string]map[string]struct{} {
+func genExpectPriv(
+	privileges map[mysql.PrivilegeType]struct{},
+	checkTables []*filter.Table,
+) map[mysql.PrivilegeType]map[string]map[string]struct{} {
 	lackPriv := make(map[mysql.PrivilegeType]map[string]map[string]struct{}, len(privileges))
 	for p := range privileges {
 		if _, ok := privNeedGlobal[p]; ok {

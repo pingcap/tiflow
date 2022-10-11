@@ -78,9 +78,10 @@ type Checker struct {
 
 	instances []*mysqlInstance
 
-	checkList     []checker.RealChecker
-	checkingItems map[string]string
-	result        struct {
+	checkList         []checker.RealChecker
+	checkingItems     map[string]string
+	dumpWholeInstance bool
+	result            struct {
 		sync.RWMutex
 		detail *checker.Results
 	}
