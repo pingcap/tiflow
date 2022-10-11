@@ -95,7 +95,7 @@ type regionWorker struct {
 	// event handlers in region worker
 	handles []workerpool.EventHandle
 	// how many workers in worker pool will be used for this region worker
-	concurrent    int
+	concurrency   int
 	statesManager *regionStateManager
 
 	rtsManager  *regionTsManager
@@ -107,8 +107,6 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
-	// total input slots
-	inputSlots int
 }
 
 func newRegionWorker(
@@ -143,15 +141,14 @@ func newRegionWorker(
 		rtsManager:    newRegionTsManager(),
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
-		concurrent:    s.client.config.WorkerConcurrent,
+		concurrency:   s.client.config.WorkerConcurrent,
 		metrics:       metrics,
 		inputPending:  0,
-		inputSlots:    s.client.config.WorkerConcurrent,
 	}
 }
 
 func (w *regionWorker) inputCalcSlot(regionID uint64) int {
-	return int(regionID) % w.concurrent
+	return int(regionID) % w.concurrency
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -393,8 +390,8 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 }
 
 func (w *regionWorker) initPoolHandles() {
-	handles := make([]workerpool.EventHandle, 0, w.concurrent)
-	for i := 0; i < w.concurrent; i++ {
+	handles := make([]workerpool.EventHandle, 0, w.concurrency)
+	for i := 0; i < w.concurrency; i++ {
 		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
 			event := eventI.(*regionStatefulEvent)
 			return w.processEvent(ctx, event)

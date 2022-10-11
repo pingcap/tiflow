@@ -1160,10 +1160,10 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
-	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
-	for i := 0; i < worker.inputSlots; i++ {
+	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
+	for i := 0; i < worker.concurrency; i++ {
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
-		buffLen := len(events) / worker.inputSlots * 3 / 2
+		buffLen := len(events) / worker.concurrency * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
@@ -1245,11 +1245,11 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
-	statefulEvents := make([]*regionStatefulEvent, worker.inputSlots)
+	statefulEvents := make([]*regionStatefulEvent, worker.concurrency)
 	// split resolved ts
-	for i := 0; i < worker.inputSlots; i++ {
+	for i := 0; i < worker.concurrency; i++ {
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
-		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
+		buffLen := len(resolvedTs.Regions) / worker.concurrency * 3 / 2
 		statefulEvents[i] = &regionStatefulEvent{
 			resolvedTsEvent: &resolvedTsEvent{
 				resolvedTs: resolvedTs.Ts,
