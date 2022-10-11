@@ -83,7 +83,7 @@ func benchmarkGetRegionState(b *testing.B, bench func(b *testing.B, sm regionSta
 	for _, count := range regionCount {
 		sm := newRegionStateManager(-1)
 		// uncomment the code below to enable the benchmark for `sync.Map`
-		//sm := newRegionStateManagerWithSyncMap(-1)
+		// sm := newRegionStateManagerWithSyncMap(-1)
 		for i := 0; i < count; i++ {
 			sm.setState(uint64(i+10000), state)
 		}
