@@ -155,5 +155,12 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 		}
 		return nil, errOut
 	}
+
+	log.With(
+		zap.String("method", info.FullMethod),
+		zap.Any("request", req),
+		zap.Any("response", resp),
+	).Debug("request handled successfully")
+
 	return resp, nil
 }
