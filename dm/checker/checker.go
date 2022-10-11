@@ -218,7 +218,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				if err != nil {
 					return err
 				}
-				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
+				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
+					instance.sourceDB.DB,
+					instance.sourceDBinfo,
+					checkTables,
+					exportCfg.Consistency,
+					false,
+				))
 			}
 		}
 		if instance.cfg.Mode != config.ModeFull {
