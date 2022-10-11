@@ -256,7 +256,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []interface{}) {
 	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &buf)
 	if err := stmt.Restore(restoreCtx); err != nil {
 		log.L().DPanic("failed to generate multi-row UPDATE",
-			zap.Int("number of changes", len(changes)),
+			zap.Int("numberOfChanges", len(changes)),
 			zap.Error(err))
 		return "", nil
 	}
