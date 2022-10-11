@@ -280,9 +280,8 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col3`=VALUES(`col3`),`name`=VALUES(`name`)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col3`=VALUES(`col3`),`name`=VALUES(`name`)",
-		"UPDATE `db2`.`tb2` SET `id` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
-		"UPDATE `db2`.`tb2` SET `id` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
-		"UPDATE `db2`.`tb2` SET `id` = ?, `col3` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, `col2`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, `name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END WHERE `id` IN (?,?)",
+		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id`=? THEN ? END, `col3`=CASE WHEN `id`=? THEN ? END, `name`=CASE WHEN `id`=? THEN ? END WHERE `id` IN (?)",
 		"DELETE FROM `db2`.`tb2` WHERE (`id`) IN ((?),(?),(?))",
 
 		// table1
@@ -320,9 +319,8 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		{3, 3, "cc"},
 		{1, 4, "aa", 2, 5, "bb"},
 		{3, 6, "cc"},
-		{4, 4, "aa", 1},
-		{5, 5, "bb", 2},
-		{6, 6, "cc", 3},
+		{1, 4, 2, 5, 1, 4, 2, 5, 1, "aa", 2, "bb", 1, 2},
+		{3, 6, 3, 6, 3, "cc", 3},
 		{4, 5, 6},
 
 		// table1
