@@ -173,10 +173,8 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 			ID:         cfID.ID,
 		}
 
-		if cfInfo != nil {
-			resp.FeedState = cfInfo.State
-			resp.RunningError = cfInfo.Error
-		}
+		resp.FeedState = cfInfo.State
+		resp.RunningError = cfInfo.Error
 
 		if cfStatus != nil {
 			resp.CheckpointTSO = cfStatus.CheckpointTs

@@ -14,7 +14,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,6 +171,6 @@ func TestChangefeedCreateCli(t *testing.T) {
 	cmd = newCmdCreateChangefeed(f)
 	o := newCreateChangefeedOptions(newChangefeedCommonOptions())
 	o.commonChangefeedOptions.sortDir = "/tmp/test"
-	require.NoError(t, o.complete(context.Background(), f, cmd))
+	require.NoError(t, o.complete(f, cmd))
 	require.Contains(t, o.validate(cmd).Error(), "creating changefeed with `--sort-dir`")
 }

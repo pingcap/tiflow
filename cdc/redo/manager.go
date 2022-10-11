@@ -36,6 +36,7 @@ import (
 )
 
 var (
+	// flushIntervalInMs is the minimum value of flush interval
 	flushIntervalInMs int64 = 2000 // 2 seconds
 	flushTimeout            = time.Second * 20
 
@@ -230,7 +231,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		m.writer = writer.NewBlackHoleWriter()
 	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
-		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
+		// When an external storage such S3 is used, we use redoDir as a temporary dir to store redo logs
+		// before we flush them to S3.
 		var redoDir string
 		if changeFeedID.Namespace == model.DefaultNamespace {
 			redoDir = filepath.Join(globalConf.DataDir,
@@ -240,8 +242,9 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 				config.DefaultRedoDir,
 				changeFeedID.Namespace, changeFeedID.ID)
 		}
+
+		// When local storage or NFS is used, we use redoDir as the final storage path.
 		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
-			// When using local or nfs as backend, store redo logs to redoDir directly.
 			redoDir = uri.Path
 		}
 
@@ -457,6 +460,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 }
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
+// only owner should call this method.
 func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	common.RedoWriteLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
@@ -554,8 +558,6 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 		m.postFlush(tableRtsMap, minResolvedTs)
 		m.postFlushMeta(metaCheckpoint, metaResolved)
 	}()
-
-	return
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
@@ -568,7 +570,7 @@ func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts
 
 func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	// logErrCh is used to retrieve errors from log flushing goroutines.
-	// if the channel is full, it's better to block subsequent flushings.
+	// if the channel is full, it's better to block subsequent flushing goroutines.
 	logErrCh := make(chan error, 1)
 	handleErr := func(err error) { logErrCh <- err }
 
@@ -636,7 +638,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 		}
 	}
 
-	// NOTE: the goroutine should never exit until the err is put into errCh successfully
+	// NOTE: the goroutine should never exit until the error is put into errCh successfully
 	// or the context is canceled.
 	select {
 	case <-ctx.Done():
