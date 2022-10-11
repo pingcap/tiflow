@@ -211,6 +211,9 @@ func (c *Case) diffData(ctx context.Context) (bool, error) {
 	for _, tableName := range c.tables {
 		row := c.target.db.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT count(1) FROM %s", dbutil.TableName(c.target.currDB, tableName)))
 		if row.Err() != nil {
+			if row.Err() == context.DeadlineExceeded {
+				return false, nil
+			}
 			return false, row.Err()
 		}
 		var count int
