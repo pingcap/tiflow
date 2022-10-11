@@ -348,7 +348,7 @@ func (w *Writer) close() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	defer dirFile.Close()
-	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	// sync the dir to guarantee the renamed file is persisted to disk.
 	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

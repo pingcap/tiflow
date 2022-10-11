@@ -19,14 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testElem struct {
-	id int
-}
-
-func (e *testElem) NodeID(other *testElem) bool {
-	return e.id == other.id
-}
-
 func TestSlotsTrivial(t *testing.T) {
 	t.Parallel()
 

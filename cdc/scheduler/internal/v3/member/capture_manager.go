@@ -157,10 +157,7 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 			return false
 		}
 	}
-	if len(c.Captures) == 0 {
-		return false
-	}
-	return true
+	return len(c.Captures) != 0
 }
 
 // Tick advances the logical lock of capture manager and produce heartbeat when

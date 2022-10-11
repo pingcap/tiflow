@@ -39,6 +39,7 @@ var _ Broker = (*LocalBroker)(nil)
 type LocalBroker struct {
 	*DefaultBroker
 
+	config   *resModel.Config
 	clientMu sync.Mutex
 	client   *manager.MockClient
 
@@ -54,8 +55,13 @@ func NewBrokerForTesting(executorID resModel.ExecutorID) *LocalBroker {
 	}
 	cfg := &resModel.Config{Local: resModel.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewMockClient()
+	broker, err := NewBroker(cfg, executorID, client)
+	if err != nil {
+		log.Panic("failed to create broker")
+	}
 	return &LocalBroker{
-		DefaultBroker: NewBroker(cfg, executorID, client),
+		DefaultBroker: broker,
+		config:        cfg,
 		client:        client,
 	}
 }

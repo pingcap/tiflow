@@ -14,68 +14,13 @@
 package metrics
 
 import (
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
 const largeRowSizeLowBound = 128 * 1024
-
-// ---------- Metrics for txn sink and backends. ---------- //
-var (
-	// ConflictDetectDuration records the duration of detecting conflict.
-	ConflictDetectDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_conflict_detect_duration",
-			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
-		}, []string{"namespace", "changefeed"})
-
-	TxnWorkerFlushDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_worker_flush_duration",
-			Help:      "Flush duration (s) for txn worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
-		}, []string{"namespace", "changefeed"})
-
-	TxnWorkerBusyRatio = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_worker_busy_ratio",
-			Help:      "Busy ratio (X ms in 1s) for all workers.",
-		}, []string{"namespace", "changefeed"})
-
-	TxnWorkerHandledRows = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_worker_handled_rows",
-			Help:      "Busy ratio (X ms in 1s) for all workers.",
-		}, []string{"namespace", "changefeed", "id"})
-
-	TxnSinkDMLBatchCommit = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_sink_dml_batch_commit",
-			Help:      "Duration of committing a DML batch",
-			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1000s
-		}, []string{"namespace", "changefeed"})
-
-	TxnSinkDMLBatchCallback = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "txn_sink_dml_batch_callback",
-			Help:      "Duration of execuing a batch of callbacks",
-			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1000s
-		}, []string{"namespace", "changefeed"})
-)
 
 // ---------- Metrics used in Statistics. ---------- //
 var (
@@ -119,20 +64,13 @@ var (
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 )
 
-// InitMetrics registers all metrics in this file
+// InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(ConflictDetectDuration)
-	registry.MustRegister(TxnWorkerFlushDuration)
-	registry.MustRegister(TxnWorkerBusyRatio)
-	registry.MustRegister(TxnWorkerHandledRows)
-	registry.MustRegister(TxnSinkDMLBatchCommit)
-	registry.MustRegister(TxnSinkDMLBatchCallback)
-
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 
-	// Register Kafka producer and broker metrics.
-	kafka.InitMetrics(registry)
+	txn.InitMetrics(registry)
+	mq.InitMetrics(registry)
 }

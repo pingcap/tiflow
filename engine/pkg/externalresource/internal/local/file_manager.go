@@ -60,8 +60,8 @@ func NewLocalFileManager(executorID model.ExecutorID, config resModel.LocalFileC
 func (m *FileManager) CreateResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
-	m.validateIdent(ident)
-	res := &FileResourceDescriptor{
+	m.validateExecutor(ident.Executor, ident)
+	res := &resourceDescriptor{
 		BasePath: m.config.BaseDir,
 		Ident:    ident,
 	}
@@ -81,8 +81,8 @@ func (m *FileManager) GetPersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	// For local file, an executor can only access resources that are created by itself.
-	m.validateIdent(ident)
-	res := &FileResourceDescriptor{
+	m.validateExecutor(ident.Executor, ident)
+	res := &resourceDescriptor{
 		BasePath: m.config.BaseDir,
 		Ident:    ident,
 	}
@@ -114,6 +114,7 @@ func (m *FileManager) GetPersistedResource(
 func (m *FileManager) RemoveTemporaryFiles(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
+	m.validateExecutor(scope.Executor, scope)
 	creator := scope.WorkerID
 	log.Info("Start cleaning temporary files",
 		zap.String("worker-id", creator))
@@ -169,7 +170,7 @@ func (m *FileManager) RemoveTemporaryFiles(
 func (m *FileManager) RemoveResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	m.validateIdent(ident)
+	m.validateExecutor(ident.Executor, ident)
 	resName := ident.Name
 	creator := ident.WorkerID
 	if creator == "" {
@@ -207,9 +208,7 @@ func (m *FileManager) RemoveResource(
 	defer m.mu.Unlock()
 
 	if resources := m.persistedResourcesByCreator[creator]; resources != nil {
-		if _, ok := resources[resName]; ok {
-			delete(resources, resName)
-		}
+		delete(resources, resName)
 	}
 	return nil
 }
@@ -221,7 +220,7 @@ func (m *FileManager) RemoveResource(
 func (m *FileManager) SetPersisted(
 	ctx context.Context, ident internal.ResourceIdent,
 ) error {
-	m.validateIdent(ident)
+	m.validateExecutor(ident.Executor, ident)
 	resName := ident.Name
 	creator := ident.WorkerID
 
@@ -279,8 +278,8 @@ func iterOverResourceDirectories(path string, fn func(relPath string) error) err
 }
 
 // PreCheckConfig does a preflight check on the executor's storage configurations.
-func PreCheckConfig(config resModel.Config) error {
-	baseDir := config.Local.BaseDir
+func PreCheckConfig(config resModel.LocalFileConfig) error {
+	baseDir := config.BaseDir
 
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		log.Info("Configured local file directory does not existing, try to create one",
@@ -304,17 +303,12 @@ func PreCheckConfig(config resModel.Config) error {
 	return nil
 }
 
-func (m *FileManager) validateIdent(ident internal.ResourceIdent) {
+func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}) {
 	// Defensive verification to ensure that local resources are not accessible across nodes.
-	if ident.Executor != m.executorID {
+	if creator != m.executorID {
 		log.Panic("inconsistent executor ID of local file",
-			zap.Any("fileScope", ident),
-			zap.Any("creator", ident.Executor),
+			zap.Any("resource", res),
+			zap.Any("creator", creator),
 			zap.String("currentExecutor", string(m.executorID)))
 	}
-}
-
-// Close shuts down the FileManager.
-func (m *FileManager) Close() {
-	log.Info("Closing local file manager")
 }
