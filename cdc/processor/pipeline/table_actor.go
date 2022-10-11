@@ -42,10 +42,9 @@ import (
 )
 
 var (
-	_        tablepb.TablePipeline         = (*tableActor)(nil)
-	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
-	stopped                                = uint32(1)
-	workload                               = tablepb.Stats{}
+	_       tablepb.TablePipeline         = (*tableActor)(nil)
+	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                               = uint32(1)
 )
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for

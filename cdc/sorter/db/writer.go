@@ -145,8 +145,15 @@ func (w *writer) OnClose() {
 }
 
 func (w *writer) stats() sorter.Stats {
+	maxCommitTs := atomic.LoadUint64(&w.maxCommitTs)
+	maxResolvedTs := atomic.LoadUint64(&w.maxResolvedTs)
+	if maxCommitTs < maxResolvedTs {
+		// In case, there is no write for the table,
+		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
+		maxCommitTs = maxResolvedTs
+	}
 	return sorter.Stats{
-		CheckpointTsIngress: atomic.LoadUint64(&w.maxCommitTs),
-		ResolvedTsIngress:   atomic.LoadUint64(&w.maxResolvedTs),
+		CheckpointTsIngress: maxCommitTs,
+		ResolvedTsIngress:   maxResolvedTs,
 	}
 }

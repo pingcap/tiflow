@@ -378,7 +378,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		state.iter = iter
 		start := time.Now()
 		requestDuration := start.Sub(state.iterRequestTime)
-		state.metricIterRequest.Observe(float64(requestDuration.Seconds()))
+		state.metricIterRequest.Observe(requestDuration.Seconds())
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false

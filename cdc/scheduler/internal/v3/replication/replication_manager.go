@@ -525,18 +525,18 @@ func (r *Manager) CollectMetrics(currentTs int64) {
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
 			checkpointLag := float64(currentTs-phyCkpTs) / 1e3
 			slowestTableStageCheckpointTsLagGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(checkpointLag))
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
 			slowestTableStageCheckpointTsLagHistogramVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(float64(checkpointLag))
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
 			// Resolved ts
 			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
 			slowestTableStageResolvedTsGaugeVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
 			resolvedTsLag := float64(currentTs-phyRTs) / 1e3
 			slowestTableStageResolvedTsLagGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(resolvedTsLag))
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
 			slowestTableStageResolvedTsLagHistogramVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(float64(resolvedTsLag))
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
 		}
 		slowestTableRegionGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
