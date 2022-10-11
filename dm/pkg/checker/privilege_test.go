@@ -66,7 +66,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "db1", Name: "anomaly_score"},
 			},
-			// `db1`.`anomaly_score`; `INFORMATION_SCHEMA`
+			// `db1`.`anomaly_score`
 			// can't guarantee the order
 			errMatch: "lack of Select privilege: {.*}; ",
 		},
