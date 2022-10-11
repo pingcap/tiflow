@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	tableNum     = 5
-	rowNum       = 1000
-	batch        = 100
+	tableNum = 5
+	rowNum   = 1000
+	batch    = 100
 	// 5 minutes
 	diffTimes    = 150
 	diffInterval = 2 * time.Second
@@ -150,10 +150,10 @@ func (c *Case) Run(ctx context.Context) error {
 	defer func() {
 		log.L().Info("finish run case", zap.String("name", c.name), zap.String("job_id", c.jobID), zap.Int("insert", c.result[0]), zap.Int("update", c.result[1]), zap.Int("delete", c.result[2]))
 	}()
-	if err := c.createJob(ctx); err != nil {
+	if err := c.genFullData(); err != nil {
 		return err
 	}
-	if err := c.genFullData(); err != nil {
+	if err := c.createJob(ctx); err != nil {
 		return err
 	}
 	if err := c.diffDataLoop(ctx); err != nil {
