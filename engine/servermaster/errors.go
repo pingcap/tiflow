@@ -35,7 +35,7 @@ type JobAlreadyExistsError struct {
 	JobID string
 }
 
-// ErrJobNotTerminated indicates that a given job is in terminated state.
+// ErrJobNotTerminated indicates that a given job is not in terminated state.
 var ErrJobNotTerminated = rpcerror.Normalize[JobNotTerminatedError]()
 
 // JobNotTerminatedError provides details of an ErrJobNotTerminated.
