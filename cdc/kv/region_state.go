@@ -235,6 +235,12 @@ func (m *syncRegionFeedStateMap) len() int {
 	return len(m.states)
 }
 
+type regionStateManagerInterface interface {
+	getState(regionID uint64) (*regionFeedState, bool)
+	setState(regionID uint64, state *regionFeedState)
+	delState(regionID uint64)
+}
+
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
 // into several buckets to reduce lock contention
 type regionStateManager struct {
