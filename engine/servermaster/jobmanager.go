@@ -120,7 +120,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 	if err != nil {
 		return nil, err
 	}
-	if pbJob.State == pb.Job_Finished || pbJob.State == pb.Job_Canceled {
+	if pbJob.State == pb.Job_Finished || pbJob.State == pb.Job_Canceled || pbJob.State == pb.Job_Failed {
 		return pbJob, nil
 	}
 
