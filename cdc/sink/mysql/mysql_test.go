@@ -1622,9 +1622,11 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	ddl1 := &model.DDLEvent{
 		StartTs:  1000,
 		CommitTs: 1010,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "test",
-			Table:  "t1",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 		},
 		Type:  timodel.ActionAddColumn,
 		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
@@ -1646,8 +1648,8 @@ func TestNeedSwitchDB(t *testing.T) {
 	}{
 		{
 			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: ""},
 				},
 				Type: timodel.ActionCreateTable,
 			},
@@ -1655,8 +1657,8 @@ func TestNeedSwitchDB(t *testing.T) {
 		},
 		{
 			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "golang"},
 				},
 				Type: timodel.ActionCreateSchema,
 			},
@@ -1664,8 +1666,8 @@ func TestNeedSwitchDB(t *testing.T) {
 		},
 		{
 			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "golang"},
 				},
 				Type: timodel.ActionDropSchema,
 			},
@@ -1673,8 +1675,8 @@ func TestNeedSwitchDB(t *testing.T) {
 		},
 		{
 			&model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "golang",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "golang"},
 				},
 				Type: timodel.ActionCreateTable,
 			},

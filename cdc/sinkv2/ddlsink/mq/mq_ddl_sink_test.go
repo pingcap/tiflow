@@ -98,8 +98,10 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 
 	ddl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), primary key(id))",
 		Type:  mm.ActionCreateTable,
@@ -147,8 +149,10 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 
 	ddl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), primary key(id))",
 		Type:  mm.ActionCreateTable,
