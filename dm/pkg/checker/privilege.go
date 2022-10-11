@@ -32,14 +32,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-// some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
-// https://dev.mysql.com/doc/refman/5.7/en/grant.html#grant-global-privileges
-var defaultPrivNeedGlobal = map[mysql.PrivilegeType]struct{}{
-	mysql.ReloadPriv:            {},
-	mysql.ReplicationClientPriv: {},
-	mysql.ReplicationSlavePriv:  {},
-}
-
 type tablePriv struct {
 	wholeTable bool
 	columns    map[string]struct{}
