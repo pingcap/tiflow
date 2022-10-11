@@ -23,6 +23,11 @@ type Config struct {
 	S3    S3Config        `json:"s3" toml:"s3"`
 }
 
+// LocalEnabled returns true if the local storage is enabled
+func (c *Config) LocalEnabled() bool {
+	return c.Local.BaseDir != ""
+}
+
 // S3Enabled returns true if the S3 storage is enabled
 func (c *Config) S3Enabled() bool {
 	return c.S3.Bucket != "" && c.S3.Endpoint != "" &&
@@ -38,4 +43,5 @@ type LocalFileConfig struct {
 type S3Config struct {
 	brStorage.S3BackendOptions
 	Bucket string `json:"bucket" toml:"bucket"`
+	Prefix string `json:"prefix" toml:"prefix"`
 }

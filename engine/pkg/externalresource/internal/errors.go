@@ -70,6 +70,7 @@ type ResourceFilesNotFoundError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
 
 	Ident   ResourceIdent
+	URI     string
 	Details string
 }
 

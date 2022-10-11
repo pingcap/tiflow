@@ -173,10 +173,8 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 			ID:         cfID.ID,
 		}
 
-		if cfInfo != nil {
-			resp.FeedState = cfInfo.State
-			resp.RunningError = cfInfo.Error
-		}
+		resp.FeedState = cfInfo.State
+		resp.RunningError = cfInfo.Error
 
 		if cfStatus != nil {
 			resp.CheckpointTSO = cfStatus.CheckpointTs
@@ -760,7 +758,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&model.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&model.Capture{
+				ID:            c.ID,
+				IsOwner:       isOwner,
+				AdvertiseAddr: c.AdvertiseAddr,
+				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
+			})
 	}
 
 	c.IndentedJSON(http.StatusOK, captures)

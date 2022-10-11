@@ -91,7 +91,7 @@ type JobManagerImpl struct {
 	tombstoneCleaned    bool
 	jobOperator         jobop.JobOperator
 	jobOperatorNotifier *notify.Notifier
-	JobBackoffMgr       *jobop.BackoffManager
+	JobBackoffMgr       jobop.BackoffManager
 
 	// jobStatusChangeMu must be taken when we try to create, delete,
 	// pause or resume a job.
@@ -545,7 +545,7 @@ func NewJobManagerImpl(
 		notifier:            notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 		jobOperatorNotifier: new(notify.Notifier),
 		jobHTTPClient:       engineHTTPUtil.NewJobHTTPClient(httpCli),
-		JobBackoffMgr:       jobop.NewBackoffManager(clocker, backoffConfig),
+		JobBackoffMgr:       jobop.NewBackoffManagerImpl(clocker, backoffConfig),
 	}
 	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
@@ -596,6 +596,17 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *frameModel.MasterMeta) (string, error) {
+			isJobCanceling := jm.jobOperator.IsJobCanceling(ctx, job.ID)
+			if isJobCanceling || jm.JobBackoffMgr.Terminate(job.ID) {
+				state := frameModel.MasterStateFailed
+				if isJobCanceling {
+					state = frameModel.MasterStateStopped
+				}
+				if err := jm.terminateJob(ctx, job.ErrorMsg, job.ID, state); err != nil {
+					return "", err
+				}
+				return "", derrors.ErrMasterCreateWorkerTerminate.FastGenByArgs()
+			}
 			if !jm.JobBackoffMgr.Allow(job.ID) {
 				return "", derrors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
@@ -679,12 +690,8 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		if errIn, ok := pkgClient.ErrCreateWorkerTerminate.Convert(result); ok {
-			log.Warn("job master terminated",
-				zap.String("job-id", worker.ID()), zap.String("details", errIn.Details))
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-			defer cancel()
-			if err := jm.UpdateJobStatus(
-				ctx, worker.ID(), errIn.Details, frameModel.MasterStateFailed,
+			if err := jm.terminateJob(
+				context.Background(), errIn.Details, worker.ID(), frameModel.MasterStateFailed,
 			); err != nil {
 				return err
 			}
@@ -748,16 +755,15 @@ func (jm *JobManagerImpl) OnWorkerStatusUpdated(worker framework.WorkerHandle, n
 }
 
 // CloseImpl implements frame.MasterImpl.CloseImpl
-func (jm *JobManagerImpl) CloseImpl(ctx context.Context) error {
+func (jm *JobManagerImpl) CloseImpl(ctx context.Context) {
 	jm.notifier.Close()
 	jm.jobHTTPClient.Close()
 	jm.jobOperatorNotifier.Close()
-	return jm.wg.Wait()
 }
 
 // StopImpl implements frame.MasterImpl.StopImpl
-func (jm *JobManagerImpl) StopImpl(ctx context.Context) error {
-	return jm.CloseImpl(ctx)
+func (jm *JobManagerImpl) StopImpl(ctx context.Context) {
+	jm.CloseImpl(ctx)
 }
 
 // WatchJobStatuses returns a snapshot of job statuses followed by a stream
@@ -818,4 +824,14 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 			}
 		}
 	})
+}
+
+func (jm *JobManagerImpl) terminateJob(
+	ctx context.Context, errMsg string, jobID string, state frameModel.MasterState,
+) error {
+	log.Info("job master terminated", zap.String("job-id", jobID),
+		zap.String("error", errMsg), zap.Any("state", state))
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+	return jm.UpdateJobStatus(ctx, jobID, errMsg, state)
 }

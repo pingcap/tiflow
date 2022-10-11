@@ -1086,6 +1086,11 @@ error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
+["CDC:ErrStorageSinkInvalidDateSeparator"]
+error = '''
+date separator in cloud storage sink is invalid
+'''
+
 ["CDC:ErrSupportGetOnly"]
 error = '''
 this api supports GET method only
@@ -1194,6 +1199,11 @@ unmarshal failed
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed
+'''
+
+["CDC:ErrUpstreamClosed"]
+error = '''
+upstream has been closed
 '''
 
 ["CDC:ErrUpstreamManagerNotReady"]
@@ -1484,6 +1494,11 @@ master config contains unknown configuration options: %s
 ["DFLOW:ErrMasterCreateWorkerBackoff"]
 error = '''
 create worker is being backoff, retry later
+'''
+
+["DFLOW:ErrMasterCreateWorkerTerminate"]
+error = '''
+create worker is terminated, won't backoff any more
 '''
 
 ["DFLOW:ErrMasterDecodeConfigFile"]

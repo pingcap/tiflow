@@ -225,11 +225,10 @@ func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl(ctx context.Context) error {
+func (task *cvsTask) CloseImpl(ctx context.Context) {
 	if task.cancelFn != nil {
 		task.cancelFn()
 	}
-	return nil
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {

@@ -743,6 +743,29 @@ var doc = `{
         }
     },
     "definitions": {
+        "config.CSVConfig": {
+            "type": "object",
+            "properties": {
+                "date-separator": {
+                    "type": "string"
+                },
+                "delimiter": {
+                    "type": "string"
+                },
+                "include-commit-ts": {
+                    "type": "boolean"
+                },
+                "null": {
+                    "type": "string"
+                },
+                "quote": {
+                    "type": "string"
+                },
+                "terminator": {
+                    "type": "string"
+                }
+            }
+        },
         "config.ColumnSelector": {
             "type": "object",
             "properties": {
@@ -791,6 +814,9 @@ var doc = `{
                         "$ref": "#/definitions/config.ColumnSelector"
                     }
                 },
+                "csv": {
+                    "$ref": "#/definitions/config.CSVConfig"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
@@ -812,6 +838,9 @@ var doc = `{
             "type": "object",
             "properties": {
                 "address": {
+                    "type": "string"
+                },
+                "cluster_id": {
                     "type": "string"
                 },
                 "id": {

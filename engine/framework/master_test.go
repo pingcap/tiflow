@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -59,12 +60,18 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
 	// Restart the master
 	master.Reset()
+	defer func() {
+		master.deps.Construct(func(broker broker.Broker) (int, error) {
+			broker.Close()
+			return 0, nil
+		})
+	}()
 	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
 	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
 
@@ -112,7 +119,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		return master.TickCount() > 10
 	}, time.Millisecond*2000, time.Millisecond*10)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 

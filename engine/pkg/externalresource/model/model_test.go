@@ -20,14 +20,14 @@ import (
 )
 
 func TestParseResource(t *testing.T) {
-	tp, suffix, err := PasreResourceID("/local/my-local-resource/a/b/c")
+	tp, suffix, err := ParseResourceID("/local/my-local-resource/a/b/c")
 	require.NoError(t, err)
 	require.Equal(t, ResourceTypeLocalFile, tp)
 	require.Equal(t, "my-local-resource/a/b/c", suffix)
 
 	require.Equal(t, "/local/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
 
-	tp, suffix, err = PasreResourceID("/s3/my-local-resource/a/b/c")
+	tp, suffix, err = ParseResourceID("/s3/my-local-resource/a/b/c")
 	require.NoError(t, err)
 	require.Equal(t, ResourceTypeS3, tp)
 	require.Equal(t, "my-local-resource/a/b/c", suffix)

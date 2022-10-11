@@ -51,7 +51,7 @@ type RedoLogWriter interface {
 	// Regressions on them will be ignored.
 	FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error
 
-	// Get the current meta.
+	// GetMeta gets current meta.
 	GetMeta() (checkpointTs, resolvedTs model.Ts)
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only.
@@ -60,7 +60,7 @@ type RedoLogWriter interface {
 	// GC cleans stale files before the given checkpoint.
 	GC(ctx context.Context, checkpointTs model.Ts) error
 
-	// Close is used to closed the writer.
+	// Close is used to close the writer.
 	Close() error
 }
 
@@ -93,7 +93,9 @@ type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter fileWriter
 	ddlWriter fileWriter
-	storage   storage.ExternalStorage
+	// storage in LogWriter is used to write meta and clean up
+	// the redo log files when changefeed is created or deleted.
+	storage storage.ExternalStorage
 
 	meta *common.LogMeta
 
@@ -340,27 +342,58 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 		return
 	}
 
-	err = os.RemoveAll(l.cfg.Dir)
+	localFiles, err := os.ReadDir(l.cfg.Dir)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		if os.IsNotExist(err) {
+			log.Warn("read removed log dir fail", zap.Error(err))
+			return nil
+		}
+		return cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't read log file directory: %s", l.cfg.Dir))
+	}
+
+	fileNames := make([]string, 0, len(localFiles))
+	for _, file := range localFiles {
+		fileNames = append(fileNames, file.Name())
+	}
+	filteredFiles := common.FilterChangefeedFiles(fileNames, l.cfg.ChangeFeedID)
+
+	if len(filteredFiles) == len(fileNames) {
+		if err = os.RemoveAll(l.cfg.Dir); err != nil {
+			if os.IsNotExist(err) {
+				log.Warn("removed log dir fail", zap.Error(err))
+				return nil
+			}
+			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
+	} else {
+		for _, file := range filteredFiles {
+			if err = os.RemoveAll(filepath.Join(l.cfg.Dir, file)); err != nil {
+				if os.IsNotExist(err) {
+					log.Warn("removed log dir fail", zap.Error(err))
+					return nil
+				}
+				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			}
+		}
 	}
 
 	if !l.cfg.S3Storage {
 		return
 	}
 
-	var files []string
-	files, err = getAllFilesInS3(ctx, l)
+	var remoteFiles []string
+	remoteFiles, err = getAllFilesInS3(ctx, l)
 	if err != nil {
 		return err
 	}
-
-	err = l.deleteFilesInS3(ctx, files)
+	filteredFiles = common.FilterChangefeedFiles(remoteFiles, l.cfg.ChangeFeedID)
+	err = l.deleteFilesInS3(ctx, filteredFiles)
 	if err != nil {
 		return
 	}
 
-	// Write the delete marker before clean any files.
+	// Write deleted mark before clean any files.
 	err = l.writeDeletedMarkerToS3(ctx)
 	log.Info("redo manager write deleted mark",
 		zap.String("namespace", l.cfg.ChangeFeedID.Namespace),
@@ -548,7 +581,7 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	defer dirFile.Close()
-	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	// sync the dir to guarantee the renamed file is persisted to disk.
 	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

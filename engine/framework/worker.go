@@ -64,20 +64,40 @@ type Worker interface {
 // the implementation struct must embed the framework.BaseWorker interface, this
 // interface will be initialized by the framework.
 type WorkerImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
+	// InitImpl is called as the consequence of CreateWorker from jobmaster or failover,
+	// business logic is expected to do initialization here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is called as the first callback function of an WorkerImpl
+	//   instance, and it's not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
+	// Tick is called on a fixed interval after WorkerImpl is initialized, business
+	// logic can do some periodic tasks here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
 
-	// OnMasterMessage is called when worker receives master message
+	// OnMasterMessage is called when worker receives master message, business developer
+	// does not need to implement it.
+	// TODO: move it out of WorkerImpl and should not be concurrent with CloseImpl.
 	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
-	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
-	CloseImpl(ctx context.Context) error
+	// CloseImpl is called as the consequence of returning error from InitImpl or
+	// Tick, the Tick will be stopped after entering this function. Business logic
+	// is expected to release resources here, but business developer should be aware
+	// that when the runtime is crashed, CloseImpl has no time to be called.
+	// CloseImpl will only be called for once.
+	// TODO: no other callbacks will be called after CloseImpl
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
+	CloseImpl(ctx context.Context)
 }
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
@@ -375,10 +395,8 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doClose() {
 	if w.resourceBroker != nil {
-		// Closing the resource broker here will
-		// release all temporary file resources created by the worker.
-		// Since we only support local files for now, deletion is fast,
-		// so this method will block until it finishes.
+		// Closing the resource broker here will release all temporary file
+		// resources created by the worker.
 		w.resourceBroker.OnWorkerClosed(context.Background(), w.id, w.masterID)
 	}
 
@@ -420,12 +438,7 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
 	defer cancel()
 
-	err := w.Impl.CloseImpl(closeCtx)
-	if err != nil {
-		w.Logger().Warn("Failed to close worker",
-			zap.String("worker-id", w.id),
-			logutil.ShortError(err))
-	}
+	w.Impl.CloseImpl(closeCtx)
 }
 
 // Stop implements Worker.Stop, works the same as Worker.Close

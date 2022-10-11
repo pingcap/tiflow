@@ -171,15 +171,15 @@ func (m *ddlMaxwellMessage) encode() ([]byte, error) {
 func ddlEventToMaxwellMsg(e *model.DDLEvent) (*internal.MessageKey, *ddlMaxwellMessage) {
 	key := &internal.MessageKey{
 		Ts:     e.CommitTs,
-		Schema: e.TableInfo.Schema,
-		Table:  e.TableInfo.Table,
+		Schema: e.TableInfo.TableName.Schema,
+		Table:  e.TableInfo.TableName.Table,
 		Type:   model.MessageTypeDDL,
 	}
 	value := &ddlMaxwellMessage{
 		Ts:       e.CommitTs,
-		Database: e.TableInfo.Schema,
+		Database: e.TableInfo.TableName.Schema,
 		Type:     "table-create",
-		Table:    e.TableInfo.Table,
+		Table:    e.TableInfo.TableName.Table,
 		Old:      tableStruct{},
 		Def:      tableStruct{},
 		SQL:      e.Query,
@@ -188,29 +188,29 @@ func ddlEventToMaxwellMsg(e *model.DDLEvent) (*internal.MessageKey, *ddlMaxwellM
 	value.Type = ddlToMaxwellType(e.Type)
 
 	if e.PreTableInfo != nil {
-		value.Old.Database = e.PreTableInfo.Schema
-		value.Old.Table = e.PreTableInfo.Table
-		for _, v := range e.PreTableInfo.ColumnInfo {
-			maxwellcolumntype, _ := columnToMaxwellType(v.Type)
+		value.Old.Database = e.PreTableInfo.TableName.Schema
+		value.Old.Table = e.PreTableInfo.TableName.Table
+		for _, v := range e.PreTableInfo.TableInfo.Columns {
+			maxwellcolumntype, _ := columnToMaxwellType(v.FieldType.GetType())
 			value.Old.Columns = append(value.Old.Columns, &maxwellColumn{
-				Name: v.Name,
+				Name: v.Name.O,
 				Type: maxwellcolumntype,
 			})
 		}
 	}
 
-	value.Def.Database = e.TableInfo.Schema
-	value.Def.Table = e.TableInfo.Table
-	for _, v := range e.TableInfo.ColumnInfo {
-		maxwellcolumntype, err := columnToMaxwellType(v.Type)
+	value.Def.Database = e.TableInfo.TableName.Schema
+	value.Def.Table = e.TableInfo.TableName.Table
+	for _, v := range e.TableInfo.TableInfo.Columns {
+		maxwellcolumntype, err := columnToMaxwellType(v.FieldType.GetType())
 		if err != nil {
 			value.Old.Columns = append(value.Old.Columns, &maxwellColumn{
-				Name: v.Name,
+				Name: v.Name.O,
 				Type: err.Error(),
 			})
 		}
 		value.Def.Columns = append(value.Def.Columns, &maxwellColumn{
-			Name: v.Name,
+			Name: v.Name.O,
 			Type: maxwellcolumntype,
 		})
 	}

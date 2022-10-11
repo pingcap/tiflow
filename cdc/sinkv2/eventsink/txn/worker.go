@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -73,10 +73,10 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		backend: backend,
 		errCh:   errCh,
 
-		metricConflictDetectDuration: metrics.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerFlushDuration: metrics.TxnWorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerBusyRatio:     metrics.TxnWorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerHandledRows:   metrics.TxnWorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
+		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
 		flushInterval:     backend.MaxFlushInterval(),
 		hasPending:        false,
@@ -168,7 +168,7 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) onEvent(txn txnWithNotifier) bool {
-	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
+	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
@@ -180,10 +180,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
-	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-		return true
-	}
-	return false
+	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
 }
 
 // doFlush flushes the backend.
