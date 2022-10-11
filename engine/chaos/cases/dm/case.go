@@ -257,6 +257,11 @@ func (c *Case) randDML(source int, table string) (string, error) {
 	generator := c.generators[source][table]
 	mcp := c.mcps[source][table]
 	t := rand.Intn(3)
+	key := mcp.NextUK()
+	// no rows
+	if key == nil {
+		t = 0
+	}
 	c.result[t]++
 	switch t {
 	case 0:
@@ -278,9 +283,8 @@ func (c *Case) randDML(source int, table string) (string, error) {
 		c.keySet[table][uk.GetValueHash()] = struct{}{}
 		return sql, nil
 	case 1:
-		return generator.GenUpdateRow(mcp.NextUK())
+		return generator.GenUpdateRow(key)
 	default:
-		key := mcp.NextUK()
 		sql, err := generator.GenDeleteRow(key)
 		if err != nil {
 			return "", err
