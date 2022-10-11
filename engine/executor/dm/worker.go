@@ -73,9 +73,8 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
-	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Uint64("config_modify_revision", cfg.ModRevision))
-	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
-	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.Stringer("worker_type", f.workerType), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Any("task_config", cfg))
+	return newDMWorker(ctx, masterID, f.workerType, cfg), nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
@@ -100,23 +99,26 @@ type dmWorker struct {
 	masterID              frameModel.MasterID
 	messageHandlerManager p2p.MessageHandlerManager
 
-	cfgModRevision uint64
+	cfgModRevision   uint64
+	noNeedExtStorage bool
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, cfgModRevision uint64) *dmWorker {
+func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
+	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
 	w := &dmWorker{
-		cfg:            cfg,
-		stage:          metadata.StageInit,
-		workerType:     workerType,
-		taskID:         cfg.SourceID,
-		masterID:       masterID,
-		unitHolder:     newUnitHolderImpl(workerType, cfg),
-		autoResume:     autoResume,
-		cfgModRevision: cfgModRevision,
+		cfg:              dmSubtaskCfg,
+		stage:            metadata.StageInit,
+		workerType:       workerType,
+		taskID:           dmSubtaskCfg.SourceID,
+		masterID:         masterID,
+		unitHolder:       newUnitHolderImpl(workerType, dmSubtaskCfg),
+		autoResume:       autoResume,
+		cfgModRevision:   cfg.ModRevision,
+		noNeedExtStorage: cfg.NoNeedExtStorage,
 	}
 
 	// nolint:errcheck
@@ -135,7 +137,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
-	if w.cfg.Mode != dmconfig.ModeIncrement {
+	if w.cfg.Mode != dmconfig.ModeIncrement && !w.noNeedExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}
