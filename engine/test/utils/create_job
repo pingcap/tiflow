@@ -23,5 +23,27 @@ config=$(base64 -i ${job_config} | tr -d \\n)
 create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" '{ type: $TYPE, config: $CONFIG }')
 echo -e "\ncreate_job_json: $create_job_json \n" >/dev/stderr
 
-job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=${tenant_id}&project_id=${project_id})" | tee /dev/stderr | jq -r .id)
-echo "$job_id"
+job_id=""
+retry_time=15
+i=0
+set +e
+while [ $i -lt $retry_time ]; do
+	output=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=${tenant_id}&project_id=${project_id})" | tee /dev/stderr)
+	code=$(echo $output | jq -r .code)
+	if [ "$code" == "null" ]; then
+		job_id=$(echo $output | jq -r .id)
+		break
+	else
+		((i++))
+		echo -e "create job failed $i-th time, retry later, error: $output" >/dev/stderr
+		sleep 2
+	fi
+done
+set -e
+
+if [ $i -ge $retry_time ]; then
+	echo "create job failed at last"
+	exit 1
+else
+	echo $job_id
+fi
