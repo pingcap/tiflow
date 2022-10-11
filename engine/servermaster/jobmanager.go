@@ -120,7 +120,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 	if err != nil {
 		return nil, err
 	}
-	if pbJob.State == pb.Job_Finished || pbJob.State == pb.Job_Canceled || pbJob.State == pb.Job_Failed {
+	if isJobTerminated(meta.State) {
 		return pbJob, nil
 	}
 
@@ -166,14 +166,24 @@ func (jm *JobManagerImpl) DeleteJob(ctx context.Context, req *pb.DeleteJobReques
 		return nil, err
 	}
 
-	// Only stopped (canceled) jobs can be deleted.
-	if masterMeta.State != frameModel.MasterStateStopped && masterMeta.State != frameModel.MasterStateFinished {
-		return nil, ErrJobNotStopped.GenWithStack(&JobNotStoppedError{JobID: req.Id})
+	// Only terminated jobs can be deleted.
+	if !isJobTerminated(masterMeta.State) {
+		return nil, ErrJobNotTerminated.GenWithStack(&JobNotTerminatedError{JobID: req.Id})
 	}
+
 	if err := jm.deleteJobMeta(ctx, req.Id); err != nil {
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func isJobTerminated(state frameModel.MasterState) bool {
+	switch state {
+	case frameModel.MasterStateFinished, frameModel.MasterStateStopped, frameModel.MasterStateFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (jm *JobManagerImpl) deleteJobMeta(ctx context.Context, jobID string) error {
