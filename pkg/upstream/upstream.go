@@ -215,7 +215,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 // Close all resources.
 func (up *Upstream) Close() {
 	up.mu.Lock()
-	up.mu.Unlock()
+	defer up.mu.Unlock()
 	up.cancel()
 	if atomic.LoadInt32(&up.status) == closed ||
 		atomic.LoadInt32(&up.status) == closing {

@@ -21,7 +21,7 @@ import (
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 )
 
-func TestGenDeleteMultiValue(t *testing.T) {
+func TestGenDeleteMultiRows(t *testing.T) {
 	t.Parallel()
 
 	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
@@ -40,7 +40,69 @@ func TestGenDeleteMultiValue(t *testing.T) {
 	require.Equal(t, []interface{}{1, 3}, args)
 }
 
-func TestGenInsertMultiValue(t *testing.T) {
+func TestGenUpdateMultiRows(t *testing.T) {
+	t.Parallel()
+
+	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	source2 := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+
+	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
+	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
+
+	change1 := NewRowChange(source1, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI1, targetTI, nil)
+	change2 := NewRowChange(source2, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI2, targetTI, nil)
+	sql, args := GenUpdateSQL(change1, change2)
+
+	expectedSQL := "UPDATE `db`.`tb` SET " +
+		"`c`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END, " +
+		"`c2`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END, " +
+		"`c3`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END " +
+		"WHERE ROW(`c`,`c2`) IN (ROW(?,?),ROW(?,?))"
+	expectedArgs := []interface{}{
+		1, 2, 10, 4, 5, 40,
+		1, 2, 20, 4, 5, 50,
+		1, 2, 30, 4, 5, 60,
+		1, 2, 4, 5,
+	}
+
+	require.Equal(t, expectedSQL, sql)
+	require.Equal(t, expectedArgs, args)
+}
+
+func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
+	t.Parallel()
+
+	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	source2 := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+
+	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c2 INT, c3 INT, PRIMARY KEY (c))")
+	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (c INT, c2 INT, c3 INT, PRIMARY KEY (c))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c2 INT, c3 INT, PRIMARY KEY (c))")
+
+	change1 := NewRowChange(source1, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI1, targetTI, nil)
+	change2 := NewRowChange(source2, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI2, targetTI, nil)
+	sql, args := GenUpdateSQL(change1, change2)
+
+	expectedSQL := "UPDATE `db`.`tb` SET " +
+		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
+		"`c2`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
+		"`c3`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END " +
+		"WHERE `c` IN (?,?)"
+	expectedArgs := []interface{}{
+		1, 10, 4, 40,
+		1, 20, 4, 50,
+		1, 30, 4, 60,
+		1, 4,
+	}
+
+	require.Equal(t, expectedSQL, sql)
+	require.Equal(t, expectedArgs, args)
+}
+
+func TestGenInsertMultiRows(t *testing.T) {
 	t.Parallel()
 
 	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}

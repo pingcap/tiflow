@@ -48,6 +48,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/election"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -442,7 +443,7 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-func (s *Server) startForTest(ctx context.Context) (err error) {
+func (s *Server) startForTest() (err error) {
 	// TODO: implement mock-etcd and leader election
 
 	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
@@ -483,7 +484,7 @@ func (s *Server) Stop() {
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
-		return s.startForTest(ctx)
+		return s.startForTest()
 	}
 
 	err := s.registerMetaStore(ctx)
@@ -494,6 +495,10 @@ func (s *Server) Run(ctx context.Context) error {
 	// Elector relies on meta store, so it should be initialized after meta store.
 	if err := s.initElector(); err != nil {
 		return errors.Trace(err)
+	}
+
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
 	}
 
 	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
@@ -591,11 +596,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	s.resourceManagerService = externRescManager.NewService(
-		s.frameMetaClient,
-		s.executorManager,
-		s.masterRPCHook,
-	)
+	s.resourceManagerService = externRescManager.NewService(s.frameMetaClient, s.masterRPCHook)
 }
 
 func (s *Server) initElector() error {
@@ -694,7 +695,8 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 	registerRoutes(router, grpcMux, s.forwardJobAPI)
 
 	return &http.Server{
-		Handler: router,
+		Handler:           router,
+		ReadHeaderTimeout: time.Minute,
 	}, nil
 }
 
@@ -747,19 +749,6 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.ServeHTTP(w, r)
 	return nil
-}
-
-// member returns member information of the server
-func (s *Server) member() string {
-	m := &rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-	}
-	val, err := m.String()
-	if err != nil {
-		return s.name()
-	}
-	return val
 }
 
 // name is a shortcut to etcd name
@@ -885,7 +874,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("job manager exited")
 	}()
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients)
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	// TODO refactor this method to make it more readable and maintainable.

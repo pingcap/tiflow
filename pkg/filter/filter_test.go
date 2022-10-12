@@ -320,7 +320,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}, "")
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			tableInfo := &model.SimpleTableInfo{Schema: tc.schema, Table: tc.table}
+			tableInfo := &model.TableInfo{TableName: model.TableName{Schema: tc.schema, Table: tc.table}}
 			ddl := &model.DDLEvent{StartTs: tc.startTs, TableInfo: tableInfo, Query: tc.query}
 			ignore, err := filter.ShouldIgnoreDDLEvent(ddl)
 			require.Nil(t, err, "%#v", tc)
