@@ -77,6 +77,7 @@ func TestSorterResolvedTs(t *testing.T) {
 }
 
 type checkSorter struct {
+	sorter.EventSorter
 	ch chan *model.PolymorphicEvent
 }
 

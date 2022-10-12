@@ -282,13 +282,11 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		return nil, status.Errorf(codes.InvalidArgument, "job type %v is not supported", job.Type)
 	}
 
-	// Store job master metadata before creating it.
-	// FIXME: note the following two operations are not atomic. We should use
-	//  a transaction or an insert statement to avoid inconsistent result.
-	if _, err := jm.frameMetaClient.GetJobByID(ctx, job.Id); err == nil {
-		return nil, ErrJobAlreadyExists.GenWithStack(&JobAlreadyExistsError{JobID: job.Id})
-	}
-	if err := metadata.StoreMasterMeta(ctx, jm.frameMetaClient, meta); err != nil {
+	// create job master metadata before creating it.
+	if err := jm.frameMetaClient.InsertJob(ctx, meta); err != nil {
+		if pkgOrm.IsDuplicateEntryError(err) {
+			return nil, ErrJobAlreadyExists.GenWithStack(&JobAlreadyExistsError{JobID: job.Id})
+		}
 		return nil, err
 	}
 
