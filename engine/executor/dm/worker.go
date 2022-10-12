@@ -99,8 +99,8 @@ type dmWorker struct {
 	masterID              frameModel.MasterID
 	messageHandlerManager p2p.MessageHandlerManager
 
-	cfgModRevision   uint64
-	noNeedExtStorage bool
+	cfgModRevision uint64
+	needExtStorage bool
 }
 
 func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
@@ -110,15 +110,15 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
 	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
 	w := &dmWorker{
-		cfg:              dmSubtaskCfg,
-		stage:            metadata.StageInit,
-		workerType:       workerType,
-		taskID:           dmSubtaskCfg.SourceID,
-		masterID:         masterID,
-		unitHolder:       newUnitHolderImpl(workerType, dmSubtaskCfg),
-		autoResume:       autoResume,
-		cfgModRevision:   cfg.ModRevision,
-		noNeedExtStorage: cfg.NoNeedExtStorage,
+		cfg:            dmSubtaskCfg,
+		stage:          metadata.StageInit,
+		workerType:     workerType,
+		taskID:         dmSubtaskCfg.SourceID,
+		masterID:       masterID,
+		unitHolder:     newUnitHolderImpl(workerType, dmSubtaskCfg),
+		autoResume:     autoResume,
+		cfgModRevision: cfg.ModRevision,
+		needExtStorage: cfg.NeedExtStorage,
 	}
 
 	// nolint:errcheck
@@ -137,7 +137,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
-	if w.cfg.Mode != dmconfig.ModeIncrement && !w.noNeedExtStorage {
+	if w.cfg.Mode != dmconfig.ModeIncrement && w.needExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}

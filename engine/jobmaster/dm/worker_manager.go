@@ -258,8 +258,8 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
-		if nextUnit == frameModel.WorkerDMSync && !isFresh {
-			taskCfg.NoNeedExtStorage = true
+		if nextUnit != frameModel.WorkerDMSync || isFresh {
+			taskCfg.NeedExtStorage = true
 		}
 
 		// createWorker should be an asynchronous operation

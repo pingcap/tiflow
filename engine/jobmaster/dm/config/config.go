@@ -262,7 +262,7 @@ type TaskCfg struct {
 	JobCfg
 
 	// FIXME: remove this item after fix https://github.com/pingcap/tiflow/issues/7304
-	NoNeedExtStorage bool
+	NeedExtStorage bool
 }
 
 // ToJobCfg converts TaskCfg to JobCfg.
