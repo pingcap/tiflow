@@ -15,8 +15,8 @@ package cvs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"github.com/goccy/go-json"
 	"sync"
 	"time"
 	"unsafe"

@@ -14,7 +14,7 @@
 package relay
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"

@@ -15,7 +15,7 @@ package server
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

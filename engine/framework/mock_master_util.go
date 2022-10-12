@@ -18,7 +18,7 @@ package framework
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 
 	"github.com/golang/mock/gomock"

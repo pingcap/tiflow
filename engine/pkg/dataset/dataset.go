@@ -15,7 +15,7 @@ package dataset
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"

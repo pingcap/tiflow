@@ -16,7 +16,7 @@ package avro
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"

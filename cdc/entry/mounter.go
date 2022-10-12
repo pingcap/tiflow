@@ -16,8 +16,8 @@ package entry
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"math"
 	"time"
 	"unsafe"

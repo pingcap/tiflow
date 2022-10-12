@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"

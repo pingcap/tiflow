@@ -15,7 +15,7 @@ package owner
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"

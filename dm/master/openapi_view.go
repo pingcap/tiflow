@@ -17,7 +17,7 @@ package master
 
 import (
 	"crypto/tls"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"

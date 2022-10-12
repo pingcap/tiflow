@@ -14,8 +14,8 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"

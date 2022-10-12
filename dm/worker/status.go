@@ -14,7 +14,7 @@
 package worker
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"sort"
 
 	"github.com/gogo/protobuf/jsonpb"

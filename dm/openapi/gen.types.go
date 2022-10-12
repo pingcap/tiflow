@@ -4,7 +4,7 @@
 package openapi
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 )
 

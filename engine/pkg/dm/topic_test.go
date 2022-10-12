@@ -14,7 +14,7 @@
 package dm
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"

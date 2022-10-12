@@ -15,7 +15,7 @@ package master
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"os"
 	"path"
 	"sort"

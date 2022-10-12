@@ -15,7 +15,7 @@ package optimism
 
 import (
 	"bytes"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"sync"
 

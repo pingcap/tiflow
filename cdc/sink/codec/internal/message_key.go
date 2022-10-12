@@ -14,7 +14,7 @@
 package internal
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

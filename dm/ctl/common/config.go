@@ -14,7 +14,7 @@
 package common
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"

@@ -14,9 +14,9 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/goccy/go-json"
 	"math"
 	"os"
 	"sort"

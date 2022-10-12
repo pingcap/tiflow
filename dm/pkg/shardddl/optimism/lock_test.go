@@ -14,8 +14,8 @@
 package optimism
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"

@@ -15,8 +15,8 @@ package ha
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"time"
 
 	"github.com/pingcap/failpoint"

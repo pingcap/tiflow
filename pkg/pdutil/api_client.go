@@ -16,7 +16,7 @@ package pdutil
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"

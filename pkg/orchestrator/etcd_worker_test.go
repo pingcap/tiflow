@@ -15,7 +15,7 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"

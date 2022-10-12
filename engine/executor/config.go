@@ -16,7 +16,7 @@ package executor
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"

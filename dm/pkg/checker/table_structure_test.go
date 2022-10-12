@@ -16,8 +16,8 @@ package checker
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"

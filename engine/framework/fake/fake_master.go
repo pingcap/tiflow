@@ -15,7 +15,7 @@ package fake
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"

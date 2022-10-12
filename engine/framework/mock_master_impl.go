@@ -15,7 +15,7 @@ package framework
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"sync"
 	"testing"
 

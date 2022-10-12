@@ -14,7 +14,7 @@
 package model
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"math"
 	"net/url"
 	"regexp"

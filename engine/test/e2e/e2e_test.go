@@ -15,7 +15,7 @@ package e2e_test
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"

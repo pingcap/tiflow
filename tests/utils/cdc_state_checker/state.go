@@ -14,7 +14,7 @@
 package main
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"regexp"
 
 	"github.com/pingcap/errors"
@@ -38,10 +38,10 @@ var (
 	captureRegex = regexp.MustCompile(regexp.QuoteMeta(
 		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)) + "/(.+)")
 	changefeedRegex = regexp.MustCompile(regexp.
-		QuoteMeta(etcd.ChangefeedStatusKeyPrefix(etcd.DefaultCDCClusterID,
+			QuoteMeta(etcd.ChangefeedStatusKeyPrefix(etcd.DefaultCDCClusterID,
 			model.DefaultNamespace)) + "/(.+)")
 	positionRegex = regexp.MustCompile(regexp.
-		QuoteMeta(etcd.TaskPositionKeyPrefix(etcd.DefaultCDCClusterID,
+			QuoteMeta(etcd.TaskPositionKeyPrefix(etcd.DefaultCDCClusterID,
 			model.DefaultNamespace)) + "/(.+?)/(.+)")
 )
 

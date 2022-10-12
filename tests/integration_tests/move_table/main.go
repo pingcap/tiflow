@@ -17,7 +17,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"

@@ -14,7 +14,7 @@
 package runtime
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 	"time"
 

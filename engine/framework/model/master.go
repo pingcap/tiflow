@@ -15,7 +15,7 @@ package model
 
 import (
 	"database/sql/driver"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"reflect"
 
 	"github.com/pingcap/errors"

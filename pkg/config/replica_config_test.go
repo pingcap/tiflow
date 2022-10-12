@@ -15,7 +15,7 @@ package config
 
 import (
 	"bytes"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 	"time"
 

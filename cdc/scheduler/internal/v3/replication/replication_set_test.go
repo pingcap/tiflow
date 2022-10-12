@@ -14,7 +14,7 @@
 package replication
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"math/rand"
 	"testing"
 	"time"

@@ -14,7 +14,7 @@
 package onlineddl
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sync"

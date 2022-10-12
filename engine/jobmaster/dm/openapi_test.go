@@ -16,7 +16,7 @@ package dm
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"

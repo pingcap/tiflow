@@ -16,7 +16,7 @@ package api
 import (
 	"bufio"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"net/http"
 	"strings"
 

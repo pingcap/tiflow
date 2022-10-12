@@ -14,7 +14,7 @@
 package fixtures
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"math/rand"
 
 	"github.com/pingcap/tiflow/dm/openapi"

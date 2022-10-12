@@ -14,7 +14,7 @@
 package openapi
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 )
 
 var defaultMetaSchema = "dm_meta"

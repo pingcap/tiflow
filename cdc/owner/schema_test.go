@@ -14,7 +14,7 @@
 package owner
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"sort"
 	"testing"
 

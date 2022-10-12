@@ -15,7 +15,7 @@ package processor
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sync/atomic"

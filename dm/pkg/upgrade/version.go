@@ -14,7 +14,7 @@
 package upgrade
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 

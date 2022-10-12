@@ -15,7 +15,7 @@ package version
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"

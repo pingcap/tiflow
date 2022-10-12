@@ -15,7 +15,7 @@ package syncer
 
 import (
 	"database/sql"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"

@@ -15,7 +15,7 @@ package servermaster
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"regexp"
 	"sort"
 	"time"

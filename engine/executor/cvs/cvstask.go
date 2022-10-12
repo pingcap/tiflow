@@ -15,7 +15,7 @@ package cvs
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"math/rand"
 	"sync"
 	"time"

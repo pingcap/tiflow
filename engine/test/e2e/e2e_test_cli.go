@@ -16,7 +16,7 @@ package e2e
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"

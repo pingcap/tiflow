@@ -15,7 +15,7 @@ package migrate
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"

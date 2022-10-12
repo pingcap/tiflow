@@ -14,7 +14,7 @@
 package config
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"time"
 )
 

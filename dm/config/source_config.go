@@ -18,7 +18,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"math"
 	"math/rand"
 	"os"

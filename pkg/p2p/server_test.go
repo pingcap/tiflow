@@ -15,7 +15,7 @@ package p2p
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"

@@ -14,7 +14,7 @@
 package registry
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	libErrors "errors"
 	"reflect"
 
@@ -34,10 +34,10 @@ type WorkerFactory interface {
 	// NewWorkerImpl return an implementation of the worker. its BaseWorker
 	// or BaseJobMaster field can be left nil, framework will fill it in.
 	NewWorkerImpl(
-		ctx *dcontext.Context,        // We require a `dcontext` here to provide dependencies.
+		ctx *dcontext.Context, // We require a `dcontext` here to provide dependencies.
 		workerID frameModel.WorkerID, // the globally unique workerID for this worker to be created.
 		masterID frameModel.MasterID, // the masterID that this worker will report to.
-		config WorkerConfig,          // the config used to initialize the worker.
+		config WorkerConfig, // the config used to initialize the worker.
 	) (framework.WorkerImpl, error)
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
 	// IsRetryableError passes in an error to business logic, and returns whether

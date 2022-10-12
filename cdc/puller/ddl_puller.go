@@ -15,7 +15,7 @@ package puller
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"

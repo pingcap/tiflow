@@ -15,7 +15,7 @@ package open
 
 import (
 	"bytes"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"sort"
 	"strings"
 

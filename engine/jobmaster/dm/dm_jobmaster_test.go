@@ -15,7 +15,7 @@ package dm
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"errors"
 	"os"
 	"sync"

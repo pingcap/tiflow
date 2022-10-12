@@ -15,7 +15,7 @@ package optimism
 
 import (
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"

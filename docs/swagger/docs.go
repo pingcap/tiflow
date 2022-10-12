@@ -4,7 +4,7 @@ package swagger
 
 import (
 	"bytes"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"strings"
 	"text/template"
 

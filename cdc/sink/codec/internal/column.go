@@ -15,7 +15,7 @@ package internal
 
 import (
 	"encoding/base64"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"strconv"
 
 	"github.com/pingcap/log"

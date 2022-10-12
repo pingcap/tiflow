@@ -14,7 +14,7 @@
 package message
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"

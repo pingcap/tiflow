@@ -16,7 +16,7 @@ package log
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"

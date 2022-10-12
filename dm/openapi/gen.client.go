@@ -6,7 +6,7 @@ package openapi
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"

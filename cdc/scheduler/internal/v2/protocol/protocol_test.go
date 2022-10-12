@@ -14,7 +14,7 @@
 package protocol
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"

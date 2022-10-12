@@ -15,8 +15,8 @@ package entry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"testing"
 
 	"github.com/pingcap/errors"

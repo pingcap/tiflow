@@ -16,7 +16,7 @@ package rest
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"

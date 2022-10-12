@@ -15,8 +15,8 @@ package election
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"math"
 	"sync"
 	"time"

@@ -16,7 +16,7 @@ package syncer
 import (
 	"bytes"
 	"context"
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"

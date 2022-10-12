@@ -14,7 +14,7 @@
 package orchestrator
 
 import (
-	"github.com/goccy/go-json"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"

@@ -14,8 +14,8 @@
 package runtime
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"time"
 
 	"github.com/pingcap/errors"
