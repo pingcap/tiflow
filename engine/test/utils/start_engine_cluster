@@ -13,7 +13,8 @@ while [ $i -le $retry_times ]; do
 	run_engine.sh deploy "$@" && break
 	((i++)) || true
 	run_engine.sh stop "$@" || true
-	echo "start engine cluster failed"
+	echo "start engine cluster failed, retry later..."
+	sleep 3
 done
 
 if [ $i -gt $retry_times ]; then

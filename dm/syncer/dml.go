@@ -355,6 +355,8 @@ func genSQLMultipleRows(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) (querie
 	switch op {
 	case sqlmodel.DMLInsert, sqlmodel.DMLReplace, sqlmodel.DMLInsertOnDuplicateUpdate:
 		return sqlmodel.GenInsertSQL(op, dmls...)
+	case sqlmodel.DMLUpdate:
+		return sqlmodel.GenUpdateSQL(dmls...)
 	case sqlmodel.DMLDelete:
 		return sqlmodel.GenDeleteSQL(dmls...)
 	}
@@ -407,9 +409,8 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 	var lastTable string
 	groupDMLs := make([]*sqlmodel.RowChange, 0, len(jobs))
 
-	// for updateDML, generate SQLs one by one
 	if op == sqlmodel.DMLUpdate {
-		for _, j := range jobs {
+		for i, j := range jobs {
 			if j.safeMode {
 				query, arg := j.dml.GenSQL(sqlmodel.DMLDelete)
 				queries = append(queries, query)
@@ -419,9 +420,24 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 				args = append(args, arg)
 				continue
 			}
-			query, arg := j.dml.GenSQL(op)
-			queries = append(queries, query)
-			args = append(args, arg)
+
+			if i == 0 {
+				lastTable = j.dml.TargetTableID()
+			}
+			if lastTable != j.dml.TargetTableID() {
+				query, arg := genDMLsWithSameCols(op, groupDMLs)
+				queries = append(queries, query...)
+				args = append(args, arg...)
+
+				groupDMLs = groupDMLs[0:0]
+				lastTable = j.dml.TargetTableID()
+			}
+			groupDMLs = append(groupDMLs, j.dml)
+		}
+		if len(groupDMLs) > 0 {
+			query, arg := genDMLsWithSameCols(op, groupDMLs)
+			queries = append(queries, query...)
+			args = append(args, arg...)
 		}
 		return queries, args
 	}
