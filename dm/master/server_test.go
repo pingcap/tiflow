@@ -2521,6 +2521,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 }
 
+// nolint:unparam
 func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
 	stage := ha.NewValidatorStage(expectStage, source, taskName)
 
