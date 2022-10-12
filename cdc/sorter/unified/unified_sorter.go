@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -263,3 +264,6 @@ func RunWorkerPool(ctx context.Context) error {
 
 // EmitStartTs implement sorter interface
 func (s *Sorter) EmitStartTs(ctx context.Context, ts uint64) {}
+
+// Stats implement sorter interface
+func (s *Sorter) Stats() sorter.Stats { return sorter.Stats{} }

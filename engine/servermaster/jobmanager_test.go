@@ -110,6 +110,18 @@ func TestJobManagerCreateJob(t *testing.T) {
 	}
 	_, err = mgr.CreateJob(ctx, req)
 	require.True(t, ErrJobAlreadyExists.Is(err))
+
+	// delete a finished job, re-create job with the same id will meet error
+	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
+		map[string]interface{}{
+			"state": frameModel.MasterStateFinished,
+		},
+	)
+	require.NoError(t, err)
+	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{Id: job.Id})
+	require.NoError(t, err)
+	_, err = mgr.CreateJob(ctx, req)
+	require.True(t, ErrJobAlreadyExists.Is(err))
 }
 
 type mockBaseMasterCreateWorkerFailed struct {

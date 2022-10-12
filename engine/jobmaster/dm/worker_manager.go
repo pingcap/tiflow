@@ -249,6 +249,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		var resources []resModel.ResourceID
+		taskCfg := persistentTask.Cfg
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
@@ -256,8 +257,13 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
+		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+		if nextUnit != frameModel.WorkerDMSync || isFresh {
+			taskCfg.NeedExtStorage = true
+		}
+
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg, resources...); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
