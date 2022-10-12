@@ -16,6 +16,7 @@ function test_owner_ha() {
 	test_owner_cleanup_stale_tasks
 	test_owner_retryable_error
 	test_gap_between_watch_capture
+	test_delete_owner_key
 }
 # test_kill_owner starts two captures and kill the owner
 # we expect the live capture will be elected as the new
