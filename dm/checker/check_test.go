@@ -141,8 +141,8 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Summary.Failed)
-	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of REPLICATION SLAVE privilege")
-	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of REPLICATION CLIENT privilege")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of REPLICATION SLAVE global (*.*) privilege")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of REPLICATION CLIENT global (*.*) privilege")
 
 	// happy path
 

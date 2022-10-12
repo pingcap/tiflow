@@ -62,6 +62,10 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			errStr: "lack of Select privilege: {`db1`.`tb1`}; ",
 		},
 		{
+			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege but no do-tables
+			dumpState: StateSuccess,
+		},
+		{
 			grants: []string{ // lack optional privilege
 				"GRANT RELOAD ON *.* TO 'user'@'%'",
 				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
@@ -112,12 +116,18 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "tb1"},
+			},
 			dumpState: StateFailure,
-			errStr:    "lack of Select privilege; lack of RELOAD global (*.*) privilege; ",
+			errStr:    "lack of Select privilege: {`db1`.`tb1`}; lack of RELOAD global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "tb1"},
 			},
 			dumpState: StateSuccess,
 		},
@@ -194,17 +204,14 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			State: StateFailure,
 		}
 		dumpRequiredPrivs := map[mysql.PrivilegeType]priv{
-			mysql.SelectPriv: {needGlobal: false},
+			mysql.SelectPriv: {
+				needGlobal: false,
+				dbs:        genTableLevelPrivs(cs.checkTables),
+			},
 			mysql.ReloadPriv: {needGlobal: true},
 		}
 		if cs.dumpWholeInstance {
 			dumpRequiredPrivs[mysql.SelectPriv] = priv{needGlobal: true}
-		}
-		if len(cs.checkTables) > 0 {
-			dumpRequiredPrivs[mysql.SelectPriv] = priv{
-				needGlobal: false,
-				dbs:        genTableLevelPrivs(cs.checkTables),
-			}
 		}
 		err := verifyPrivilegesWithResult(result, cs.grants, dumpRequiredPrivs)
 		if cs.dumpState == StateSuccess {

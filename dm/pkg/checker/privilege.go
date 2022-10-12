@@ -291,7 +291,7 @@ func VerifyPrivileges(
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
 				if privElem.Priv == mysql.AllPriv {
-					for privName, privs := range lackPrivs {
+					for _, privs := range lackPrivs {
 						if privs.needGlobal {
 							continue
 						}
@@ -299,9 +299,6 @@ func VerifyPrivileges(
 							continue
 						}
 						delete(privs.dbs, dbName)
-						if len(privs.dbs) == 0 {
-							delete(lackPrivs, privName)
-						}
 					}
 					continue
 				}
@@ -321,16 +318,13 @@ func VerifyPrivileges(
 					continue
 				}
 				delete(privs.dbs, dbName)
-				if len(privs.dbs) == 0 {
-					delete(lackPrivs, privElem.Priv)
-				}
 			}
 		case ast.GrantLevelTable:
 			for _, privElem := range grantStmt.Privs {
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
 				if privElem.Priv == mysql.AllPriv {
-					for privName, privs := range lackPrivs {
+					for _, privs := range lackPrivs {
 						if privs.needGlobal {
 							continue
 						}
@@ -345,12 +339,6 @@ func VerifyPrivileges(
 							continue
 						}
 						delete(dbPrivs.tables, tableName)
-						if len(dbPrivs.tables) == 0 {
-							delete(privs.dbs, dbName)
-						}
-						if len(privs.dbs) == 0 {
-							delete(lackPrivs, privName)
-						}
 					}
 					continue
 				}
@@ -377,13 +365,24 @@ func VerifyPrivileges(
 					continue
 				}
 				delete(dbPrivs.tables, tableName)
-				if len(dbPrivs.tables) == 0 {
-					delete(privs.dbs, dbName)
-				}
-				if len(privs.dbs) == 0 {
-					delete(lackPrivs, privElem.Priv)
+			}
+		}
+	}
+
+	// purge empty leaves
+	for privName, privs := range lackPrivs {
+		for dbName, dbPrivs := range privs.dbs {
+			for tableName, tablePrivs := range dbPrivs.tables {
+				if !tablePrivs.wholeTable && len(tablePrivs.columns) == 0 {
+					delete(dbPrivs.tables, tableName)
 				}
 			}
+			if !dbPrivs.wholeDB && len(dbPrivs.tables) == 0 {
+				delete(privs.dbs, dbName)
+			}
+		}
+		if !privs.needGlobal && len(privs.dbs) == 0 {
+			delete(lackPrivs, privName)
 		}
 	}
 
