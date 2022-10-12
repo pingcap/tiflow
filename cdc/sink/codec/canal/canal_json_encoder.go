@@ -24,8 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	canal "github.com/pingcap/tiflow/proto/canal"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -50,72 +49,78 @@ func newJSONBatchEncoder() codec.EventBatchEncoder {
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canalJSONMessageInterface, error) {
-	eventType := convertRowEventType(e)
-	header := c.builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
-	rowData, err := c.builder.buildRowData(e)
-	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
-	}
-
-	pkCols := e.PrimaryKeyColumns()
-	pkNames := make([]string, len(pkCols))
-	for i := range pkNames {
-		pkNames[i] = pkCols[i].Name
-	}
-
-	var nonTrivialRow []*canal.Column
-	if e.IsDelete() {
-		nonTrivialRow = rowData.BeforeColumns
-	} else {
-		nonTrivialRow = rowData.AfterColumns
-	}
-
-	sqlType := make(map[string]int32, len(nonTrivialRow))
-	mysqlType := make(map[string]string, len(nonTrivialRow))
-	for i := range nonTrivialRow {
-		sqlType[nonTrivialRow[i].Name] = nonTrivialRow[i].SqlType
-		mysqlType[nonTrivialRow[i].Name] = nonTrivialRow[i].MysqlType
-	}
-
 	var (
 		data    map[string]interface{}
 		oldData map[string]interface{}
 	)
+	isDelete := e.IsDelete()
+	sqlTypeMap := make(map[string]int32, len(e.Columns))
+	mysqlTypeMap := make(map[string]string, len(e.Columns))
+	if len(e.PreColumns) > 0 {
+		oldData = make(map[string]interface{}, len(e.PreColumns))
+	}
+	for _, column := range e.PreColumns {
+		if column != nil {
+			mysqlType := getMySQLType(column)
+			javaType, err := getJavaSQLType(column, mysqlType)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			value, err := c.builder.formatValue(column.Value, javaType)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			if isDelete {
+				sqlTypeMap[column.Name] = int32(javaType)
+				mysqlTypeMap[column.Name] = mysqlType
+			}
 
-	if len(rowData.BeforeColumns) > 0 {
-		oldData = make(map[string]interface{}, len(rowData.BeforeColumns))
-		for i := range rowData.BeforeColumns {
-			if !rowData.BeforeColumns[i].GetIsNull() {
-				oldData[rowData.BeforeColumns[i].Name] = rowData.BeforeColumns[i].Value
+			if column.Value == nil {
+				oldData[column.Name] = nil
 			} else {
-				oldData[rowData.BeforeColumns[i].Name] = nil
+				oldData[column.Name] = value
 			}
 		}
 	}
 
-	if len(rowData.AfterColumns) > 0 {
-		data = make(map[string]interface{}, len(rowData.AfterColumns))
-		for i := range rowData.AfterColumns {
-			if !rowData.AfterColumns[i].GetIsNull() {
-				data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
+	if len(e.Columns) > 0 {
+		data = make(map[string]interface{}, len(e.Columns))
+	}
+	for _, column := range e.Columns {
+		if column != nil {
+			mysqlType := getMySQLType(column)
+			javaType, err := getJavaSQLType(column, mysqlType)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			value, err := c.builder.formatValue(column.Value, javaType)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			if !isDelete {
+				sqlTypeMap[column.Name] = int32(javaType)
+				mysqlTypeMap[column.Name] = mysqlType
+			}
+			if column.Value == nil {
+				data[column.Name] = nil
 			} else {
-				data[rowData.AfterColumns[i].Name] = nil
+				data[column.Name] = value
 			}
 		}
 	}
 
 	msg := &CanalJSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
-		PKNames:       pkNames,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		PKNames:       e.PrimaryKeyColumnNames(),
 		IsDDL:         false,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
+		EventType:     eventTypeString(e),
+		ExecutionTime: convertToCanalTs(e.CommitTs),
 		BuildTime:     time.Now().UnixNano() / 1e6, // ignored by both Canal Adapter and Flink
 		Query:         "",
-		SQLType:       sqlType,
-		MySQLType:     mysqlType,
+		SQLType:       sqlTypeMap,
+		MySQLType:     mysqlTypeMap,
 		Data:          make([]map[string]interface{}, 0),
 		Old:           nil,
 		tikvTs:        e.CommitTs,
@@ -140,6 +145,16 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canal
 		CanalJSONMessage: msg,
 		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
 	}, nil
+}
+
+func eventTypeString(e *model.RowChangedEvent) string {
+	if e.IsDelete() {
+		return "DELETE"
+	}
+	if len(e.PreColumns) == 0 {
+		return "INSERT"
+	}
+	return "UPDATE"
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
@@ -188,7 +203,7 @@ func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, er
 	msg := c.newJSONMessage4CheckpointEvent(ts)
 	value, err := json.Marshal(msg)
 	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
@@ -216,7 +231,7 @@ func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, e
 	message := c.newJSONMessageForDDL(e)
 	value, err := json.Marshal(message)
 	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }

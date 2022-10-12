@@ -47,9 +47,8 @@ type canalEntryBuilder struct {
 
 // newCanalEntryBuilder creates a new canalEntryBuilder
 func newCanalEntryBuilder() *canalEntryBuilder {
-	d := charmap.ISO8859_1.NewDecoder()
 	return &canalEntryBuilder{
-		bytesDecoder: d,
+		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}
 }
 
