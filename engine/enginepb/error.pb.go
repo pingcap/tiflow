@@ -34,7 +34,6 @@ const (
 	ErrorCode_SubJobSubmitFailed ErrorCode = 4
 	// TombstoneExecutor
 	ErrorCode_TombstoneExecutor ErrorCode = 5
-	//
 	ErrorCode_SubJobBuildFailed ErrorCode = 6
 	// create gRPC connection failed
 	ErrorCode_BuildGrpcConnFailed ErrorCode = 7
