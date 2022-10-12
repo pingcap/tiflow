@@ -250,8 +250,8 @@ func (c *TablesChecker) checkAST(st *ast.CreateTableStmt) []*incompatibilityOpti
 	}
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
-			state:       StateFailure,
-			instruction: "please set primary/unique key for the table",
+			state:       StateWarning,
+			instruction: "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised",
 			errMessage:  "primary/unique key does not exist",
 		})
 	}
@@ -298,7 +298,7 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 		cs := strings.ToLower(opt.StrValue)
 		if cs != "binary" && !charset.ValidCharsetAndCollation(cs, "") {
 			return &incompatibilityOption{
-				state:       StateFailure,
+				state:       StateWarning,
 				instruction: "https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 				errMessage:  fmt.Sprintf("unsupport charset %s", opt.StrValue),
 			}
