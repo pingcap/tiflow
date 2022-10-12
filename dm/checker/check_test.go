@@ -109,6 +109,16 @@ func TestDumpPrivilegeChecking(t *testing.T) {
 	require.Equal(t, int64(1), result.Summary.Failed)
 	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Select privilege")
 
+	// test dumpWholeInstance
+
+	mock = initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT ON db.* TO 'haha'@'%'"))
+	result, err = RunCheckOnConfigs(context.Background(), cfgs, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Summary.Failed)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Select global (*.*) privilege")
+
 	// happy path
 
 	checkHappyPath(t, func() {

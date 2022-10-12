@@ -223,7 +223,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					instance.sourceDBinfo,
 					checkTables,
 					exportCfg.Consistency,
-					false,
+					c.dumpWholeInstance,
 				))
 			}
 		}
