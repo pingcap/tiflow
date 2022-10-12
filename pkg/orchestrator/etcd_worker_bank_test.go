@@ -16,13 +16,14 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	putil "github.com/pingcap/tiflow/pkg/util"
 	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	putil "github.com/pingcap/tiflow/pkg/util"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"

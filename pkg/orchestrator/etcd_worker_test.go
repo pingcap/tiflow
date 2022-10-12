@@ -16,13 +16,14 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	putil "github.com/pingcap/tiflow/pkg/util"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	putil "github.com/pingcap/tiflow/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

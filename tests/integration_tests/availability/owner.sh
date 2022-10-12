@@ -243,7 +243,6 @@ function test_gap_between_watch_capture() {
 	cleanup_process $CDC_BINARY
 }
 
-
 # make sure when owner key in etcd is deleted, the owner will resign,
 # and only one owner exists in the cluster at the same time.
 function test_delete_owner_key() {

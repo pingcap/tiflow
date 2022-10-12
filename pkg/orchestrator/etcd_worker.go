@@ -16,9 +16,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tiflow/cdc/model"
 	"strconv"
 	"time"
+
+	"github.com/pingcap/tiflow/cdc/model"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
