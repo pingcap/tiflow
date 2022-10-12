@@ -36,7 +36,7 @@ type EventSortEngine interface {
 
 	// SetOnResolve pushes action into EventSortEngine's hook list, which
 	// will be called after any events are resolved.
-	SetOnResolve(action func(model.TableID, model.ResolvedTs))
+	SetOnResolve(action func(model.TableID, model.Ts))
 
 	// Fetch creates an iterator to fetch events with CRTs in [lowerBound, unlimited).
 	// If tableID is -1 it means fetching events from all tables.
