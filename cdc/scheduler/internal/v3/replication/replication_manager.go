@@ -518,6 +518,29 @@ func (r *Manager) CollectMetrics() {
 		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
 		slowestTableResolvedTsGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
+		phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
+		for stage, checkpoint := range table.Stats.StageCheckpoints {
+			// Checkpoint ts
+			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
+			slowestTableStageCheckpointTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
+			checkpointLag := float64(phyCurrentTs-phyCkpTs) / 1e3
+			slowestTableStageCheckpointTsLagGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
+			slowestTableStageCheckpointTsLagHistogramVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
+			// Resolved ts
+			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
+			slowestTableStageResolvedTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
+			resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
+			slowestTableStageResolvedTsLagGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
+			slowestTableStageResolvedTsLagHistogramVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
+		}
+		slowestTableRegionGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 	}
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,
@@ -593,6 +616,13 @@ func (r *Manager) CleanMetrics() {
 		tableStateGauge.
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
+	slowestTableStageCheckpointTsGaugeVec.Reset()
+	slowestTableStageResolvedTsGaugeVec.Reset()
+	slowestTableStageCheckpointTsLagGaugeVec.Reset()
+	slowestTableStageResolvedTsLagGaugeVec.Reset()
+	slowestTableStageCheckpointTsLagHistogramVec.Reset()
+	slowestTableStageResolvedTsLagHistogramVec.Reset()
+	slowestTableRegionGaugeVec.Reset()
 }
 
 // SetReplicationSetForTests is only used in tests.

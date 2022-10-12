@@ -65,6 +65,11 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMeta
 	return masterMeta, nil
 }
 
+// Insert inserts the metadata
+func (c *MasterMetadataClient) Insert(ctx context.Context, data *frameModel.MasterMeta) error {
+	return errors.Trace(c.metaClient.InsertJob(ctx, data))
+}
+
 // Store upsert the data
 func (c *MasterMetadataClient) Store(ctx context.Context, data *frameModel.MasterMeta) error {
 	return errors.Trace(c.metaClient.UpsertJob(ctx, data))
