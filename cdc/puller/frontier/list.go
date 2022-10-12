@@ -32,12 +32,19 @@ type skipListNode struct {
 	key   []byte
 	value *fibonacciHeapNode
 
+	end      []byte
+	regionID uint64
+
 	nexts []*skipListNode
 }
 
 // Key is the key of the node
 func (s *skipListNode) Key() []byte {
 	return s.key
+}
+
+func (s *skipListNode) End() []byte {
+	return s.end
 }
 
 // Value is the value of the node
@@ -52,7 +59,7 @@ func (s *skipListNode) Next() *skipListNode {
 
 type seekResult []*skipListNode
 
-// Next points to the next seek result
+// Next points to the next seek seekTempResult
 func (s seekResult) Next() {
 	next := s.Node().Next()
 	for i := range next.nexts {
@@ -60,7 +67,7 @@ func (s seekResult) Next() {
 	}
 }
 
-// Node returns the node point by the seek result
+// Node returns the node point by the seek seekTempResult
 func (s seekResult) Node() *skipListNode {
 	if len(s) == 0 {
 		return nil
@@ -90,13 +97,12 @@ func (l *skipList) randomHeight() int {
 //go:linkname fastrand runtime.fastrand
 func fastrand() uint32
 
-// Seek returns the seek result
-// the seek result is a slice of nodes,
+// Seek returns the seek seekTempResult
+// the seek seekTempResult is a slice of nodes,
 // Each element in the slice represents the nearest(left) node to the target value at each level of the skip list.
-func (l *skipList) Seek(key []byte) seekResult {
+func (l *skipList) Seek(key []byte, result []*skipListNode) seekResult {
 	head := &l.head
 	current := head
-	result := make(seekResult, maxHeight)
 
 LevelLoop:
 	for level := l.height - 1; level >= 0; level-- {
@@ -124,7 +130,7 @@ LevelLoop:
 	return result
 }
 
-// InsertNextToNode insert the specified node after the seek result
+// InsertNextToNode insert the specified node after the seek seekTempResult
 func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
 	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
 		log.Panic("the InsertNextToNode function can only append node to the seek result.")
@@ -152,11 +158,11 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 
 // Insert inserts the specified node
 func (l *skipList) Insert(key []byte, value *fibonacciHeapNode) {
-	seekR := l.Seek(key)
+	seekR := l.Seek(key, make(seekResult, maxHeight))
 	l.InsertNextToNode(seekR, key, value)
 }
 
-// Remove removes the specified node after the seek result
+// Remove removes the specified node after the seek seekTempResult
 func (l *skipList) Remove(seekR seekResult, toRemove *skipListNode) {
 	seekCurrent := seekR.Node()
 	if seekCurrent == nil || seekCurrent.Next() != toRemove {

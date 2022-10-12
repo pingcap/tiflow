@@ -74,7 +74,13 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if h.capture != nil {
-		st.ID = h.capture.Info().ID
+		info, err := h.capture.Info()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		st.ID = info.ID
 		st.IsOwner = h.capture.IsOwner()
 	}
 	writeData(w, st)

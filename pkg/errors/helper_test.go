@@ -99,3 +99,24 @@ func TestChangefeedFastFailError(t *testing.T) {
 	require.Equal(t, false, ChangefeedFastFailError(err))
 	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
 }
+
+func TestIsChangefeedUnRetryableError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			err:      ErrCaptureSuicide.FastGenByArgs(),
+			expected: false,
+		},
+		{
+			err:      WrapChangefeedUnretryableErr(errors.New("whatever")),
+			expected: true,
+		},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
+	}
+}

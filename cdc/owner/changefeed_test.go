@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/gommon/log"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -539,12 +540,14 @@ func testChangefeedReleaseResource(
 		CfID: cf.id,
 		Type: model.AdminRemove,
 	})
+	cf.isReleased = false
 	// changefeed tick will release resources
 	err := cf.tick(ctx, state, captures)
 	require.Nil(t, err)
 	cancel()
 	// check redo log dir is deleted
 	_, err = os.Stat(redoLogDir)
+	log.Error(err)
 	require.True(t, os.IsNotExist(err))
 }
 
@@ -987,4 +990,62 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
 	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
+}
+
+func TestBarrierAdvance(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		ctx := cdcContext.NewBackendContext4Test(true)
+		if i == 1 {
+			ctx.ChangefeedVars().Info.SyncPointEnabled = true
+			ctx.ChangefeedVars().Info.SyncPointInterval = 100 * time.Second
+		}
+
+		cf, state, captures, tester := createChangefeed4Test(ctx, t)
+		defer cf.Close(ctx)
+
+		// Pre tick, to fill cf.state.Info.
+		cf.Tick(ctx, state, captures)
+		tester.MustApplyPatches()
+
+		// The changefeed load the info from etcd.
+		cf.state.Status = &model.ChangeFeedStatus{
+			ResolvedTs:   cf.state.Info.StartTs + 10,
+			CheckpointTs: cf.state.Info.StartTs,
+		}
+
+		// Do the preflightCheck and initialize the changefeed.
+		cf.Tick(ctx, state, captures)
+		tester.MustApplyPatches()
+
+		// add 5s to resolvedTs.
+		mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+		mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
+
+		// Then the first tick barrier won't be changed.
+		barrier, err := cf.handleBarrier(ctx)
+		require.Nil(t, err)
+		require.Equal(t, cf.state.Info.StartTs, barrier)
+
+		// If sync-point is enabled, must tick more 1 time to advance barrier.
+		if i == 1 {
+			barrier, err := cf.handleBarrier(ctx)
+			require.Nil(t, err)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+		}
+
+		// Suppose checkpoint has been advanced.
+		cf.state.Status.CheckpointTs = cf.state.Status.ResolvedTs
+
+		// Need more 1 tick to advance barrier if sync-point is enabled.
+		if i == 1 {
+			barrier, err := cf.handleBarrier(ctx)
+			require.Nil(t, err)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+		}
+
+		// Then the last tick barrier must be advanced correctly.
+		barrier, err = cf.handleBarrier(ctx)
+		require.Nil(t, err)
+		require.Equal(t, mockDDLPuller.resolvedTs, barrier)
+	}
 }

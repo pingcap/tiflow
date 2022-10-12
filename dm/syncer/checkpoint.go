@@ -603,11 +603,11 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
 // This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
-// - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
-//   When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
-//   When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
-//   to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
-// - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
+//   - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
+//     When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
+//     When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
+//     to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
+//   - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
 func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location) bool {
 	cp.RLock()
 	defer cp.RUnlock()
@@ -679,13 +679,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	sqls := make([]string, 0, 100)
 	args := make([][]interface{}, 0, 100)
 
-	if snapshotCp.globalPoint != nil {
-		locationG := snapshotCp.globalPoint.location
-		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
-		sqls = append(sqls, sqlG)
-		args = append(args, argG)
-	}
-
 	type tableCpSnapshotTuple struct {
 		tableCp         *binlogPoint // current table checkpoint location
 		snapshotTableCP tablePoint   // table checkpoint snapshot location
@@ -724,12 +717,21 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		args = append(args, extraArgs[i])
 	}
 
+	// updating global checkpoint should be the last SQL, its success indicates
+	// the checkpoint is flushed successfully.
+	if snapshotCp.globalPoint != nil {
+		locationG := snapshotCp.globalPoint.location
+		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
+		sqls = append(sqls, sqlG)
+		args = append(args, argG)
+	}
+
 	cp.Unlock()
 
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, sqls, args...)
 	if err != nil {
 		return err
 	}

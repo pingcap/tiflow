@@ -22,7 +22,9 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/errno"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -36,14 +38,16 @@ import (
 // BaseConn is the basic connection we use in dm
 // BaseDB -> BaseConn correspond to sql.DB -> sql.Conn
 // In our scenario, there are two main reasons why we need BaseConn
-//   1. we often need one fixed DB connection to execute sql
-//   2. we need own retry policy during execute failed
+//  1. we often need one fixed DB connection to execute sql
+//  2. we need own retry policy during execute failed
+//
 // So we split a fixed sql.Conn out of sql.DB, and wraps it to BaseConn
 // And Similar with sql.Conn, all BaseConn generated from one BaseDB shares this BaseDB to reset
 //
 // Basic usage:
 // For Syncer and Loader Unit, they both have different amount of connections due to config
 // Currently we have some types of connections exist
+//
 //	Syncer:
 //		Worker Connection:
 //			DML connection:
@@ -91,7 +95,7 @@ func (conn *BaseConn) SetRetryStrategy(strategy retry.Strategy) error {
 	return nil
 }
 
-// QuerySQL defines query statement, and connect to real DB.
+// QuerySQL runs a query statement.
 func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if conn == nil || conn.DBConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")
@@ -216,6 +220,34 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 // 2. succeed: (len(sqls), nil).
 func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *metricsproxy.HistogramVecProxy, task string, queries []string, args ...[]interface{}) (int, error) {
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
+}
+
+// ExecuteSQLsAutoSplit executes sqls and when meet "transaction too large" error,
+// it will try to split the sqls into two parts and execute them again.
+// The `queries` and `args` should be the same length.
+func (conn *BaseConn) ExecuteSQLsAutoSplit(
+	tctx *tcontext.Context,
+	hVec *metricsproxy.HistogramVecProxy,
+	task string,
+	queries []string,
+	args ...[]interface{},
+) error {
+	_, err := conn.ExecuteSQL(tctx, hVec, task, queries, args...)
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return err
+	}
+
+	if mysqlErr.Number != errno.ErrTxnTooLarge || len(queries) == 1 {
+		return err
+	}
+
+	mid := len(queries) / 2
+	err = conn.ExecuteSQLsAutoSplit(tctx, hVec, task, queries[:mid], args[:mid]...)
+	if err != nil {
+		return err
+	}
+	return conn.ExecuteSQLsAutoSplit(tctx, hVec, task, queries[mid:], args[mid:]...)
 }
 
 // ApplyRetryStrategy apply specify strategy for BaseConn.

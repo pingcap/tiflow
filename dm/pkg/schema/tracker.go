@@ -127,6 +127,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
 		conf.NewCollationsEnabledOnFirstBootstrap = false
 		conf.Performance.RunAutoAnalyze = false
+		// bypass "Specified key was too long"
+		conf.MaxIndexLength = 1<<32 - 1
 	})
 
 	if len(sessionCfg) == 0 {

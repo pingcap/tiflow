@@ -89,7 +89,13 @@ func NewPuller(
 	// To make puller level resolved ts initialization distinguishable, we set
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
-	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+	pullerType := "dml"
+	if len(spans) > 1 {
+		pullerType = "ddl"
+	}
+	metricMissedRegionCollectCounter := missedRegionCollectCounter.
+		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
+	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, tikvStorage, grpcPool, regionCache, pdClock, changefeed, cfg)
 	p := &pullerImpl{
@@ -197,18 +203,20 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Inc()
-				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
-						zap.Reflect("resolved", e.Resolved),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("spans", p.spans),
-					)
+				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Spans)))
+				for _, resolvedSpan := range e.Resolved.Spans {
+					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
+						log.Panic("the resolved span is not in the total span",
+							zap.String("namespace", changefeedID.Namespace),
+							zap.String("changefeed", changefeedID.ID),
+							zap.Reflect("resolved", e.Resolved),
+							zap.Int64("tableID", tableID),
+							zap.Reflect("spans", p.spans),
+						)
+					}
+					// Forward is called in a single thread
+					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
 				}
-				// Forward is called in a single thread
-				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()
 				if resolvedTs > 0 && !initialized {
 					// Advancing to a non-zero value means the puller level
