@@ -761,3 +761,11 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 		jobMgrTickAndCheckJobState(jobID, frameModel.MasterStateStopped)
 	}
 }
+
+func TestIsJobTerminated(t *testing.T) {
+	require.False(t, isJobTerminated(frameModel.MasterStateUninit))
+	require.False(t, isJobTerminated(frameModel.MasterStateInit))
+	require.True(t, isJobTerminated(frameModel.MasterStateFinished))
+	require.True(t, isJobTerminated(frameModel.MasterStateFailed))
+	require.True(t, isJobTerminated(frameModel.MasterStateStopped))
+}
