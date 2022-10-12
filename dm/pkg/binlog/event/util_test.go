@@ -162,8 +162,8 @@ func TestGetTimezoneByStatusVars(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		var upstreamTZStr string // to simulate Syncer.upstreamTZ
-		upstreamTZStr = "+0:00"
+		// to simulate Syncer.upstreamTZ
+		upstreamTZStr := "+0:00"
 		vars, err := GetTimezoneByStatusVars(test.input, upstreamTZStr)
 		if test.err != nil {
 			require.Equal(t, test.err.Error(), err.Error())
