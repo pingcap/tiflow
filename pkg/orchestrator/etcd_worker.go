@@ -50,7 +50,7 @@ const (
 type EtcdWorker struct {
 	clusterID string
 	captureID model.CaptureID
-	client    *etcd.Client
+	client    etcd.CDCEtcdClient
 	reactor   Reactor
 	role      putil.Role
 	state     ReactorState
@@ -114,7 +114,7 @@ func NewEtcdWorker(
 		clusterID:  client.GetClusterID(),
 		captureID:  captureID,
 		role:       role,
-		client:     client.GetEtcdClient(),
+		client:     client,
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
@@ -159,7 +159,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), worker.role.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.GetEtcdClient().Watch(watchCtx, worker.prefix.String(), worker.role.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	if worker.role == putil.RoleProcessor {
 		failpoint.Inject("ProcessorEtcdDelay", func() {
@@ -270,6 +270,20 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				continue
 			}
 			startTime := time.Now()
+			// we need to check if this the owner key is delete before we tick the reactor
+			if worker.role == putil.RoleOwner {
+				id, err := worker.client.GetOwnerID(ctx)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if id != worker.captureID {
+					log.Error("owner key is deleted, exit etcd worker and suicide the capture",
+						zap.String("captureID", worker.captureID))
+					// we need to suicide the capture to reset all state and resource, e.g.,
+					// captureID, ownerKey to prevent undefined behaviors.
+					return cerrors.ErrCaptureSuicide.GenWithStackByArgs()
+				}
+			}
 			// it is safe that a batch of updates has been applied to worker.state before worker.reactor.Tick
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)
@@ -340,7 +354,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
-	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
+	resp, err := worker.client.GetEtcdClient().Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -441,12 +455,12 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
 	startTime := time.Now()
-	resp, err := worker.client.Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
+	resp, err := worker.client.GetEtcdClient().Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
 
 	// For testing the situation where we have a progress notification that
 	// has the same revision as the committed Etcd transaction.
 	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
-		if err := worker.client.RequestProgress(ctx); err != nil {
+		if err := worker.client.GetEtcdClient().RequestProgress(ctx); err != nil {
 			failpoint.Return(errors.Trace(err))
 		}
 	})

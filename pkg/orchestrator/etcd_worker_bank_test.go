@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -159,9 +160,9 @@ func TestEtcdBank(t *testing.T) {
 				worker, err := NewEtcdWorker(cdcCli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)},
-					&migrate.NoOpMigrator{})
+					&migrate.NoOpMigrator{}, "capture", putil.RoleProcessor)
 				require.Nil(t, err)
-				err = worker.Run(ctx, nil, 100*time.Millisecond, "owner")
+				err = worker.Run(ctx, nil, 100*time.Millisecond)
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
