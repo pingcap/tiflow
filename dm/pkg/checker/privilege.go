@@ -204,18 +204,18 @@ func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]priv) string {
 
 		b.WriteString(": {")
 		i := 0
-		for _, kv2 := range sortmap.Sort(pair.Value.dbs) {
-			if kv2.Value.wholeDB {
-				b.WriteString(dbutil.ColumnName(kv2.Key))
+		for _, pair2 := range sortmap.Sort(pair.Value.dbs) {
+			if pair2.Value.wholeDB {
+				b.WriteString(dbutil.ColumnName(pair2.Key))
 				b.WriteString(".*; ")
 				continue
 			}
 
 			j := 0
-			for table := range kv2.Value.tables {
-				b.WriteString(dbutil.TableName(kv2.Key, table))
+			for table := range pair2.Value.tables {
+				b.WriteString(dbutil.TableName(pair2.Key, table))
 				j++
-				if j != len(kv2.Value.tables) {
+				if j != len(pair2.Value.tables) {
 					b.WriteString(", ")
 				}
 			}
