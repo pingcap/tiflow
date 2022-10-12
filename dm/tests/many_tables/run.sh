@@ -12,17 +12,19 @@ function prepare_data() {
 	run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	for i in $(seq $TABLE_NUM); do
-		run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY, c1 VARCHAR(20), c2 VARCHAR(20), c3 VARCHAR(20), c4 VARCHAR(20), c5 VARCHAR(20), c6 VARCHAR(20), c7 VARCHAR(20), c8 VARCHAR(20), c9 VARCHAR(20), c10 VARCHAR(20), c11 VARCHAR(20), c12 VARCHAR(20), c13 VARCHAR(20));" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		for j in $(seq 2); do
-			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+			run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
+		# to make the tables have odd number of lines before 'ALTER TABLE' command, for check_sync_diff to work correctly
+		run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES (9, 90009);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
 function incremental_data() {
 	for j in $(seq 3 5); do
 		for i in $(seq $TABLE_NUM); do
-			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+			run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
 	done
 }
@@ -30,11 +32,21 @@ function incremental_data() {
 function incremental_data_2() {
 	j=6
 	for i in $(seq $TABLE_NUM); do
-		run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "INSERT INTO many_tables_db.t$i (i, j) VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
 function run() {
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
+	# clean unistore data
+	rm -rf /tmp/tidb
+
+	# start a TiDB with small txn-total-size-limit
+	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
+	sleep 2
+
 	echo "start prepare_data"
 	prepare_data
 	echo "finish prepare_data"
@@ -58,6 +70,10 @@ function run() {
 		"\"estimateTotalRows\"" 1
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_tidb_with_retry_times "select count(*) from dm_meta.test_syncer_checkpoint" "count(*): 501" 60
+
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004: Transaction is too large'
 
 	# check https://github.com/pingcap/tiflow/issues/5063
 	check_time=20

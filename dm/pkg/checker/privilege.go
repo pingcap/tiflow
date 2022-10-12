@@ -336,11 +336,6 @@ func genExpectPriv(privileges map[mysql.PrivilegeType]struct{}, checkTables []*f
 			}
 			lackPriv[p][table.Schema][table.Name] = struct{}{}
 		}
-		if p == mysql.SelectPriv {
-			if _, ok := lackPriv[p]["INFORMATION_SCHEMA"]; !ok {
-				lackPriv[p]["INFORMATION_SCHEMA"] = make(map[string]struct{})
-			}
-		}
 	}
 	return lackPriv
 }

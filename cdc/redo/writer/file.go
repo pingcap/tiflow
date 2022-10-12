@@ -47,7 +47,7 @@ const (
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
 	pageBytes        = 8 * common.MinSectorSize
-	defaultS3Timeout = 3 * time.Second
+	defaultS3Timeout = 15 * time.Second
 )
 
 var (
@@ -345,7 +345,7 @@ func (w *Writer) close() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	defer dirFile.Close()
-	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	// sync the dir to guarantee the renamed file is persisted to disk.
 	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

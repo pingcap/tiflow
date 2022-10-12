@@ -258,3 +258,51 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		},
 	}, event, "%v", event)
 }
+
+func TestRegionWorkerHandleResolvedTs(t *testing.T) {
+	ctx := context.Background()
+	w := &regionWorker{}
+	outputCh := make(chan model.RegionFeedEvent, 1)
+	w.outputCh = outputCh
+	w.rtsUpdateCh = make(chan *rtsUpdateEvent, 1)
+	w.session = &eventFeedSession{client: &CDCClient{
+		changefeed: model.DefaultChangeFeedID("1"),
+	}}
+	w.metrics = &regionWorkerMetrics{metricSendEventResolvedCounter: sendEventCounter.
+		WithLabelValues("native-resolved", "n", "id")}
+	s1 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(1, 1, 1),
+	}, 1)
+	s1.initialized = true
+	s1.lastResolvedTs = 9
+
+	s2 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(2, 2, 2),
+	}, 2)
+	s2.initialized = true
+	s2.lastResolvedTs = 11
+
+	s3 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(3, 3, 3),
+	}, 3)
+	s3.initialized = false
+	s3.lastResolvedTs = 8
+	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
+		resolvedTs: 10,
+		regions:    []*regionFeedState{s1, s2, s3},
+	})
+	require.Nil(t, err)
+	require.Equal(t, uint64(10), s1.lastResolvedTs)
+	require.Equal(t, uint64(11), s2.lastResolvedTs)
+	require.Equal(t, uint64(8), s3.lastResolvedTs)
+
+	re := <-w.rtsUpdateCh
+	require.Equal(t, uint64(10), re.resolvedTs)
+	require.Equal(t, 2, len(re.regions))
+
+	event := <-outputCh
+	require.Equal(t, uint64(0), event.RegionID)
+	require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
+	require.Equal(t, 1, len(event.Resolved.Spans))
+	require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
+}
