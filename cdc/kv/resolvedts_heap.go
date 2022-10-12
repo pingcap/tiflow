@@ -82,7 +82,7 @@ func newRegionTsManager() *regionTsManager {
 
 // Upsert implements insert	and update on duplicated key
 // if the region is exists update the resolvedTs, eventTime, penalty, and fixed heap order
-// otherwise, setByRequestID a new regionTsInfo with penalty 0
+// otherwise, insert a new regionTsInfo with penalty 0
 func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Time) {
 	if old, ok := rm.m[regionID]; ok {
 		// in a single resolved ts manager, we should not expect a fallback resolved event
