@@ -374,6 +374,64 @@ func TestJob(t *testing.T) {
 
 	testCases := []tCase{
 		{
+			fn: "InsertJob",
+			inputs: []interface{}{
+				&frameModel.MasterMeta{
+					Model: model.Model{
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO `master_meta` [(]`created_at`,"+
+					"`updated_at`,`project_id`,`id`,`type`,`state`,`node_id`,"+
+					"`address`,`epoch`,`config`,`error_message`,`detail`,"+
+					"`ext`,`deleted`[)]").
+					WithArgs(createdAt, updatedAt, "p111", "j111", 1, 1, "n111",
+						"127.0.0.1", 1, []byte{0x11, 0x22}, sqlmock.AnyArg(),
+						sqlmock.AnyArg(), extForTest, nil).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			fn: "InsertJob",
+			inputs: []interface{}{
+				&frameModel.MasterMeta{
+					Model: model.Model{
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
+				},
+			},
+			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO `master_meta` [(]`created_at`," +
+					"`updated_at`,`project_id`,`id`,`type`,`state`,`node_id`," +
+					"`address`,`epoch`,`config`,`error_message`,`detail`," +
+					"`ext`,`deleted`[)]").
+					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry '123456' for key 'uidx_mid'"})
+			},
+		},
+		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
 				&frameModel.MasterMeta{
