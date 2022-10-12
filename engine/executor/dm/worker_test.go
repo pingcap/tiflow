@@ -125,6 +125,7 @@ func TestWorker(t *testing.T) {
 				},
 			},
 		},
+		NeedExtStorage: true,
 	}
 	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
 	unitHolder := &mockUnitHolder{}
