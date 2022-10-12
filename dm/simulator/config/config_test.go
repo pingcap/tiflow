@@ -46,7 +46,7 @@ func TestConfig(t *testing.T) {
 				DataLen:    11,
 			},
 		},
-		UniqueKeyColumnNames: []string{"id"},
+		UniqueKeyColumnNames: []string{"id", "name"},
 	}
-	require.Equal(t, "CREATE TABLE `games`.`members`(`id` int(11),`name` varchar(255),`age` int(11),`team_id` int(11),UNIQUE KEY `id`(`id`))", tableConfig.GenCreateTable())
+	require.Equal(t, "CREATE TABLE `games`.`members`(`id` int(11),`name` varchar(255),`age` int(11),`team_id` int(11),UNIQUE KEY `id_name`(`id`,`name`))", tableConfig.GenCreateTable())
 }

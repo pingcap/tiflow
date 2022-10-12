@@ -55,11 +55,16 @@ func (t *TableConfig) GenCreateTable() string {
 			buf.WriteByte(')')
 		}
 	}
-	for _, ukColName := range t.UniqueKeyColumnNames {
+	if len(t.UniqueKeyColumnNames) > 0 {
 		buf.WriteString(",UNIQUE KEY ")
-		buf.WriteString(dbutil.ColumnName(ukColName))
-		buf.WriteString("(")
-		buf.WriteString(dbutil.ColumnName(ukColName))
+		buf.WriteString(dbutil.ColumnName(strings.Join(t.UniqueKeyColumnNames, "_")))
+		buf.WriteByte('(')
+		for i, ukColName := range t.UniqueKeyColumnNames {
+			if i != 0 {
+				buf.WriteString(",")
+			}
+			buf.WriteString(dbutil.ColumnName(ukColName))
+		}
 		buf.WriteByte(')')
 	}
 	buf.WriteByte(')')
