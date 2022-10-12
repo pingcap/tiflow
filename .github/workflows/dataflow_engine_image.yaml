@@ -33,6 +33,17 @@ jobs:
           username: pingcap
           password: ${{ secrets.DOCKERHUB }}
 
+      - name: Get Tag Name
+        id: imageTag
+        env:
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [[ -z "$INPUT_IMAGE_TAG" ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${INPUT_IMAGE_TAG}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and Push image
         uses: docker/build-push-action@v3
         with:
@@ -40,4 +51,4 @@ jobs:
           platforms: linux/amd64
           file: deployments/engine/docker/Dockerfile
           push: true
-          tags: pingcap/tiflow:latest
+          tags: pingcap/tiflow:${{ steps.imageTag.outputs.tag }}
