@@ -65,7 +65,7 @@ func (c *OnlineDDLChecker) Check(ctx context.Context) *Result {
 		}
 		tables := c.bwlist.Apply(realTables)
 		if len(tables) != 0 {
-			r.State = StateWarning
+			r.State = StateFailure
 			r.Extra = "please wait the online-ddl over"
 			r.Errors = append(r.Errors, NewError("your ddl is in pt/ghost online-ddl"))
 			return r
