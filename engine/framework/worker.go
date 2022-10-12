@@ -395,10 +395,8 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doClose() {
 	if w.resourceBroker != nil {
-		// Closing the resource broker here will
-		// release all temporary file resources created by the worker.
-		// Since we only support local files for now, deletion is fast,
-		// so this method will block until it finishes.
+		// Closing the resource broker here will release all temporary file
+		// resources created by the worker.
 		w.resourceBroker.OnWorkerClosed(context.Background(), w.id, w.masterID)
 	}
 

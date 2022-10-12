@@ -35,7 +35,8 @@ const (
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
-	ctx := makeCtxWithMockDeps(t)
+	ctx, cancel := makeCtxWithMockDeps(t)
+	defer cancel()
 	metaCli, err := ctx.Deps().Construct(
 		func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 			return cli, nil

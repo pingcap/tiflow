@@ -446,6 +446,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		err = c.runEtcdWorker(ownerCtx, owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleOwner)
+		c.owner.AsyncStop()
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,

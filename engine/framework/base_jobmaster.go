@@ -474,7 +474,6 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 
 func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) {
 	log.Panic("unexpected Close call")
-	return
 }
 
 func (j *jobMasterImplAsMasterImpl) StopImpl(ctx context.Context) {

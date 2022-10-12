@@ -39,8 +39,7 @@ type mockWorkerImpl struct {
 	messageSender         *p2p.MockMessageSender
 	metaClient            pkgOrm.Client
 
-	failoverCount atomic.Int64
-	closed        atomic.Bool
+	closed atomic.Bool
 }
 
 type workerParamListForTest struct {

@@ -42,7 +42,7 @@ func (c *chunk[T]) reset() {
 
 func newChunk[T any](size int, q *ChunkQueue[T]) *chunk[T] {
 	return &chunk[T]{
-		data:  make([]T, size, size),
+		data:  make([]T, size),
 		queue: q,
 	}
 }

@@ -25,8 +25,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -50,6 +52,9 @@ type worker struct {
 	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
+	// metricMQWorkerFlushDuration is the metric of the flush duration.
+	// We record the flush duration for each batch.
+	metricMQWorkerFlushDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 }
@@ -62,12 +67,13 @@ func newWorker(
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
-		changeFeedID: id,
-		msgChan:      chann.New[mqEvent](),
-		ticker:       time.NewTicker(mqv1.FlushInterval),
-		encoder:      encoder,
-		producer:     producer,
-		statistics:   statistics,
+		changeFeedID:                id,
+		msgChan:                     chann.New[mqEvent](),
+		ticker:                      time.NewTicker(mqv1.FlushInterval),
+		encoder:                     encoder,
+		producer:                    producer,
+		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
+		statistics:                  statistics,
 	}
 
 	return w
@@ -87,6 +93,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {
+		start := time.Now()
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
@@ -103,6 +110,8 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		duration := time.Since(start)
+		w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
 	}
 }
 
@@ -177,7 +186,7 @@ func (w *worker) asyncSend(
 		rowsCount := 0
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.GetTableSinkState() == state.TableSinkStopping {
+			if event.GetTableSinkState() != state.TableSinkSinking {
 				event.Callback()
 				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue

@@ -360,10 +360,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 // OnCancel implements JobMasterImpl.OnCancel
 func (jm *JobMaster) OnCancel(ctx context.Context) error {
 	log.Info("cvs jobmaster: OnCancel")
-	return jm.cancelWorkers(ctx)
+	return jm.cancelWorkers()
 }
 
-func (jm *JobMaster) cancelWorkers(ctx context.Context) error {
+func (jm *JobMaster) cancelWorkers() error {
 	jm.setState(frameModel.WorkerStateStopped)
 	for _, worker := range jm.syncFilesInfo {
 		if worker.handle.Load() == nil {

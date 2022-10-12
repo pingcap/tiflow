@@ -390,8 +390,10 @@ var (
 		ddlCases: [][]*model.DDLEvent{
 			{{
 				CommitTs: 1,
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "a", Table: "b",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "a", Table: "b",
+					},
 				},
 				Query: "create table a",
 				Type:  1,
@@ -399,16 +401,20 @@ var (
 			{
 				{
 					CommitTs: 2,
-					TableInfo: &model.SimpleTableInfo{
-						Schema: "a", Table: "b",
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a", Table: "b",
+						},
 					},
 					Query: "create table b",
 					Type:  3,
 				},
 				{
 					CommitTs: 3,
-					TableInfo: &model.SimpleTableInfo{
-						Schema: "a", Table: "b",
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a", Table: "b",
+						},
 					},
 					Query: "create table c",
 					Type:  3,
@@ -451,8 +457,10 @@ var (
 
 	testCaseDDL = &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  mm.ActionCreateTable,

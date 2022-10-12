@@ -17,7 +17,7 @@ import (
 	"context"
 	"math"
 	"sync"
-	stdatomic "sync/atomic"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -28,7 +28,7 @@ import (
 
 const (
 	// waitingInterval is the interval to wait for the all callbacks be called.
-	// It used for close the table sink.
+	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
@@ -63,6 +63,10 @@ type progressTracker struct {
 
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
+
+	// frozen is used to indicate whether the progress tracker is frozen.
+	// It means we do not advance anymore.
+	frozen bool
 
 	// closed is used to indicate the progress tracker is closed.
 	closed bool
@@ -131,7 +135,7 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	// 0000000000000000000000000000000000000000000000000000000000000000 ->
 	// 0000000000000000000000000000000000000000000000000000000000001000
 	// When we advance the progress, we can try to find the first 0 bit to indicate the progress.
-	postEventFlush = func() { stdatomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
+	postEventFlush = func() { atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
 	return
 }
 
@@ -172,7 +176,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 			break
 		}
 
-		currBitMap := stdatomic.LoadUint64(&r.pendingEvents[idx1][idx2])
+		currBitMap := atomic.LoadUint64(&r.pendingEvents[idx1][idx2])
 		if currBitMap == math.MaxUint64 {
 			// Move to the next uint64 word (maybe in the next buffer).
 			idx2 += 1
@@ -199,8 +203,8 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
-				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed.
-				if !r.closed {
+				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
+				if !r.frozen && !r.closed {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
 				r.resolvedTsCache = r.resolvedTsCache[1:]
@@ -225,7 +229,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 	return r.lastMinResolvedTs
 }
 
-// trackingCount returns the number of pending events and resolved tss.
+// trackingCount returns the number of pending events and resolved timestamps.
 // Notice: must hold the lock.
 func (r *progressTracker) trackingCount() int {
 	r.mu.Lock()
@@ -233,9 +237,19 @@ func (r *progressTracker) trackingCount() int {
 	return int(r.nextEventID - r.nextToResolvePos)
 }
 
+// freezeProcess marks we do not advance checkpoint ts anymore.
+func (r *progressTracker) freezeProcess() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.frozen = true
+}
+
 // close is used to close the progress tracker.
 func (r *progressTracker) close(ctx context.Context) error {
 	r.mu.Lock()
+	if !r.frozen {
+		panic("the progress tracker should be frozen before closing")
+	}
 	r.closed = true
 	r.mu.Unlock()
 	blockTicker := time.NewTicker(warnDuration)

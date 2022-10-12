@@ -833,7 +833,6 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 type MockTableExecutor struct {
 	mock.Mock
 
-	t *testing.T
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
 	tables map[model.TableID]tablepb.TableState
 }
