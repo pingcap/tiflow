@@ -19,11 +19,13 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+// KV represents the KV pairs in the input map of Sort.
 type KV[K constraints.Ordered, V any] struct {
 	Key   K
 	Value V
 }
 
+// Sort converts an unordered golang map to a slice sorted by map key.
 func Sort[K constraints.Ordered, V any](m map[K]V) []KV[K, V] {
 	s := make([]KV[K, V], 0, len(m))
 	for k, v := range m {
