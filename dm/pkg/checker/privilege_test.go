@@ -52,7 +52,10 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		{
 			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege
 			dumpState: StateFailure,
-			errMatch:  "lack of Select privilege: {`INFORMATION_SCHEMA`}; ",
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "tb1"},
+			},
+			errMatch: "lack of Select privilege: {`db1`.`tb1`}; ",
 		},
 		{
 			grants: []string{ // lack optional privilege
@@ -63,9 +66,9 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "db1", Name: "anomaly_score"},
 			},
-			// `db1`.`anomaly_score`; `INFORMATION_SCHEMA`
+			// `db1`.`anomaly_score`
 			// can't guarantee the order
-			errMatch: "lack of Select privilege: {.*; .*}; ",
+			errMatch: "lack of Select privilege: {.*}; ",
 		},
 		{
 			grants: []string{ // have privileges
@@ -124,7 +127,6 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		},
 		{
 			grants: []string{ // lack db/table level privilege
-				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
@@ -136,7 +138,6 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		{
 			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
-				"GRANT ALL PRIVILEGES ON `INFORMATION_SCHEMA`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
 			checkTables: []*filter.Table{
@@ -148,7 +149,6 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{ // privilege on column level is not enough to execute SHOW CREATE TABLE
 				"GRANT RELOAD ON *.* TO 'user'@'%'",
 				"GRANT SELECT (c) ON `lance`.`t` TO 'user'@'%'",
-				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO 'user'@'%'",
 			},
 			dumpState: StateFailure,
 			checkTables: []*filter.Table{
@@ -160,7 +160,6 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{
 				"GRANT RELOAD ON *.* TO `u1`@`localhost`",
 				"GRANT SELECT ON `db1`.* TO `u1`@`localhost`",
-				"GRANT SELECT ON `INFORMATION_SCHEMA`.* TO `u1`@`localhost`",
 				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
 			},
 			dumpState: StateSuccess,
@@ -187,9 +186,11 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		}
 		dumpLackGrants := genDumpPriv(dumpPrivileges, cs.checkTables)
 		err := verifyPrivilegesWithResult(result, cs.grants, dumpLackGrants)
-		require.Equal(t, err == nil, cs.dumpState == StateSuccess)
-		if err != nil && len(cs.errMatch) != 0 {
-			require.Regexp(t, cs.errMatch, err.ShortErr)
+		if cs.dumpState == StateSuccess {
+			require.Nil(t, err, "grants: %v", cs.grants)
+		} else {
+			require.NotNil(t, err, "grants: %v", cs.grants)
+			require.Regexp(t, cs.errMatch, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
 }
