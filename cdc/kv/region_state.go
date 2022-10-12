@@ -29,10 +29,10 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID        tikv.RegionVerID
-	span         regionspan.ComparableSpan
-	checkpointTs uint64
-	rpcCtx       *tikv.RPCContext
+	verID      tikv.RegionVerID
+	span       regionspan.ComparableSpan
+	resolvedTs uint64
+	rpcCtx     *tikv.RPCContext
 }
 
 func newSingleRegionInfo(
@@ -42,10 +42,10 @@ func newSingleRegionInfo(
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:        verID,
-		span:         span,
-		checkpointTs: ts,
-		rpcCtx:       rpcCtx,
+		verID:      verID,
+		span:       span,
+		resolvedTs: ts,
+		rpcCtx:     rpcCtx,
 	}
 }
 
@@ -71,7 +71,7 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 
 func (s *regionFeedState) start() {
 	s.startFeedTime = time.Now()
-	s.lastResolvedTs = s.sri.checkpointTs
+	s.lastResolvedTs = s.sri.resolvedTs
 	s.matcher = newMatcher()
 }
 
@@ -87,20 +87,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) getLastResolvedTs() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.lastResolvedTs
-}
-
-func (s *regionFeedState) setResolvedTs(resolvedTs uint64) {
-	if resolvedTs > s.getLastResolvedTs() {
-		s.lock.Lock()
-		defer s.lock.Unlock()
-		s.lastResolvedTs = resolvedTs
-	}
 }
 
 func (s *regionFeedState) isInitialized() bool {
@@ -133,10 +119,19 @@ func (s *regionFeedState) getRequestID() uint64 {
 	return s.requestID
 }
 
-func (s *regionFeedState) getCheckpointTs() uint64 {
+func (s *regionFeedState) getLastResolvedTs() uint64 {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return s.sri.checkpointTs
+	return s.lastResolvedTs
+}
+
+// updateResolvedTs update the resolved ts of the current region feed
+func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
+	if resolvedTs > s.getLastResolvedTs() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		s.lastResolvedTs = resolvedTs
+	}
 }
 
 func (s *regionFeedState) getStoreAddr() string {
@@ -145,11 +140,11 @@ func (s *regionFeedState) getStoreAddr() string {
 	return s.sri.rpcCtx.Addr
 }
 
-func (s *regionFeedState) updateCheckpoint() {
+// setRegionInfoResolvedTs is only called when the region disconnect,
+// to update the `singleRegionInfo` which is reused by reconnect.
+func (s *regionFeedState) setRegionInfoResolvedTs() {
 	s.lock.RLock()
-	resolvedTs := s.lastResolvedTs
-	checkpointTs := s.sri.checkpointTs
-	if resolvedTs <= checkpointTs {
+	if s.lastResolvedTs <= s.sri.resolvedTs {
 		s.lock.RUnlock()
 		return
 	}
@@ -157,7 +152,13 @@ func (s *regionFeedState) updateCheckpoint() {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.sri.checkpointTs = resolvedTs
+	s.sri.resolvedTs = s.lastResolvedTs
+}
+
+func (s *regionFeedState) getRegionInfoResolvedTs() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.resolvedTs
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {

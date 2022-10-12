@@ -187,7 +187,7 @@ func (w *regionWorker) checkShouldExit() error {
 }
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
-	state.updateCheckpoint()
+	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -195,7 +195,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.getRequestID()),
 		zap.Stringer("span", state.getRegionSpan()),
-		zap.Uint64("checkpoint", state.getCheckpointTs()),
+		zap.Uint64("resolvedTs", state.getRegionInfoResolvedTs()),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
@@ -304,7 +304,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						log.Warn("kv client reconnect triggered",
 							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
-							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
+							zap.Duration("duration", sinceLastResolvedTs),
+							zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
 					}
 					// Only resolve lock if the resolved-ts keeps unchanged for
@@ -731,18 +732,18 @@ func (w *regionWorker) handleResolvedTs(
 		}
 		regionID := state.getRegionID()
 		regions = append(regions, regionID)
-		regionResolvedTs := state.getLastResolvedTs()
-		if resolvedTs < regionResolvedTs {
+		lastResolvedTs := state.getLastResolvedTs()
+		if resolvedTs < lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID),
 				zap.String("EventType", "RESOLVED"),
 				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Uint64("lastResolvedTs", regionResolvedTs),
+				zap.Uint64("lastResolvedTs", lastResolvedTs),
 				zap.Uint64("regionID", regionID))
 			continue
 		}
-		// emit a checkpointTs
+		// emit a resolvedTs
 		resolvedSpans = append(resolvedSpans, model.RegionComparableSpan{
 			Span:   state.sri.span,
 			Region: regionID,
@@ -764,9 +765,9 @@ func (w *regionWorker) handleResolvedTs(
 		if !state.isInitialized() {
 			continue
 		}
-		state.setResolvedTs(resolvedTs)
+		state.updateResolvedTs(resolvedTs)
 	}
-	// emit a checkpointTs
+	// emit a resolvedTs
 	revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: resolvedTs, Spans: resolvedSpans}}
 	select {
 	case w.outputCh <- revent:
@@ -787,7 +788,7 @@ func (w *regionWorker) evictAllRegions() {
 			}
 			regionState.markStopped()
 			w.delRegionState(regionID)
-			regionState.updateCheckpoint()
+			regionState.setRegionInfoResolvedTs()
 			revokeToken := !regionState.isInitialized()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent

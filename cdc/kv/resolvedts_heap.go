@@ -80,7 +80,7 @@ func newRegionTsManager() *regionTsManager {
 	}
 }
 
-// Upsert implements setByRequestID	and update on duplicated key
+// Upsert implements insert	and update on duplicated key
 // if the region is exists update the resolvedTs, eventTime, penalty, and fixed heap order
 // otherwise, setByRequestID a new regionTsInfo with penalty 0
 func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Time) {
