@@ -75,7 +75,7 @@ func (uk *UniqueKey) GetValue() map[string]interface{} {
 	return result
 }
 
-// GetValueHash return hash for values
+// GetValueHash return hash for values.
 func (uk *UniqueKey) GetValueHash() string {
 	uk.RLock()
 	defer uk.RUnlock()
