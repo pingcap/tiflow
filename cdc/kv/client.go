@@ -305,6 +305,10 @@ type CDCKVClient interface {
 
 	// RegionCount returns the number of captured regions.
 	RegionCount() uint64
+	// ResolvedTs returns the current ingress resolved ts.
+	ResolvedTs() model.Ts
+	// CommitTs returns the current ingress commit ts.
+	CommitTs() model.Ts
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -331,6 +335,8 @@ type CDCClient struct {
 		sync.Mutex
 		counts *list.List
 	}
+	ingressCommitTs   model.Ts
+	ingressResolvedTs model.Ts
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -439,6 +445,16 @@ func (c *CDCClient) RegionCount() uint64 {
 		totalCount += uint64(atomic.LoadInt64(e.Value.(*int64)))
 	}
 	return totalCount
+}
+
+// ResolvedTs returns the current ingress resolved ts.
+func (c *CDCClient) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&c.ingressResolvedTs)
+}
+
+// CommitTs returns the current ingress commit ts.
+func (c *CDCClient) CommitTs() model.Ts {
+	return atomic.LoadUint64(&c.ingressCommitTs)
 }
 
 var currentID uint64 = 0
@@ -1188,6 +1204,7 @@ func (s *eventFeedSession) receiveFromStream(
 		return worker.run(ctx)
 	})
 
+	maxCommitTs := model.Ts(0)
 	for {
 		cevent, err := stream.Recv()
 
@@ -1262,6 +1279,14 @@ func (s *eventFeedSession) receiveFromStream(
 				zap.Int("resolvedRegionCount", regionCount))
 		}
 
+		if len(cevent.Events) != 0 {
+			if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok {
+				commitTs := entries.Entries.Entries[0].CommitTs
+				if maxCommitTs < commitTs {
+					maxCommitTs = commitTs
+				}
+			}
+		}
 		err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
 		if err != nil {
 			return err
@@ -1275,6 +1300,14 @@ func (s *eventFeedSession) receiveFromStream(
 			// TiKV send resolved ts events every second by default.
 			// We check and update region count here to save CPU.
 			atomic.StoreInt64(regionCount, worker.statesManager.regionCount())
+			atomic.StoreUint64(&s.client.ingressResolvedTs, cevent.ResolvedTs.Ts)
+			if maxCommitTs == 0 {
+				// In case, there is no write for the table,
+				// we use resolved ts as maxCommitTs to make the stats meaningful.
+				atomic.StoreUint64(&s.client.ingressCommitTs, cevent.ResolvedTs.Ts)
+			} else {
+				atomic.StoreUint64(&s.client.ingressCommitTs, maxCommitTs)
+			}
 		}
 	}
 }

@@ -22,18 +22,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInfoProvider(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
 	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
 		"a": {Tables: []tablepb.TableStatus{{
 			TableID:    1,
@@ -66,11 +64,10 @@ func TestInfoProvider(t *testing.T) {
 func TestInfoProviderIsInitialized(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
 	var ip internal.InfoProvider = coord
 
 	// Has not initialized yet.

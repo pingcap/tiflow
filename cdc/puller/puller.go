@@ -43,9 +43,11 @@ const (
 
 // Stats of a puller.
 type Stats struct {
-	RegionCount  uint64
-	CheckpointTs model.Ts
-	ResolvedTs   model.Ts
+	RegionCount         uint64
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
+	CheckpointTsEgress  model.Ts
+	ResolvedTsEgress    model.Ts
 }
 
 // Puller pull data from tikv and push changes into a buffer.
@@ -272,8 +274,10 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 func (p *pullerImpl) Stats() Stats {
 	return Stats{
-		RegionCount:  p.kvCli.RegionCount(),
-		ResolvedTs:   atomic.LoadUint64(&p.resolvedTs),
-		CheckpointTs: atomic.LoadUint64(&p.checkpointTs),
+		RegionCount:         p.kvCli.RegionCount(),
+		ResolvedTsIngress:   p.kvCli.ResolvedTs(),
+		CheckpointTsIngress: p.kvCli.CommitTs(),
+		ResolvedTsEgress:    atomic.LoadUint64(&p.resolvedTs),
+		CheckpointTsEgress:  atomic.LoadUint64(&p.checkpointTs),
 	}
 }

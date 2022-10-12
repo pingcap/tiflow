@@ -47,8 +47,10 @@ message Checkpoint {
 message Stats {
     // Number of captured regions.
     uint64 region_count = 1;
+    // The current timestamp from the table's point of view.
+    uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     // Checkponits at each stage.
-    map<string, Checkpoint> stage_checkpoints = 2 [(gogoproto.nullable) = false];
+    map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
 }
 
 // TableStatus is the running status of a table.

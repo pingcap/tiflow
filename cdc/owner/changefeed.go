@@ -44,7 +44,7 @@ import (
 // newSchedulerFromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+	ctx cdcContext.Context, startTs uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -52,11 +52,10 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	clock := upstream.PDClock
 	if cfg.EnableSchedulerV3 {
 		ret, err = scheduler.NewSchedulerV3(
 			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, clock, cfg.Scheduler)
+			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	} else {
 		ret, err = scheduler.NewScheduler(
 			ctx, captureID, changeFeedID, startTs,
@@ -66,9 +65,9 @@ func newSchedulerFromCtx(
 }
 
 func newScheduler(
-	ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+	ctx cdcContext.Context, startTs uint64,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, startTs, upstream)
+	return newSchedulerFromCtx(ctx, startTs)
 }
 
 type changefeed struct {
@@ -136,7 +135,7 @@ type changefeed struct {
 
 	newSink      func() DDLSink
 	newScheduler func(
-		ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+		ctx cdcContext.Context, startTs uint64,
 	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -176,7 +175,7 @@ func newChangefeed4Test(
 	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, startTs uint64, upstream *upstream.Upstream,
+		ctx cdcContext.Context, startTs uint64,
 	) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -525,7 +524,7 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs, c.upstream)
+	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
 	if err != nil {
 		return errors.Trace(err)
 	}

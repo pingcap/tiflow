@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
-	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,12 +118,11 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 func TestCoordinatorHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-			AddTableBatchSize:  50,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
+	})
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 
@@ -178,11 +176,10 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 
@@ -235,12 +232,11 @@ func TestCoordinatorAddCapture(t *testing.T) {
 func TestCoordinatorRemoveCapture(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-			AddTableBatchSize:  50,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+		AddTableBatchSize:  50,
+	})
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 
@@ -327,11 +323,10 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, pdutil.NewClock4Test(),
-		&config.SchedulerConfig{
-			HeartbeatTick:      math.MaxInt,
-			MaxTaskConcurrency: 1,
-		})
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 

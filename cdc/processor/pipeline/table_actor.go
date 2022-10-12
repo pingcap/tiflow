@@ -35,6 +35,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
 	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -458,13 +459,19 @@ func (t *tableActor) Stats() tablepb.Stats {
 	pullerStats := t.pullerNode.plr.Stats()
 	sorterStats := t.sortNode.sorter.Stats()
 	sinkStats := t.sinkNode.Stats()
+	now, _ := t.upstream.PDClock.CurrentTime()
 
 	return tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
 		StageCheckpoints: map[string]tablepb.Checkpoint{
-			"puller": {
-				CheckpointTs: pullerStats.CheckpointTs,
-				ResolvedTs:   pullerStats.ResolvedTs,
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
 			},
 			"sorter-ingress": {
 				CheckpointTs: sorterStats.CheckpointTsIngress,
