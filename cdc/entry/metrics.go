@@ -18,14 +18,6 @@ import (
 )
 
 var (
-	mountDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "mounter",
-			Name:      "unmarshal_and_mount",
-			Help:      "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
-			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"namespace", "changefeed"})
 	totalRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -44,7 +36,6 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(mountDuration)
 	registry.MustRegister(totalRowsCountGauge)
 	registry.MustRegister(ignoredDMLEventCounter)
 }
