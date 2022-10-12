@@ -411,7 +411,7 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	}
 	job := state.(*metadata.Job)
 	for _, task := range job.Tasks {
-		cfg := (*config.JobCfg)(task.Cfg)
+		cfg := task.Cfg.ToJobCfg()
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")
