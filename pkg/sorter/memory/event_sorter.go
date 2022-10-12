@@ -20,6 +20,12 @@ import (
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sorter"
+)
+
+var (
+	_ sorter.EventSortEngine = (*EventSorter)(nil)
+	_ sorter.EventIterator   = (*EventIter)(nil)
 )
 
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
@@ -58,53 +64,55 @@ func (s *EventSorter) AddTable(_ model.TableID) {}
 func (s *EventSorter) RemoveTable(_ model.TableID) {}
 
 // Add implements sorter.EventSortEngine.
-func (s *EventSorter) Add(event *model.PolymorphicEvent) (err error) {
+func (s *EventSorter) Add(_ model.TableID, events ...*model.PolymorphicEvent) (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	heap.Push(&s.unresolved, event)
-	if event.IsResolved() {
-		s.resolvedTsGroup = append(s.resolvedTsGroup, event.CRTs)
-		for s.unresolved.Len() > 0 {
-			item := heap.Pop(&s.unresolved).(*model.PolymorphicEvent)
-			s.resolved = append(s.resolved, item)
-			if item == event {
-				break
+	for _, event := range events {
+		heap.Push(&s.unresolved, event)
+		if event.IsResolved() {
+			s.resolvedTsGroup = append(s.resolvedTsGroup, event.CRTs)
+			for s.unresolved.Len() > 0 {
+				item := heap.Pop(&s.unresolved).(*model.PolymorphicEvent)
+				s.resolved = append(s.resolved, item)
+				if item == event {
+					break
+				}
 			}
 		}
 	}
+
 	return
 }
 
 // SetOnResolve implements sorter.EventSortEngine.
 func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
-	defer s.mu.RUnlock()
+	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
 // Fetch implements sorter.EventSortEngine.
-func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) (iter EventIter) {
+func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) sorter.EventIterator {
 	if tableID != -1 {
 		panic("only for DDL puller")
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	var iter *EventIter = &EventIter{}
 	if len(s.resolvedTsGroup) == 0 {
-		return
+		return iter
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
 		return s.resolved[idx].CRTs >= lowerBound
 	})
-
 	endIdx := sort.Search(len(s.resolved), func(idx int) bool {
 		return s.resolved[idx].CRTs > s.resolvedTsGroup[len(s.resolvedTsGroup)-1]
 	})
-
 	iter.resolved = s.resolved[startIdx:endIdx]
-	return
+	return iter
 }
 
 // Clean implements sorter.EventSortEngine.
@@ -136,8 +144,9 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
 }
 
 // Close implements sorter.EventIterator.
-func (s *EventIter) Close() {
+func (s *EventIter) Close() error {
 	s.resolved = nil
+	return nil
 }
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {

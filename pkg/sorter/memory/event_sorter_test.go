@@ -103,9 +103,9 @@ func TestEventSorter(t *testing.T) {
 	nextToFetch := model.Ts(0)
 	for i, tc := range testCases {
 		for _, entry := range tc.input {
-			es.Add(model.NewPolymorphicEvent(entry))
+			es.Add(0, model.NewPolymorphicEvent(entry))
 		}
-		es.Add(model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
+		es.Add(0, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		iter := es.Fetch(-1, nextToFetch)
 		for j, expect := range tc.expect {
 			fmt.Printf("checking %d.%d\n", i, j)
@@ -139,11 +139,11 @@ func TestEventSorterRandomly(t *testing.T) {
 					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
 					OpType: opType,
 				}
-				es.Add(model.NewPolymorphicEvent(entry))
+				es.Add(0, model.NewPolymorphicEvent(entry))
 			}
-			es.Add(model.NewResolvedPolymorphicEvent(0, resolvedTs))
+			es.Add(0, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.Add(model.NewResolvedPolymorphicEvent(0, maxTs))
+		es.Add(0, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 
 	var lastTs uint64
@@ -295,11 +295,11 @@ func BenchmarkSorter(b *testing.B) {
 					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(1000)),
 					OpType: opType,
 				}
-				es.Add(model.NewPolymorphicEvent(entry))
+				es.Add(0, model.NewPolymorphicEvent(entry))
 			}
-			es.Add(model.NewResolvedPolymorphicEvent(0, resolvedTs))
+			es.Add(0, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.Add(model.NewResolvedPolymorphicEvent(0, maxTs))
+		es.Add(0, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 
 	var resolvedTs uint64

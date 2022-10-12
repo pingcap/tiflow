@@ -31,8 +31,10 @@ type EventSortEngine interface {
 	// Remove removes the table from the engine.
 	RemoveTable(tableID model.TableID)
 
-	// Add adds the given event into the sort engine.
-	Add(event *model.PolymorphicEvent) error
+	// Add adds the given events into the sort engine.
+	// NOTE: it's an asynchronous interface. To get the notification of when
+	// events are available for `Fetch`, SetOnResolve is what you want.
+	Add(tableID model.TableID, events ...*model.PolymorphicEvent) error
 
 	// SetOnResolve pushes action into EventSortEngine's hook list, which
 	// will be called after any events are resolved.

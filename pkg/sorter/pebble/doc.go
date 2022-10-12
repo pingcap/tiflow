@@ -11,5 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package memory is an in-memory EventSortEngine implementation.
-package memory
+// Package pebble is an pebble-based EventSortEngine implementation with such properties:
+//  1. all EventSortEngine instances shares several pebble.DB instances;
+//  2. keys are encoded with prefix TableID-CRTs;
+//  3. keys are hashed into different pebble.DB instances based on table prefix.
+package pebble
