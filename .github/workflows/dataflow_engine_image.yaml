@@ -19,6 +19,9 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
       - name: Build-engine
         run: docker build -f ./deployments/engine/docker/Dockerfile .
 
