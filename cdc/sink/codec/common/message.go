@@ -77,8 +77,8 @@ func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) 
 		value,
 		event.CommitTs,
 		model.MessageTypeDDL,
-		&event.TableInfo.Schema,
-		&event.TableInfo.Table,
+		&event.TableInfo.TableName.Schema,
+		&event.TableInfo.TableName.Table,
 	)
 }
 

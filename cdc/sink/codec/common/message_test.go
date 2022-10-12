@@ -91,16 +91,17 @@ func TestCreate(t *testing.T) {
 			},
 		},
 	}
+	tableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	ddlEvent := &model.DDLEvent{}
-	ddlEvent.FromJob(job, preTableInfo)
+	ddlEvent.FromJob(job, preTableInfo, tableInfo)
 
 	msg = NewDDLMsg(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	require.Nil(t, msg.Key)
 	require.Equal(t, []byte("value1"), msg.Value)
 	require.Equal(t, ddlEvent.CommitTs, msg.Ts)
 	require.Equal(t, model.MessageTypeDDL, msg.Type)
-	require.Equal(t, ddlEvent.TableInfo.Schema, *msg.Schema)
-	require.Equal(t, ddlEvent.TableInfo.Table, *msg.Table)
+	require.Equal(t, ddlEvent.TableInfo.TableName.Schema, *msg.Schema)
+	require.Equal(t, ddlEvent.TableInfo.TableName.Table, *msg.Table)
 	require.Equal(t, config.ProtocolMaxwell, msg.Protocol)
 
 	msg = NewResolvedMsg(config.ProtocolCanal, []byte("key1"), nil, 1234)

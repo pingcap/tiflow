@@ -43,4 +43,6 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 	)
+
+	Close()
 }

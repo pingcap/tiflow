@@ -48,6 +48,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/election"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -496,6 +497,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
+	}
+
 	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
 	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
 	if err != nil {
@@ -591,11 +596,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	s.resourceManagerService = externRescManager.NewService(
-		s.frameMetaClient,
-		s.executorManager,
-		s.masterRPCHook,
-	)
+	s.resourceManagerService = externRescManager.NewService(s.frameMetaClient, s.masterRPCHook)
 }
 
 func (s *Server) initElector() error {
@@ -873,7 +874,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("job manager exited")
 	}()
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients)
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	// TODO refactor this method to make it more readable and maintainable.

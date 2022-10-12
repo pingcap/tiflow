@@ -886,7 +886,7 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 		return false, err
 	}
 	if ddlEvent.TableInfo != nil &&
-		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
+		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableName.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
 			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
