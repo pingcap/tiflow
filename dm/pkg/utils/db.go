@@ -343,6 +343,11 @@ func IsMySQLError(err error, code uint16) bool {
 	return ok && e.Number == code
 }
 
+// IsErrDuplicateEntry checks whether err is DuplicateEntry error.
+func IsErrDuplicateEntry(err error) bool {
+	return IsMySQLError(err, tmysql.ErrDupEntry)
+}
+
 // IsErrBinlogPurged checks whether err is BinlogPurged error.
 func IsErrBinlogPurged(err error) bool {
 	return IsMySQLError(err, tmysql.ErrMasterFatalErrorReadingBinlog)
