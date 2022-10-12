@@ -184,19 +184,10 @@ func (t *testCheckSuite) TestVerifyDumpPrivileges(c *tc.C) {
 			State: StateFailure,
 		}
 		dumpLackGrants := genDumpPriv(dumpPrivileges, cs.checkTables)
-<<<<<<< HEAD
 		err := verifyPrivileges(result, cs.grants, dumpLackGrants)
 		c.Assert(err == nil, tc.Equals, cs.dumpState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
 			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)
-=======
-		err := verifyPrivilegesWithResult(result, cs.grants, dumpLackGrants)
-		if cs.dumpState == StateSuccess {
-			require.Nil(t, err, "grants: %v", cs.grants)
-		} else {
-			require.NotNil(t, err, "grants: %v", cs.grants)
-			require.Regexp(t, cs.errMatch, err.ShortErr, "grants: %v", cs.grants)
->>>>>>> 1af961d0b (checker: infoschema does not need privilege to access (#7324))
 		}
 	}
 }
