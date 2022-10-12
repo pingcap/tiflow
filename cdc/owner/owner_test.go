@@ -61,7 +61,9 @@ func newOwner4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, startTs uint64,
+	) (scheduler.Scheduler, error),
 	pdClient pd.Client,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
@@ -100,7 +102,9 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 			return &mockDDLSink{}
 		},
 		// new scheduler
-		func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+		func(
+			ctx cdcContext.Context, startTs uint64,
+		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},
 		pdClient,
