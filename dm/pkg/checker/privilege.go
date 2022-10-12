@@ -190,21 +190,21 @@ func verifyPrivilegesWithResult(
 func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]priv) string {
 	var b strings.Builder
 
-	for _, kv := range sortmap.Sort(lackPriv) {
+	for _, pair := range sortmap.Sort(lackPriv) {
 		b.WriteString("lack of ")
-		b.WriteString(kv.Key.String())
-		if kv.Value.needGlobal {
+		b.WriteString(pair.Key.String())
+		if pair.Value.needGlobal {
 			b.WriteString(" global (*.*)")
 		}
 		b.WriteString(" privilege")
-		if len(kv.Value.dbs) == 0 {
+		if len(pair.Value.dbs) == 0 {
 			b.WriteString("; ")
 			continue
 		}
 
 		b.WriteString(": {")
 		i := 0
-		for _, kv2 := range sortmap.Sort(kv.Value.dbs) {
+		for _, kv2 := range sortmap.Sort(pair.Value.dbs) {
 			if kv2.Value.wholeDB {
 				b.WriteString(dbutil.ColumnName(kv2.Key))
 				b.WriteString(".*; ")
@@ -220,7 +220,7 @@ func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]priv) string {
 				}
 			}
 			i++
-			if i != len(kv.Value.dbs) {
+			if i != len(pair.Value.dbs) {
 				b.WriteString("; ")
 			}
 		}
@@ -303,10 +303,7 @@ func VerifyPrivileges(
 					continue
 				}
 				privs, ok := lackPrivs[privElem.Priv]
-				if !ok {
-					continue
-				}
-				if privs.needGlobal {
+				if !ok || privs.needGlobal {
 					continue
 				}
 				if _, ok := privs.dbs[dbName]; !ok {
@@ -329,10 +326,7 @@ func VerifyPrivileges(
 							continue
 						}
 						dbPrivs, ok := privs.dbs[dbName]
-						if !ok {
-							continue
-						}
-						if dbPrivs.wholeDB {
+						if !ok || dbPrivs.wholeDB {
 							continue
 						}
 						if _, ok := dbPrivs.tables[tableName]; !ok {
@@ -343,17 +337,11 @@ func VerifyPrivileges(
 					continue
 				}
 				privs, ok := lackPrivs[privElem.Priv]
-				if !ok {
-					continue
-				}
-				if privs.needGlobal {
+				if !ok || privs.needGlobal {
 					continue
 				}
 				dbPrivs, ok := privs.dbs[dbName]
-				if !ok {
-					continue
-				}
-				if dbPrivs.wholeDB {
+				if !ok || dbPrivs.wholeDB {
 					continue
 				}
 				if _, ok := dbPrivs.tables[tableName]; !ok {

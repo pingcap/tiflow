@@ -27,7 +27,7 @@ func TestSort(t *testing.T) {
 		"10": "10",
 	}
 
-	expected := []KV[string, string]{
+	expected := []Pair[string, string]{
 		{"1", "1"},
 		{"10", "10"},
 		{"2", "2"},
