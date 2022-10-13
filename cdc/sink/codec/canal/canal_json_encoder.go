@@ -158,14 +158,13 @@ func eventTypeString(e *model.RowChangedEvent) string {
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.TableName.Schema, e.TableInfo.TableName.Table, convertDdlEventType(e), 1)
 	msg := &canalJSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
+		Schema:        e.TableInfo.TableName.Schema,
+		Table:         e.TableInfo.TableName.Table,
 		IsDDL:         true,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
+		EventType:     convertDdlEventType(e).String(),
+		ExecutionTime: convertToCanalTs(e.CommitTs),
 		BuildTime:     time.Now().UnixNano() / 1e6, // timestamp
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
