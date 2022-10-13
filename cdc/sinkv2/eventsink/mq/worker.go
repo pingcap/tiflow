@@ -30,6 +30,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// flushBatchSize is the batch size of the flush worker.
+	flushBatchSize = 2048
+	// flushInterval is the interval of the flush worker.
+	// We should not set it too big, otherwise it will cause we wait too long to send the message.
+	flushInterval = 15 * time.Millisecond
+)
+
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
@@ -62,12 +70,22 @@ func newWorker(
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
+<<<<<<< HEAD
 		changeFeedID: id,
 		msgChan:      chann.New[mqEvent](),
 		ticker:       time.NewTicker(mqv1.FlushInterval),
 		encoder:      encoder,
 		producer:     producer,
 		statistics:   statistics,
+=======
+		changeFeedID:                id,
+		msgChan:                     chann.New[mqEvent](),
+		ticker:                      time.NewTicker(flushInterval),
+		encoder:                     encoder,
+		producer:                    producer,
+		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
+		statistics:                  statistics,
+>>>>>>> 796d13fc1 (sinkv2(ticdc): make kafka sink send msg more frequently (#7345))
 	}
 
 	return w
@@ -85,7 +103,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
-	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
+	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
@@ -129,7 +147,7 @@ func (w *worker) batch(
 	}
 
 	// Start a new tick to flush the batch.
-	w.ticker.Reset(mqv1.FlushInterval)
+	w.ticker.Reset(flushInterval)
 	for {
 		select {
 		case <-ctx.Done():
