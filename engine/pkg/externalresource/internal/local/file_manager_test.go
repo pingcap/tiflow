@@ -20,11 +20,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/stretchr/testify/require"
 )
 
 func newResourceIdentForTesting(executor, workerID, resourceName string) internal.ResourceIdent {

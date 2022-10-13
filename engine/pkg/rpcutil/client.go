@@ -19,11 +19,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 const defaultDialRetry = 3

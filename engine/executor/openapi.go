@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-
 	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 

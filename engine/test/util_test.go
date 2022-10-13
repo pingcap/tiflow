@@ -20,7 +20,6 @@ import (
 
 	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/engine/executor"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"

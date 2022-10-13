@@ -17,11 +17,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
 )
 
 // SafeMode controls whether enable safe-mode through a mechanism similar to reference-count

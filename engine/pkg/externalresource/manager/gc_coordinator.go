@@ -20,16 +20,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/ratelimit"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"go.uber.org/ratelimit"
+	"go.uber.org/zap"
 )
 
 var _ GCCoordinator = &DefaultGCCoordinator{}
@@ -175,7 +173,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		executorSet[id] = struct{}{}
 	}
 
-	toGCJobSet := make(map[engineModel.JobID]struct{})
+	toGCJobSet := make(map[model.JobID]struct{})
 	toGCExecutorSet := make(map[model.ExecutorID]struct{})
 	for _, resMeta := range resources {
 		if _, exists := jobSnapshot[resMeta.Job]; !exists {
@@ -198,7 +196,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		}
 	}
 
-	toGCJobs := make([]engineModel.JobID, 0, len(toGCJobSet))
+	toGCJobs := make([]model.JobID, 0, len(toGCJobSet))
 	for jobID := range toGCJobSet {
 		toGCJobs = append(toGCJobs, jobID)
 	}

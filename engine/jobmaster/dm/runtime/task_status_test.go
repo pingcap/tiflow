@@ -16,10 +16,9 @@ package runtime
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTaskStatus(t *testing.T) {
