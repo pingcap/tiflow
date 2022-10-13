@@ -44,10 +44,10 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if len(b.data) == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
-	var msg canalJSONMessageInterface = &CanalJSONMessage{}
+	var msg canalJSONMessageInterface = &canalJSONMessage{}
 	if b.enableTiDBExtension {
 		msg = &canalJSONMessageWithTiDBExtension{
-			CanalJSONMessage: &CanalJSONMessage{},
+			canalJSONMessage: &canalJSONMessage{},
 			Extensions:       &tidbExtension{},
 		}
 	}

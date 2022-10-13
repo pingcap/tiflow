@@ -304,7 +304,7 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 		cols = r.Columns
 	}
 
-	result = make([]string, 0, len(cols))
+	result = make([]string, 0)
 	for _, col := range cols {
 		if col != nil && col.Flag.IsPrimaryKey() {
 			result = append(result, col.Name)
