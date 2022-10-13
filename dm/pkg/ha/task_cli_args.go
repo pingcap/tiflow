@@ -17,12 +17,11 @@ import (
 	"context"
 	"fmt"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func putTaskCliArgsOp(taskname string, sources []string, args config.TaskCliArgs) ([]clientv3.Op, error) {

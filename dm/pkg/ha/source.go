@@ -18,12 +18,11 @@ import (
 	"fmt"
 
 	"github.com/pingcap/failpoint"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // PutSourceCfg puts the config of the upstream source into etcd.

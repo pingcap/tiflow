@@ -21,11 +21,10 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
-
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
 )
 
 func TestFailToStartLeader(t *testing.T) {

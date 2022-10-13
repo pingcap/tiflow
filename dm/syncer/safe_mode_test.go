@@ -17,15 +17,14 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/tests/v3/integration"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	mode "github.com/pingcap/tiflow/dm/syncer/safe-mode"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/tests/v3/integration"
+	"go.uber.org/zap"
 )
 
 type mockCheckpointForSafeMode struct {

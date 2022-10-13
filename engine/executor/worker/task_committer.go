@@ -18,11 +18,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const runTTLCheckerInterval = 1 * time.Second
