@@ -193,17 +193,6 @@ func TestColumnValueString(t *testing.T) {
 	}
 }
 
-func TestFromTiColumnInfo(t *testing.T) {
-	t.Parallel()
-	col := &ColumnInfo{}
-	col.FromTiColumnInfo(&timodel.ColumnInfo{
-		Name:      timodel.CIStr{O: "col1"},
-		FieldType: *types.NewFieldType(mysql.TypeLong),
-	})
-	require.Equal(t, "col1", col.Name)
-	require.Equal(t, uint8(3), col.Type)
-}
-
 func TestDDLEventFromJob(t *testing.T) {
 	t.Parallel()
 	ft := types.NewFieldType(mysql.TypeUnspecified)
@@ -241,14 +230,15 @@ func TestDDLEventFromJob(t *testing.T) {
 			},
 		},
 	}
+	tableInfo := WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	event := &DDLEvent{}
-	event.FromJob(job, preTableInfo)
+	event.FromJob(job, preTableInfo, tableInfo)
 	require.Equal(t, uint64(420536581131337731), event.StartTs)
-	require.Equal(t, event.TableInfo.TableID, int64(49))
-	require.Equal(t, 1, len(event.PreTableInfo.ColumnInfo))
+	require.Equal(t, int64(49), event.TableInfo.TableName.TableID)
+	require.Equal(t, 1, len(event.PreTableInfo.TableInfo.Columns))
 
 	event = &DDLEvent{}
-	event.FromJob(job, nil)
+	event.FromJob(job, nil, nil)
 	require.Nil(t, event.PreTableInfo)
 }
 
@@ -313,27 +303,34 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 		},
 	}
 
-	tableInfo := &timodel.TableInfo{
-		ID:   67,
-		Name: timodel.CIStr{O: "t10"},
-		Columns: []*timodel.ColumnInfo{
-			{
-				ID:        1,
-				Name:      timodel.CIStr{O: "id"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t10",
+			TableID: 67,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   67,
+			Name: timodel.CIStr{O: "t10"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
 			},
 		},
 	}
 
 	event := &DDLEvent{}
 	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
-	require.Equal(t, event.PreTableInfo.TableID, int64(67))
-	require.Equal(t, event.PreTableInfo.Table, "t1")
-	require.Len(t, event.PreTableInfo.ColumnInfo, 1)
-	require.Equal(t, event.TableInfo.TableID, int64(67))
-	require.Equal(t, event.TableInfo.Table, "t10")
-	require.Len(t, event.TableInfo.ColumnInfo, 1)
+	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.PreTableInfo.TableName.Table, "t1")
+	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
+	require.Equal(t, event.TableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.TableInfo.TableName.Table, "t10")
+	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t1` TO `test1`.`t10`")
 
 	preTableInfo = &TableInfo{
@@ -356,26 +353,33 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 		},
 	}
 
-	tableInfo = &timodel.TableInfo{
-		ID:   69,
-		Name: timodel.CIStr{O: "t20"},
-		Columns: []*timodel.ColumnInfo{
-			{
-				ID:        1,
-				Name:      timodel.CIStr{O: "id"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
+	tableInfo = &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t20",
+			TableID: 69,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   69,
+			Name: timodel.CIStr{O: "t20"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
 			},
 		},
 	}
 
 	event = &DDLEvent{}
 	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
-	require.Equal(t, event.PreTableInfo.TableID, int64(69))
-	require.Equal(t, event.PreTableInfo.Table, "t2")
-	require.Len(t, event.PreTableInfo.ColumnInfo, 1)
-	require.Equal(t, event.TableInfo.TableID, int64(69))
-	require.Equal(t, event.TableInfo.Table, "t20")
-	require.Len(t, event.TableInfo.ColumnInfo, 1)
+	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
+	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
+	require.Equal(t, event.TableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.TableInfo.TableName.Table, "t20")
+	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t2` TO `test1`.`t20`")
 }

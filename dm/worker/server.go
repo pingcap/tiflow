@@ -825,13 +825,15 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
-	w.RLock()
-	sourceID := w.cfg.SourceID
-	w.RUnlock()
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
-	} else if req.Source != sourceID {
+	}
+	w.RLock()
+	// nolint:ifshort
+	sourceID := w.cfg.SourceID
+	w.RUnlock()
+	if req.Source != sourceID {
 		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", sourceID))
 		return makeCommonWorkerResponse(terror.ErrWorkerSourceNotMatch.Generate()), nil
 	}

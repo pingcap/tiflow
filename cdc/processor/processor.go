@@ -390,6 +390,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 			ResolvedTs:   table.ResolvedTs(),
 		},
 		State: table.State(),
+		Stats: table.Stats(),
 	}
 }
 

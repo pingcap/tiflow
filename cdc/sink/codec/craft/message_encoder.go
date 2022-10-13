@@ -313,11 +313,11 @@ func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageE
 	ty := uint64(ev.Type)
 	query := ev.Query
 	var schema, table *string
-	if len(ev.TableInfo.Schema) > 0 {
-		schema = &ev.TableInfo.Schema
+	if len(ev.TableInfo.TableName.Schema) > 0 {
+		schema = &ev.TableInfo.TableName.Schema
 	}
-	if len(ev.TableInfo.Table) > 0 {
-		table = &ev.TableInfo.Table
+	if len(ev.TableInfo.TableName.Table) > 0 {
+		table = &ev.TableInfo.TableName.Table
 	}
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ev.CommitTs),
