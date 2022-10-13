@@ -80,6 +80,11 @@ func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEven
 
 // UpdateResolvedTs advances the resolved ts of the table sink.
 func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
+	// If resolvedTs is not greater than maxResolvedTs,
+	// the flush is unnecessary.
+	if !e.maxResolvedTs.Less(resolvedTs) {
+		return nil
+	}
 	e.maxResolvedTs = resolvedTs
 
 	i := sort.Search(len(e.eventBuffer), func(i int) bool {
