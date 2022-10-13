@@ -23,12 +23,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"go.uber.org/zap"
 )
 
 // dbConn holds a connection to a database and supports to reset the connection.

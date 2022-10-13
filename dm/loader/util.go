@@ -22,9 +22,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
@@ -33,6 +30,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // SQLReplace works like strings.Replace but only supports one replacement.

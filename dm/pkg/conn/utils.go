@@ -22,11 +22,10 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
-
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 const (

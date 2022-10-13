@@ -21,10 +21,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/spf13/cobra"
-
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/spf13/cobra"
 )
 
 const (

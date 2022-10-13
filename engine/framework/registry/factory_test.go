@@ -17,9 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/dig"
-
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -28,6 +25,8 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
 )
 
 type paramList struct {

@@ -18,12 +18,6 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/stretchr/testify/require"
-
-	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
-
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -32,6 +26,10 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/mock"
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 )
 
 var (

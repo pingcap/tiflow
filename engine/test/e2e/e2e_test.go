@@ -22,12 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/test/e2e"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 type Config struct {

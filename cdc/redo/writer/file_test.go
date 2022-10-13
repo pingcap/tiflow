@@ -26,13 +26,12 @@ import (
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/atomic"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/atomic"
 )
 
 func TestWriterWrite(t *testing.T) {

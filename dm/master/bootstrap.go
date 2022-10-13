@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
@@ -36,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/upgrade"
 	"github.com/pingcap/tiflow/dm/pkg/v1dbschema"
 	"github.com/pingcap/tiflow/dm/pkg/v1workermeta"
+	"go.uber.org/zap"
 )
 
 var (
