@@ -33,6 +33,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/test/e2e"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -164,12 +165,19 @@ func (c *Case) Run(ctx context.Context) error {
 }
 
 func (c *Case) createJob(ctx context.Context) error {
-	jobID, err := e2e.CreateJobViaHTTP(ctx, c.addr, "chaos-dm-test", "project-dm", pb.Job_DM, c.cfgBytes)
-	if err != nil {
-		return err
-	}
-	c.jobID = jobID
-	return nil
+	return retry.Do(ctx, func() error {
+		jobID, err := e2e.CreateJobViaHTTP(ctx, c.addr, "chaos-dm-test", "project-dm", pb.Job_DM, c.cfgBytes)
+		if err != nil {
+			log.L().Error("create job failed", zap.String("name", c.name), zap.Error(err))
+			return err
+		}
+		c.jobID = jobID
+		return nil
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1 second */),
+		retry.WithBackoffMaxDelay(8000 /* 8 seconds */),
+		retry.WithMaxTries(15 /* fail after 103 seconds */),
+	)
 }
 
 func (c *Case) genFullData() error {
