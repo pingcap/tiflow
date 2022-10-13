@@ -242,7 +242,10 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 	// Make sure the retry delay is less than the deadline, otherwise the retry has no chance to execute.
 	backoffMaxDelayInMs := int64(e.config.RenewDeadline/time.Millisecond) / 2
 	if deadline, ok := ctx.Deadline(); ok {
-		backoffMaxDelayInMs = int64(deadline.Sub(time.Now())/time.Millisecond) / 2
+		maxDelayForCtx := int64(deadline.Sub(time.Now())/time.Millisecond) / 2
+		if maxDelayForCtx < backoffMaxDelayInMs {
+			backoffMaxDelayInMs = maxDelayForCtx
+		}
 	}
 
 	return retry.Do(ctx, func() error {
@@ -265,7 +268,11 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithIsRetryableErr(func(err error) bool {
-			log.Debug("failed to update record", zap.Error(err))
+			if errors.Cause(err) == ErrRecordConflict {
+				log.Info("update record conflict, retrying")
+			} else {
+				log.Warn("failed to update record, retrying", zap.Error(err))
+			}
 			return true // For log only, retry doesn't rely on it.
 		}),
 	)
