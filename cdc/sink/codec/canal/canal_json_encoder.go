@@ -43,14 +43,19 @@ type JSONBatchEncoder struct {
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
-		builder:             newCanalEntryBuilder(),
-		messageHolder:       &canalJSONMessage{},
+		builder: newCanalEntryBuilder(),
+		messageHolder: &canalJSONMessage{
+			Data: make([]map[string]interface{}, 0),
+		},
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0),
 	}
 
 	if enableTiDBExtension {
-		encoder.messageHolder = &canalJSONMessageWithTiDBExtension{}
+		encoder.messageHolder = &canalJSONMessageWithTiDBExtension{
+			canalJSONMessage: encoder.messageHolder.(*canalJSONMessage),
+			Extensions:       &tidbExtension{},
+		}
 	}
 
 	return encoder
@@ -135,7 +140,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.Query = ""
 	baseMessage.SQLType = sqlTypeMap
 	baseMessage.MySQLType = mysqlTypeMap
-	baseMessage.Data = make([]map[string]interface{}, 0)
+	baseMessage.Data = baseMessage.Data[:0]
 	baseMessage.Old = nil
 	baseMessage.tikvTs = e.CommitTs
 
@@ -249,7 +254,7 @@ func (c *JSONBatchEncoder) Build() []*common.Message {
 	}
 
 	result := c.messages
-	c.messages = make([]*common.Message, 0)
+	c.messages = c.messages[:0]
 	return result
 }
 
