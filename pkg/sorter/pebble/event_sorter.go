@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -42,9 +43,6 @@ type EventSorter struct {
 	channs   []*chann.Chann[eventWithTableID]
 	serde    encoding.MsgPackGenSerde
 
-	// Just like map[model.TableID]*chann.Chann[eventWithTableID]
-	tables sync.Map
-
 	// To manage background goroutines.
 	wg     sync.WaitGroup
 	closed chan struct{}
@@ -52,9 +50,13 @@ type EventSorter struct {
 	// Following fields are protected by mu.
 	mu         sync.RWMutex
 	onResolves []func(model.TableID, model.Ts)
+	tables     map[model.TableID]*tableState
 }
 
-type EventIter struct{}
+type EventIter struct {
+	iter  *pebble.Iterator
+	serde encoding.MsgPackGenSerde
+}
 
 func New(ctx context.Context, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
@@ -66,6 +68,7 @@ func New(ctx context.Context, dbs []*pebble.DB) *EventSorter {
 		uniqueID: genUniqueID(),
 		dbs:      dbs,
 		channs:   channs,
+		tables:   make(map[model.TableID]*tableState),
 	}
 
 	for i := range eventSorter.dbs {
@@ -86,29 +89,40 @@ func (s *EventSorter) IsTableBased() bool {
 
 // AddTable implements sorter.EventSortEngine.
 func (s *EventSorter) AddTable(tableID model.TableID) {
-	dbID := getDB(tableID, len(s.dbs))
-	if _, loaded := s.tables.LoadOrStore(tableID, s.channs[dbID]); loaded {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.tables[tableID]; exists {
 		log.Panic("add an exist table")
+	}
+	s.tables[tableID] = &tableState{
+		ch:       s.channs[getDB(tableID, len(s.dbs))],
+		resolved: uint64(0),
 	}
 }
 
 // RemoveTable implements sorter.EventSortEngine.
 func (s *EventSorter) RemoveTable(tableID model.TableID) {
-	if _, loaded := s.tables.LoadAndDelete(tableID); !loaded {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.tables[tableID]; !exists {
 		log.Panic("remove an unexist table")
 	}
+	delete(s.tables, tableID)
 }
 
 // Add implements sorter.EventSortEngine.
 func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
-	value, ok := s.tables.Load(tableID)
-	if !ok {
-		log.Panic("add event into an unexist table")
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	if !exists {
+		log.Panic("add events into an unexist table")
 	}
-	ch := value.(*chann.Chann[eventWithTableID])
+	s.mu.Unlock()
 
 	for _, event := range events {
-		ch.In() <- eventWithTableID{tableID, event}
+		state.ch.In() <- eventWithTableID{tableID, event}
 	}
 	return
 }
@@ -122,7 +136,31 @@ func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
 
 // Fetch implements sorter.EventSortEngine.
 func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) sorter.EventIterator {
-	return &EventIter{}
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	if !exists {
+		log.Panic("fetch events from an unexist table")
+	}
+	s.mu.Unlock()
+
+	resolved := atomic.LoadUint64(&state.resolved)
+	if lowerBound > resolved {
+		// FIXME: better way to return an empty iterator.
+		return &EventIter{}
+	}
+
+	db := s.dbs[getDB(tableID, len(s.dbs))]
+	iter := db.NewIter(&pebble.IterOptions{
+		LowerBound: encoding.EncodeTsKey(s.uniqueID, uint64(tableID), lowerBound),
+		UpperBound: encoding.EncodeTsKey(s.uniqueID, uint64(tableID), resolved+1),
+		TableFilter: func(userProps map[string]string) bool {
+			tableMinCRTs, _ := strconv.Atoi(userProps[minTableCRTsLabel])
+			tableMaxCRTs, _ := strconv.Atoi(userProps[maxTableCRTsLabel])
+			return uint64(tableMaxCRTs) >= lowerBound && uint64(tableMinCRTs) <= resolved
+		},
+	})
+	iter.First()
+	return &EventIter{iter, s.serde}
 }
 
 // Clean implements sorter.EventSortEngine.
@@ -131,6 +169,10 @@ func (s *EventSorter) Clean(tableID model.TableID, upperBound model.Ts) {
 
 // Next implements sorter.EventIterator.
 func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
+	if s.iter.Valid() {
+		event = &model.PolymorphicEvent{}
+		_, err = s.serde.Unmarshal(event, s.iter.Value())
+	}
 	return
 }
 
@@ -144,15 +186,20 @@ type eventWithTableID struct {
 	event   *model.PolymorphicEvent
 }
 
+type tableState struct {
+	ch       *chann.Chann[eventWithTableID]
+	resolved uint64
+}
+
 func (s *EventSorter) handleEvents(offset int) {
 	db := s.dbs[offset]
 	inputCh := s.channs[offset].Out()
 
 	batch := db.NewBatch()
-	needCommit := false
 	writeOpts := &pebble.WriteOptions{Sync: false}
+	newResolved := make(map[model.TableID]model.Ts)
 
-	handleItem := func(item eventWithTableID) (mustCommit bool) {
+	handleItem := func(item eventWithTableID) bool {
 		key := encoding.EncodeKey(s.uniqueID, uint64(item.tableID), item.event)
 		value, err := s.serde.Marshal(item.event, []byte{})
 		if err != nil {
@@ -161,10 +208,10 @@ func (s *EventSorter) handleEvents(offset int) {
 		if err = batch.Set(key, value, writeOpts); err != nil {
 			log.Panic("failed to update pebble batch", zap.Error(err))
 		}
-		needCommit = needCommit || item.event.IsResolved()
-		mustCommit = batch.Count() >= batchCommitCount
-		needCommit = needCommit || mustCommit
-		return
+		if item.event.IsResolved() {
+			newResolved[item.tableID] = item.event.CRTs
+		}
+		return batch.Count() >= batchCommitCount
 	}
 
 	for {
@@ -189,19 +236,21 @@ func (s *EventSorter) handleEvents(offset int) {
 			}
 		}
 	CommitBatch:
-		if needCommit {
-			if err := batch.Commit(writeOpts); err != nil {
-				log.Panic("failed to commit pebble batch", zap.Error(err))
-			}
-			batch = db.NewBatch()
-			needCommit = false
+		if err := batch.Commit(writeOpts); err != nil {
+			log.Panic("failed to commit pebble batch", zap.Error(err))
 		}
+		batch = db.NewBatch()
+		s.mu.RLock()
+		for table, resolved := range newResolved {
+			for _, onResolve := range s.onResolves {
+				onResolve(table, resolved)
+			}
+		}
+		s.mu.RUnlock()
 	}
 }
 
-const (
-	batchCommitCount uint32 = 1024
-)
+const batchCommitCount uint32 = 1024
 
 var uniqueIDGen uint32 = 0
 
