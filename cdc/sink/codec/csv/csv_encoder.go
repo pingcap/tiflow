@@ -45,11 +45,11 @@ func (b *BatchEncoder) AppendRowChangedEvent(
 			errors.New("no csv config provided"))
 	}
 
-	row, err := buildRowData(b.csvConfig, e)
+	row, err := rowChangedEvent2CSVMsg(b.csvConfig, e)
 	if err != nil {
 		return err
 	}
-	b.valueBuf.Write(row)
+	b.valueBuf.Write(row.encode())
 	b.batchSize++
 	if callback != nil {
 		b.callbackBuf = append(b.callbackBuf, callback)
