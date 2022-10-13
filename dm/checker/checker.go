@@ -78,9 +78,10 @@ type Checker struct {
 
 	instances []*mysqlInstance
 
-	checkList     []checker.RealChecker
-	checkingItems map[string]string
-	result        struct {
+	checkList         []checker.RealChecker
+	checkingItems     map[string]string
+	dumpWholeInstance bool
+	result            struct {
 		sync.RWMutex
 		detail *checker.Results
 	}
@@ -217,7 +218,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				if err != nil {
 					return err
 				}
-				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
+				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
+					instance.sourceDB.DB,
+					instance.sourceDBinfo,
+					checkTables,
+					exportCfg.Consistency,
+					c.dumpWholeInstance,
+				))
 			}
 		}
 		if instance.cfg.Mode != config.ModeFull {
