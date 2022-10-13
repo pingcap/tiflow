@@ -411,14 +411,14 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
-	test_expression_filter
-	test_json_expression
-	test_fail_job_between_event
-	test_session_config
-	test_query_timeout
-	test_stop_task_before_checkpoint
-	test_regexpr_router regexpr-task.yaml
-	test_regexpr_router regexpr-task-lightning.yaml
+#	test_expression_filter
+#	test_json_expression
+#	test_fail_job_between_event
+#	test_session_config
+#	test_query_timeout
+#	test_stop_task_before_checkpoint
+#	test_regexpr_router regexpr-task.yaml
+#	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
@@ -432,14 +432,14 @@ function run() {
 	run_sql_tidb "drop table if exists all_mode.no_diff;"
 	run_sql_tidb "create table all_mode.no_diff(id int NOT NULL PRIMARY KEY, dt datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, ts timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP);"
 
-	# create table with unsupported charset
-	run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
-	run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
-
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
+
+	# create table with unsupported charset
+  run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
+  run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
 
 	# start DM worker and master
 	# set log level of DM-master to info, because debug level will let etcd print KV, thus expose the password in task config
