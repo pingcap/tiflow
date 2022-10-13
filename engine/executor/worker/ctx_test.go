@@ -18,10 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToRuntimeCtxFromDerivedStdCtx(t *testing.T) {

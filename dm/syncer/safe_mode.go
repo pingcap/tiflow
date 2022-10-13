@@ -16,13 +16,12 @@ package syncer
 import (
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/unit"
+	"go.uber.org/zap"
 )
 
 func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {

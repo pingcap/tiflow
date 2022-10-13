@@ -26,14 +26,13 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.uber.org/zap"
 )
 
 const (

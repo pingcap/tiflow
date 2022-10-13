@@ -26,10 +26,9 @@ import (
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/container/sortmap"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 type tablePriv struct {

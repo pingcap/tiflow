@@ -17,11 +17,10 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/v1workermeta"
+	"go.uber.org/zap"
 )
 
 // OperateV1Meta implements WorkerServer.OperateV1Meta.

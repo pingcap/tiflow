@@ -16,9 +16,8 @@ package utils
 import (
 	"os"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 // ExitWithError forces to exist the process, it's often used in integration tests.

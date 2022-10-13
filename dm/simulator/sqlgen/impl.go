@@ -23,11 +23,10 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
 	_ "github.com/pingcap/tidb/types/parser_driver" // import this to make the parser work
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/simulator/config"
 	"github.com/pingcap/tiflow/dm/simulator/mcp"
+	"go.uber.org/zap"
 )
 
 type sqlGeneratorImpl struct {
