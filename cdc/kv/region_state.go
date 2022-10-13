@@ -119,6 +119,15 @@ func (s *regionFeedState) getRequestID() uint64 {
 	return s.requestID
 }
 
+func (s *regionFeedState) getRegionIDAndLastResolvedTs() (uint64, uint64, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	if !s.initialized {
+		return 0, 0, false
+	}
+	return s.sri.verID.GetID(), s.lastResolvedTs, true
+}
+
 func (s *regionFeedState) getLastResolvedTs() uint64 {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -127,11 +136,21 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	if resolvedTs > s.getLastResolvedTs() {
-		s.lock.Lock()
-		defer s.lock.Unlock()
-		s.lastResolvedTs = resolvedTs
+	s.lock.RLock()
+	if !s.initialized {
+		s.lock.RUnlock()
+		return
 	}
+
+	if resolvedTs <= s.lastResolvedTs {
+		s.lock.RUnlock()
+		return
+	}
+
+	s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.lastResolvedTs = resolvedTs
 }
 
 func (s *regionFeedState) getStoreAddr() string {

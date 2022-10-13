@@ -189,7 +189,7 @@ func (w *regionWorker) checkShouldExit() error {
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
-	log.Info("single region event feed disconnected",
+	log.Debug("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
@@ -727,12 +727,11 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
+		regionID, lastResolvedTs, initialized := state.getRegionIDAndLastResolvedTs()
+		if !initialized {
 			continue
 		}
-		regionID := state.getRegionID()
 		regions = append(regions, regionID)
-		lastResolvedTs := state.getLastResolvedTs()
 		if resolvedTs < lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -762,9 +761,6 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
-			continue
-		}
 		state.updateResolvedTs(resolvedTs)
 	}
 	// emit a resolvedTs
