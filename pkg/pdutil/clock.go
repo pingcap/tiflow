@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const pdTimeUpdateInterval = 200 * time.Millisecond
+const pdTimeUpdateInterval = 10 * time.Millisecond
 
 // Clock is a time source of PD cluster.
 type Clock interface {
