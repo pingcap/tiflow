@@ -108,7 +108,7 @@ var (
 			Subsystem: "scheduler",
 			Name:      "slow_table_stage_checkpoint_ts_lag_histogram",
 			Help:      "Histogram of the slowest table checkpoint ts lag of each stage",
-			Buckets:   prometheus.LinearBuckets(0.5, 1, 16),
+			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
 		}, []string{"namespace", "changefeed", "stage"})
 	slowestTableStageResolvedTsLagHistogramVec = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -116,7 +116,7 @@ var (
 			Subsystem: "scheduler",
 			Name:      "slow_table_stage_resolved_ts_lag_histogram",
 			Help:      "Histogram of the slowest table resolved ts lag of each stage",
-			Buckets:   prometheus.LinearBuckets(0.5, 1, 16),
+			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
 		}, []string{"namespace", "changefeed", "stage"})
 	slowestTableRegionGaugeVec = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
