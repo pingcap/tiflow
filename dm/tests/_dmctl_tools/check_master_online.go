@@ -18,12 +18,10 @@ import (
 	"os"
 	"time"
 
-	"google.golang.org/grpc"
-
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/tests/utils"
+	"google.golang.org/grpc"
 )
 
 // use show-ddl-locks request to test DM-master is online

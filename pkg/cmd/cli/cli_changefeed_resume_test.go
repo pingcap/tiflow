@@ -22,9 +22,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )

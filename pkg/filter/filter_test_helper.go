@@ -25,10 +25,9 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
-
-	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // testHelper is a test helper for filter which creates

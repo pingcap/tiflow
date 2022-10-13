@@ -18,15 +18,14 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Re-export types for public use

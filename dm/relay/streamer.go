@@ -18,14 +18,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-
-	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 )
 

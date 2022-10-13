@@ -17,11 +17,10 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Workloader defines an interface to get Workload

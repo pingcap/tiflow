@@ -464,6 +464,7 @@ func (t *tableActor) Stats() tablepb.Stats {
 	return tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
 		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
 				CheckpointTs: pullerStats.CheckpointTsIngress,

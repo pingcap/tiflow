@@ -22,10 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/log"
 	cvsTask "github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -37,6 +33,9 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Config records all configurations of cvs job
