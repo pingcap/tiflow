@@ -467,7 +467,7 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
-		"Unknown character set: 'greek'" 1
+		"Unknown character set: 'greek'"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $ILLEGAL_CHAR_NAME" \
 		"Unknown character set: 'greek'" 1
@@ -593,7 +593,11 @@ function run() {
 	check_contains "all_mode"
 
 	echo "check dump files have been cleaned"
-	ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker1 auto removed dump files"
+	# source1 contains unsupported charset, so dump files is uncleaned
+	# files are all_mode.no_diff2-schema.sql  all_mode.t1-schema.sql
+  #   all_mode.no_diff-schema.sql   metadata
+  #  	all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
+  [ `ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l` -eq 6 ]
 	ls $WORK_DIR/worker2/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker2 auto removed dump files"
 
 	echo "check no password in log"
