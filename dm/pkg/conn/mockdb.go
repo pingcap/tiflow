@@ -29,9 +29,8 @@ import (
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/tikv/client-go/v2/testutils"
-
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/tikv/client-go/v2/testutils"
 )
 
 type mockDBProvider struct {

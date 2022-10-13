@@ -21,11 +21,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // BinlogWriter is a binlog event writer which writes binlog events to a file.

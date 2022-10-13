@@ -17,18 +17,16 @@ import (
 	"context"
 	"time"
 
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-
 	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Writer is used to persist WorkerStatus changes and send notifications

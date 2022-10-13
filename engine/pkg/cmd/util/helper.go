@@ -20,10 +20,9 @@ import (
 	"syscall"
 
 	"github.com/pingcap/log"
+	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-
-	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 )
 
 // InitCmd initializes the default context and returns its cancel function.

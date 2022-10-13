@@ -17,11 +17,10 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 // BaseHandle provides some common api of a worker, no matter it is running or dead.

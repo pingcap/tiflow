@@ -16,12 +16,11 @@ package master
 import (
 	"context"
 
-	"go.uber.org/atomic"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 )
 
 // MockHandle implements WorkerHandle, it can work as either a RunningHandle or
