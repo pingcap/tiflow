@@ -86,6 +86,16 @@ error = '''
 puller mem buffer reach size limit
 '''
 
+["CDC:ErrCSVDecodeFailed"]
+error = '''
+csv decode failed
+'''
+
+["CDC:ErrCSVEncodeFailed"]
+error = '''
+csv encode failed
+'''
+
 ["CDC:ErrCachedTSONotExists"]
 error = '''
 GetCachedCurrentVersion: cache entry does not exist

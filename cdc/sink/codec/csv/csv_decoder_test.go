@@ -14,7 +14,6 @@ package csv
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -50,6 +49,5 @@ func TestCSVBatchDecoder(t *testing.T) {
 	}
 
 	_, hasNext, _ := decoder.HasNext()
-	fmt.Println(hasNext)
 	require.False(t, hasNext)
 }
