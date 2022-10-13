@@ -63,6 +63,7 @@ func newSink(ctx context.Context,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
+	dryRun bool,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -74,7 +75,7 @@ func newSink(ctx context.Context,
 	encoder := encoderBuilder.Build()
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	w := newWorker(changefeedID, encoder, producer, statistics)
+	w := newWorker(changefeedID, encoder, producer, statistics, dryRun)
 
 	s := &dmlSink{
 		id:             changefeedID,

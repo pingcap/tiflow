@@ -16,6 +16,7 @@ package mq
 import (
 	"context"
 	"net/url"
+	"strconv"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -117,7 +118,15 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, errCh)
+	var dryRun bool
+	if dryRunStr := sinkURI.Query().Get("dry-run"); dryRunStr != "" {
+		dryRun, err = strconv.ParseBool(dryRunStr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, dryRun, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

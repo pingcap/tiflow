@@ -55,6 +55,7 @@ const (
 	defaultSafeMode            = true
 	defaultTxnIsolationRC      = "READ-COMMITTED"
 	defaultCharacterSet        = "utf8mb4"
+	defaultDryRun              = false
 
 	// BackoffBaseDelay indicates the base delay time for retrying.
 	BackoffBaseDelay = 500 * time.Millisecond
@@ -77,6 +78,9 @@ type Config struct {
 	TLS                 string
 	ForceReplicate      bool
 	EnableOldValue      bool
+	// If DryRun is true, the sink will not write data to downstream.
+	// It only uses for debug.
+	DryRun bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -91,6 +95,7 @@ func NewConfig() *Config {
 		WriteTimeout:        defaultWriteTimeout,
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
+		DryRun:              defaultDryRun,
 	}
 }
 
@@ -140,7 +145,9 @@ func (c *Config) Apply(
 	if err = getDuration(query, "timeout", &c.DialTimeout); err != nil {
 		return err
 	}
-
+	if err = getDryRun(query, &c.DryRun); err != nil {
+		return err
+	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 
@@ -307,5 +314,18 @@ func getDuration(values url.Values, key string, target *string) error {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
 	*target = s
+	return nil
+}
+
+func getDryRun(values url.Values, dryRun *bool) error {
+	s := values.Get("dry-run")
+	if len(s) == 0 {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	*dryRun = enabled
 	return nil
 }

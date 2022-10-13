@@ -312,6 +312,14 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 }
 
 func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
+	// Debug only.
+	if s.cfg.DryRun {
+		s.statistics.RecordBatchExecution(func() (int, error) {
+			return dmls.rowCount, nil
+		})
+		return nil
+	}
+
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),

@@ -57,6 +57,7 @@ type worker struct {
 	metricMQWorkerFlushDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
+	dryRun     bool
 }
 
 // newWorker creates a new flush worker.
@@ -65,6 +66,7 @@ func newWorker(
 	encoder codec.EventBatchEncoder,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
+	dryRun bool,
 ) *worker {
 	w := &worker{
 		changeFeedID:                id,
@@ -74,6 +76,7 @@ func newWorker(
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
+		dryRun:                      dryRun,
 	}
 
 	return w
@@ -199,6 +202,16 @@ func (w *worker) asyncSend(
 			w.statistics.ObserveRows(event.Event)
 		}
 
+		// Debug Only
+		if w.dryRun {
+			for _, message := range w.encoder.Build() {
+				_ = w.statistics.RecordBatchExecution(func() (int, error) {
+					return message.GetRowsCount(), nil
+				})
+			}
+			return nil
+		}
+
 		for _, message := range w.encoder.Build() {
 			err := w.statistics.RecordBatchExecution(func() (int, error) {
 				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
@@ -212,7 +225,6 @@ func (w *worker) asyncSend(
 			}
 		}
 	}
-
 	return nil
 }
 
