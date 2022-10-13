@@ -26,6 +26,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+const defaultIOConcurrency = 1
+
 type batchDecoder struct {
 	csvConfig *config.CSVConfig
 	parser    *mydump.CSVParser
@@ -38,6 +40,8 @@ type batchDecoder struct {
 func NewBatchDecoder(ctx context.Context, csvConfig *config.CSVConfig, value []byte) (codec.EventBatchDecoder, error) {
 	var backslashEscape bool
 
+	// if quote is not set in config, we should unespace backslash
+	// when parsing csv columns.
 	if len(csvConfig.Quote) == 0 {
 		backslashEscape = true
 	}
@@ -51,13 +55,14 @@ func NewBatchDecoder(ctx context.Context, csvConfig *config.CSVConfig, value []b
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
 		mydump.NewStringReader(string(value)),
 		int64(lconfig.ReadBlockSize),
-		worker.NewPool(ctx, 1, "io"), false, nil)
+		worker.NewPool(ctx, defaultIOConcurrency, "io"), false, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &batchDecoder{
 		csvConfig: csvConfig,
 		data:      value,
+		msg:       newCSVMessage(csvConfig),
 		parser:    csvParser,
 	}, nil
 }
@@ -71,11 +76,9 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	}
 
 	row := b.parser.LastRow()
-	csvMsg := newCSVMessage(b.csvConfig)
-	if err = csvMsg.decode(row.Row); err != nil {
+	if err = b.msg.decode(row.Row); err != nil {
 		return model.MessageTypeUnknown, false, errors.Trace(err)
 	}
-	b.msg = csvMsg
 
 	return model.MessageTypeRow, true, nil
 }

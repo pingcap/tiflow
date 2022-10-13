@@ -29,6 +29,9 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// a csv row should at least contain operation-type, table-name, schema-name and one table column
+const minimumColsCnt = 4
+
 // operation specifies the operation type
 type operation int
 
@@ -109,7 +112,7 @@ func (c *csvMessage) encode() []byte {
 }
 
 func (c *csvMessage) decode(datums []types.Datum) error {
-	if len(datums) < 4 {
+	if len(datums) < minimumColsCnt {
 		return cerror.WrapError(cerror.ErrCSVDecodeFailed,
 			errors.New("the csv row should have at least four columns"+
 				"(operation-type, table-name, schema-name, commit-ts)"))
