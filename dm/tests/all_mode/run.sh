@@ -411,14 +411,14 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
-#	test_expression_filter
-#	test_json_expression
-#	test_fail_job_between_event
-#	test_session_config
-#	test_query_timeout
-#	test_stop_task_before_checkpoint
-#	test_regexpr_router regexpr-task.yaml
-#	test_regexpr_router regexpr-task-lightning.yaml
+	#	test_expression_filter
+	#	test_json_expression
+	#	test_fail_job_between_event
+	#	test_session_config
+	#	test_query_timeout
+	#	test_stop_task_before_checkpoint
+	#	test_regexpr_router regexpr-task.yaml
+	#	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
@@ -438,8 +438,8 @@ function run() {
 	check_contains 'Query OK, 3 rows affected'
 
 	# create table with unsupported charset
-  run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
-  run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
+	run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
+	run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
 
 	# start DM worker and master
 	# set log level of DM-master to info, because debug level will let etcd print KV, thus expose the password in task config
@@ -465,7 +465,17 @@ function run() {
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
 
-	read -p 123
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
+		"Unknown character set: 'greek'" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $ILLEGAL_CHAR_NAME" \
+		"Unknown character set: 'greek'" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+  	"stop-task $WORK_DIR/dm-task.yaml"
+
+	run_sql_tidb "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=utf8mb4;"
+
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	# check task has started
 	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker1\"}" 10 1 3
@@ -473,6 +483,8 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# check data of no_diff2
+	run_sql_tidb_with_retry "select count(1) from all_mode.no_diff2 where name = 'αβγ'" "count(1): 1"
 
 	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
 	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
