@@ -431,3 +431,18 @@ func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
 	}
 	return nil
 }
+
+func (n *sinkNode) Stats() Stats {
+	return Stats{
+		CheckpointTs: n.CheckpointTs(),
+		ResolvedTs:   n.getResolvedTs().Ts,
+		BarrierTs:    n.barrierTs,
+	}
+}
+
+// Stats of a sink.
+type Stats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
+}

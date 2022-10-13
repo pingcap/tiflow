@@ -157,10 +157,12 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
 	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
 	messageAgent.On("SendMessage").Return(destroyError).Once()
-	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	jobCfg := &config.JobCfg{ModRevision: 1}
+	taskCfg := jobCfg.ToTaskCfg()
+	job.Tasks[source2] = metadata.NewTask(taskCfg)
 	require.EqualError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job), destroyError.Error())
 	messageAgent.On("SendMessage").Return(nil).Once()
-	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	job.Tasks[source2] = metadata.NewTask(taskCfg)
 	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
 
 	job = metadata.NewJob(&config.JobCfg{})
