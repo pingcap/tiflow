@@ -234,3 +234,21 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
 	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
 }
+
+func TestDoNotAddUselessResolvedTs(t *testing.T) {
+	t.Parallel()
+
+	// There is no event in the tracker.
+	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 0, tracker.trackingCount(), "resolved ts should not be added")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
+
+	// Useless resolved ts should not be added.
+	// Because the resolved ts is smaller than or equal to the lastMinResolvedTs.
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Len(t, tracker.resolvedTsCache, 0, "resolved ts should not be added")
+}

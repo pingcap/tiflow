@@ -37,7 +37,7 @@ const (
 	flushBatchSize = 2048
 	// flushInterval is the interval of the flush worker.
 	// We should not set it too big, otherwise it will cause we wait too long to send the message.
-	flushInterval = 10 * time.Millisecond
+	flushInterval = 15 * time.Millisecond
 )
 
 // mqEvent is the event of the mq worker.
