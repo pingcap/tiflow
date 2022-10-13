@@ -97,12 +97,12 @@ func newWorker(
 func (w *worker) run(ctx context.Context) (retErr error) {
 	defer func() {
 		w.ticker.Stop()
-		log.Info("FlushWorker exited", zap.Error(retErr),
+		log.Info("MQ sink worker exited", zap.Error(retErr),
 			zap.String("namespace", w.changeFeedID.Namespace),
-			zap.String("changefeed", w.changeFeedID.ID))
+			zap.String("changefeed", w.changeFeedID.ID),
+			zap.String("protocol", w.protocol.String()),
+		)
 	}()
-	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
-		zap.String("changefeed", w.changeFeedID.ID))
 	if w.protocol.IsBatchEncoder() {
 		return w.batchEncode(ctx)
 	}
@@ -110,6 +110,11 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 }
 
 func (w *worker) nonBatchEncode(ctx context.Context) error {
+	log.Info("MQ sink non batch worker started",
+		zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID),
+		zap.String("protocol", w.protocol.String()),
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -118,6 +123,12 @@ func (w *worker) nonBatchEncode(ctx context.Context) error {
 			if !ok {
 				log.Warn("MQ sink flush worker channel closed")
 				return nil
+			}
+			// Skip this event when the table is stopping.
+			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+				event.rowEvent.Callback()
+				log.Debug("Skip event of stopped table", zap.Any("event", event))
+				continue
 			}
 			start := time.Now()
 			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
@@ -145,6 +156,11 @@ func (w *worker) nonBatchEncode(ctx context.Context) error {
 }
 
 func (w *worker) batchEncode(ctx context.Context) (retErr error) {
+	log.Info("MQ sink batch worker started",
+		zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID),
+		zap.String("protocol", w.protocol.String()),
+	)
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
