@@ -32,6 +32,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// flushBatchSize is the batch size of the flush worker.
+	flushBatchSize = 2048
+	// flushInterval is the interval of the flush worker.
+	// We should not set it too big, otherwise it will cause we wait too long to send the message.
+	flushInterval = 15 * time.Millisecond
+)
+
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
@@ -69,7 +77,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                id,
 		msgChan:                     chann.New[mqEvent](),
-		ticker:                      time.NewTicker(mqv1.FlushInterval),
+		ticker:                      time.NewTicker(flushInterval),
 		encoder:                     encoder,
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
@@ -91,7 +99,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
-	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
+	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
 		start := time.Now()
 		endIndex, err := w.batch(ctx, eventsBuf)
@@ -138,7 +146,7 @@ func (w *worker) batch(
 	}
 
 	// Start a new tick to flush the batch.
-	w.ticker.Reset(mqv1.FlushInterval)
+	w.ticker.Reset(flushInterval)
 	for {
 		select {
 		case <-ctx.Done():
