@@ -47,8 +47,8 @@ type TablePipeline interface {
 	// Start the sink consume data from the given `ts`
 	Start(ts model.Ts)
 
-	// Workload returns the workload of this table
-	Workload() model.WorkloadInfo
+	// Stats returns statistic for a table.
+	Stats() Stats
 	// State returns the state of this table pipeline
 	State() TableState
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline

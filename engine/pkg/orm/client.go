@@ -96,6 +96,7 @@ type ProjectOperationClient interface {
 
 // JobClient defines interface that manages job in metastore
 type JobClient interface {
+	InsertJob(ctx context.Context, job *frameModel.MasterMeta) error
 	UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error
 	UpdateJob(ctx context.Context, jobID string, values model.KeyValueMap) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
@@ -292,6 +293,19 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 }
 
 // ///////////////////////////// Job Operation
+// InsertJob insert the jobInfo
+func (c *metaOpsClient) InsertJob(ctx context.Context, job *frameModel.MasterMeta) error {
+	if job == nil {
+		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
+	}
+
+	if err := c.db.WithContext(ctx).Create(job).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
+}
+
 // UpsertJob upsert the jobInfo
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error {
 	if job == nil {

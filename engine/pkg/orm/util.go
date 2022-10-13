@@ -24,6 +24,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	dmutils "github.com/pingcap/tiflow/dm/pkg/utils" // TODO: move it to pkg
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
@@ -127,4 +128,14 @@ func NewGormDB(sqlDB *sql.DB, storeType metaModel.StoreType) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+// IsDuplicateEntryError checks whether error contains DuplicateEntry(MySQL) error
+// or UNIQUE constraint failed(SQLite) error underlying.
+func IsDuplicateEntryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return dmutils.IsErrDuplicateEntry(err) ||
+		strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

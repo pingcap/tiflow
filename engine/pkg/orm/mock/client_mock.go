@@ -264,6 +264,20 @@ func (mr *MockClientMockRecorder) GetWorkerByID(arg0, arg1, arg2 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerByID", reflect.TypeOf((*MockClient)(nil).GetWorkerByID), arg0, arg1, arg2)
 }
 
+// InsertJob mocks base method.
+func (m *MockClient) InsertJob(arg0 context.Context, arg1 *model.MasterMeta) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertJob", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertJob indicates an expected call of InsertJob.
+func (mr *MockClientMockRecorder) InsertJob(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertJob", reflect.TypeOf((*MockClient)(nil).InsertJob), arg0, arg1)
+}
+
 // QueryJobOp mocks base method.
 func (m *MockClient) QueryJobOp(arg0 context.Context, arg1 string) (*model2.JobOp, error) {
 	m.ctrl.T.Helper()
