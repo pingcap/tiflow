@@ -411,14 +411,14 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
-	#	test_expression_filter
-	#	test_json_expression
-	#	test_fail_job_between_event
-	#	test_session_config
-	#	test_query_timeout
-	#	test_stop_task_before_checkpoint
-	#	test_regexpr_router regexpr-task.yaml
-	#	test_regexpr_router regexpr-task-lightning.yaml
+	test_expression_filter
+	test_json_expression
+	test_fail_job_between_event
+	test_session_config
+	test_query_timeout
+	test_stop_task_before_checkpoint
+	test_regexpr_router regexpr-task.yaml
+	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
@@ -472,7 +472,7 @@ function run() {
 		"query-status $ILLEGAL_CHAR_NAME" \
 		"Unknown character set: 'greek'" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-  	"stop-task $WORK_DIR/dm-task.yaml"
+		"stop-task $WORK_DIR/dm-task.yaml"
 
 	run_sql_tidb "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=utf8mb4;"
 
@@ -595,9 +595,9 @@ function run() {
 	echo "check dump files have been cleaned"
 	# source1 contains unsupported charset, so dump files is uncleaned
 	# files are all_mode.no_diff2-schema.sql  all_mode.t1-schema.sql
-  #   all_mode.no_diff-schema.sql   metadata
-  #  	all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
-  [ `ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l` -eq 6 ]
+	#   all_mode.no_diff-schema.sql   metadata
+	#  	all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
+	[ $(ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l) -eq 6 ]
 	ls $WORK_DIR/worker2/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker2 auto removed dump files"
 
 	echo "check no password in log"
