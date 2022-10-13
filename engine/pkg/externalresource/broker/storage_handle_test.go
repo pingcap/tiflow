@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -33,7 +32,7 @@ func newResourceIdentForTesting(executor, workerID, resourceName string) interna
 		Name: resourceName,
 		ResourceScope: internal.ResourceScope{
 			ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
-			Executor:    resModel.ExecutorID(executor),
+			Executor:    model.ExecutorID(executor),
 			WorkerID:    workerID,
 		},
 	}
@@ -45,7 +44,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 
 	executor := model.ExecutorID("executor-1")
 	ident := newResourceIdentForTesting(string(executor), "worker-1", "test-resource")
-	fm := local.NewLocalFileManager(executor, resModel.LocalFileConfig{BaseDir: dir})
+	fm := local.NewLocalFileManager(executor, model.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()
 
 	ctx := context.Background()
@@ -109,7 +108,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	fm := local.NewLocalFileManager("", resModel.LocalFileConfig{BaseDir: dir})
+	fm := local.NewLocalFileManager("", model.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()
 
 	ctx := context.Background()

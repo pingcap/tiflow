@@ -29,22 +29,21 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
+	"golang.org/x/sync/errgroup"
 )
 
 type testServer struct {

@@ -15,7 +15,6 @@ package ha
 
 import (
 	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

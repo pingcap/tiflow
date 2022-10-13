@@ -24,7 +24,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

@@ -18,18 +18,17 @@ import (
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // NewClientConnImpl return a new clientConnImpl
 func NewClientConnImpl(storeConf *metaModel.StoreConfig) (*clientConnImpl, error) {
 	if storeConf == nil {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("store config is nil")
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("store config is nil")
 	}
 
 	if storeConf.StoreType != metaModel.StoreTypeEtcd {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStack(
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack(
 			"etcd conn but get unmatch type:%s", storeConf.StoreType)
 	}
 
@@ -54,7 +53,7 @@ func (cc *clientConnImpl) GetConn() (interface{}, error) {
 	defer cc.rwLock.RUnlock()
 
 	if cc.cli == nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs("connection is uninitialized")
+		return nil, errors.ErrMetaOpFail.GenWithStackByArgs("connection is uninitialized")
 	}
 
 	return cc.cli, nil

@@ -26,10 +26,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
@@ -39,7 +35,10 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var _ = Suite(&testDDLSuite{})
