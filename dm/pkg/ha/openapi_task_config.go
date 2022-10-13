@@ -16,13 +16,12 @@ package ha
 import (
 	"context"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/clientv3util"
-
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/clientv3util"
 )
 
 func openAPITaskFromResp(resp *clientv3.GetResponse) (*openapi.Task, error) {

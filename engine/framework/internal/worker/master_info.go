@@ -17,10 +17,9 @@ import (
 	"context"
 	"sync"
 
-	"go.uber.org/atomic"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/atomic"
 )
 
 // MasterInfoProvider is an object that can provide the caller
