@@ -127,12 +127,21 @@ func IsTiDBFromVersion(version string) bool {
 
 func markCheckError(result *Result, err error) {
 	if err != nil {
-		var state State
+		state := StateFailure
 		if utils.OriginError(err) == context.Canceled {
 			state = StateWarning
-		} else {
-			state = StateFailure
 		}
+		// `StateWarning` can't cover `StateFailure`.
+		if result.State != StateFailure {
+			result.State = state
+		}
+		result.Errors = append(result.Errors, &Error{Severity: state, ShortErr: err.Error()})
+	}
+}
+
+func markCheckErrorFromParser(result *Result, err error) {
+	if err != nil {
+		state := StateWarning
 		// `StateWarning` can't cover `StateFailure`.
 		if result.State != StateFailure {
 			result.State = state
