@@ -39,8 +39,8 @@ const (
 	ProtocolCsv
 )
 
-// IsBatchEncoder returns whether the protocol is a batch encoder.
-func (p *Protocol) IsBatchEncoder() bool {
+// IsBatchEncode returns whether the protocol is a batch encoder.
+func (p *Protocol) IsBatchEncode() bool {
 	return *p == ProtocolOpen || *p == ProtocolCanal || *p == ProtocolMaxwell || *p == ProtocolCraft
 }
 

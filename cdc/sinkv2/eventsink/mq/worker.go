@@ -103,13 +103,14 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("protocol", w.protocol.String()),
 		)
 	}()
-	if w.protocol.IsBatchEncoder() {
-		return w.batchEncode(ctx)
+	if w.protocol.IsBatchEncode() {
+		return w.batchEncodeRun(ctx)
 	}
-	return w.nonBatchEncode(ctx)
+	return w.nonBatchEncodeRun(ctx)
 }
 
-func (w *worker) nonBatchEncode(ctx context.Context) error {
+// Directly send the message to the producer.
+func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 	log.Info("MQ sink non batch worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID),
@@ -155,7 +156,8 @@ func (w *worker) nonBatchEncode(ctx context.Context) error {
 	}
 }
 
-func (w *worker) batchEncode(ctx context.Context) (retErr error) {
+// Collect messages and send them to the producer in batches.
+func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	log.Info("MQ sink batch worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID),
