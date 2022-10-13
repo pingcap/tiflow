@@ -57,7 +57,9 @@ type worker struct {
 	metricMQWorkerFlushDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
-	dryRun     bool
+	// If DryRun is true, the sink will not write data to downstream.
+	// It only uses for debug.
+	dryRun bool
 }
 
 // newWorker creates a new flush worker.
