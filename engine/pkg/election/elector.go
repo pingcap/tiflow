@@ -269,7 +269,7 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithIsRetryableErr(func(err error) bool {
 			if errors.Cause(err) == ErrRecordConflict {
-				log.Info("update record conflict, retrying")
+				log.Info("conflict encountered while updating record, retrying")
 			} else {
 				log.Warn("failed to update record, retrying", zap.Error(err))
 			}
