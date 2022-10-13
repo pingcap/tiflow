@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -51,6 +52,8 @@ type mqEvent struct {
 type worker struct {
 	// changeFeedID indicates this sink belongs to which processor(changefeed).
 	changeFeedID model.ChangeFeedID
+	// protocol indicates the protocol used by this sink.
+	protocol config.Protocol
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
 	msgChan *chann.Chann[mqEvent]
@@ -70,12 +73,14 @@ type worker struct {
 // newWorker creates a new flush worker.
 func newWorker(
 	id model.ChangeFeedID,
+	protocol config.Protocol,
 	encoder codec.EventBatchEncoder,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID:                id,
+		protocol:                    protocol,
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
 		encoder:                     encoder,
@@ -98,6 +103,48 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	}()
 	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
+	if w.protocol.IsBatchEncoder() {
+		return w.batchEncode(ctx)
+	}
+	return w.nonBatchEncode(ctx)
+}
+
+func (w *worker) nonBatchEncode(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case event, ok := <-w.msgChan.Out():
+			if !ok {
+				log.Warn("MQ sink flush worker channel closed")
+				return nil
+			}
+			start := time.Now()
+			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
+				event.rowEvent.Event, event.rowEvent.Callback)
+			if err != nil {
+				return err
+			}
+			w.statistics.ObserveRows(event.rowEvent.Event)
+			for _, message := range w.encoder.Build() {
+				err := w.statistics.RecordBatchExecution(func() (int, error) {
+					err := w.producer.AsyncSendMessage(ctx, event.key.Topic, event.key.Partition, message)
+					if err != nil {
+						return 0, err
+					}
+					return message.GetRowsCount(), nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+			duration := time.Since(start)
+			w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
+		}
+	}
+}
+
+func (w *worker) batchEncode(ctx context.Context) (retErr error) {
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {

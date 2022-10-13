@@ -41,7 +41,7 @@ func newTestWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLP
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	return newWorker(id, config.ProtocolOpen, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
 }
 
 func TestBatch(t *testing.T) {
