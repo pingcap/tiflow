@@ -20,9 +20,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"google.golang.org/grpc"
-
 	"github.com/pingcap/tiflow/dm/pb"
+	"google.golang.org/grpc"
 )
 
 // CreateDmCtl creates a gRPC client to DM-master.

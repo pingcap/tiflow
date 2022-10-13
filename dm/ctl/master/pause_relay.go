@@ -18,10 +18,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/spf13/cobra"
 )
 
 // NewPauseRelayCmd creates a PauseRelay command.

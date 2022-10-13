@@ -19,9 +19,8 @@ package utils
 import (
 	"reflect"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"golang.org/x/sys/unix"
 )
 
 // GetStorageSize gets storage's capacity and available size.

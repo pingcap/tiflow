@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +53,6 @@ func TestToDMError(t *testing.T) {
 	}
 
 	// Non DM error
-	err := perrors.New("normal error")
+	err := errors.New("normal error")
 	require.Equal(t, err, ToDMError(err))
 }
