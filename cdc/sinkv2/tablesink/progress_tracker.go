@@ -144,6 +144,12 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.lastMinResolvedTs.Ts >= resolvedTs.Ts {
+		// It means the resolved ts is not growing.
+		// We can ignore it.
+		return
+	}
+
 	if r.nextEventID == 0 {
 		r.lastMinResolvedTs = resolvedTs
 		return
