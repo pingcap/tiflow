@@ -30,19 +30,20 @@ import (
 
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
-	builder     *canalEntryBuilder
-	messageBuf  []canalJSONMessageInterface
-	callbackBuf []func()
+	builder          *canalEntryBuilder
+	canalJsonMessage canalJSONMessageInterface
+	callbackBuf      []func()
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
+
+	messages []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder() codec.EventBatchEncoder {
 	return &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
-		messageBuf:          make([]canalJSONMessageInterface, 0),
 		callbackBuf:         make([]func(), 0),
 		enableTiDBExtension: false,
 	}
@@ -219,10 +220,16 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.messageBuf = append(c.messageBuf, message)
-	if callback != nil {
-		c.callbackBuf = append(c.callbackBuf, callback)
+
+	value, err := json.Marshal(message)
+	if err != nil {
+		log.Panic("JSONBatchEncoder", zap.Error(err))
+		return nil
 	}
+	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, message.getTikvTs(), model.MessageTypeRow, message.getSchema(), message.getTable())
+	m.IncRowsCount()
+	c.messages = append(c.messages, m)
+
 	return nil
 }
 
@@ -238,28 +245,36 @@ func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, e
 
 // Build implements the EventJSONBatchEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
-	if len(c.messageBuf) == 0 {
+	if len(c.messages) == 0 {
 		return nil
 	}
-	ret := make([]*common.Message, len(c.messageBuf))
-	for i, msg := range c.messageBuf {
-		value, err := json.Marshal(msg)
-		if err != nil {
-			log.Panic("JSONBatchEncoder", zap.Error(err))
-			return nil
-		}
-		m := common.NewMsg(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
-		m.IncRowsCount()
-		ret[i] = m
-	}
-	c.messageBuf = make([]canalJSONMessageInterface, 0)
-	if len(c.callbackBuf) != 0 && len(c.callbackBuf) == len(ret) {
-		for i, c := range c.callbackBuf {
-			ret[i].Callback = c
-		}
-		c.callbackBuf = make([]func(), 0)
-	}
-	return ret
+
+	result := c.messages
+	c.messages = c.messages[:0]
+	return result
+
+	// if len(c.messageBuf) == 0 {
+	// 	return nil
+	// }
+	// ret := make([]*common.Message, len(c.messageBuf))
+	// for i, msg := range c.messageBuf {
+	// 	value, err := json.Marshal(msg)
+	// 	if err != nil {
+	// 		log.Panic("JSONBatchEncoder", zap.Error(err))
+	// 		return nil
+	// 	}
+	// 	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
+	// 	m.IncRowsCount()
+	// 	ret[i] = m
+	// }
+	// c.messageBuf = make([]canalJSONMessageInterface, 0)
+	// if len(c.callbackBuf) != 0 && len(c.callbackBuf) == len(ret) {
+	// 	for i, c := range c.callbackBuf {
+	// 		ret[i].Callback = c
+	// 	}
+	// 	c.callbackBuf = make([]func(), 0)
+	// }
+	// return ret
 }
 
 type jsonBatchEncoderBuilder struct {
