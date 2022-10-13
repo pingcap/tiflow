@@ -31,9 +31,6 @@ master:
     max-interval = "15s"
     max-try-time = 100
 
-    [log]
-    level = "debug"
-
 executor:
   replicas: 4
   logStorage: 1Gi
@@ -41,9 +38,6 @@ executor:
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
     session-ttl = 20
-
-    [log]
-    level = "debug"
 
 metastore:
   frameworkStorage: 5Gi
