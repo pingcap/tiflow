@@ -185,7 +185,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
+	c.Assert(result.State, tc.Equals, StateWarning)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 
@@ -246,7 +246,7 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
+	c.Assert(result.State, tc.Equals, StateWarning)
 	c.Assert(result.Errors, tc.HasLen, 3)
 }
 
