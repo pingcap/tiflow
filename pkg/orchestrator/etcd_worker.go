@@ -297,7 +297,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		}
 		worker.state = nextState
 		pendingPatches = append(pendingPatches, nextState.GetPatches()...)
-		//apply pending patches
+		// apply pending patches
 		if retry, err = tryCommitPendingPatches(); err != nil {
 			return err
 		}
