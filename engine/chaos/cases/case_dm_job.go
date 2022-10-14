@@ -15,21 +15,26 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 
+	dmchaos "github.com/pingcap/tiflow/engine/chaos/cases/dm"
 	"golang.org/x/sync/errgroup"
 )
 
-type caseFn func(context.Context, *config) error
+var filenames = []string{"dmjob"}
 
-var cases = []caseFn{runFakeJobCase, runDMJobCases}
+func runDMJobCases(ctx context.Context, cfg *config) error {
+	eg, ctx2 := errgroup.WithContext(ctx)
+	for _, f := range filenames {
+		file := f
+		eg.Go(func() error {
+			testCase, err := dmchaos.NewCase(ctx2, cfg.Addr, file, filepath.Join(cfg.ConfigDir, file+".yaml"))
+			if err != nil {
+				return err
+			}
 
-func runCases(ctx context.Context, cfg *config) error {
-	errg, ctx := errgroup.WithContext(ctx)
-	for _, fn := range cases {
-		fn := fn
-		errg.Go(func() error {
-			return fn(ctx, cfg)
+			return testCase.Run(ctx2)
 		})
 	}
-	return errg.Wait()
+	return eg.Wait()
 }
