@@ -272,7 +272,7 @@
     },
     "/api/v1/jobs/{id}/cancel": {
       "post": {
-        "summary": "NOTE: for the compability of existing openapi(ticdc) format, \nwe use `/cancel` but not `:cancel`(google api suggested) \nrefer to: https://cloud.google.com/apis/design/custom_methods",
+        "summary": "NOTE: for the compatibility of existing openapi(ticdc) format,\nwe use `/cancel` but not `:cancel`(google api suggested)\nrefer to: https://cloud.google.com/apis/design/custom_methods",
         "operationId": "JobManager_CancelJob",
         "responses": {
           "200": {
@@ -475,12 +475,7 @@
       }
     },
     "enginepbExecWorkloadResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        }
-      }
+      "type": "object"
     },
     "enginepbExecutor": {
       "type": "object",
@@ -525,21 +520,7 @@
       }
     },
     "enginepbHeartbeatResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
-        "leader": {
-          "type": "string"
-        },
-        "addrs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
+      "type": "object"
     },
     "enginepbIsReadyResponse": {
       "type": "object",
@@ -684,9 +665,6 @@
     "enginepbQueryMetaStoreResponse": {
       "type": "object",
       "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
         "address": {
           "type": "string"
         }
@@ -773,12 +751,7 @@
       }
     },
     "enginepbRegisterMetaStoreResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        }
-      }
+      "type": "object"
     },
     "enginepbRemoveLocalResourceResponse": {
       "type": "object"
@@ -825,7 +798,6 @@
     "enginepbStoreType": {
       "type": "string",
       "enum": [
-        "SystemMetaStore",
         "AppMetaStore"
       ]
     },

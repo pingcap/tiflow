@@ -192,17 +192,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		return resp2, err
 	}
 
-	resp, err := s.executorManager.HandleHeartbeat(req)
-	if err == nil && resp.Err == nil {
-		for _, m := range s.elector.GetMembers() {
-			resp.Addrs = append(resp.Addrs, m.Address)
-		}
-		leader, exists := s.masterRPCHook.CheckLeader()
-		if exists {
-			resp.Leader = leader.AdvertiseAddr
-		}
-	}
-	return resp, err
+	return s.executorManager.HandleHeartbeat(req)
 }
 
 // CreateJob delegates request to leader's JobManager.CreateJob.
@@ -367,43 +357,28 @@ func (s *Server) RegisterMetaStore(
 func (s *Server) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest,
 ) (*pb.QueryMetaStoreResponse, error) {
-	getStore := func(storeID string) *pb.QueryMetaStoreResponse {
+	getStore := func(storeID string) (*pb.QueryMetaStoreResponse, error) {
 		store := s.metaStoreManager.GetMetaStore(storeID)
 		if store == nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreNotExists,
-					Message: fmt.Sprintf("store ID: %s", storeID),
-				},
-			}
+			return nil, ErrMetaStoreNotExists.GenWithStack(&MetaStoreNotExistsError{StoreID: storeID})
 		}
 		b, err := json.Marshal(store)
 		if err != nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreSerializeFail,
-					Message: fmt.Sprintf("raw store config params: %v", store),
-				},
-			}
+			return nil, errors.Trace(err)
 		}
 
 		return &pb.QueryMetaStoreResponse{
 			Address: string(b),
-		}
+		}, nil
 	}
 
 	switch req.Tp {
 	case pb.StoreType_SystemMetaStore:
-		return getStore(FrameMetaID), nil
+		return getStore(FrameMetaID)
 	case pb.StoreType_AppMetaStore:
-		return getStore(DefaultBusinessMetaID), nil
+		return getStore(DefaultBusinessMetaID)
 	default:
-		return &pb.QueryMetaStoreResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_InvalidMetaStoreType,
-				Message: fmt.Sprintf("store type: %s", req.Tp),
-			},
-		}, nil
+		return nil, status.Errorf(codes.InvalidArgument, "unknown store type %v", req.Tp)
 	}
 }
 

@@ -140,14 +140,13 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		err := errors.ErrUnknownExecutorID.FastGenByArgs(req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
+		return nil, ErrUnknownExecutor.GenWithStack(&UnknownExecutorError{ExecutorID: string(execID)})
 	}
 	e.mu.Unlock()
 
 	status := model.ExecutorStatus(req.Status)
 	if err := exec.heartbeat(req.Ttl, status); err != nil {
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
+		return nil, err
 	}
 	usage := model.RescUnit(req.GetResourceUsage())
 	if err := e.rescMgr.Update(execID, usage, usage, status); err != nil {
@@ -269,7 +268,7 @@ func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.status == model.Tombstone {
-		return errors.ErrTombstoneExecutor.FastGenByArgs(e.ID)
+		return ErrTombstoneExecutorError.GenWithStack(&TombstoneExecutorError{ExecutorID: string(e.ID)})
 	}
 	e.lastUpdateTime = time.Now()
 	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond

@@ -536,7 +536,7 @@ type JobManagerClient interface {
 	CreateJob(ctx context.Context, in *CreateJobRequest, opts ...grpc.CallOption) (*Job, error)
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*Job, error)
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
-	// NOTE: for the compability of existing openapi(ticdc) format,
+	// NOTE: for the compatibility of existing openapi(ticdc) format,
 	// we use `/cancel` but not `:cancel`(google api suggested)
 	// refer to: https://cloud.google.com/apis/design/custom_methods
 	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*Job, error)
@@ -603,7 +603,7 @@ type JobManagerServer interface {
 	CreateJob(context.Context, *CreateJobRequest) (*Job, error)
 	GetJob(context.Context, *GetJobRequest) (*Job, error)
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
-	// NOTE: for the compability of existing openapi(ticdc) format,
+	// NOTE: for the compatibility of existing openapi(ticdc) format,
 	// we use `/cancel` but not `:cancel`(google api suggested)
 	// refer to: https://cloud.google.com/apis/design/custom_methods
 	CancelJob(context.Context, *CancelJobRequest) (*Job, error)
