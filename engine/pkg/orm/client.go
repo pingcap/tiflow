@@ -19,9 +19,6 @@ import (
 	gerrors "errors"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -29,6 +26,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var globalModels = []interface{}{
@@ -96,6 +95,7 @@ type ProjectOperationClient interface {
 
 // JobClient defines interface that manages job in metastore
 type JobClient interface {
+	InsertJob(ctx context.Context, job *frameModel.MasterMeta) error
 	UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error
 	UpdateJob(ctx context.Context, jobID string, values model.KeyValueMap) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
@@ -292,6 +292,19 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 }
 
 // ///////////////////////////// Job Operation
+// InsertJob insert the jobInfo
+func (c *metaOpsClient) InsertJob(ctx context.Context, job *frameModel.MasterMeta) error {
+	if job == nil {
+		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
+	}
+
+	if err := c.db.WithContext(ctx).Create(job).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
+}
+
 // UpsertJob upsert the jobInfo
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMeta) error {
 	if job == nil {

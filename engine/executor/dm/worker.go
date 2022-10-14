@@ -22,10 +22,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
@@ -44,6 +40,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // RegisterWorker is used to register dm task to global registry
@@ -73,9 +72,8 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
-	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Uint64("config_modify_revision", cfg.ModRevision))
-	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
-	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.Stringer("worker_type", f.workerType), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Any("task_config", cfg))
+	return newDMWorker(ctx, masterID, f.workerType, cfg), nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
@@ -101,22 +99,25 @@ type dmWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 
 	cfgModRevision uint64
+	needExtStorage bool
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, cfgModRevision uint64) *dmWorker {
+func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
+	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
 	w := &dmWorker{
-		cfg:            cfg,
+		cfg:            dmSubtaskCfg,
 		stage:          metadata.StageInit,
 		workerType:     workerType,
-		taskID:         cfg.SourceID,
+		taskID:         dmSubtaskCfg.SourceID,
 		masterID:       masterID,
-		unitHolder:     newUnitHolderImpl(workerType, cfg),
+		unitHolder:     newUnitHolderImpl(workerType, dmSubtaskCfg),
 		autoResume:     autoResume,
-		cfgModRevision: cfgModRevision,
+		cfgModRevision: cfg.ModRevision,
+		needExtStorage: cfg.NeedExtStorage,
 	}
 
 	// nolint:errcheck
@@ -135,7 +136,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
-	if w.cfg.Mode != dmconfig.ModeIncrement {
+	if w.cfg.Mode != dmconfig.ModeIncrement && w.needExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}

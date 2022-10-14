@@ -19,6 +19,12 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -28,13 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
-
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 )
 

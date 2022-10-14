@@ -17,9 +17,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCausalityKeys(t *testing.T) {

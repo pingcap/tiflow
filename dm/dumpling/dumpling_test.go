@@ -20,19 +20,18 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/docker/go-units"
+	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/util/filter"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ = Suite(&testDumplingSuite{})

@@ -22,8 +22,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -41,6 +39,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 // JobMaster defines job master of dm job
@@ -411,7 +410,7 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	}
 	job := state.(*metadata.Job)
 	for _, task := range job.Tasks {
-		cfg := (*config.JobCfg)(task.Cfg)
+		cfg := task.Cfg.ToJobCfg()
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")

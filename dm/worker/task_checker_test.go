@@ -20,15 +20,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var (

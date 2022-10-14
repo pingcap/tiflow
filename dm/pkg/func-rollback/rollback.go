@@ -17,7 +17,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-
 	"go.uber.org/zap"
 )
 

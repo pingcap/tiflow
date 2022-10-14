@@ -20,7 +20,6 @@ import (
 
 	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/util/dbutil"
-
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -120,7 +119,7 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql server_id has been greater than 0",
-		State: StateFailure,
+		State: StateWarning,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -131,13 +130,13 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 			return result
 		}
 		result.Errors = append(result.Errors, NewError("server_id not set"))
-		result.Instruction = "please set server_id in your database"
+		result.Instruction = "please set server_id in your database, or error may happen in master/slave switchover"
 		return result
 	}
 
 	if serverID == 0 {
 		result.Errors = append(result.Errors, NewError("server_id is 0"))
-		result.Instruction = "please set server_id greater than 0"
+		result.Instruction = "please set server_id greater than 0, or error may happen in master/slave switchover"
 		return result
 	}
 	result.State = StateSuccess

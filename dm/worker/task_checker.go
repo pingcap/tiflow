@@ -21,15 +21,14 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Backoff related constants

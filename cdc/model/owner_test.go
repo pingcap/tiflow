@@ -114,30 +114,6 @@ func TestTableOperationState(t *testing.T) {
 	require.Nil(t, nilTableOper.Clone())
 }
 
-func TestTaskWorkloadMarshal(t *testing.T) {
-	t.Parallel()
-
-	workload := &TaskWorkload{
-		12: WorkloadInfo{Workload: uint64(1)},
-		15: WorkloadInfo{Workload: uint64(3)},
-	}
-	expected := `{"12":{"workload":1},"15":{"workload":3}}`
-
-	data, err := workload.Marshal()
-	require.Nil(t, err)
-	require.Equal(t, expected, data)
-
-	newWorkload := &TaskWorkload{}
-	err = newWorkload.Unmarshal([]byte(data))
-	require.Nil(t, err)
-	require.Equal(t, workload, newWorkload)
-
-	workload = nil
-	data, err = workload.Marshal()
-	require.Nil(t, err)
-	require.Equal(t, "{}", data)
-}
-
 func TestShouldBeDeepCopy(t *testing.T) {
 	t.Parallel()
 

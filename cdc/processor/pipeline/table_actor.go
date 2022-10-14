@@ -35,6 +35,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
 	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -42,10 +43,9 @@ import (
 )
 
 var (
-	_        tablepb.TablePipeline         = (*tableActor)(nil)
-	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
-	stopped                                = uint32(1)
-	workload                               = model.WorkloadInfo{Workload: 1}
+	_       tablepb.TablePipeline         = (*tableActor)(nil)
+	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                               = uint32(1)
 )
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
@@ -454,10 +454,40 @@ func (t *tableActor) AsyncStop() bool {
 	return true
 }
 
-// Workload returns the workload of this table pipeline
-func (t *tableActor) Workload() model.WorkloadInfo {
-	// We temporarily set the value to constant 1
-	return workload
+// Stats returns the statistics of this table pipeline
+func (t *tableActor) Stats() tablepb.Stats {
+	pullerStats := t.pullerNode.plr.Stats()
+	sorterStats := t.sortNode.sorter.Stats()
+	sinkStats := t.sinkNode.Stats()
+	now, _ := t.upstream.PDClock.CurrentTime()
+
+	return tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
+			},
+			"sorter-ingress": {
+				CheckpointTs: sorterStats.CheckpointTsIngress,
+				ResolvedTs:   sorterStats.ResolvedTsIngress,
+			},
+			"sorter-egress": {
+				CheckpointTs: sorterStats.CheckpointTsEgress,
+				ResolvedTs:   sorterStats.ResolvedTsEgress,
+			},
+			"sink": {
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
+			},
+		},
+	}
 }
 
 // State returns the state of this table pipeline

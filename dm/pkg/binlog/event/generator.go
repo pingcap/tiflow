@@ -20,7 +20,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )

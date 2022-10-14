@@ -17,9 +17,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/pb"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/pb"
 )
 
 func TestCtlMaster(t *testing.T) {

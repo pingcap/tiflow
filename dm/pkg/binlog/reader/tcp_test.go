@@ -23,7 +23,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )

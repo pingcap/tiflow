@@ -18,7 +18,6 @@ import (
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-
 	"go.uber.org/zap"
 )
 

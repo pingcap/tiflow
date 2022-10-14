@@ -22,7 +22,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
