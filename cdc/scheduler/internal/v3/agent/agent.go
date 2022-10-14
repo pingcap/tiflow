@@ -205,6 +205,7 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 
 func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	result := make([]*schedulepb.Message, 0)
+	hasHeartbeatResponse := false
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
@@ -220,6 +221,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 		case schedulepb.MsgHeartbeat:
 			response := a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, response)
+			hasHeartbeatResponse = true
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
@@ -230,19 +232,23 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 				zap.Any("message", message))
 		}
 	}
+	// if there is no heartbeat received, add a heartbeat response to send the
+	// checkpoint ts and resolved ts
+	if !hasHeartbeatResponse {
+		result = append(result, &schedulepb.Message{
+			MsgType: schedulepb.MsgHeartbeatResponse,
+			HeartbeatResponse: &schedulepb.HeartbeatResponse{
+				Tables:   a.getAllTableStatus(),
+				Liveness: a.liveness.Load(),
+			},
+		})
+	}
 	return result
 }
 
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
 	allTables := a.tableM.getAllTables()
-	result := make([]tablepb.TableStatus, 0, len(allTables))
-	for _, table := range allTables {
-		status := table.getTableStatus()
-		if table.task != nil && table.task.IsRemove {
-			status.State = tablepb.TableStateStopping
-		}
-		result = append(result, status)
-	}
+	result := a.getAllTableStatus()
 	for _, tableID := range request.GetTableIDs() {
 		if _, ok := allTables[tableID]; !ok {
 			status := a.tableM.getTableStatus(tableID)
@@ -270,6 +276,19 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		zap.Any("message", message))
 
 	return message
+}
+
+func (a *agent) getAllTableStatus() []tablepb.TableStatus {
+	allTables := a.tableM.getAllTables()
+	result := make([]tablepb.TableStatus, 0, len(allTables))
+	for _, table := range allTables {
+		status := table.getTableStatus()
+		if table.task != nil && table.task.IsRemove {
+			status.State = tablepb.TableStateStopping
+		}
+		result = append(result, status)
+	}
+	return result
 }
 
 type dispatchTableTaskStatus int32
