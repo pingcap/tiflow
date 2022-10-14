@@ -106,7 +106,7 @@ const (
 	DateSeparatorDay
 )
 
-// ParseSinkProtocolFromString converts the separator from string to DateSeperator enum type.
+// FromString converts the separator from string to DateSeperator enum type.
 func (d *DateSeparator) FromString(separator string) error {
 	switch strings.ToLower(separator) {
 	case "none":
