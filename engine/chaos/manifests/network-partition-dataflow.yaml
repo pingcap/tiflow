@@ -1,71 +1,24 @@
----
-# network partition between server-master and executor
 apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
+kind: Schedule
 metadata:
   name: network-partition-dataflow-master-executor
   labels:
     app: network-partition-dataflow-master-executor
 spec:
-  action: partition
-  mode: one
-  selector:
-    labelSelectors:
-      "app": "chaos-server-master"
-  direction: both
-  target:
+  schedule: 2-59/4 * * * *
+  type: NetworkChaos
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  networkChaos:
+    action: partition
+    mode: one
     selector:
       labelSelectors:
-        "app": "chaos-executor"
-    mode: one
-  duration: "20s"
-  scheduler:
-    cron: "2-59/4 * * * *" # At every 4th minute from 2 through 59, (2, 6, 10, ...)
-
----
-# network partition between dataflow server-master members
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: network-partition-dataflow-master-master
-  labels:
-    app: network-partition-dataflow-master-master
-spec:
-  action: partition
-  mode: one
-  selector:
-    labelSelectors:
-      "app": "chaos-server-master"
-  direction: both
-  target:
-    selector:
-      labelSelectors:
-        "app": "chaos-server-master"
-    mode: one
-  duration: "20s"
-  scheduler:
-    cron: "3-59/4 * * * *" # At every 4th minute from 3 through 59, (3, 7, 11, ...)
-
----
-# network partition between dataflow executor members
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: network-partition-dataflow-executor-executor
-  labels:
-    app: network-partition-dataflow-executor-executor
-spec:
-  action: partition
-  mode: one
-  selector:
-    labelSelectors:
-      "app": "chaos-executor"
-  direction: both
-  target:
-    selector:
-      labelSelectors:
-        "app": "chaos-executor"
-    mode: one
-  duration: "20s"
-  scheduler:
-    cron: "1-59/4 * * * *" # At every 4th minute from 1 through 59, (1, 5, 9, ...)
+        app: chaos-server-master
+    direction: both
+    target:
+      selector:
+        labelSelectors:
+          app: chaos-executor
+      mode: one
+    duration: 20s
