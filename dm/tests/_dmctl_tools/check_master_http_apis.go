@@ -19,9 +19,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/pingcap/tiflow/dm/tests/utils"
-
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tiflow/dm/tests/utils"
 )
 
 // use show-ddl-locks request to test DM-master is online

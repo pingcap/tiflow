@@ -51,6 +51,8 @@ message Stats {
     uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     // Checkponits at each stage.
     map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
+    // The barrier timestamp of the table.
+    uint64 barrier_ts = 4 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 // TableStatus is the running status of a table.

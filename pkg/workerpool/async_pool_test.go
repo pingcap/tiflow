@@ -21,11 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
-
 	"golang.org/x/sync/errgroup"
 )
 

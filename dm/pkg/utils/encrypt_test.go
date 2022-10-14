@@ -17,7 +17,6 @@ import (
 	"encoding/base64"
 
 	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 

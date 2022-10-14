@@ -21,16 +21,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/google/shlex"
-	"go.uber.org/zap"
-
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-
-	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/spf13/pflag"
+	"go.uber.org/zap"
 )
 
 const (

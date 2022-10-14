@@ -18,9 +18,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -28,6 +25,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/relay"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // RelayHolder for relay unit.
