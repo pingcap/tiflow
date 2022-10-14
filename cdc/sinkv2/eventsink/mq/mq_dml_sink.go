@@ -74,7 +74,7 @@ func newSink(ctx context.Context,
 	encoder := encoderBuilder.Build()
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	w := newWorker(changefeedID, encoder, producer, statistics)
+	w := newWorker(changefeedID, encoderConfig.Protocol, encoder, producer, statistics)
 
 	s := &dmlSink{
 		id:             changefeedID,
