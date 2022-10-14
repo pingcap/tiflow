@@ -117,9 +117,7 @@ func TestSliceQueueConcurrentWriteAndRead(t *testing.T) {
 
 		counter := 0
 		for {
-			select {
-			case <-q.C:
-			}
+			<-q.C
 
 			for {
 				val, ok := q.Pop()

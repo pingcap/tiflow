@@ -220,10 +220,10 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	require.True(t.T(), ok)
 	require.Equal(t.T(), syncStatus1, taskStatus)
 
-	taskManager.onJobDel(context.Background())
+	taskManager.onJobDel()
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
-	taskManager.onJobDel(context.Background())
+	taskManager.onJobDel()
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 

@@ -39,6 +39,7 @@ func NewSliceQueue[T any]() *SliceQueue[T] {
 	}
 }
 
+// Push pushes element to the end of the queue
 func (q *SliceQueue[T]) Push(elem T) {
 	q.mu.Lock()
 
@@ -62,6 +63,7 @@ func (q *SliceQueue[T]) Push(elem T) {
 	}
 }
 
+// Pop removes the first element from queue and returns it, if it exists
 func (q *SliceQueue[T]) Pop() (T, bool) {
 	q.mu.Lock()
 
@@ -90,6 +92,7 @@ func (q *SliceQueue[T]) Pop() (T, bool) {
 	return ret, true
 }
 
+// Peek returns the first element of the queue if exits.
 func (q *SliceQueue[T]) Peek() (retVal T, ok bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -102,6 +105,7 @@ func (q *SliceQueue[T]) Peek() (retVal T, ok bool) {
 	return q.elems[0], true
 }
 
+// Size returns the element count in the queue
 func (q *SliceQueue[T]) Size() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()

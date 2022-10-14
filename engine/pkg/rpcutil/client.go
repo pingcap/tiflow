@@ -141,6 +141,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 	}
 }
 
+// Endpoints returns a slice of all client endpoints
 func (c *FailoverRPCClients[T]) Endpoints() []string {
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
@@ -151,6 +152,7 @@ func (c *FailoverRPCClients[T]) Endpoints() []string {
 	return ret
 }
 
+// Close closes connection underlying
 func (c *FailoverRPCClients[T]) Close() (err error) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()

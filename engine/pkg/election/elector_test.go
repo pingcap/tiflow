@@ -176,14 +176,14 @@ func TestElectorRenewFailure(t *testing.T) {
 	var recordLock sync.RWMutex
 	record := &election.Record{}
 
-	getRecord := func(ctx context.Context) (*election.Record, error) {
+	getRecord := func(_ context.Context) (*election.Record, error) { //nolint:unparam
 		recordLock.RLock()
 		defer recordLock.RUnlock()
 
 		return record.Clone(), nil
 	}
 
-	updateRecord := func(ctx context.Context, r *election.Record) error {
+	updateRecord := func(_ context.Context, r *election.Record) error {
 		recordLock.Lock()
 		defer recordLock.Unlock()
 

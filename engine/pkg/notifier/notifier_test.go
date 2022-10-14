@@ -44,9 +44,7 @@ func TestNotifierBasics(t *testing.T) {
 
 			var ev, lastEv int
 			for {
-				select {
-				case ev = <-r.C:
-				}
+				ev = <-r.C
 
 				if ev == finEv {
 					return

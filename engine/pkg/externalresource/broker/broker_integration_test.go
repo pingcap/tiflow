@@ -214,6 +214,7 @@ func createS3ResourceForWorker(
 	}
 }
 
+//nolint:unparam
 func getExistingS3ResourceForWorker(
 	t *testing.T, brk *DefaultBroker, cli *manager.MockClient,
 	creator, user resModel.WorkerID, persistedRes resModel.ResourceID,
