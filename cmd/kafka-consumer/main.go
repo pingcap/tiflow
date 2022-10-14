@@ -168,7 +168,7 @@ func init() {
 
 	s = upstreamURI.Query().Get("protocol")
 	if s != "" {
-		if protocol, err = config.FromString(s); err != nil {
+		if protocol, err = config.ParseSinkProtocolFromString(s); err != nil {
 			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 		}
 	}

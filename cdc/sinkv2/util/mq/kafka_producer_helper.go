@@ -39,7 +39,7 @@ func GetTopic(sinkURI *url.URL) (string, error) {
 
 // GetProtocol returns the protocol from the sink URI.
 func GetProtocol(protocolStr string) (config.Protocol, error) {
-	protocol, err := config.FromString(protocolStr)
+	protocol, err := config.ParseSinkProtocolFromString(protocolStr)
 	if err != nil {
 		return protocol, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

@@ -45,8 +45,8 @@ func (p Protocol) IsBatchEncode() bool {
 	return p == ProtocolOpen || p == ProtocolCanal || p == ProtocolMaxwell || p == ProtocolCraft
 }
 
-// FromString converts the protocol from string to Protocol enum type.
-func FromString(protocol string) (Protocol, error) {
+// ParseSinkProtocolFromString converts the protocol from string to Protocol enum type.
+func ParseSinkProtocolFromString(protocol string) (Protocol, error) {
 	switch strings.ToLower(protocol) {
 	case "default":
 		return ProtocolOpen, nil

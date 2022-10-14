@@ -381,7 +381,7 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	}
 
 	needsFix := func(protocolStr string) bool {
-		_, err := config.FromString(protocolStr)
+		_, err := config.ParseSinkProtocolFromString(protocolStr)
 		// There are two cases:
 		// 1. there is an error indicating that the old ticdc accepts
 		//    a protocol that is not known. It needs to be fixed as open protocol.

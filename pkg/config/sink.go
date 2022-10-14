@@ -106,7 +106,7 @@ const (
 	DateSeparatorDay
 )
 
-// FromString converts the separator from string to DateSeperator enum type.
+// ParseSinkProtocolFromString converts the separator from string to DateSeperator enum type.
 func (d *DateSeparator) FromString(separator string) error {
 	switch strings.ToLower(separator) {
 	case "none":
@@ -288,7 +288,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 
 	// validate that protocol is compatible with the scheme
 	if sink.IsMQScheme(sinkURI.Scheme) {
-		_, err := FromString(s.Protocol)
+		_, err := ParseSinkProtocolFromString(s.Protocol)
 		if err != nil {
 			return err
 		}

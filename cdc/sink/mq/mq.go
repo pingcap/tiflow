@@ -410,7 +410,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := config.FromString(replicaConfig.Sink.Protocol)
+	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
