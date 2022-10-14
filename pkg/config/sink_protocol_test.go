@@ -65,8 +65,7 @@ func TestFromString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		var protocol Protocol
-		err := protocol.FromString(tc.protocol)
+		protocol, err := FromString(tc.protocol)
 		if tc.expectedErr != "" {
 			require.Regexp(t, tc.expectedErr, err)
 		} else {
