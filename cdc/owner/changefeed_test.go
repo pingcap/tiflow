@@ -1011,15 +1011,14 @@ func TestBarrierAdvance(t *testing.T) {
 		mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 		mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 
-		// Then the first tick barrier won't be changed.
 		barrier, err := cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		require.Equal(t, cf.state.Info.StartTs, barrier)
+		if i == 0 {
+			require.Equal(t, mockDDLPuller.resolvedTs, barrier)
+		}
 
-		// If sync-point is enabled, must tick more 1 time to advance barrier.
+		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
-			barrier, err := cf.handleBarrier(ctx)
-			require.Nil(t, err)
 			require.Equal(t, cf.state.Info.StartTs+10, barrier)
 		}
 
