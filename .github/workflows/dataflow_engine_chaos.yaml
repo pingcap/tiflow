@@ -21,7 +21,7 @@ jobs:
   base:
     # The type of runner that the job will run on
     runs-on: ubuntu-20.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +55,7 @@ jobs:
           key: ${{ runner.os }}-dataflow-${{ hashFiles('go.sum') }}
 
       - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.2.0
+        uses: helm/kind-action@v1.4.0
         with:
           cluster_name: dataflow-engine-cluster
           config: ${{ github.workspace }}/engine/chaos/manifests/kind-cluster.yaml
@@ -71,7 +71,9 @@ jobs:
           helm version
 
       - name: Build dataflow engine binary
-        run: make tiflow tiflow-chaos-case
+        run: |
+          make tiflow tiflow-chaos-case
+          cp -r $GITHUB_WORKSPACE/engine/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/engine-conf
 
       - name: Build Dataflow engine docker image
         run: |
@@ -82,6 +84,61 @@ jobs:
         run: |
           kind load docker-image dataflow:chaos --name dataflow-engine-cluster
 
+      # Set up upstream instances
+      - name: Set up sources
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/sources.yaml
+      - name: Wait for sources ready # kubectl wait --all not working
+        run: |
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=300s || true
+          sleep 10
+          echo show pvc
+          kubectl get pvc -l app=sources -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=sources -o wide
+          echo show sts
+          kubectl get sts -l app=sources -o wide
+          echo show po
+          kubectl get po -l app=sources -o wide
+          echo describe po
+          kubectl describe po -l app=sources
+          echo describe pvc
+          kubectl describe pvc -l app=sources
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=0s
+ 
+      # Set up downstream TiDB instance (deploy a TiDB with mockTiKV, not a TidbCluster managed by TiDB-operator)
+      - name: Set up TiDB
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl get -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/dm/chaos/manifests/tidb.yaml
+      - name: Wait for TiDB ready
+        run: |
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=10m || true
+          echo show pvc
+          kubectl get pvc -l app=tidb -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=tidb -o wide
+          echo show sts
+          kubectl get sts -l app=tidb -o wide
+          echo show po
+          kubectl get po -l app=tidb -o wide
+          echo describe po
+          kubectl describe po -l app=tidb
+          echo describe pvc
+          kubectl describe pvc -l app=tidb
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
+     
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
@@ -196,6 +253,17 @@ jobs:
           kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
           kubectl get pods
 
+      # FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+      - name: Wait DM enter sync stage
+        run: |
+          for idx in $(seq 0 300); do
+            echo "wait dm enter sync stage"
+            if kubectl logs job.batch/chaos-test-case | grep "full mode of the task has completed" ; then
+              break
+            fi
+            sleep 1
+          done
+
       - name: Encode chaos-mesh action
         run: |
           echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
@@ -204,7 +272,6 @@ jobs:
         uses: chaos-mesh/chaos-mesh-action@master
         env:
           CFG_BASE64: ${{ env.CFG_BASE64 }}
-          CHAOS_MESH_VERSION: v1.0.0
 
       # check whether complete with 1m * 20 times.
       - name: Wait for chaos test case complete
