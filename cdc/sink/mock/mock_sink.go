@@ -61,7 +61,7 @@ func (s *mockSink) FlushRowChangedEvents(
 	return resolved, nil
 }
 
-func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	panic("unreachable")
 }
 
