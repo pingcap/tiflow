@@ -45,7 +45,8 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
 		builder: newCanalEntryBuilder(),
 		messageHolder: &canalJSONMessage{
-			Data: make([]map[string]interface{}, 0),
+			// for Data field, no matter event type, always be filled with only one item.
+			Data: make([]map[string]interface{}, 1),
 		},
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0),
@@ -140,17 +141,16 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.Query = ""
 	baseMessage.SQLType = sqlTypeMap
 	baseMessage.MySQLType = mysqlTypeMap
-	baseMessage.Data = baseMessage.Data[:0]
 	baseMessage.Old = nil
 	baseMessage.tikvTs = e.CommitTs
 
 	if e.IsDelete() {
-		baseMessage.Data = append(baseMessage.Data, oldData)
+		baseMessage.Data[0] = oldData
 	} else if e.IsInsert() {
-		baseMessage.Data = append(baseMessage.Data, data)
+		baseMessage.Data[0] = data
 	} else if e.IsUpdate() {
+		baseMessage.Data[0] = data
 		baseMessage.Old = []map[string]interface{}{oldData}
-		baseMessage.Data = append(baseMessage.Data, data)
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
