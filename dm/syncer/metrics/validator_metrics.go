@@ -14,9 +14,8 @@
 package metrics
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var defaultFactory = &promutil.PromFactory{}

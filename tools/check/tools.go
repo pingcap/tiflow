@@ -23,6 +23,7 @@ import (
 	// make go module happy
 	_ "github.com/AlekSi/gocov-xml"
 	_ "github.com/axw/gocov/gocov"
+	_ "github.com/daixiang0/gci"
 	_ "github.com/deepmap/oapi-codegen/cmd/oapi-codegen"
 	_ "github.com/gogo/protobuf/protoc-gen-gogofaster"
 	_ "github.com/golang/mock/mockgen"

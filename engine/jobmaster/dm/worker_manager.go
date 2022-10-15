@@ -245,7 +245,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		} else if !runningWorker.RunAsExpected() {
 			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", nextUnit))
 		}
 
 		var resources []resModel.ResourceID

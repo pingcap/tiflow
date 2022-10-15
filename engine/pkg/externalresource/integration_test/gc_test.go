@@ -19,15 +19,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestLocalFileTriggeredByJobRemoval(t *testing.T) {

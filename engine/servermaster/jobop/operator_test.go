@@ -16,14 +16,12 @@ package jobop
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	frameworkModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/context"
 )
 
 type mockOperatorRouter struct {
@@ -56,14 +54,14 @@ func (r *mockOperatorRouter) checkCancelCalls(t *testing.T, jobID string, expect
 }
 
 func (r *mockOperatorRouter) jobOnline(
-	ctx context.Context, jobID string, meta *frameworkModel.MasterMeta,
+	ctx context.Context, jobID string, meta *frameModel.MasterMeta,
 ) error {
 	r.onlineJobs[jobID] = struct{}{}
 	return r.cli.UpsertJob(ctx, meta)
 }
 
 func (r *mockOperatorRouter) jobOffline(
-	ctx context.Context, jobID string, meta *frameworkModel.MasterMeta,
+	ctx context.Context, jobID string, meta *frameModel.MasterMeta,
 ) error {
 	delete(r.onlineJobs, jobID)
 	return r.cli.UpsertJob(ctx, meta)
@@ -88,10 +86,10 @@ func TestJobOperator(t *testing.T) {
 	oper := NewJobOperatorImpl(metaCli, router)
 
 	jobID := "cancel-job-id"
-	meta := &frameworkModel.MasterMeta{
+	meta := &frameModel.MasterMeta{
 		ID:    jobID,
 		Type:  frameModel.CvsJobMaster,
-		State: frameworkModel.MasterStateInit,
+		State: frameModel.MasterStateInit,
 	}
 	err = router.jobOnline(ctx, jobID, meta)
 	require.NoError(t, err)
@@ -112,7 +110,7 @@ func TestJobOperator(t *testing.T) {
 	}
 
 	// mock job master is canceled and status persisted
-	meta.State = frameworkModel.MasterStateStopped
+	meta.State = frameModel.MasterStateStopped
 	err = router.jobOffline(ctx, jobID, meta)
 	require.NoError(t, err)
 

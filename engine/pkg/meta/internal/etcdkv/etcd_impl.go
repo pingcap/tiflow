@@ -18,10 +18,9 @@ import (
 	"fmt"
 	"sync"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Defines fake key/value pair which is used in aliveness check or epoch generation

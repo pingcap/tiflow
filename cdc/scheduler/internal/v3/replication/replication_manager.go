@@ -518,6 +518,8 @@ func (r *Manager) CollectMetrics() {
 		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
 		slowestTableResolvedTsGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
+
+		// Slow table latency metrics.
 		phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
 		for stage, checkpoint := range table.Stats.StageCheckpoints {
 			// Checkpoint ts
@@ -539,6 +541,17 @@ func (r *Manager) CollectMetrics() {
 			slowestTableStageResolvedTsLagHistogramVec.
 				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
 		}
+		// Barrier ts
+		stage := "barrier"
+		phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
+		slowestTableStageResolvedTsGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
+		barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
+		slowestTableStageResolvedTsLagGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
+		slowestTableStageResolvedTsLagHistogramVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Observe(barrierTsLag)
+		// Region count
 		slowestTableRegionGaugeVec.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 	}

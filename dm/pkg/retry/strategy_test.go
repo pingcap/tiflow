@@ -18,11 +18,10 @@ import (
 	"testing"
 	"time"
 
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/dbutil"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func TestSuite(t *testing.T) {

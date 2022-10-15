@@ -20,11 +20,10 @@ import (
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // defaultMasterAddr is the default master address.

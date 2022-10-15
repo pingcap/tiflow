@@ -27,11 +27,10 @@ import (
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
-	"go.uber.org/zap"
-	"golang.org/x/net/http/httpproxy"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
+	"golang.org/x/net/http/httpproxy"
 )
 
 var (

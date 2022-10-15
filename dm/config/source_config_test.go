@@ -28,9 +28,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigFunctions(t *testing.T) {

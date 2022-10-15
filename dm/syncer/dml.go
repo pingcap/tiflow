@@ -22,16 +22,15 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/shopspring/decimal"
-	"go.uber.org/zap"
-	"golang.org/x/text/encoding/charmap"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // genDMLParam stores original data and table structure.

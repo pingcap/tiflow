@@ -328,8 +328,7 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 		if tc.expectedProtocolStr != "" {
 			require.Equal(t, tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
 		} else {
-			var protocol config.Protocol
-			err := protocol.FromString(tc.info.Config.Sink.Protocol)
+			_, err := config.ParseSinkProtocolFromString(tc.info.Config.Sink.Protocol)
 			if strings.Contains(tc.info.SinkURI, "kafka") {
 				require.NoError(t, err)
 			} else {
@@ -639,8 +638,7 @@ func TestFixMQSinkProtocol(t *testing.T) {
 
 	for _, tc := range configTestCases {
 		tc.info.fixMQSinkProtocol()
-		var protocol config.Protocol
-		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+		protocol, err := config.ParseSinkProtocolFromString(tc.info.Config.Sink.Protocol)
 		require.Nil(t, err)
 		require.Equal(t, tc.expectedProtocol, protocol)
 	}

@@ -23,9 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -34,9 +31,10 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/schemacmp"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -256,8 +254,8 @@ func (c *TablesChecker) checkAST(st *ast.CreateTableStmt) []*incompatibilityOpti
 	}
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
-			state:       StateFailure,
-			instruction: "please set primary/unique key for the table",
+			state:       StateWarning,
+			instruction: "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised",
 			errMessage:  "primary/unique key does not exist",
 		})
 	}
@@ -304,7 +302,7 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 		cs := strings.ToLower(opt.StrValue)
 		if cs != "binary" && !charset.ValidCharsetAndCollation(cs, "") {
 			return &incompatibilityOption{
-				state:       StateFailure,
+				state:       StateWarning,
 				instruction: "https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 				errMessage:  fmt.Sprintf("unsupport charset %s", opt.StrValue),
 			}

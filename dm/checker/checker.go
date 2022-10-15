@@ -24,6 +24,11 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql" // for mysql
+	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -39,15 +44,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
-	"golang.org/x/sync/errgroup"
-
-	_ "github.com/go-sql-driver/mysql" // for mysql
-	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (

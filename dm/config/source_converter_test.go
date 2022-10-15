@@ -15,7 +15,6 @@ package config
 
 import (
 	"github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 )
 

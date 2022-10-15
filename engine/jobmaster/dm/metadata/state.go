@@ -21,7 +21,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
-
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 

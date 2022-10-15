@@ -45,8 +45,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	protocol := sinkURI.Query().Get("protocol")
 	require.Equal(t, "canal-json", protocol)
 
-	var p config.Protocol
-	err = p.FromString(protocol)
+	p, err := config.ParseSinkProtocolFromString(protocol)
 	require.NoError(t, err)
 
 	c := NewConfig(p)
@@ -72,7 +71,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	protocol = sinkURI.Query().Get("protocol")
-	err = p.FromString(protocol)
+	p, err = config.ParseSinkProtocolFromString(protocol)
 	require.NoError(t, err)
 
 	c = NewConfig(p)
@@ -90,7 +89,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	protocol = sinkURI.Query().Get("protocol")
 	require.Equal(t, "avro", protocol)
-	err = p.FromString(protocol)
+	p, err = config.ParseSinkProtocolFromString(protocol)
 	require.NoError(t, err)
 	c = NewConfig(p)
 	require.Equal(t, config.ProtocolAvro, c.Protocol)

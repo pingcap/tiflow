@@ -184,7 +184,7 @@ func TestTablesChecker(t *testing.T) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 2)
 	require.NoError(t, mock.ExpectationsWereMet())
 
@@ -220,7 +220,7 @@ func TestTablesChecker(t *testing.T) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 3)
 }
 

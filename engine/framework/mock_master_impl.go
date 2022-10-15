@@ -20,14 +20,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/stretchr/testify/mock"
-	"go.uber.org/atomic"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -35,6 +30,10 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // MockMasterImpl implements a mock MasterImpl

@@ -25,10 +25,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -39,6 +35,9 @@ import (
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 var emptyWorkerStatusInfoJSONLength = 25

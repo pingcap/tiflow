@@ -80,9 +80,9 @@ ifeq ($(RELEASE_VERSION),)
 	RELEASE_VERSION := v6.3.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
-	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
 		# If we are in release branch, try to use tag version.
-		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+		ifneq ($(shell git describe --tags --dirty | grep -E $(release_version_regex)),)
 			RELEASE_VERSION := $(shell git describe --tags --dirty)
 		endif
 	else ifneq ($(shell git status --porcelain),)
@@ -227,8 +227,10 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code tiflow-generate-mock
-	@echo "gofmt (simplify)"
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code tiflow-generate-mock
+	@echo "run gci (format imports)"
+	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run gofumports"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
