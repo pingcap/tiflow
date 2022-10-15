@@ -188,31 +188,6 @@ func TestTablesChecker(t *testing.T) {
 	require.Len(t, result.Errors, 2)
 	require.NoError(t, mock.ExpectationsWereMet())
 
-	// 3. unsupported charset
-	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "2")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=ucs2`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-
-	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
-			{Schema: "test-db", Name: "test-table-1"},
-		}},
-		1)
-	result = checker.Check(ctx)
-	require.Equal(t, StateFailure, result.State)
-	require.Len(t, result.Errors, 1)
-	require.NoError(t, mock.ExpectationsWereMet())
-
 	// test #5759
 	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", "2")
