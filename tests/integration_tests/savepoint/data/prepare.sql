@@ -2,7 +2,7 @@ drop database if exists `savepoint`;
 create database `savepoint`;
 use `savepoint`;
 
-create table t(id int, a int, unique index idx(id));
+create table t(id int key, a int, index idx(a));
 
 -- Test savepoint in optimistic transaction.
 
