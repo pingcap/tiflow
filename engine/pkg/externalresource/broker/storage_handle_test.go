@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ import (
 
 func newResourceIdentForTesting(executor, workerID, resourceName string) internal.ResourceIdent {
 	return internal.ResourceIdent{
-		Name: resourceName,
+		Name: resModel.EncodeResourceName(resourceName),
 		ResourceScope: internal.ResourceScope{
 			ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
 			Executor:    model.ExecutorID(executor),

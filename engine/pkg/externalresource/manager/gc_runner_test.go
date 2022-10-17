@@ -353,7 +353,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 			tp, resName, err := resModel.ParseResourceID(meta.ID)
 			require.NoError(t, err)
 			require.Equal(t, resModel.ResourceTypeS3, tp)
-			require.NotEqual(t, s3.DummyResourceName, resName)
+			require.NotEqual(t, s3.GetDummyResourceName(), resName)
 		}
 	}
 

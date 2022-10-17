@@ -2,19 +2,13 @@
 endpoints = ["mysql-standalone:3306"]
 schema = "test_framework"
 user = "root"
-password = "123456"
-
-[framework-meta.security]
-ca-path = "/ca.pem"
+password = ""
 
 [business-meta]
 endpoints = ["mysql-standalone:3306"]
 schema = "test_business"
 user = "root"
-password = "123456"
-
-[business-meta.security]
-ca-path = "/ca.pem"
+password = ""
 
 [log]
 level = "debug"
@@ -23,6 +17,7 @@ level = "debug"
 reset-interval = "2s"
 initial-interval = "1s"
 max-interval = "15s"
+max-try-time = 100
 
 [storage.s3]
 bucket = "engine-it"
