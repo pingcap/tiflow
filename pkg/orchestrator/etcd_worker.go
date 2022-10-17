@@ -163,11 +163,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	}
 
 	var (
-		pendingPatches  [][]DataPatch
-		commitedChanges int
-		exiting         bool
-		retry           bool
-		sessionDone     <-chan struct{}
+		pendingPatches   [][]DataPatch
+		committedChanges int
+		exiting          bool
+		retry            bool
+		sessionDone      <-chan struct{}
 	)
 	if session != nil {
 		sessionDone = session.Done()
@@ -234,7 +234,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		tryCommitPendingPatches := func() (bool, error) {
 			if len(pendingPatches) > 0 {
 				// Here we have some patches yet to be uploaded to Etcd.
-				pendingPatches, commitedChanges, err = worker.applyPatchGroups(ctx, pendingPatches)
+				pendingPatches, committedChanges, err = worker.applyPatchGroups(ctx, pendingPatches)
 				if isRetryableError(err) {
 					return true, nil
 				}
@@ -243,7 +243,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 				// pendingPatches size may greater than 0, but nothing to commit to etcd
 				// if nothing is changed, we should not break this tick
-				if commitedChanges > 0 {
+				if committedChanges > 0 {
 					return true, nil
 				}
 			}
