@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
@@ -64,28 +63,28 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 	return m.ddl
 }
 
-func newDDLSink4Test() (DDLSink, *mockSink) {
+func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink()
-	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
-		a.sinkV1 = mockSink
+	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
+	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
+		s.sinkV1 = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
 }
 
 func TestCheckpoint(t *testing.T) {
-	ddlSink, mSink := newDDLSink4Test()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx, cancel := cdcContext.WithCancel(ctx)
+	ddlSink, mSink := newDDLSink4Test(func(err error) {})
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
 		ddlSink.close(ctx)
 	}()
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
-		return retry.Do(context.Background(), func() error {
+		return retry.Do(ctx, func() error {
 			if targetTs != atomic.LoadUint64(&m.checkpointTs) {
 				return errors.New("targetTs!=checkpointTs")
 			}
@@ -99,14 +98,14 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestExecDDLEvents(t *testing.T) {
-	ddlSink, mSink := newDDLSink4Test()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx, cancel := cdcContext.WithCancel(ctx)
+	ddlSink, mSink := newDDLSink4Test(func(err error) {})
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
 		ddlSink.close(ctx)
 	}()
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	ddlEvents := []*model.DDLEvent{
 		{CommitTs: 1},
@@ -127,8 +126,6 @@ func TestExecDDLEvents(t *testing.T) {
 }
 
 func TestExecDDLError(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-
 	var (
 		resultErr   error
 		resultErrMu sync.Mutex
@@ -139,20 +136,19 @@ func TestExecDDLError(t *testing.T) {
 		return resultErr
 	}
 
-	ddlSink, mSink := newDDLSink4Test()
-	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
+	ddlSink, mSink := newDDLSink4Test(func(err error) {
 		resultErrMu.Lock()
 		defer resultErrMu.Unlock()
 		resultErr = err
-		return nil
 	})
-	ctx, cancel := cdcContext.WithCancel(ctx)
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
 		ddlSink.close(ctx)
 	}()
 
-	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+	ddlSink.run(ctx)
 
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
