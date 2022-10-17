@@ -283,7 +283,59 @@ type datum2ColumnConverter struct {
 	rawColumns []types.Datum
 }
 
+func NewDatum2ColumnConverter() *datum2ColumnConverter {
+	return &datum2ColumnConverter{
+		columns:    make([]*model.Column, 0),
+		rawColumns: make([]types.Datum, 0),
+	}
+}
+
 func (c *datum2ColumnConverter) convert(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) error {
+	var (
+		err      error
+		warn     string
+		size     int
+		colValue interface{}
+	)
+	for _, colInfo := range tableInfo.Columns {
+		if !model.IsColCDCVisible(colInfo) {
+			log.Debug("skip the column which is not visible",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
+			continue
+		}
+		colName := colInfo.Name.O
+		colDatums, exist := datums[colInfo.ID]
+		if !exist && !fillWithDefaultValue {
+			log.Debug("column value is not found",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
+			continue
+		}
+
+		if exist {
+			colValue, size, warn, err = formatColVal(colDatums, colInfo)
+		} else if fillWithDefaultValue {
+			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+		}
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+		}
+		
+		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		c.rawColumns[offset] = colDatums
+		c.columns[offset] = &model.Column{
+			Name:    colName,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
+			Value:   colValue,
+			Default: getDDLDefaultDefinition(colInfo),
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+			// ApproximateBytes = column data size + column struct size
+			ApproximateBytes: size + sizeOfEmptyColumn,
+		}
+	}
 	return nil
 }
 
