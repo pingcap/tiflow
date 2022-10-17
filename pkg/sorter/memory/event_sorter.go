@@ -24,8 +24,8 @@ import (
 )
 
 var (
-	_ sorter.EventSortEngine = (*EventSorter)(nil)
-	_ sorter.EventIterator   = (*EventIter)(nil)
+	_ sorter.EventSortEngine[Position] = (*EventSorter)(nil)
+	_ sorter.EventIterator[Position]   = (*EventIter)(nil)
 )
 
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
@@ -42,6 +42,10 @@ type EventSorter struct {
 type EventIter struct {
 	resolved []*model.PolymorphicEvent
 	position int
+}
+
+type Position struct {
+	ts model.Ts
 }
 
 // New creates a new EventSorter.
@@ -86,14 +90,14 @@ func (s *EventSorter) Add(_ model.TableID, events ...*model.PolymorphicEvent) (e
 }
 
 // SetOnResolve implements sorter.EventSortEngine.
-func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
+func (s *EventSorter) SetOnResolve(action func(model.TableID, Position)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
-// Fetch implements sorter.EventSortEngine.
-func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) sorter.EventIterator {
+// FetchByTable implements sorter.EventSortEngine.
+func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position, upperBound ...Position) sorter.EventIterator {
 	if tableID != -1 {
 		panic("only for DDL puller")
 	}

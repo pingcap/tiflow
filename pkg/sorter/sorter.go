@@ -41,16 +41,16 @@ type EventSortEngine[Pos Position] interface {
 	SetOnResolve(action func(model.TableID, Pos))
 
 	// FetchByTable creates an iterator to fetch events from the given table.
-	// The range is specified by [lowerBound, upperBound]. If upperBound is not
-	// specified, all resolved events of the table will be retrieved.
+	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(tableID model.TableID, lowerBound Pos, upperBound ...Pos) EventIterator[Pos]
+	FetchByTable(tableID model.TableID, lowerBound Pos) EventIterator[Pos]
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
+	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	FetchAllTables(lowerBound Pos, upperBound ...Pos) EventIterator[Pos]
+	FetchAllTables(lowerBound Pos) EventIterator[Pos]
 
 	// CleanByTable tells the engine events of the given table in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
