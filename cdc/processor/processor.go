@@ -662,12 +662,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage,
-		p.changefeedID,
-		contextutil.TimezoneFromCtx(ctx),
-		p.filter,
-		p.changefeed.Info.Config.EnableOldValue,
-	)
+	p.mounter = entry.NewMounter(p.schemaStorage, contextutil.TimezoneFromCtx(ctx), p.filter, p.changefeed.Info.Config.EnableOldValue, p.changefeedID)
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()

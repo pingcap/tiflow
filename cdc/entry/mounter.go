@@ -68,23 +68,26 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage                SchemaStorage
-	tz                           *time.Location
-	enableOldValue               bool
-	changefeedID                 model.ChangeFeedID
-	filter                       pfilter.Filter
+	filter         pfilter.Filter
+	schemaStorage  SchemaStorage
+	tz             *time.Location
+	enableOldValue bool
+
 	metricMountDuration          prometheus.Observer
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
+
+	changefeedID model.ChangeFeedID
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage SchemaStorage,
-	changefeedID model.ChangeFeedID,
+func NewMounter(
+	schemaStorage SchemaStorage,
 	tz *time.Location,
 	filter pfilter.Filter,
 	enableOldValue bool,
-) Mounter {
+	changefeedID model.ChangeFeedID,
+) *mounterImpl {
 	return &mounterImpl{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,

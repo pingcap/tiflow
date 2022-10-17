@@ -295,9 +295,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	config := config.GetDefaultReplicaConfig()
 	filter, err := pfilter.NewFilter(config, "")
 	require.Nil(t, err)
-	mounter := NewMounter(scheamStorage,
-		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false).(*mounterImpl)
+	mounter := NewMounter(scheamStorage, time.UTC, filter, false, model.DefaultChangeFeedID("c1")).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -1004,7 +1002,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounterImpl)
+	mounter := NewMounter(schemaStorage, time.Local, filter, true, cfID).(*mounterImpl)
 
 	type testCase struct {
 		schema  string
