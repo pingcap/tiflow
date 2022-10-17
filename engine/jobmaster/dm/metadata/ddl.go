@@ -14,7 +14,6 @@
 package metadata
 
 import (
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
@@ -28,8 +27,6 @@ type DDL struct {
 // Write by DDLCoordinator.
 type DDLStore struct {
 	*TomlStore
-
-	id frameModel.MasterID
 }
 
 // NewDDLStore returns a new DDLStore instance

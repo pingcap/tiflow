@@ -32,7 +32,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		log.Info("Start http listen on :8083")
-		err := http.ListenAndServe(":8083", nil)
+		err := http.ListenAndServe(":8083", nil) //nolint:gosec
 		if err != nil {
 			return
 		}
