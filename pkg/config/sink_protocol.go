@@ -29,7 +29,8 @@ type Protocol int
 
 // Enum types of the Protocol.
 const (
-	ProtocolDefault Protocol = iota
+	ProtocolUnknown Protocol = iota
+	ProtocolDefault
 	ProtocolCanal
 	ProtocolAvro
 	ProtocolMaxwell
@@ -40,36 +41,34 @@ const (
 )
 
 // IsBatchEncode returns whether the protocol is a batch encoder.
-func (p *Protocol) IsBatchEncode() bool {
-	return *p == ProtocolOpen || *p == ProtocolCanal || *p == ProtocolMaxwell || *p == ProtocolCraft
+func (p Protocol) IsBatchEncode() bool {
+	return p == ProtocolOpen || p == ProtocolCanal || p == ProtocolMaxwell || p == ProtocolCraft
 }
 
-// FromString converts the protocol from string to Protocol enum type.
-func (p *Protocol) FromString(protocol string) error {
+// ParseSinkProtocolFromString converts the protocol from string to Protocol enum type.
+func ParseSinkProtocolFromString(protocol string) (Protocol, error) {
 	switch strings.ToLower(protocol) {
 	case "default":
-		*p = ProtocolOpen
+		return ProtocolOpen, nil
 	case "canal":
-		*p = ProtocolCanal
+		return ProtocolCanal, nil
 	case "avro":
-		*p = ProtocolAvro
+		return ProtocolAvro, nil
 	case "flat-avro":
-		*p = ProtocolAvro
+		return ProtocolAvro, nil
 	case "maxwell":
-		*p = ProtocolMaxwell
+		return ProtocolMaxwell, nil
 	case "canal-json":
-		*p = ProtocolCanalJSON
+		return ProtocolCanalJSON, nil
 	case "craft":
-		*p = ProtocolCraft
+		return ProtocolCraft, nil
 	case "open-protocol":
-		*p = ProtocolOpen
+		return ProtocolOpen, nil
 	case "csv":
-		*p = ProtocolCsv
+		return ProtocolCsv, nil
 	default:
-		return cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(protocol)
+		return ProtocolUnknown, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(protocol)
 	}
-
-	return nil
 }
 
 // String converts the Protocol enum type string to string.
