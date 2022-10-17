@@ -16,7 +16,6 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -49,10 +48,6 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
-	// taskID -> FinishedTaskStatus
-	// worker exists after finished, so we need record the finished status for QueryJobStatus
-	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
-	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -181,7 +176,6 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 		return err
 	}
 
-	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
@@ -215,7 +209,24 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	taskStatus := finishedTaskStatus.TaskStatus
-	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
+
+	finishedStateStore := jm.metadata.FinishedStateStore()
+	err := finishedStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.FinishedState) error {
+		state.FinishedUnitStatus[taskStatus.Task] = append(
+			state.FinishedUnitStatus[taskStatus.Task], &finishedTaskStatus,
+		)
+		length := len(state.FinishedUnitStatus[taskStatus.Task])
+		// avoid duplicate append
+		if length >= 2 && state.FinishedUnitStatus[taskStatus.Task][length-1].Unit == state.FinishedUnitStatus[taskStatus.Task][length-2].Unit {
+			state.FinishedUnitStatus[taskStatus.Task][length-2] = state.FinishedUnitStatus[taskStatus.Task][length-1]
+			state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:length-1]
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {

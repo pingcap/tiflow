@@ -40,6 +40,9 @@ type JobStatus struct {
 	JobID frameModel.MasterID `json:"job_id"`
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus `json:"task_status"`
+	// FinishedUnitStatus records the finished unit status of a task. This field
+	// is not atomic with TaskStatus (current status).
+	FinishedUnitStatus *metadata.FinishedState `json:"finished_unit_status,omitempty"`
 }
 
 // QueryJobStatus is the api of query job status.
@@ -56,9 +59,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}
 	}
 
-	var expectedCfgModRevsion uint64
+	var expectedCfgModRevision uint64
 	for _, task := range job.Tasks {
-		expectedCfgModRevsion = task.Cfg.ModRevision
+		expectedCfgModRevision = task.Cfg.ModRevision
 		break
 	}
 
@@ -94,27 +97,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				if !ok {
 					// worker unscheduled
 					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
-				} else if workerStatus.Stage == runtime.WorkerFinished {
-					// task finished
-					workerID = workerStatus.ID
-					cfgModRevision = workerStatus.CfgModRevision
-					finishedStatus, ok := jm.finishedStatus.Load(taskID)
-					if !ok {
-						queryStatusResp = &dmpkg.QueryStatusResponse{
-							Unit:     workerStatus.Unit,
-							Stage:    metadata.StageFinished,
-							ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID),
-						}
-					} else {
-						s := finishedStatus.(runtime.FinishedTaskStatus)
-						queryStatusResp = &dmpkg.QueryStatusResponse{
-							Unit:   workerStatus.Unit,
-							Stage:  metadata.StageFinished,
-							Result: dmpkg.NewProcessResultFromPB(s.Result),
-							Status: s.Status,
-						}
-					}
-				} else {
+				} else if workerStatus.Stage != runtime.WorkerFinished {
 					workerID = workerStatus.ID
 					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = jm.QueryStatus(ctx, taskID)
@@ -126,12 +109,18 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				ExpectedStage:  expectedStage,
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
-				ConfigOutdated: cfgModRevision != expectedCfgModRevsion,
+				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
 			}
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
+
+	s, err := jm.metadata.FinishedStateStore().Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	jobStatus.FinishedUnitStatus = s.(*metadata.FinishedState)
 	return jobStatus, nil
 }
 
@@ -184,8 +173,22 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
 		return err
 	}
+
 	// reset finished status, all tasks will be restarted now.
-	jm.finishedStatus = sync.Map{}
+	store := jm.metadata.FinishedStateStore()
+	err := store.ReadModifyWrite(ctx, func(state *metadata.FinishedState) error {
+		for k := range state.FinishedUnitStatus {
+			length := len(state.FinishedUnitStatus[k])
+			if length > 0 {
+				state.FinishedUnitStatus[k] = state.FinishedUnitStatus[k][:length-1]
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }

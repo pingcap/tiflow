@@ -23,7 +23,7 @@ import (
 
 // ClusterInfo represents the cluster info.
 type ClusterInfo struct {
-	State
+	state
 
 	Version semver.Version
 }
@@ -37,25 +37,25 @@ func NewClusterInfo(version semver.Version) *ClusterInfo {
 
 // ClusterInfoStore manages the state of ClusterInfo.
 type ClusterInfoStore struct {
-	*TomlStore
+	*frameworkMetaStore
 }
 
 // NewClusterInfoStore returns a new ClusterInfoStore instance
 func NewClusterInfoStore(kvClient metaModel.KVClient) *ClusterInfoStore {
 	clusterInfoStore := &ClusterInfoStore{
-		TomlStore: NewTomlStore(kvClient),
+		frameworkMetaStore: newTOMLFrameworkMetaStore(kvClient),
 	}
-	clusterInfoStore.TomlStore.Store = clusterInfoStore
+	clusterInfoStore.frameworkMetaStore.stateFactory = clusterInfoStore
 	return clusterInfoStore
 }
 
 // CreateState creates an empty ClusterInfo object
-func (clusterInfoStore *ClusterInfoStore) CreateState() State {
+func (clusterInfoStore *ClusterInfoStore) createState() state {
 	return &ClusterInfo{}
 }
 
 // Key returns encoded key of ClusterInfo state store
-func (clusterInfoStore *ClusterInfoStore) Key() string {
+func (clusterInfoStore *ClusterInfoStore) key() string {
 	return adapter.DMInfoKeyAdapter.Encode()
 }
 
