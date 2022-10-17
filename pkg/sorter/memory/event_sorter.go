@@ -37,7 +37,7 @@ type EventSorter struct {
 	unresolved      eventHeap
 	resolved        []*model.PolymorphicEvent
 	resolvedTsGroup []uint64
-	onResolves      []func(model.TableID, Position)
+	onResolves      []func(model.TableID, model.Ts)
 }
 
 type EventIter struct {
@@ -91,14 +91,17 @@ func (s *EventSorter) Add(_ model.TableID, events ...*model.PolymorphicEvent) (e
 }
 
 // SetOnResolve implements sorter.EventSortEngine.
-func (s *EventSorter) SetOnResolve(action func(model.TableID, Position)) {
+func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
 // FetchByTable implements sorter.EventSortEngine.
-func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position) sorter.EventIterator[Position] {
+func (s *EventSorter) FetchByTable(
+	tableID model.TableID,
+	lowerBound, upperBound Position,
+) sorter.EventIterator[Position] {
 	log.Panic("FetchByTable should never be called")
 	return nil
 }

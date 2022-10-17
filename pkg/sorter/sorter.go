@@ -38,13 +38,13 @@ type EventSortEngine[Pos Position[Pos]] interface {
 
 	// SetOnResolve pushes action into EventSortEngine's hook list, which
 	// will be called after any events are resolved.
-	SetOnResolve(action func(model.TableID, Pos))
+	SetOnResolve(action func(model.TableID, model.Ts))
 
 	// FetchByTable creates an iterator to fetch events from the given table.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(tableID model.TableID, lowerBound Pos) EventIterator[Pos]
+	FetchByTable(tableID model.TableID, lowerBound, upperBound Pos) EventIterator[Pos]
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
@@ -88,9 +88,8 @@ type EventIterator[Pos Position[Pos]] interface {
 }
 
 // Position is used to
-//  1. notify downstream components events are available, see EventSortEngine.SetOnResolve.
-//  2. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
-//  3. calculate the next position with method Next.
+//  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
+//  2. calculate the next position with method Next.
 type Position[T any] interface {
 	Next() T
 }

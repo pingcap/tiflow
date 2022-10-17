@@ -277,7 +277,7 @@ func TestEventLess(t *testing.T) {
 func BenchmarkSorter(b *testing.B) {
 	es := New(context.Background())
 	esResolved := make(chan model.Ts, 128)
-	es.SetOnResolve(func(_ model.TableID, pos Position) { esResolved <- pos.ts })
+	es.SetOnResolve(func(_ model.TableID, ts model.Ts) { esResolved <- ts })
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()

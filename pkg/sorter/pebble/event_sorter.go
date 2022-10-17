@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
-	"strconv"
+	"math"
 	"sync"
 	"sync/atomic"
 
@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	_ sorter.EventSortEngine = (*EventSorter)(nil)
-	_ sorter.EventIterator   = (*EventIter)(nil)
+	_ sorter.EventSortEngine[Position] = (*EventSorter)(nil)
+	_ sorter.EventIterator[Position]   = (*EventIter)(nil)
 )
 
 // EventSorter is an event sort engine.
@@ -54,8 +54,14 @@ type EventSorter struct {
 }
 
 type EventIter struct {
-	iter  *pebble.Iterator
-	serde encoding.MsgPackGenSerde
+	tableID model.TableID
+	iter    *pebble.Iterator
+	serde   encoding.MsgPackGenSerde
+}
+
+type Position struct {
+	tableID model.TableID
+	ts      model.Ts
 }
 
 func New(ctx context.Context, dbs []*pebble.DB) *EventSorter {
@@ -134,8 +140,15 @@ func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
 	s.onResolves = append(s.onResolves, action)
 }
 
-// Fetch implements sorter.EventSortEngine.
-func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) sorter.EventIterator {
+// FetchByTable implements sorter.EventSortEngine.
+func (s *EventSorter) FetchByTable(
+	tableID model.TableID,
+	lowerBound, upperBound Position,
+) sorter.EventIterator[Position] {
+	if tableID != lowerBound.tableID {
+		log.Panic("tableID doesn't match the boundary")
+	}
+
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	if !exists {
@@ -143,42 +156,96 @@ func (s *EventSorter) Fetch(tableID model.TableID, lowerBound model.Ts) sorter.E
 	}
 	s.mu.Unlock()
 
-	resolved := atomic.LoadUint64(&state.resolved)
-	if lowerBound > resolved {
-		// FIXME: better way to return an empty iterator.
-		return &EventIter{}
+	if upperBound.ts > atomic.LoadUint64(&state.resolved) {
+		log.Panic("fetch unresolved events")
 	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
-	iter := db.NewIter(&pebble.IterOptions{
-		LowerBound: encoding.EncodeTsKey(s.uniqueID, uint64(tableID), lowerBound),
-		UpperBound: encoding.EncodeTsKey(s.uniqueID, uint64(tableID), resolved+1),
-		TableFilter: func(userProps map[string]string) bool {
-			tableMinCRTs, _ := strconv.Atoi(userProps[minTableCRTsLabel])
-			tableMaxCRTs, _ := strconv.Atoi(userProps[maxTableCRTsLabel])
-			return uint64(tableMaxCRTs) >= lowerBound && uint64(tableMinCRTs) <= resolved
-		},
-	})
-	iter.First()
-	return &EventIter{iter, s.serde}
+	iter := iterTable(db, s.uniqueID, tableID, lowerBound.ts, upperBound.ts+1)
+	return &EventIter{tableID, iter, s.serde}
 }
 
-// Clean implements sorter.EventSortEngine.
-func (s *EventSorter) Clean(tableID model.TableID, upperBound model.Ts) {
+// FetchAllTables implements sorter.EventSortEngine.
+func (s *EventSorter) FetchAllTables(lowerBound Position) sorter.EventIterator[Position] {
+	log.Panic("FetchAllTables should never be called")
+	return nil
+}
+
+// CleanByTable implements sorter.EventSortEngine.
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound Position) error {
+	if tableID != upperBound.tableID {
+		log.Panic("tableID doesn't match the boundary")
+	}
+
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	if !exists {
+		log.Panic("clean an unexist table")
+	}
+	s.mu.Unlock()
+
+	return s.cleanTable(state, tableID, upperBound)
+}
+
+// CleanAllTables implements sorter.EventSortEngine.
+func (s *EventSorter) CleanAllTables(upperBound Position) error {
+	log.Panic("CleanAllTables should never be called")
+	return nil
+}
+
+// Close implements sorter.EventSortEngine.
+func (s *EventSorter) Close() error {
+	close(s.closed)
+	s.wg.Done()
+	for _, ch := range s.channs {
+		ch.Close()
+		for range ch.Out() {
+		}
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for tableID, state := range s.tables {
+		if err := s.cleanTable(state, tableID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ZeroPosition implements sorter.EventSortEngine.
+func (s *EventSorter) ZeroPosition(tableID ...model.TableID) Position {
+	if len(tableID) == 0 || len(tableID) > 1 {
+		log.Panic("must retrieve one tableID")
+	}
+
+	return Position{tableID: tableID[0], ts: model.Ts(0)}
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
-	if s.iter.Valid() {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, pos Position, err error) {
+	if s.iter != nil && s.iter.Valid() {
 		event = &model.PolymorphicEvent{}
 		_, err = s.serde.Unmarshal(event, s.iter.Value())
+		if event.IsResolved() {
+			pos.tableID = s.tableID
+			pos.ts = event.CRTs
+		}
 	}
 	return
 }
 
 // Close implements sorter.EventIterator.
 func (s *EventIter) Close() error {
+	if s.iter != nil {
+		return s.iter.Close()
+	}
 	return nil
+}
+
+// Next implements sorter.Position.
+func (p Position) Next() Position {
+	return Position{tableID: p.tableID, ts: p.ts + 1}
 }
 
 type eventWithTableID struct {
@@ -189,6 +256,7 @@ type eventWithTableID struct {
 type tableState struct {
 	ch       *chann.Chann[eventWithTableID]
 	resolved uint64
+	cleaned  uint64
 }
 
 func (s *EventSorter) handleEvents(offset int) {
@@ -250,6 +318,43 @@ func (s *EventSorter) handleEvents(offset int) {
 	}
 }
 
+// cleanTable uses DeleteRange to clean data of the given table.
+func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upperBound ...Position) error {
+	var cleaned model.Ts
+	var start, end []byte
+
+	if len(upperBound) == 1 {
+		cleaned = upperBound[0].ts
+	} else {
+		cleaned = math.MaxUint64
+	}
+
+	if atomic.LoadUint64(&state.cleaned) >= cleaned {
+		return nil
+	}
+
+	start = encoding.EncodeTsKey(s.uniqueID, uint64(tableID), 0)
+	if cleaned == math.MaxUint64 {
+		end = encoding.EncodeTsKey(s.uniqueID, uint64(tableID)+1, 0)
+	} else {
+		end = encoding.EncodeTsKey(s.uniqueID, uint64(tableID), cleaned+1)
+	}
+
+	db := s.dbs[getDB(tableID, len(s.dbs))]
+	err := db.DeleteRange(start, end, &pebble.WriteOptions{Sync: false})
+	if err != nil {
+		return err
+	}
+	for {
+		prev := atomic.LoadUint64(&state.cleaned)
+		if prev >= cleaned || atomic.CompareAndSwapUint64(&state.cleaned, prev, cleaned) {
+			break
+		}
+	}
+	return nil
+}
+
+// / ----- Some internal variable and functions ----- ///
 const batchCommitCount uint32 = 1024
 
 var uniqueIDGen uint32 = 0
