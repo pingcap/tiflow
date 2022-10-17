@@ -34,9 +34,25 @@ func TestS3ResourceController(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), caseTimeout)
 	defer cancel()
 
-	fm, factory := newFileManagerForUT(t)
+	temproraryResNames := make([]resModel.ResourceName, numTemporaryResources)
+	for i := 0; i < numTemporaryResources; i++ {
+		resID := fmt.Sprintf("/s3/temporary-resource-%d", i)
+		_, resName, err := resModel.ParseResourceID(resID)
+		require.NoError(t, err)
+		temproraryResNames[i] = resName
+	}
+
+	persistedResNames := make([]resModel.ResourceName, numPersistedResources)
+	persistedResMetas := []*resModel.ResourceMeta{}
+	for i := 0; i < numPersistedResources; i++ {
+		resID := fmt.Sprintf("/s3/persisted-resource-%d", i)
+		_, resName, err := resModel.ParseResourceID(resID)
+		require.NoError(t, err)
+		persistedResNames[i] = resName
+	}
+
+	fm, factory := NewFileManagerForUT(t.TempDir(), MockExecutorID)
 	workers := []string{"worker-1", "worker-2", "worker-3"}
-	persistedResources := []*resModel.ResourceMeta{}
 	// generate mock data
 	for _, worker := range workers {
 		scope := internal.ResourceScope{
@@ -44,19 +60,10 @@ func TestS3ResourceController(t *testing.T) {
 			WorkerID: worker,
 		}
 
-		for i := 0; i < numTemporaryResources; i++ {
-			_, err := fm.CreateResource(ctx, internal.ResourceIdent{
-				ResourceScope: scope,
-				Name:          fmt.Sprintf("temp-resource-%d", i),
-			})
-			require.NoError(t, err)
-		}
-
-		for i := 0; i < numPersistedResources; i++ {
-			name := fmt.Sprintf("persisted-resource-%d", i)
+		for _, persistedResName := range persistedResNames {
 			ident := internal.ResourceIdent{
 				ResourceScope: scope,
-				Name:          name,
+				Name:          persistedResName,
 			}
 			_, err := fm.CreateResource(ctx, ident)
 			require.NoError(t, err)
@@ -64,11 +71,19 @@ func TestS3ResourceController(t *testing.T) {
 			err = fm.SetPersisted(ctx, ident)
 			require.NoError(t, err)
 
-			persistedResources = append(persistedResources, &resModel.ResourceMeta{
-				ID:       "/s3/" + name,
-				Executor: ident.Executor,
+			persistedResMetas = append(persistedResMetas, &resModel.ResourceMeta{
+				ID:       resModel.BuildResourceID(resModel.ResourceTypeS3, persistedResName),
+				Executor: MockExecutorID,
 				Worker:   worker,
 			})
+		}
+
+		for _, tempResName := range temproraryResNames {
+			_, err := fm.CreateResource(ctx, internal.ResourceIdent{
+				ResourceScope: scope,
+				Name:          tempResName,
+			})
+			require.NoError(t, err)
 		}
 	}
 
@@ -77,19 +92,19 @@ func TestS3ResourceController(t *testing.T) {
 			Executor: MockExecutorID,
 			WorkerID: worker,
 		}
-		for i := 0; i < numPersistedResources; i++ {
+		for _, persistedResName := range persistedResNames {
 			ident := internal.ResourceIdent{
 				ResourceScope: scope,
-				Name:          fmt.Sprintf("persisted-resource-%d", i),
+				Name:          persistedResName,
 			}
 			_, err := fm.GetPersistedResource(ctx, ident)
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < numTemporaryResources; i++ {
+		for _, tempResName := range temproraryResNames {
 			_, err := fm.GetPersistedResource(ctx, internal.ResourceIdent{
 				ResourceScope: scope,
-				Name:          fmt.Sprintf("temp-resource-%d", i),
+				Name:          tempResName,
 			})
 			if removed {
 				require.ErrorContains(t, err, "ResourceFilesNotFoundError")
@@ -106,7 +121,7 @@ func TestS3ResourceController(t *testing.T) {
 	fm1 := newFileManagerForUTFromSharedStorageFactory("leader-controller", factory)
 	controller := &resourceController{fm: fm1}
 	gcExecutor := func() {
-		err := controller.GCExecutor(ctx, persistedResources, MockExecutorID)
+		err := controller.GCExecutor(ctx, persistedResMetas, MockExecutorID)
 		require.NoError(t, err)
 		checkWorker(workers[0], true)
 		checkWorker(workers[1], true)
@@ -117,7 +132,7 @@ func TestS3ResourceController(t *testing.T) {
 	gcExecutor()
 
 	// test GCSingleResource
-	for _, res := range persistedResources {
+	for _, res := range persistedResMetas {
 		_, resName, err := resModel.ParseResourceID(res.ID)
 		require.NoError(t, err)
 		ident := internal.ResourceIdent{
