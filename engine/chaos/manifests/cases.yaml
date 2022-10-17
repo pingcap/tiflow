@@ -11,6 +11,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - "/tiflow-chaos-case"
+            - "--config-dir=/engine-conf"
             - "--duration=20m"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
