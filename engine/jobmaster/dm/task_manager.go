@@ -124,7 +124,7 @@ func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil || state.(*metadata.Job).Deleting {
 		tm.logger.Info("on job deleting", zap.Error(err))
-		tm.onJobDel(ctx)
+		tm.onJobDel()
 		return err
 	}
 	job := state.(*metadata.Job)
@@ -181,7 +181,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 }
 
 // remove all tasks, usually happened when delete jobs.
-func (tm *TaskManager) onJobDel(ctx context.Context) {
+func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
