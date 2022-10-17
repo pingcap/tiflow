@@ -177,10 +177,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		sessionDone = make(chan struct{})
 	}
 
-	// tickRate represents the number of times EtcdWorker can tick
-	// the reactor per second
-	tickRate := time.Second / timerInterval
-	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
+	// limit the number of times EtcdWorker can tick
+	rl := rate.NewLimiter(rate.Every(timerInterval), 2)
 	for {
 		select {
 		case <-ctx.Done():
