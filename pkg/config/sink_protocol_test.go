@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFromString(t *testing.T) {
+func TestParseSinkProtocolFromString(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		protocol             string
@@ -65,8 +65,7 @@ func TestFromString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		var protocol Protocol
-		err := protocol.FromString(tc.protocol)
+		protocol, err := ParseSinkProtocolFromString(tc.protocol)
 		if tc.expectedErr != "" {
 			require.Regexp(t, tc.expectedErr, err)
 		} else {
