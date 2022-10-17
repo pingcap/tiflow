@@ -63,6 +63,7 @@ func GetDummyJobID(executorID model.ExecutorID) model.JobID {
 	return fmt.Sprintf(dummyJobID, executorID)
 }
 
+// GetDummyResPath returns a file path located in dummy resource for s3 storage.
 func GetDummyResPath(filename string) string {
 	return path.Join(DummyWorkerID, dummyResourceName, filename)
 }

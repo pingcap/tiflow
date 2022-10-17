@@ -16,10 +16,10 @@ package model
 import (
 	"encoding/hex"
 	"fmt"
-	"log"
 	"path"
 	"strings"
 
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
@@ -183,7 +183,7 @@ func BuildResourceID(rtype ResourceType, resName ResourceName) ResourceID {
 // EncodeResourceName encodes raw resource name to a valid resource name.
 func EncodeResourceName(rawResName string) ResourceName {
 	resName := hex.EncodeToString([]byte(rawResName))
-	return ResourceName(resName)
+	return resName
 }
 
 // DecodeResourceName decodes resource name to raw resource name.
