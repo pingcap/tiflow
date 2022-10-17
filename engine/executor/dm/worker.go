@@ -193,11 +193,18 @@ func (w *dmWorker) CloseImpl(ctx context.Context) {
 // setupStorage opens and configs external storage
 func (w *dmWorker) setupStorage(ctx context.Context) error {
 	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
-	h, err := w.OpenStorage(ctx, rid)
+	openStorageFunc := func() (broker.Handle, error) {
+		if w.workerType == frameModel.WorkerDMDump {
+			// always use an empty storage for dumpling task
+			return w.OpenStorage(ctx, rid, broker.WithEmptyOption())
+		}
+		return w.OpenStorage(ctx, rid)
+	}
+	h, err := openStorageFunc()
 	for status.Code(err) == codes.Unavailable {
 		w.Logger().Info("simple retry", zap.Error(err))
 		time.Sleep(time.Second)
-		h, err = w.OpenStorage(ctx, rid)
+		h, err = openStorageFunc()
 	}
 	if err != nil {
 		return errors.Trace(err)

@@ -81,6 +81,7 @@ func (b *MockBroker) OpenStorage(
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resourcePath resModel.ResourceID,
+	opts ...OpenStorageOption,
 ) (Handle, error) {
 	b.clientMu.Lock()
 	defer b.clientMu.Unlock()

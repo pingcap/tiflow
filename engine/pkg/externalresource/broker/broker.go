@@ -116,6 +116,7 @@ func (b *DefaultBroker) OpenStorage(
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resID resModel.ResourceID,
+	opts ...OpenStorageOption,
 ) (Handle, error) {
 	// Note the semantics of PasreResourceID:
 	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
@@ -130,6 +131,11 @@ func (b *DefaultBroker) OpenStorage(
 		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
+	options := &openStorageOptions{}
+	for _, o := range opts {
+		o(options)
+	}
+
 	record, exists, err := b.checkForExistingResource(ctx,
 		resModel.ResourceKey{JobID: jobID, ID: resID})
 	if err != nil {
@@ -140,7 +146,7 @@ func (b *DefaultBroker) OpenStorage(
 	if !exists {
 		desc, err = b.createResource(ctx, fm, projectInfo, workerID, resName)
 	} else {
-		desc, err = b.getPersistResource(ctx, fm, record, resName)
+		desc, err = b.getPersistResource(ctx, fm, record, resName, options)
 	}
 	if err != nil {
 		return nil, err
@@ -299,6 +305,7 @@ func (b *DefaultBroker) getPersistResource(
 	ctx context.Context, fm internal.FileManager,
 	record *resModel.ResourceMeta,
 	resName resModel.ResourceName,
+	options *openStorageOptions,
 ) (internal.ResourceDescriptor, error) {
 	ident := internal.ResourceIdent{
 		Name: resName,
@@ -308,7 +315,22 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	return fm.GetPersistedResource(ctx, ident)
+	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
+	}
+
+	if options.needEmpty {
+		err := fm.RemoveResource(ctx, ident)
+		if err != nil {
+			return nil, err
+		}
+		desc, err = fm.CreateResource(ctx, ident)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return desc, nil
 }
 
 func (b *DefaultBroker) createDummyS3Resource() error {

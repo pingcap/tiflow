@@ -33,6 +33,7 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
+		opts ...OpenStorageOption,
 	) (Handle, error)
 
 	// OnWorkerClosed is called when a worker is closing.
@@ -45,4 +46,16 @@ type Broker interface {
 	)
 
 	Close()
+}
+
+type openStorageOptions struct {
+	needEmpty bool
+}
+
+type OpenStorageOption func(*openStorageOptions)
+
+func WithEmptyOption() OpenStorageOption {
+	return func(opts *openStorageOptions) {
+		opts.needEmpty = true
+	}
 }
