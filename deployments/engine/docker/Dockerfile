@@ -18,4 +18,3 @@ RUN make engine
 FROM alpine:3.16
 
 COPY --from=builder /dataflow-engine/bin/tiflow /tiflow
-COPY --from=builder /dataflow-engine/bin/tiflow-demoserver /tiflow-demoserver
