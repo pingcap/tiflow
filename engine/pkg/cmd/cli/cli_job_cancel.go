@@ -45,12 +45,12 @@ func (o *jobCancelOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
-func (o *jobCancelOptions) validate(ctx context.Context, cmd *cobra.Command) error {
-	return o.generalOpts.validate(ctx, cmd)
+func (o *jobCancelOptions) validate(ctx context.Context) error {
+	return o.generalOpts.validate(ctx)
 }
 
 // run the `cli job create` command.
-func (o *jobCancelOptions) run(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobCancelOptions) run(ctx context.Context) error {
 	resp, err := o.generalOpts.jobManagerCli.CancelJob(ctx, &enginepb.CancelJobRequest{
 		Id:        o.jobID,
 		TenantId:  o.generalOpts.tenant.TenantID(),
@@ -73,10 +73,10 @@ func newCmdJobCancel(generalOpts *jobGeneralOptions) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
-			if err := o.validate(ctx, cmd); err != nil {
+			if err := o.validate(ctx); err != nil {
 				return err
 			}
-			return o.run(ctx, cmd)
+			return o.run(ctx)
 		},
 	}
 
