@@ -248,6 +248,11 @@ func (p Position) Next() Position {
 	return Position{tableID: p.tableID, ts: p.ts + 1}
 }
 
+// Ts implements sorter.Position.
+func (p Position) Ts() model.Ts {
+	return p.ts
+}
+
 type eventWithTableID struct {
 	tableID model.TableID
 	event   *model.PolymorphicEvent

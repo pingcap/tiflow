@@ -182,6 +182,11 @@ func (p Position) Next() Position {
 	return Position{ts: p.ts + 1}
 }
 
+// Ts implements sorter.Position.
+func (p Position) Ts() model.Ts {
+	return p.ts
+}
+
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 	return model.ComparePolymorphicEvents(i, j)
 }

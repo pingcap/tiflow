@@ -91,5 +91,9 @@ type EventIterator[Pos Position[Pos]] interface {
 //  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
 //  2. calculate the next position with method Next.
 type Position[T any] interface {
+	// Next gets the next position used in the next fetch.
 	Next() T
+
+	// Ts returns the internal timestamp of the position.
+	Ts() model.Ts
 }
