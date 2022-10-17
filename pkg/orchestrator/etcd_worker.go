@@ -396,9 +396,6 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 		if err != nil {
 			return patchGroups, committedChanges, err
 		}
-		if len(changeSate) == 0 {
-			break
-		}
 		committedChanges += len(changeSate)
 		err = worker.commitChangedState(ctx, changeSate, size)
 		if err != nil {
