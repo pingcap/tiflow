@@ -80,7 +80,7 @@ func newBrokerForS3WithPrefix(
 	cli.On("CreateResource", mock.Anything,
 		&pb.CreateResourceRequest{
 			ProjectInfo:     &pb.ProjectInfo{},
-			ResourceId:      fmt.Sprintf("/s3/%s", s3.DummyResourceName),
+			ResourceId:      s3.DummyResourceID,
 			CreatorExecutor: string(executorID),
 			JobId:           s3.GetDummyJobID(executorID),
 			CreatorWorkerId: s3.DummyWorkerID,
@@ -104,7 +104,7 @@ func newBrokerForS3WithPrefix(
 	require.NoError(t, err)
 
 	// check dummy resource exists
-	checkFile(t, rootStrorage, "keep-alive-worker/dummy/.keep", fileExists)
+	checkFile(t, rootStrorage, s3.GetDummyResPath(".keep"), fileExists)
 	return broker, cli, tmpDir, rootStrorage, s3Prefix
 }
 
@@ -239,12 +239,16 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 	brk, cli, dir, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
 
 	// test local file works well under this condition
-	cli.On("QueryResource", mock.Anything,
-		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: fakeJobID, ResourceId: "/local/test-1"}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
-	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", fakeJobID, "/local/test-1")
+	resID := "/local/test-1"
+	_, resName, err := resModel.ParseResourceID(resID)
 	require.NoError(t, err)
-	require.Equal(t, "/local/test-1", hdl.ID())
+
+	cli.On("QueryResource", mock.Anything,
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: fakeJobID, ResourceId: resID}}, mock.Anything).
+		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
+	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", fakeJobID, resID)
+	require.NoError(t, err)
+	require.Equal(t, resID, hdl.ID())
 
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
@@ -260,7 +264,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 			TenantId:  fakeProjectInfo.TenantID(),
 			ProjectId: fakeProjectInfo.ProjectID(),
 		},
-		ResourceId:      "/local/test-1",
+		ResourceId:      resID,
 		CreatorExecutor: s3.MockExecutorID,
 		JobId:           fakeJobID,
 		CreatorWorkerId: "worker-1",
@@ -271,7 +275,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 
 	cli.AssertExpectations(t)
 
-	local.AssertLocalFileExists(t, dir, "worker-1", "test-1", "1.txt")
+	local.AssertLocalFileExists(t, dir, "worker-1", resName, "1.txt")
 
 	// test s3
 	testFiles := []string{"1.txt", "inner1/2.txt", "inner1/inner2/3.txt"}
