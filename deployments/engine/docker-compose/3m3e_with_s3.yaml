@@ -6,7 +6,7 @@ services:
     ports:
       - "10245:10240"
     volumes:
-      - ./config/master_with_tls.toml:/config.toml
+      - ./config/master_with_s3.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
@@ -21,15 +21,15 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
-    restart: unless-stopped
-
+      "minio-standalone":
+        condition: service_healthy
   server-master-1:
     image: dataflow:test
     container_name: server-master-1
     ports:
       - "10246:10240"
     volumes:
-      - ./config/master_with_tls.toml:/config.toml
+      - ./config/master_with_s3.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
@@ -44,15 +44,15 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
-    restart: unless-stopped
-
+      "minio-standalone":
+        condition: service_healthy
   server-master-2:
     image: dataflow:test
     container_name: server-master-2
     ports:
       - "10247:10240"
     volumes:
-      - ./config/master_with_tls.toml:/config.toml
+      - ./config/master_with_s3.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
@@ -67,8 +67,8 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
-    restart: unless-stopped
-
+      "minio-standalone":
+        condition: service_healthy
   server-executor-0:
     image: dataflow:test
     container_name: server-executor-0
@@ -93,8 +93,6 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
   server-executor-1:
     image: dataflow:test
     container_name: server-executor-1
@@ -119,8 +117,6 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
   server-executor-2:
     image: dataflow:test
     container_name: server-executor-2
@@ -145,8 +141,6 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -156,19 +150,18 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
-
   mysql-standalone:
     image: mysql:8.0
     container_name: mysql-standalone
-    command: --require_secure_transport=ON
+    command: --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
     volumes:
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
       - "3336:3306"
     healthcheck:
-      test: mysql -h127.0.0.1 -P3306 -e "show databases" -p123456
+      test: mysql -h127.0.0.1 -P3306 -e "show databases"
       interval: 10s
       timeout: 600s
       retries: 60
