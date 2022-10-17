@@ -14,7 +14,7 @@
 package canal
 
 import (
-	"encoding/json"
+	"github.com/goccy/go-json"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -44,11 +44,11 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if len(b.data) == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
-	var msg canalJSONMessageInterface = &canalJSONMessage{}
+	var msg canalJSONMessageInterface = &JSONMessage{}
 	if b.enableTiDBExtension {
 		msg = &canalJSONMessageWithTiDBExtension{
-			canalJSONMessage: &canalJSONMessage{},
-			Extensions:       &tidbExtension{},
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
 		}
 	}
 	if err := json.Unmarshal(b.data, msg); err != nil {
