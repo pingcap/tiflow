@@ -23,14 +23,29 @@ func TestParseResource(t *testing.T) {
 	tp, suffix, err := ParseResourceID("/local/my-local-resource/a/b/c")
 	require.NoError(t, err)
 	require.Equal(t, ResourceTypeLocalFile, tp)
-	require.Equal(t, "my-local-resource/a/b/c", suffix)
-
+	rawResName, err := DecodeResourceName(suffix)
+	require.NoError(t, err)
+	require.Equal(t, "my-local-resource/a/b/c", rawResName)
 	require.Equal(t, "/local/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
 
 	tp, suffix, err = ParseResourceID("/s3/my-local-resource/a/b/c")
 	require.NoError(t, err)
 	require.Equal(t, ResourceTypeS3, tp)
-	require.Equal(t, "my-local-resource/a/b/c", suffix)
-
+	rawResName, err = DecodeResourceName(suffix)
+	require.NoError(t, err)
+	require.Equal(t, "my-local-resource/a/b/c", rawResName)
 	require.Equal(t, "/s3/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
+}
+
+func FuzzEncodeResourceName(f *testing.F) {
+	testcases := []string{"resource-1", "resource-1/inner", "!resource-1+-%/*inner"}
+	for _, tc := range testcases {
+		f.Add(tc)
+	}
+	f.Fuzz(func(t *testing.T, rawResName string) {
+		resName := EncodeResourceName(rawResName)
+		decodedResName, err := DecodeResourceName(resName)
+		require.NoError(t, err)
+		require.Equal(t, rawResName, decodedResName)
+	})
 }
