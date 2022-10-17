@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -110,99 +111,71 @@ func (e *Elector) Run(ctx context.Context) error {
 	}
 }
 
-func (e *Elector) renew(ctx context.Context) error {
+func (e *Elector) renew(ctx context.Context) (err error) {
+	start := time.Now()
+	defer func() {
+		log.Debug("renew", zap.Duration("cost", time.Since(start)), zap.Error(err))
+	}()
+
 	ctx, cancel := context.WithTimeout(ctx, e.config.RenewDeadline)
 	defer cancel()
 
-	for {
-		err := e.tryRenew(ctx)
-		if err == nil {
-			return nil
-		}
-		randDelay := time.Duration(rand.Int63n(int64(e.config.RenewInterval)))
-		log.Info("renew lease failed, retry after random delay",
-			zap.Duration("delay", randDelay), zap.Error(err))
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(randDelay):
-		}
-	}
-}
-
-func (e *Elector) tryRenew(ctx context.Context) (err error) {
-	start := time.Now()
-	defer func() {
-		log.Debug("tryRenew", zap.Duration("took", time.Since(start)), zap.Error(err))
-	}()
-
-	s := e.config.Storage
-
-	record, err := s.Get(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	e.setObservedRecord(record)
-
-	var activeMembers []*Member
-	for _, m := range record.Members {
-		if e.isLeaseExpired(m.ID) {
-			if m.ID == record.LeaderID {
-				record.LeaderID = ""
-				log.Info(
-					"leader lease expired",
-					zap.String("leader-id", m.ID),
-					zap.String("leader-name", m.Name),
-					zap.String("leader-address", m.Address),
-				)
+	return e.updateRecord(ctx, func(record *Record) error {
+		var activeMembers []*Member
+		for _, m := range record.Members {
+			if e.isLeaseExpired(m.ID) {
+				if m.ID == record.LeaderID {
+					record.LeaderID = ""
+					log.Info(
+						"leader lease expired",
+						zap.String("leader-id", m.ID),
+						zap.String("leader-name", m.Name),
+						zap.String("leader-address", m.Address),
+					)
+				} else {
+					log.Info(
+						"member lease expired",
+						zap.String("member-id", m.ID),
+						zap.String("member-name", m.Name),
+						zap.String("member-address", m.Address),
+					)
+				}
 			} else {
-				log.Info(
-					"member lease expired",
-					zap.String("member-id", m.ID),
-					zap.String("member-name", m.Name),
-					zap.String("member-address", m.Address),
-				)
+				activeMembers = append(activeMembers, m)
 			}
+		}
+		record.Members = activeMembers
+
+		// Add self to the record if not exists.
+		if m, ok := record.FindMember(e.config.ID); !ok {
+			record.Members = append(record.Members, &Member{
+				ID:            e.config.ID,
+				Name:          e.config.Name,
+				Address:       e.config.Address,
+				LeaseDuration: e.config.LeaseDuration,
+				RenewTime:     time.Now(),
+			})
 		} else {
-			activeMembers = append(activeMembers, m)
+			m.RenewTime = time.Now()
 		}
-	}
-	record.Members = activeMembers
 
-	// Add self to the record if not exists.
-	if m, ok := record.FindMember(e.config.ID); !ok {
-		record.Members = append(record.Members, &Member{
-			ID:            e.config.ID,
-			Name:          e.config.Name,
-			Address:       e.config.Address,
-			LeaseDuration: e.config.LeaseDuration,
-			RenewTime:     time.Now(),
-		})
-	} else {
-		m.RenewTime = time.Now()
-	}
-
-	if time.Now().Before(e.resignUntil) {
-		if record.LeaderID == e.config.ID {
-			record.LeaderID = ""
-			log.Info("try to resign leadership")
+		if time.Now().Before(e.resignUntil) {
+			if record.LeaderID == e.config.ID {
+				record.LeaderID = ""
+				log.Info("try to resign leadership")
+			}
+		} else if record.LeaderID == "" {
+			// Elect a new leader if no leader exists.
+			record.LeaderID = e.config.ID
+			log.Info(
+				"try to elect self as leader",
+				zap.String("id", e.config.ID),
+				zap.String("name", e.config.Name),
+				zap.String("address", e.config.Address),
+			)
 		}
-	} else if record.LeaderID == "" {
-		// Elect a new leader if no leader exists.
-		record.LeaderID = e.config.ID
-		log.Info(
-			"try to elect self as leader",
-			zap.String("id", e.config.ID),
-			zap.String("name", e.config.Name),
-			zap.String("address", e.config.Address),
-		)
-	}
-
-	if err := s.Update(ctx, record); err != nil {
-		return errors.Trace(err)
-	}
-	e.setObservedRecord(record)
-	return nil
+		return nil
+	})
 }
 
 func (e *Elector) ensureCallbackIsRunning(ctx context.Context) {
@@ -247,31 +220,62 @@ func (e *Elector) release(ctx context.Context, removeSelf bool) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultReleaseTimeout)
 	defer cancel()
 
-	s := e.config.Storage
-
-	record, err := s.Get(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	e.setObservedRecord(record)
-
-	if record.LeaderID == e.config.ID {
-		record.LeaderID = ""
-	}
-	if removeSelf {
-		for i, m := range record.Members {
-			if m.ID == e.config.ID {
-				record.Members = append(record.Members[:i], record.Members[i+1:]...)
-				break
+	return e.updateRecord(ctx, func(record *Record) error {
+		if record.LeaderID == e.config.ID {
+			record.LeaderID = ""
+		}
+		if removeSelf {
+			for i, m := range record.Members {
+				if m.ID == e.config.ID {
+					record.Members = append(record.Members[:i], record.Members[i+1:]...)
+					break
+				}
 			}
+		}
+		return nil
+	})
+}
+
+func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error {
+	// Divide 2 is for more retries.
+	backoffBaseDelayInMs := int64(e.config.RenewInterval/time.Millisecond) / 2
+	// Make sure the retry delay is less than the deadline, otherwise the retry has no chance to execute.
+	backoffMaxDelayInMs := int64(e.config.RenewDeadline/time.Millisecond) / 2
+	if deadline, ok := ctx.Deadline(); ok {
+		maxDelayForCtx := int64(deadline.Sub(time.Now())/time.Millisecond) / 2
+		if maxDelayForCtx < backoffMaxDelayInMs {
+			backoffMaxDelayInMs = maxDelayForCtx
 		}
 	}
 
-	if err := s.Update(ctx, record); err != nil {
-		return errors.Trace(err)
-	}
-	e.setObservedRecord(record)
-	return nil
+	return retry.Do(ctx, func() error {
+		s := e.config.Storage
+		record, err := s.Get(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		e.setObservedRecord(record)
+
+		if err := f(record); err != nil {
+			return errors.Trace(err)
+		}
+
+		if err := s.Update(ctx, record); err != nil {
+			return errors.Trace(err)
+		}
+		e.setObservedRecord(record)
+		return nil
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if errors.Cause(err) == ErrRecordConflict {
+				log.Info("conflict encountered while updating record, retrying")
+			} else {
+				log.Warn("failed to update record, retrying", zap.Error(err))
+			}
+			return true // For log only, retry doesn't rely on it.
+		}),
+	)
 }
 
 func (e *Elector) setObservedRecord(record *Record) {
