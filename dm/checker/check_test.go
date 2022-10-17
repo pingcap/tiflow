@@ -227,15 +227,15 @@ func TestServerIDChecking(t *testing.T) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("server_id", "0"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	require.ErrorContains(t, err, "please set server_id greater than 0")
-	require.Len(t, msg, 0)
+	require.NoError(t, err)
+	require.Contains(t, msg, "please set server_id greater than 0")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("server_id", "0"))
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
-	require.False(t, result.Summary.Passed)
+	require.True(t, result.Summary.Passed)
 	require.Contains(t, result.Results[0].Instruction, "please set server_id greater than 0")
 
 	// happy path
@@ -376,8 +376,8 @@ func TestTableSchemaChecking(t *testing.T) {
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	require.ErrorContains(t, err, "primary/unique key does not exist")
-	require.Len(t, msg, 0)
+	require.NoError(t, err)
+	require.Contains(t, msg, "primary/unique key does not exist")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))

@@ -74,7 +74,8 @@ type EtcdWorker struct {
 	deleteCounter int64
 	metrics       *etcdWorkerMetrics
 
-	migrator migrate.Migrator
+	migrator     migrate.Migrator
+	ownerMetaKey string
 }
 
 type etcdWorkerMetrics struct {
@@ -169,15 +170,15 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	)
 	if session != nil {
 		sessionDone = session.Done()
+		worker.ownerMetaKey = fmt.Sprintf("%s/%x",
+			etcd.CaptureOwnerKey(worker.clusterID), session.Lease())
 	} else {
 		// should never be closed
 		sessionDone = make(chan struct{})
 	}
 
-	// tickRate represents the number of times EtcdWorker can tick
-	// the reactor per second
-	tickRate := time.Second / timerInterval
-	rl := rate.NewLimiter(rate.Limit(tickRate), 1)
+	// limit the number of times EtcdWorker can tick
+	rl := rate.NewLimiter(rate.Every(timerInterval), 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -224,7 +225,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
-				worker.handleEvent(ctx, event)
+				err = worker.handleEvent(ctx, event)
+				if err != nil {
+					return err
+				}
 			}
 
 		}
@@ -297,7 +301,7 @@ func isRetryableError(err error) bool {
 	return ok
 }
 
-func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
+func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
 	if worker.isDeleteCounterKey(event.Kv.Key) {
 		switch event.Type {
 		case mvccpb.PUT:
@@ -308,7 +312,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 		}
 		// We return here because the delete-counter is not used for business logic,
 		// and it should not be exposed further to the Reactor.
-		return
+		return nil
 	}
 
 	worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
@@ -329,7 +333,15 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 		}
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
+		if string(event.Kv.Key) == worker.ownerMetaKey {
+			log.Error("owner key is deleted externally, "+
+				"exit etcd worker and suicide the capture",
+				zap.String("ownerMetaKey", worker.ownerMetaKey),
+				zap.String("value", string(event.Kv.Value)))
+			return cerrors.ErrCaptureSuicide.GenWithStackByArgs()
+		}
 	}
+	return nil
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
