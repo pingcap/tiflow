@@ -1,7 +1,7 @@
 version: '2.3'
 
 services:
-  minio:
+  minio-standalone:
     image: minio/minio
     container_name: minio-standalone
     command: server --console-address ":9001" /data
@@ -21,10 +21,10 @@ services:
   createbuckets:
     image: minio/mc
     depends_on:
-      - minio
+      - minio-standalone
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 engine engineSecret;
+      /usr/bin/mc alias set myminio http://minio-standalone:9000 engine engineSecret;
       /usr/bin/mc mb myminio/engine-ut;
       /usr/bin/mc version enable myminio/engine-ut;
       exit 0;
