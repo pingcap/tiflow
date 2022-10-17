@@ -34,11 +34,9 @@ var _ scheduler = &basicScheduler{}
 // 2. DDL CREATE/DROP/TRUNCATE TABLE
 // 3. Capture offline.
 type basicScheduler struct {
-	batchSize            int
-	random               *rand.Rand
-	lastRebalanceTime    time.Time
-	checkBalanceInterval time.Duration
-	changefeedID         model.ChangeFeedID
+	batchSize    int
+	random       *rand.Rand
+	changefeedID model.ChangeFeedID
 }
 
 func newBasicScheduler(batchSize int, changefeed model.ChangeFeedID) *basicScheduler {

@@ -18,7 +18,6 @@ import (
 	"math"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )

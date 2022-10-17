@@ -19,10 +19,6 @@ import (
 	"time"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -30,7 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"go.uber.org/zap"
 )
 
 var (
@@ -47,7 +46,7 @@ type WorkerAgent interface {
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
 		cost model.RescUnit,
-		resources ...resourcemeta.ResourceID,
+		resources ...resModel.ResourceID,
 	) (frameModel.WorkerID, error)
 }
 
@@ -246,10 +245,11 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		} else if !runningWorker.RunAsExpected() {
 			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", nextUnit))
 		}
 
-		var resources []resourcemeta.ResourceID
+		var resources []resModel.ResourceID
+		taskCfg := persistentTask.Cfg
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
@@ -257,8 +257,13 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
+		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+		if nextUnit != frameModel.WorkerDMSync || isFresh {
+			taskCfg.NeedExtStorage = true
+		}
+
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg, resources...); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -332,7 +337,7 @@ func (wm *WorkerManager) createWorker(
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
 	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)

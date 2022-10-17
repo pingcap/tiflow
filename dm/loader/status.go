@@ -14,25 +14,68 @@
 package loader
 
 import (
+	"sync"
 	"time"
-
-	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"go.uber.org/zap"
 )
+
+type statusRecorder struct {
+	mu             sync.Mutex
+	lastFinished   int64
+	lastUpdateTime time.Time
+	speedBPS       int64
+}
+
+func newStatusRecorder() *statusRecorder {
+	return &statusRecorder{
+		lastUpdateTime: time.Now(),
+	}
+}
+
+func (s *statusRecorder) getSpeed(finished int64) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if finished == s.lastFinished {
+		// for finished bytes does not get forwarded, use old speed to avoid
+		// display zero. We may find better strategy in future.
+		return s.speedBPS
+	}
+
+	now := time.Now()
+	elapsed := int64(now.Sub(s.lastUpdateTime).Seconds())
+	if elapsed == 0 {
+		elapsed = 1
+	}
+	currentSpeed := (finished - s.lastFinished) / elapsed
+	if currentSpeed == 0 {
+		currentSpeed = 1
+	}
+
+	s.lastFinished = finished
+	s.lastUpdateTime = now
+	s.speedBPS = currentSpeed
+
+	return currentSpeed
+}
 
 // Status implements Unit.Status.
 func (l *Loader) Status(_ *binlog.SourceStatus) interface{} {
 	finishedSize := l.finishedDataSize.Load()
 	totalSize := l.totalDataSize.Load()
 	progress := percent(finishedSize, totalSize, l.finish.Load())
+	currentSpeed := l.statusRecorder.getSpeed(finishedSize)
+
 	s := &pb.LoadStatus{
-		FinishedBytes:  finishedSize,
-		TotalBytes:     totalSize,
-		Progress:       progress,
-		MetaBinlog:     l.metaBinlog.Load(),
-		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		FinishedBytes:              finishedSize,
+		TotalBytes:                 totalSize,
+		Progress:                   progress,
+		MetaBinlog:                 l.metaBinlog.Load(),
+		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
+		CurrentSpeedBytesPerSecond: currentSpeed,
 	}
 	go l.printStatus()
 	return s

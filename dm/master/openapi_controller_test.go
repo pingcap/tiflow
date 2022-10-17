@@ -24,8 +24,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/dm/pkg/ha"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/config"
@@ -34,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/suite"

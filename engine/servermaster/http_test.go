@@ -27,6 +27,7 @@ import (
 )
 
 func TestRegisterRoutes(t *testing.T) {
+	t.Parallel()
 	router := http.NewServeMux()
 	grpcMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
@@ -120,6 +121,7 @@ func TestRegisterRoutes(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -129,6 +131,8 @@ func TestRegisterRoutes(t *testing.T) {
 }
 
 func TestShouldForwardJobAPI(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
 	testCases := []struct {
 		method        string
 		path          string
@@ -178,7 +182,8 @@ func TestShouldForwardJobAPI(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
-			req, err := http.NewRequest(tc.method, tc.path, nil)
+			t.Parallel()
+			req, err := http.NewRequestWithContext(ctx, tc.method, tc.path, nil)
 			require.NoError(t, err)
 			require.Equal(t, tc.shouldForward, shouldForwardJobAPI(req))
 		})

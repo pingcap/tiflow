@@ -18,34 +18,52 @@ import (
 	"testing"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+func newResourceIdentForTesting(executor, workerID, resourceName string) internal.ResourceIdent {
+	return internal.ResourceIdent{
+		Name: resourceName,
+		ResourceScope: internal.ResourceScope{
+			ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
+			Executor:    model.ExecutorID(executor),
+			WorkerID:    workerID,
+		},
+	}
+}
+
 func TestStorageHandlePersistAndDiscard(t *testing.T) {
-	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
+	t.Parallel()
 	dir := t.TempDir()
-	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
+
+	executor := model.ExecutorID("executor-1")
+	ident := newResourceIdentForTesting(string(executor), "worker-1", "test-resource")
+	fm := local.NewLocalFileManager(executor, model.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()
 
-	desc, err := fm.CreateResource("worker-1", "test-resource")
+	ctx := context.Background()
+	desc, err := fm.CreateResource(ctx, ident)
 	require.NoError(t, err)
 
-	handle, err := newLocalResourceHandle(
-		fakeProjectInfo,
-		"/local/test-resource",
+	handle, err := newResourceHandle(
 		"job-1",
-		"executor-1",
-		fm, desc, cli)
+		executor,
+		fm, desc, false, cli)
 	require.NoError(t, err)
 
 	cli.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
-		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  desc.ResourceIdent().TenantID(),
+			ProjectId: desc.ResourceIdent().ProjectID(),
+		},
 		ResourceId:      "/local/test-resource",
-		CreatorExecutor: "executor-1",
+		CreatorExecutor: string(executor),
 		JobId:           "job-1",
 		CreatorWorkerId: "worker-1",
 	}).Return(nil).Once()
@@ -54,7 +72,10 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
 
-	desc, err = fm.GetPersistedResource("worker-1", "test-resource")
+	err = handle.Persist(context.Background())
+	require.NoError(t, err)
+
+	desc, err = fm.GetPersistedResource(ctx, ident)
 	require.NoError(t, err)
 	require.NotNil(t, desc)
 
@@ -69,7 +90,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
 
-	_, err = fm.GetPersistedResource("worker-1", "test-resource")
+	_, err = fm.GetPersistedResource(ctx, ident)
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 
@@ -85,20 +106,19 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 }
 
 func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
-	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
+	t.Parallel()
 	dir := t.TempDir()
-	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
+	fm := local.NewLocalFileManager("", model.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()
 
-	desc, err := fm.CreateResource("worker-1", "test-resource")
+	ctx := context.Background()
+	desc, err := fm.CreateResource(ctx, newResourceIdentForTesting("", "worker-1", "test-resource"))
 	require.NoError(t, err)
 
-	handle, err := newLocalResourceHandle(
-		fakeProjectInfo,
-		"/local/test-resource",
+	handle, err := newResourceHandle(
 		"job-1",
 		"executor-1",
-		fm, desc, cli)
+		fm, desc, false, cli)
 	require.NoError(t, err)
 
 	err = handle.Discard(context.Background())
@@ -106,7 +126,7 @@ func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
 	cli.AssertNotCalled(t, "RemoveResource")
 	cli.ExpectedCalls = nil
 
-	_, err = fm.GetPersistedResource("worker-1", "test-resource")
+	_, err = fm.GetPersistedResource(ctx, newResourceIdentForTesting("", "worker-1", "test-resource"))
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 

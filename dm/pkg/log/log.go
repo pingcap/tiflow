@@ -21,11 +21,10 @@ import (
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/pingcap/tiflow/dm/pkg/helper"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (

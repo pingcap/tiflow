@@ -21,12 +21,11 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/tikv/pd/pkg/tempurl"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/tikv/pd/pkg/tempurl"
 )
 
 var _ = Suite(&testWorkerRPCSuite{})

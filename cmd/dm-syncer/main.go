@@ -22,6 +22,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pingcap/errors"
+	globalLog "github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -29,9 +31,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/pkg/version"
-
-	"github.com/pingcap/errors"
-	globalLog "github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 

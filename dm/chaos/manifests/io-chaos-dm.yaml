@@ -1,15 +1,20 @@
 apiVersion: chaos-mesh.org/v1alpha1
-kind: IoChaos
+kind: Schedule
 metadata:
   name: io-delay-dm
   labels:
     app: io-delay-dm
 spec:
-  action: latency
-  mode: one
-  selector:
-    pods:
-      default: # default namespace
+  schedule: '@every 2m'
+  type: IOChaos
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  ioChaos:
+    action: latency
+    mode: one
+    selector:
+      pods:
+        default:
         - dm-master-0
         - dm-master-1
         - dm-master-2
@@ -17,10 +22,8 @@ spec:
         - dm-worker-1
         - dm-worker-2
         - dm-worker-3
-  volumePath: /data
-  path: "/data/**/*"
-  delay: "100ms"
-  percent: 50
-  duration: "60s"
-  scheduler:
-    cron: "@every 2m"
+    volumePath: /data
+    path: /data/**/*
+    delay: 100ms
+    percent: 50
+    duration: 60s

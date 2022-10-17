@@ -136,6 +136,7 @@ type ReplicationSet struct { //nolint:revive
 	//     CaptureRolePrimary.
 	Captures   map[model.CaptureID]Role
 	Checkpoint tablepb.Checkpoint
+	Stats      tablepb.Stats
 }
 
 // NewReplicationSet returns a new replication set.
@@ -162,7 +163,7 @@ func NewReplicationSet(
 			return nil, r.inconsistentError(table, captureID,
 				"schedulerv3: table id inconsistent")
 		}
-		r.updateCheckpoint(table.Checkpoint)
+		r.updateCheckpointAndStats(table.Checkpoint, table.Stats)
 
 		switch table.State {
 		case tablepb.TableStateReplicating:
@@ -481,7 +482,7 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			return nil, false, nil
 		}
 	case tablepb.TableStateStopping, tablepb.TableStateStopped:
@@ -583,7 +584,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateStopped, tablepb.TableStateAbsent:
 		if r.Primary == captureID {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			original := r.Primary
 			r.clearPrimary()
 			if !r.hasRole(RoleSecondary) {
@@ -647,7 +648,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			if r.hasRole(RoleSecondary) {
 				// Original primary is not stopped, ask for stopping.
 				return &schedulepb.Message{
@@ -680,7 +681,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateStopping:
 		if r.Primary == captureID && r.hasRole(RoleSecondary) {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			return nil, false, nil
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopping during Commit",
@@ -705,7 +706,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	switch input.State {
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			return nil, false, nil
 		}
 		return nil, false, r.multiplePrimaryError(
@@ -717,7 +718,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	case tablepb.TableStateStopping:
 	case tablepb.TableStateStopped:
 		if r.Primary == captureID {
-			r.updateCheckpoint(input.Checkpoint)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 
 			// Primary is stopped, but we still has secondary.
 			// Clear primary and promote secondary when it's prepared.
@@ -901,11 +902,14 @@ func (r *ReplicationSet) handleCaptureShutdown(
 	return msgs, true, errors.Trace(err)
 }
 
-func (r *ReplicationSet) updateCheckpoint(checkpoint tablepb.Checkpoint) {
+func (r *ReplicationSet) updateCheckpointAndStats(
+	checkpoint tablepb.Checkpoint, stats tablepb.Stats,
+) {
 	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
 		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
 	}
 	if r.Checkpoint.ResolvedTs < checkpoint.ResolvedTs {
 		r.Checkpoint.ResolvedTs = checkpoint.ResolvedTs
 	}
+	r.Stats = stats
 }

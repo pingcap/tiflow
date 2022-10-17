@@ -143,7 +143,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canal
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
+	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.TableName.Schema, e.TableInfo.TableName.Table, convertDdlEventType(e), 1)
 	msg := &canalJSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        header.SchemaName,

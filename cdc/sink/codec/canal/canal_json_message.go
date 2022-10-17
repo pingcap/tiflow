@@ -232,9 +232,11 @@ func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {
 	// we lost the startTs from kafka message
 	result.CommitTs = msg.getCommitTs()
 
-	result.TableInfo = new(model.SimpleTableInfo)
-	result.TableInfo.Schema = *msg.getSchema()
-	result.TableInfo.Table = *msg.getTable()
+	result.TableInfo = new(model.TableInfo)
+	result.TableInfo.TableName = model.TableName{
+		Schema: *msg.getSchema(),
+		Table:  *msg.getTable(),
+	}
 
 	// we lost DDL type from canal json format, only got the DDL SQL.
 	result.Query = msg.getQuery()

@@ -31,10 +31,9 @@ import (
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -341,6 +340,11 @@ func IsMySQLError(err error, code uint16) bool {
 	err = errors.Cause(err)
 	e, ok := err.(*mysql.MySQLError)
 	return ok && e.Number == code
+}
+
+// IsErrDuplicateEntry checks whether err is DuplicateEntry error.
+func IsErrDuplicateEntry(err error) bool {
+	return IsMySQLError(err, tmysql.ErrDupEntry)
 }
 
 // IsErrBinlogPurged checks whether err is BinlogPurged error.

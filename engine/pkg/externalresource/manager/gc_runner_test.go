@@ -16,16 +16,18 @@ package manager
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/stretchr/testify/require"
-
+	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/stretchr/testify/require"
 )
 
 type gcRunnerTestHelper struct {
@@ -38,7 +40,8 @@ type gcRunnerTestHelper struct {
 	cancel context.CancelFunc
 	errCh  chan error
 
-	gcRequestCh chan *resModel.ResourceMeta
+	gcRequestCh  chan *resModel.ResourceMeta
+	gcExecutorCh chan []*resModel.ResourceMeta
 }
 
 func newGCRunnerTestHelper() *gcRunnerTestHelper {
@@ -51,15 +54,13 @@ func newGCRunnerTestHelper() *gcRunnerTestHelper {
 
 func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelper {
 	reqCh := make(chan *resModel.ResourceMeta, 16)
-	mockHandler := func(ctx context.Context, meta *resModel.ResourceMeta) error {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case reqCh <- meta:
-		}
-		return nil
+	gcExecutorCh := make(chan []*resModel.ResourceMeta, 16)
+	runner := NewGCRunner(meta, nil, nil)
+	runner.gcHandlers[resModel.ResourceTypeLocalFile] = &mockResourceController{gcRequestCh: reqCh}
+	runner.gcHandlers[resModel.ResourceTypeS3] = &mockResourceController{
+		gcRequestCh:  reqCh,
+		gcExecutorCh: gcExecutorCh,
 	}
-	runner := NewGCRunner(meta, map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler})
 	clk := clock.NewMock()
 	runner.clock = clk
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,7 +94,7 @@ func (h *gcRunnerTestHelper) Close() {
 func (h *gcRunnerTestHelper) WaitGC(t *testing.T) (meta *resModel.ResourceMeta) {
 	select {
 	case <-time.After(2 * time.Second):
-		t.FailNow()
+		t.Fatal("timeout waiting for GC")
 	case meta = <-h.gcRequestCh:
 	}
 	return
@@ -139,30 +140,57 @@ func (c *mockMetaClientErrOnce) GetOneResourceForGC(ctx context.Context) (*resMo
 	return c.ResourceClient.GetOneResourceForGC(ctx)
 }
 
+func (c *mockMetaClientErrOnce) DeleteResourcesByTypeAndExecutorIDs(ctx context.Context,
+	resType resModel.ResourceType, executorID ...model.ExecutorID,
+) (pkgOrm.Result, error) {
+	if _, erred := c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"]; !erred {
+		c.methodsAllReadyErred["DeleteResourcesByTypeAndExecutorIDs"] = struct{}{}
+		return nil, errors.New("injected error")
+	}
+
+	return c.ResourceClient.DeleteResourcesByTypeAndExecutorIDs(ctx, resType, executorID...)
+}
+
+func (c *mockMetaClientErrOnce) QueryResourcesByExecutorIDs(ctx context.Context,
+	executorID ...model.ExecutorID,
+) ([]*resModel.ResourceMeta, error) {
+	if _, erred := c.methodsAllReadyErred["QueryResourcesByExecutorIDs"]; !erred {
+		c.methodsAllReadyErred["QueryResourcesByExecutorIDs"] = struct{}{}
+		return nil, errors.New("injected error")
+	}
+
+	return c.ResourceClient.QueryResourcesByExecutorIDs(ctx, executorID...)
+}
+
 func TestGCRunnerNotify(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
-
-	err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-		ID:        "/local/resource-1",
-		Job:       "job-1",
-		Worker:    "worker-1",
-		Executor:  "executor-1",
-		GCPending: true,
-	})
-	require.NoError(t, err)
-
 	helper.Start()
-	// Note that since we are not advancing the clock,
-	// GC can only be triggered by calling Notify.
-	helper.Runner.GCNotify()
 
-	gcRes := helper.WaitGC(t)
-	require.Equal(t, "/local/resource-1", gcRes.ID)
+	resources := []string{"/local/resource-1", "/s3/resource-1"}
+	for _, res := range resources {
+		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:        res,
+			Job:       "job-1",
+			Worker:    "worker-1",
+			Executor:  "executor-1",
+			GCPending: true,
+		})
+		require.NoError(t, err)
+
+		// Note that since we are not advancing the clock,
+		// GC can only be triggered by calling Notify.
+		helper.Runner.GCNotify()
+
+		gcRes := helper.WaitGC(t)
+		require.Equal(t, res, gcRes.ID)
+	}
 
 	helper.Close()
 }
 
 func TestGCRunnerUnsupportedResourceType(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 
 	// Unsupported resources should be ignored by the GCRunner.
@@ -200,35 +228,39 @@ func TestGCRunnerUnsupportedResourceType(t *testing.T) {
 }
 
 func TestGCRunnerTicker(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
-
-	err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-		ID:        "/local/resource-1",
-		Job:       "job-1",
-		Worker:    "worker-1",
-		Executor:  "executor-1",
-		GCPending: true,
-	})
-	require.NoError(t, err)
-
 	helper.Start()
-	time.Sleep(10 * time.Millisecond)
-	helper.Clock.Add(10 * time.Second)
-	helper.Clock.Add(10 * time.Second)
 
-	gcRes := helper.WaitGC(t)
-	require.Equal(t, "/local/resource-1", gcRes.ID)
+	resources := []string{"/local/resource-1", "/s3/resource-1"}
+	for _, res := range resources {
+		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:        res,
+			Job:       "job-1",
+			Worker:    "worker-1",
+			Executor:  "executor-1",
+			GCPending: true,
+		})
+		require.NoError(t, err)
+
+		helper.Clock.Add(10 * time.Second)
+
+		gcRes := helper.WaitGC(t)
+		require.Equal(t, res, gcRes.ID)
+	}
 
 	helper.Close()
 }
 
 func TestGCRunnerMultiple(t *testing.T) {
+	t.Parallel()
 	helper := newGCRunnerTestHelper()
 
+	resources := []string{"/local/resource", "/s3/resource"}
 	const numResources = 1000
 	for i := 0; i < numResources; i++ {
 		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-			ID:        fmt.Sprintf("/local/resource-%d", i),
+			ID:        fmt.Sprintf("%s-%d", resources[rand.Intn(2)], i),
 			Job:       "job-1",
 			Worker:    "worker-1",
 			Executor:  "executor-1",
@@ -261,6 +293,7 @@ loop:
 }
 
 func TestGCRunnerRetry(t *testing.T) {
+	t.Parallel()
 	mockMeta := newMockMetaClientErrOnce()
 	helper := newGCRunnerTestHelperWithMeta(mockMeta)
 
@@ -283,4 +316,80 @@ func TestGCRunnerRetry(t *testing.T) {
 	require.Equal(t, "/local/resource-1", gcRes.ID)
 
 	helper.Close()
+}
+
+func TestGCExecutors(t *testing.T) {
+	helper := newGCRunnerTestHelper()
+	testGCExecutors(t, helper)
+	helper.Close()
+}
+
+func TestGCExecutorsRetry(t *testing.T) {
+	helper := newGCRunnerTestHelperWithMeta(newMockMetaClientErrOnce())
+	testGCExecutors(t, helper)
+	helper.Close()
+}
+
+func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
+	gcExecutorsTimeout = 10 * time.Second
+	gcExecutorsRateLimit = 200
+	gcExecutorsMinIntervalMs = int64(10)
+	gcExecutorsMaxIntervalMs = int64(100)
+
+	checkAlive := func(ctx context.Context, executors ...model.ExecutorID) {
+		for _, executor := range executors {
+			res, err := helper.Meta.GetResourceByID(ctx, pkgOrm.ResourceKey{
+				JobID: s3.GetDummyJobID(executor),
+				ID:    s3.DummyResourceID,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, res)
+		}
+	}
+	checkOffline := func(ctx context.Context, executors ...model.ExecutorID) {
+		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, "executor-1", "executor-2")
+		require.NoError(t, err)
+		for _, meta := range metas {
+			tp, resName, err := resModel.ParseResourceID(meta.ID)
+			require.NoError(t, err)
+			require.Equal(t, resModel.ResourceTypeS3, tp)
+			require.NotEqual(t, s3.DummyResourceName, resName)
+		}
+	}
+
+	resources := []string{"/local/resource", "/s3/resource"}
+	executors := []string{"executor-1", "executor-2", "executor-3", "executor-never-offline"}
+	// generate mock meta
+	for _, executor := range executors {
+		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:       s3.DummyResourceID,
+			Job:      s3.GetDummyJobID(model.ExecutorID(executor)),
+			Worker:   s3.DummyWorkerID,
+			Executor: model.ExecutorID(executor),
+		})
+		require.NoError(t, err)
+	}
+	const numResources = 1000
+	for i := 0; i < numResources; i++ {
+		workerID := rand.Intn(4)
+		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:        fmt.Sprintf("%s-%d", resources[rand.Intn(2)], i),
+			Job:       "job-1",
+			Worker:    fmt.Sprintf("worker-%d", workerID),
+			Executor:  model.ExecutorID(executors[workerID]),
+			GCPending: i%2 == 0, // marks half the resources as needing GC.
+		})
+		require.NoError(t, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	helper.Runner.GCExecutors(ctx, "executor-1", "executor-2")
+	checkOffline(ctx, "executor-1", "executor-2")
+	checkAlive(ctx, "executor-3", "executor-never-offline")
+
+	helper.Runner.GCExecutors(ctx, "executor-2")
+	checkOffline(ctx, "executor-3")
+	checkAlive(ctx, "executor-never-offline")
 }

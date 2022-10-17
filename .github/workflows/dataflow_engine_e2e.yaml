@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: 1.19
 
       - name: Build images
         run: make engine_image
@@ -53,7 +53,7 @@ jobs:
 
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: 1.19
 
       - name: Build images
         run: make engine_image
@@ -81,7 +81,7 @@ jobs:
 
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: 1.19
 
       - name: Build images
         run: make engine_image
@@ -109,7 +109,7 @@ jobs:
 
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: 1.19
 
       - name: Build images
         run: make engine_image

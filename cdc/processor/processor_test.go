@@ -168,8 +168,8 @@ func (m *mockTablePipeline) AsyncStop() bool {
 	return true
 }
 
-func (m *mockTablePipeline) Workload() model.WorkloadInfo {
-	return model.WorkloadInfo{Workload: 1}
+func (m *mockTablePipeline) Stats() tablepb.Stats {
+	return tablepb.Stats{}
 }
 
 func (m *mockTablePipeline) RemainEvents() int64 {
@@ -547,7 +547,7 @@ func TestProcessorError(t *testing.T) {
 	p.sendError(cerror.ErrSinkURIInvalid)
 	err = p.Tick(ctx)
 	tester.MustApplyPatches()
-	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
+	require.Error(t, err)
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
@@ -660,7 +660,7 @@ func TestProcessorClose(t *testing.T) {
 	// send error
 	p.sendError(cerror.ErrSinkURIInvalid)
 	err = p.Tick(ctx)
-	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
+	require.Error(t, err)
 	tester.MustApplyPatches()
 
 	require.Nil(t, p.Close())

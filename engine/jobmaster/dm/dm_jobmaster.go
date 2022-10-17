@@ -22,8 +22,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -41,6 +39,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 // JobMaster defines job master of dm job
@@ -136,6 +135,16 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
 }
 
+// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
+// When it is called, the jobCfg may not be in the metadata, and we should not report an error
+func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
+	jm.Logger().Info("recovering the dm jobmaster")
+	if err := jm.initComponents(ctx); err != nil {
+		return err
+	}
+	return jm.bootstrap(ctx)
+}
+
 // Tick implements JobMasterImpl.Tick
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
@@ -147,16 +156,6 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		return jm.cancel(ctx, frameModel.WorkerStateFinished)
 	}
 	return nil
-}
-
-// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
-// When it is called, the jobCfg may not be in the metadata, and we should not report an error
-func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
-	jm.Logger().Info("recovering the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
-		return err
-	}
-	return jm.bootstrap(ctx)
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
@@ -228,7 +227,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
-	// we alreay update finished status in OnWorkerOffline
+	// we already update finished status in OnWorkerOffline
 	if newStatus.State == frameModel.WorkerStateFinished || len(newStatus.ExtBytes) == 0 {
 		return nil
 	}
@@ -263,8 +262,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl implements JobMasterImpl.CloseImpl
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return jm.messageAgent.Close(ctx)
+func (jm *JobMaster) CloseImpl(ctx context.Context) {
+	if err := jm.messageAgent.Close(ctx); err != nil {
+		jm.Logger().Error("failed to close message agent", zap.Error(err))
+	}
 }
 
 // OnCancel implements JobMasterImpl.OnCancel
@@ -274,21 +275,21 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
+// checkpoint is removed when job is stopped, this is different with OP DM where
+// `--remove-meta` is specified at start-task.
+func (jm *JobMaster) StopImpl(ctx context.Context) {
 	jm.Logger().Info("stoping the dm jobmaster")
 
 	// close component
-	if err := jm.CloseImpl(ctx); err != nil {
-		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
-		return err
-	}
+	jm.CloseImpl(ctx)
 
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {
-		// log and ignore the error.
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
+		jm.Logger().Error("failed to delete task", zap.Error(err))
+	}
 }
 
 // Workload implements JobMasterImpl.Workload
@@ -409,7 +410,7 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	}
 	job := state.(*metadata.Job)
 	for _, task := range job.Tasks {
-		cfg := (*config.JobCfg)(task.Cfg)
+		cfg := task.Cfg.ToJobCfg()
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")

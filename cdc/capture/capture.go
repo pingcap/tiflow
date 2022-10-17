@@ -46,6 +46,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const cleanMetaDuration = 10 * time.Second
+
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
 type Capture interface {
@@ -282,7 +284,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), cleanMetaDuration)
 		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
 			log.Warn("failed to delete capture info when capture exited",
 				zap.String("captureID", c.info.ID),
@@ -443,6 +445,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		err = c.runEtcdWorker(ownerCtx, owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleOwner.String())
+		c.owner.AsyncStop()
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,

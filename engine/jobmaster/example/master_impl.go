@@ -18,11 +18,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 const (
@@ -105,14 +104,12 @@ func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p
 	return nil
 }
 
-func (e *exampleMaster) CloseImpl(ctx context.Context) error {
+func (e *exampleMaster) CloseImpl(ctx context.Context) {
 	log.Info("CloseImpl")
-	return nil
 }
 
-func (e *exampleMaster) StopImpl(ctx context.Context) error {
+func (e *exampleMaster) StopImpl(ctx context.Context) {
 	log.Info("StopImpl")
-	return nil
 }
 
 func (e *exampleMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {

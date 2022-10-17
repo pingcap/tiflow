@@ -164,6 +164,10 @@ var (
 		"create worker is being backoff, retry later",
 		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerBackoff"),
 	)
+	ErrMasterCreateWorkerTerminate = errors.Normalize(
+		"create worker is terminated, won't backoff any more",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerTerminate"),
+	)
 	ErrMasterInvalidMeta = errors.Normalize(
 		"invalid master meta data: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"),

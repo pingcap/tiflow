@@ -17,11 +17,10 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	"go.uber.org/zap"
 )
 
 // skipQueryEvent if skip by binlog-filter:

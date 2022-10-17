@@ -33,10 +33,10 @@ import (
 const (
 	// clusterIDMaxLen is the max length of cdc server cluster id
 	clusterIDMaxLen = 128
-	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	// DefaultSortDir is the default value of sort-dir, it will be a subordinate directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 
-	// DefaultRedoDir is the sub directory path of data-dir.
+	// DefaultRedoDir is a subordinate directory path of data-dir.
 	DefaultRedoDir = "/tmp/redo"
 
 	// DebugConfigurationItem is the name of debug configurations

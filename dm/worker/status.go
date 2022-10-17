@@ -18,11 +18,10 @@ import (
 	"sort"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"go.uber.org/zap"
 )
 
 // Status returns the status of the current sub task.

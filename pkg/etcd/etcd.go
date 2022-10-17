@@ -20,7 +20,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -30,11 +34,6 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DefaultCDCClusterID is the default value of cdc cluster id
@@ -547,10 +546,26 @@ func (c *CDCEtcdClientImpl) PutCaptureInfo(
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
-// DeleteCaptureInfo delete capture info from etcd.
-func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, id string) error {
-	key := GetEtcdKeyCaptureInfo(c.ClusterID, id)
+// DeleteCaptureInfo delete all capture related info from etcd.
+func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, captureID string) error {
+	key := GetEtcdKeyCaptureInfo(c.ClusterID, captureID)
 	_, err := c.Client.Delete(ctx, key)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	// we need to clean all task position related to this capture when the capture is offline
+	// otherwise the task positions may leak
+	// FIXME (dongmen 2022.9.28): find a way to use changefeed's namespace
+	taskKey := TaskPositionKeyPrefix(c.ClusterID, model.DefaultNamespace)
+	// the taskKey format is /tidb/cdc/{clusterID}/{namespace}/task/position/{captureID}
+	taskKey = fmt.Sprintf("%s/%s", taskKey, captureID)
+	_, err = c.Client.Delete(ctx, taskKey, clientv3.WithPrefix())
+	if err != nil {
+		log.Warn("delete task position failed",
+			zap.String("clusterID", c.ClusterID),
+			zap.String("captureID", captureID),
+			zap.String("key", key), zap.Error(err))
+	}
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 

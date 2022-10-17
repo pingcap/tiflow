@@ -21,14 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/stretchr/testify/require"
-
 	"github.com/DATA-DOG/go-sqlmock"
-
+	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetBaseConn(t *testing.T) {
@@ -59,7 +57,7 @@ func TestGetBaseConn(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
-	affected, err := dbConn.ExecuteSQL(tctx, testStmtHistogram, "test", []string{"create database test"})
+	affected, err := dbConn.ExecuteSQL(tctx, nil, "test", []string{"create database test"})
 	require.NoError(t, err)
 	require.Equal(t, 1, affected)
 	require.NoError(t, baseDB.Close())

@@ -107,9 +107,11 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		CommitTs: b.headers.GetTs(b.index),
 		Query:    query,
 		Type:     ddlType,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: b.headers.GetSchema(b.index),
-			Table:  b.headers.GetTable(b.index),
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: b.headers.GetSchema(b.index),
+				Table:  b.headers.GetTable(b.index),
+			},
 		},
 	}
 	b.index++

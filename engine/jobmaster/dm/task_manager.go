@@ -20,14 +20,13 @@ import (
 
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"go.uber.org/zap"
 )
 
 var (

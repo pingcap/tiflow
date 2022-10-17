@@ -1,5 +1,5 @@
 run:
-  go: 1.18
+  go: "1.19"
 linters:
   enable:
     - unconvert
@@ -14,7 +14,6 @@ linters:
     - structcheck
     - deadcode
     - gosimple
-    - goimports
     - errcheck
     - staticcheck
     - stylecheck
@@ -101,6 +100,11 @@ issues:
         - errcheck
         - gosec
         - makezero
+    # G113 Potential uncontrolled memory consumption in Rat.SetString (CVE-2022-23772)
+    # only affects gp < 1.16.14. and go < 1.17.7
+    - text: "(G113)"
+      linters:
+        - gosec
   include:
     - EXC0012 # exported (.+) should have comment( \(or a comment on this block\))? or be unexported)
     - EXC0014 # comment on exported (.+) should be of the form "(.+)..."

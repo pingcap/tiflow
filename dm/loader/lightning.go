@@ -25,12 +25,6 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -38,8 +32,14 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -73,6 +73,8 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+
+	statusRecorder *statusRecorder
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -89,6 +91,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		statusRecorder:        newStatusRecorder(),
 	}
 	return loader
 }
@@ -263,7 +266,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	return err
+	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
 func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
@@ -461,17 +464,21 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
+	currentSpeed := l.statusRecorder.getSpeed(finished)
+
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
 		zap.Int64("total_bytes", total),
 		zap.String("progress", progress),
+		zap.Int64("current speed (bytes / seconds)", currentSpeed),
 	)
 	s := &pb.LoadStatus{
-		FinishedBytes:  finished,
-		TotalBytes:     total,
-		Progress:       progress,
-		MetaBinlog:     l.metaBinlog.Load(),
-		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		FinishedBytes:              finished,
+		TotalBytes:                 total,
+		Progress:                   progress,
+		MetaBinlog:                 l.metaBinlog.Load(),
+		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
+		CurrentSpeedBytesPerSecond: currentSpeed,
 	}
 	return s
 }

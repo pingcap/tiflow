@@ -42,6 +42,13 @@ var (
 			Name:      "checkpoint_ts_lag",
 			Help:      "checkpoint ts lag of changefeeds in seconds",
 		}, []string{"namespace", "changefeed"})
+	currentPDTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "current_pd_ts",
+			Help:      "The current PD ts",
+		}, []string{"namespace", "changefeed"})
 
 	changefeedCheckpointLagDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -83,13 +90,6 @@ var (
 			Name:      "ownership_counter",
 			Help:      "The counter of ownership increases every 5 seconds on a owner capture",
 		})
-	ownerMaintainTableNumGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "owner",
-			Name:      "maintain_table_num",
-			Help:      "number of replicated tables maintained in owner",
-		}, []string{"namespace", "changefeed", "capture", "type"})
 	changefeedStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -123,10 +123,6 @@ var (
 )
 
 const (
-	// total tables that have been dispatched to a single processor
-	maintainTableTypeTotal string = "total"
-	// tables that are dispatched to a processor and have not been finished yet
-	maintainTableTypeWip string = "wip"
 	// When heavy operations (such as network IO and serialization) take too much time, the program
 	// should print a warning log, and if necessary, the timeout should be exposed externally through
 	// monitor.
@@ -145,9 +141,9 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedResolvedTsLagGauge)
 	registry.MustRegister(changefeedResolvedTsLagDuration)
+	registry.MustRegister(currentPDTsGauge)
 
 	registry.MustRegister(ownershipCounter)
-	registry.MustRegister(ownerMaintainTableNumGauge)
 	registry.MustRegister(changefeedStatusGauge)
 	registry.MustRegister(changefeedTickDuration)
 	registry.MustRegister(changefeedCloseDuration)

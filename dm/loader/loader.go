@@ -25,9 +25,10 @@ import (
 	"sync"
 	"time"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"golang.org/x/sync/errgroup"
-
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
+	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
@@ -39,13 +40,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
-	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb/util/filter"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -447,6 +445,7 @@ type Loader struct {
 	dbTableDataFinishedSize     map[string]map[string]*atomic.Int64
 	dbTableDataLastFinishedSize map[string]map[string]*atomic.Int64
 	dbTableDataLastUpdatedTime  atomic.Time
+	statusRecorder              *statusRecorder
 
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
@@ -467,13 +466,14 @@ type Loader struct {
 // NewLoader creates a new Loader.
 func NewLoader(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *Loader {
 	loader := &Loader{
-		cfg:        cfg,
-		cli:        cli,
-		db2Tables:  make(map[string]Tables2DataFiles),
-		tableInfos: make(map[string]*tableInfo),
-		workerWg:   new(sync.WaitGroup),
-		logger:     log.With(zap.String("task", cfg.Name), zap.String("unit", "load")),
-		workerName: workerName,
+		cfg:            cfg,
+		cli:            cli,
+		db2Tables:      make(map[string]Tables2DataFiles),
+		tableInfos:     make(map[string]*tableInfo),
+		workerWg:       new(sync.WaitGroup),
+		logger:         log.With(zap.String("task", cfg.Name), zap.String("unit", "load")),
+		workerName:     workerName,
+		statusRecorder: newStatusRecorder(),
 	}
 	loader.fileJobQueueClosed.Store(true) // not open yet
 	return loader

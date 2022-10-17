@@ -15,7 +15,7 @@ package internal
 
 import (
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
@@ -64,3 +64,16 @@ type InvalidArgumentError struct {
 
 // ErrInvalidArgument indicates that a resource-related request has an invalid argument.
 var ErrInvalidArgument = rpcerror.Normalize[InvalidArgumentError]()
+
+// ResourceFilesNotFoundError provides details of ErrResourceFilesNotFound
+type ResourceFilesNotFoundError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
+
+	Ident   ResourceIdent
+	URI     string
+	Details string
+}
+
+// ErrResourceFilesNotFound indicates that the required resource is not found
+// in the underlying storage (s3, for example).
+var ErrResourceFilesNotFound = rpcerror.Normalize[ResourceFilesNotFoundError]()

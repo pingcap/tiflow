@@ -141,8 +141,10 @@ func TestKafkaSink(t *testing.T) {
 	ddl := &model.DDLEvent{
 		StartTs:  130,
 		CommitTs: 140,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table a",
 		Type:  1,

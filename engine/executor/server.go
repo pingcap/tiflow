@@ -380,7 +380,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		return err
 	}
 
-	err = s.initClients(ctx)
+	err = s.initClients()
 	if err != nil {
 		return err
 	}
@@ -435,7 +435,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.jobAPISrv.listenStoppedJobs(ctx, taskStopReceiver.C)
 	})
 
-	err := s.initClients(ctx)
+	err := s.initClients()
 	if err != nil {
 		return err
 	}
@@ -448,10 +448,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.resourceBroker = broker.NewBroker(
-		&s.cfg.Storage,
-		s.selfID,
-		s.masterClient)
+	s.resourceBroker, err = broker.NewBroker(&s.cfg.Storage, s.selfID, s.masterClient)
+	if err != nil {
+		return err
+	}
+	defer s.resourceBroker.Close()
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 
@@ -600,7 +601,8 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		mux.Handle(jobAPIPrefix, s.jobAPISrv)
 
 		httpSrv := &http.Server{
-			Handler: mux,
+			Handler:           mux,
+			ReadHeaderTimeout: time.Minute,
 		}
 		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
 		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
@@ -611,7 +613,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	return nil
 }
 
-func (s *Server) initClients(ctx context.Context) (err error) {
+func (s *Server) initClients() (err error) {
 	// initServerMasterList is a MasterServerList with all servers marked as followers.
 	initServerMasterList := getInitServerMasterList(s.cfg.Join)
 	// TODO support TLS

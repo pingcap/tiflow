@@ -25,20 +25,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	"github.com/golang/mock/gomock"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	dmpb "github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -48,16 +41,22 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 func TestDMJobmasterSuite(t *testing.T) {
@@ -356,7 +355,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
-	require.NoError(t.T(), jm.CloseImpl(context.Background()))
+	jm.CloseImpl(context.Background())
 
 	// OnCancel
 	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
@@ -385,7 +384,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	wg.Wait()
 
 	// Stop
-	require.NoError(t.T(), jm.StopImpl(context.Background()))
+	jm.StopImpl(context.Background())
 
 	mockBaseJobmaster.AssertExpectations(t.T())
 	workerHandle1.AssertExpectations(t.T())

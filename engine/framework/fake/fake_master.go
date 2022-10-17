@@ -23,10 +23,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -36,6 +32,9 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 /*
@@ -493,15 +492,13 @@ func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus 
 }
 
 // CloseImpl implements MasterImpl.CloseImpl
-func (m *Master) CloseImpl(ctx context.Context) error {
+func (m *Master) CloseImpl(ctx context.Context) {
 	log.Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
 }
 
 // StopImpl implements MasterImpl.StopImpl
-func (m *Master) StopImpl(ctx context.Context) error {
+func (m *Master) StopImpl(ctx context.Context) {
 	log.Info("FakeMaster: Stop", zap.Stack("stack"))
-	return nil
 }
 
 // OnMasterMessage implements MasterImpl.OnMasterMessage

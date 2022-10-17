@@ -49,12 +49,12 @@ func BenchmarkSpanFrontier(b *testing.B) {
 				spans = append(spans, span)
 			}
 
-			f := NewFrontier(0, spans...)
+			f := NewFrontier(0, c, spans...)
 
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				f.Forward(spans[i%n], uint64(i))
+				f.Forward(0, spans[i%n], uint64(i))
 			}
 		})
 	}
@@ -91,12 +91,12 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 					})
 				}
 
-				f := NewFrontier(0, spans...)
+				f := NewFrontier(0, c, spans...)
 
 				b.ResetTimer()
 
 				for i := 0; i < b.N; i++ {
-					f.Forward(forward[i%n], uint64(i))
+					f.Forward(0, forward[i%n], uint64(i))
 				}
 			})
 		}

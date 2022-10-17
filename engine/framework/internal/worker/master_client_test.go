@@ -21,14 +21,13 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormMock "github.com/pingcap/tiflow/engine/pkg/orm/mock"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/require"
 )
 
 type masterClientTestHelper struct {
@@ -121,10 +120,12 @@ func (h *masterClientTestHelper) WaitWorkerClosed(t *testing.T) error {
 }
 
 func TestMasterClientRefreshInfo(t *testing.T) {
-	helper := newMasterClientTestHelper("master-1", "worker-1")
+	masterID := "master-refresh-info"
+	workerID := "worker-refresh-info"
+	helper := newMasterClientTestHelper(masterID, workerID)
 	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
-		ID:     "master-1",
+		ID:     masterID,
 		State:  frameModel.MasterStateInit,
 		NodeID: "executor-1",
 		Addr:   "192.168.0.1:1234",
@@ -139,7 +140,7 @@ func TestMasterClientRefreshInfo(t *testing.T) {
 	require.Equal(t, frameModel.Epoch(1), helper.Client.Epoch())
 
 	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMeta{
-		ID:     "master-1",
+		ID:     masterID,
 		State:  frameModel.MasterStateInit,
 		NodeID: "executor-2",
 		Addr:   "192.168.0.2:1234",

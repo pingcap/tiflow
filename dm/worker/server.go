@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -32,9 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
-
-	"github.com/pingcap/errors"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/soheilhy/cmux"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -59,12 +58,15 @@ var (
 // sends responses to RPC client.
 type Server struct {
 	// closeMu is used to sync Start/Close and protect 5 fields below
-	closeMu    sync.Mutex
-	closed     atomic.Bool
-	inited     bool
-	rootLis    net.Listener
-	svr        *grpc.Server
-	etcdClient *clientv3.Client
+	closeMu sync.Mutex
+	// closed is used to indicate whether dm-worker server is in closed state.
+	closed atomic.Bool
+	// calledClose is used to indicate that dm-worker has received signal to close and closed successfully.
+	// we use this variable to avoid Start() after Close()
+	calledClose bool
+	rootLis     net.Listener
+	svr         *grpc.Server
+	etcdClient  *clientv3.Client
 	// end of closeMu
 
 	wg     sync.WaitGroup
@@ -111,9 +113,9 @@ func (s *Server) Start() error {
 	startErr := func() error {
 		s.closeMu.Lock()
 		defer s.closeMu.Unlock()
-
-		if s.inited {
-			return terror.ErrWorkerServerClosed.Generate()
+		// if dm-worker has received signal and finished close, start() should not continue
+		if s.calledClose {
+			return terror.ErrWorkerServerClosed
 		}
 
 		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
@@ -235,8 +237,7 @@ func (s *Server) Start() error {
 			InitStatus(httpL) // serve status
 		}()
 
-		s.closed.Store(false)
-		s.inited = true
+		s.closed.Store(false) // the server started now.
 		return nil
 	}()
 
@@ -245,6 +246,7 @@ func (s *Server) Start() error {
 	}
 
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
+
 	err := m.Serve()
 	if err != nil && common.IsErrNetClosing(err) {
 		err = nil
@@ -461,9 +463,6 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	s.closeMu.Lock()
-	defer s.closeMu.Unlock()
-
 	if s.closed.Load() {
 		return
 	}
@@ -486,16 +485,19 @@ func (s *Server) doClose() {
 	s.httpWg.Wait()
 
 	s.closed.Store(true)
-	s.inited = true
 }
 
 // Close closes the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
+
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
+	s.calledClose = true
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
@@ -822,13 +824,15 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
-	w.RLock()
-	sourceID := w.cfg.SourceID
-	w.RUnlock()
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
-	} else if req.Source != sourceID {
+	}
+	w.RLock()
+	// nolint:ifshort
+	sourceID := w.cfg.SourceID
+	w.RUnlock()
+	if req.Source != sourceID {
 		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", sourceID))
 		return makeCommonWorkerResponse(terror.ErrWorkerSourceNotMatch.Generate()), nil
 	}

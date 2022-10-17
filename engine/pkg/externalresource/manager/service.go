@@ -15,44 +15,33 @@ package manager
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+var _ pb.ResourceManagerServer = (*Service)(nil)
 
 // Service implements pb.ResourceManagerServer
 type Service struct {
 	metaclient pkgOrm.Client
-
-	executors ExecutorInfoProvider
-
-	wg       sync.WaitGroup
-	cancelCh chan struct{}
-
 	preRPCHook rpcutil.PreRPCHook
 }
 
 // NewService creates a new externalresource manage service
-func NewService(
-	metaclient pkgOrm.Client,
-	executorInfoProvider ExecutorInfoProvider,
-	preRPCHook rpcutil.PreRPCHook,
-) *Service {
+func NewService(metaclient pkgOrm.Client, preRPCHook rpcutil.PreRPCHook) *Service {
 	return &Service{
 		metaclient: metaclient,
-		executors:  executorInfoProvider,
 		preRPCHook: preRPCHook,
 	}
 }
@@ -197,7 +186,7 @@ func (s *Service) GetPlacementConstraint(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 
-	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
+	rType, _, err := resModel.ParseResourceID(resourceKey.ID)
 	if err != nil {
 		return "", false, err
 	}

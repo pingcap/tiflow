@@ -17,19 +17,19 @@ function prepare_data() {
 	run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	for i in $(seq $TABLE_NUM); do
-		run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY, c1 VARCHAR(20), c2 VARCHAR(20), c3 VARCHAR(20), c4 VARCHAR(20), c5 VARCHAR(20), c6 VARCHAR(20), c7 VARCHAR(20), c8 VARCHAR(20), c9 VARCHAR(20), c10 VARCHAR(20), c11 VARCHAR(20), c12 VARCHAR(20), c13 VARCHAR(20));" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		for j in $(seq 2); do
-			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+			run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
 		# to make the tables have odd number of lines before 'ALTER TABLE' command, for check_sync_diff to work correctly
-		run_sql "INSERT INTO many_tables_db.t$i VALUES (9, 90009);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES (9, 90009);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
 function incremental_data() {
 	for j in $(seq 3 5); do
 		for i in $(seq $TABLE_NUM); do
-			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+			run_sql "INSERT INTO many_tables_db.t$i(i,j) VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
 	done
 
@@ -54,6 +54,16 @@ function incremental_data_2() {
 }
 
 function run() {
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
+	# clean unistore data
+	rm -rf /tmp/tidb
+
+	# start a TiDB with small txn-total-size-limit
+	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
+	sleep 2
+
 	run_sql_source1 "SET GLOBAL TIME_ZONE = '+02:00'"
 	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
 	check_contains "time: 02:00:00"
@@ -89,6 +99,11 @@ function run() {
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 499 501
+
+	run_sql_tidb "select count(*) from dm_meta.test_syncer_checkpoint"
+	check_contains "count(*): 501"
+
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004: Transaction is too large'
 
 	# check https://github.com/pingcap/tiflow/issues/5063
 	check_time=100
