@@ -705,6 +705,17 @@
         }
       }
     },
+    "enginepbQueryStorageConfigResponse": {
+      "type": "object",
+      "properties": {
+        "err": {
+          "$ref": "#/definitions/enginepbError"
+        },
+        "address": {
+          "type": "string"
+        }
+      }
+    },
     "enginepbReadLinesResponse": {
       "type": "object",
       "properties": {

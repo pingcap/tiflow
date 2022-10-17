@@ -52,8 +52,10 @@ type openStorageOptions struct {
 	needEmpty bool
 }
 
+// OpenStorageOption is an option for OpenStorage.
 type OpenStorageOption func(*openStorageOptions)
 
+// WithEmptyOption indicates that returned resource should be empty.
 func WithEmptyOption() OpenStorageOption {
 	return func(opts *openStorageOptions) {
 		opts.needEmpty = true

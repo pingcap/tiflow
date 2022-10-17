@@ -411,6 +411,24 @@ func (s *Server) QueryMetaStore(
 	}
 }
 
+// QueryStorageConfig implements gRPC interface
+func (s *Server) QueryStorageConfig(
+	ctx context.Context, req *pb.QueryStorageConfigRequest,
+) (*pb.QueryStorageConfigResponse, error) {
+	b, err := json.Marshal(s.cfg.Storage)
+	if err != nil {
+		return &pb.QueryStorageConfigResponse{
+			Err: &pb.Error{
+				Code:    pb.ErrorCode_MetaStoreSerializeFail,
+				Message: fmt.Sprintf("raw storage config params: %v", s.cfg.Storage),
+			},
+		}, nil
+	}
+	return &pb.QueryStorageConfigResponse{
+		Address: string(b),
+	}, nil
+}
+
 // GetLeader implements DiscoveryServer.GetLeader.
 func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLeaderResponse, error) {
 	leaderAddr, ok := s.LeaderAddr()

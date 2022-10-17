@@ -55,7 +55,7 @@ func NewBrokerForTesting(executorID resModel.ExecutorID) *MockBroker {
 	}
 	cfg := &resModel.Config{Local: resModel.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewMockClient()
-	broker, err := NewBroker(cfg, executorID, client)
+	broker, err := NewBrokerWithConfig(cfg, executorID, client)
 	if err != nil {
 		log.Panic("failed to create broker")
 	}

@@ -47,6 +47,7 @@ service Discovery {
     // QueryMetaStore queries metastore manager and returns
     // the information of a matching metastore
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
+    rpc QueryStorageConfig(QueryStorageConfigRequest) returns(QueryStorageConfigResponse) {}
 
     rpc GetLeader(GetLeaderRequest) returns(GetLeaderResponse) {
         option (google.api.http) = {
@@ -273,4 +274,12 @@ message DeleteJobRequest {
     string id = 1;
     string tenant_id = 2;
     string project_id = 3;
+}
+
+message QueryStorageConfigRequest {
+}
+
+message QueryStorageConfigResponse {
+    Error err = 1;
+    string address = 2;
 }

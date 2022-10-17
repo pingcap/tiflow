@@ -15,16 +15,13 @@ package executor
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -39,10 +36,8 @@ var (
 	defaultRPCTimeout        = "3s"
 	defaultMetricInterval    = 15 * time.Second
 
-	defaultCapability            int64 = 100 // TODO: make this configurable
-	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
-
-	defaultExecutorAddr = "127.0.0.1:10340"
+	defaultCapability   int64 = 100 // TODO: make this configurable
+	defaultExecutorAddr       = "127.0.0.1:10340"
 )
 
 // Config is the configuration.
@@ -63,8 +58,6 @@ type Config struct {
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
-
-	Storage resModel.Config `toml:"storage" json:"storage"`
 
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
@@ -111,13 +104,6 @@ func (c *Config) configFromFile(path string) error {
 	return nil
 }
 
-func getDefaultLocalStorageDir(executorName string) string {
-	// Use hex encoding in case there are special characters in the
-	// executor name.
-	encodedExecutorName := hex.EncodeToString([]byte(executorName))
-	return filepath.Join(defaultLocalStorageDirPrefix, encodedExecutorName)
-}
-
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
 	if c.AdvertiseAddr == "" {
@@ -126,10 +112,6 @@ func (c *Config) Adjust() (err error) {
 
 	if c.Name == "" {
 		c.Name = fmt.Sprintf("executor-%s", c.AdvertiseAddr)
-	}
-
-	if c.Storage.Local.BaseDir == "" {
-		c.Storage.Local.BaseDir = getDefaultLocalStorageDir(c.Name)
 	}
 
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
@@ -169,6 +151,5 @@ func GetDefaultExecutorConfig() *Config {
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
-		Storage:              resModel.DefaultConfig,
 	}
 }

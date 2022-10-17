@@ -15,6 +15,7 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -68,8 +69,32 @@ type DefaultBroker struct {
 	cancel         context.CancelFunc
 }
 
-// NewBroker creates a new Impl instance
+// NewBroker creates a new Impl instance.
 func NewBroker(
+	ctx context.Context,
+	executorID resModel.ExecutorID,
+	client client.ServerMasterClient,
+) (*DefaultBroker, error) {
+	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
+	if err != nil || resp.Err != nil {
+		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp.Err))
+	}
+	var storageConfig resModel.Config
+	err = json.Unmarshal([]byte(resp.Address), &storageConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// validate and check config
+	storageConfig.ValidateAndAdjust(executorID)
+	if err := PreCheckConfig(storageConfig); err != nil {
+		return nil, err
+	}
+	return NewBrokerWithConfig(&storageConfig, executorID, client)
+}
+
+// NewBrokerWithConfig creates a new Impl instance based on the given config.
+func NewBrokerWithConfig(
 	config *resModel.Config,
 	executorID resModel.ExecutorID,
 	client client.ResourceManagerClient,
