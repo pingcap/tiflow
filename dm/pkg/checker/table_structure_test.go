@@ -504,29 +504,3 @@ PRIMARY KEY ("c")
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 	return mock
 }
-
-func initShardingMockWithCharset(mock sqlmock.Sqlmock, charset string) sqlmock.Sqlmock {
-	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-"c" int(11) NOT NULL,
-PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=`+charset)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-
-	maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "2")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-"c" int(11) NOT NULL,
-PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=`+charset)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-	return mock
-}
