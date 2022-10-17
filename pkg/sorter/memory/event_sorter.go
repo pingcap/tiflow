@@ -19,6 +19,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
@@ -98,7 +99,7 @@ func (s *EventSorter) SetOnResolve(action func(model.TableID, Position)) {
 
 // FetchByTable implements sorter.EventSortEngine.
 func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position) sorter.EventIterator[Position] {
-	panic("FetchByTable should never be called")
+	log.Panic("FetchByTable should never be called")
 	return nil
 }
 
@@ -124,7 +125,7 @@ func (s *EventSorter) FetchAllTables(lowerBound Position) sorter.EventIterator[P
 
 // CleanByTable implements sorter.EventSortEngine.
 func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound Position) error {
-	panic("CleanByTable should never be called")
+	log.Panic("CleanByTable should never be called")
 	return nil
 }
 
