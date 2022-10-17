@@ -39,7 +39,7 @@ type FinishedStateStore struct {
 }
 
 func (f *FinishedStateStore) createState() state {
-	return &FinishedState{}
+	return &FinishedState{FinishedUnitStatus: map[string][]*FinishedTaskStatus{}}
 }
 
 func (f *FinishedStateStore) key() string {
@@ -55,7 +55,11 @@ func (f *FinishedStateStore) ReadModifyWrite(
 
 	s, err := f.Get(ctx)
 	if err != nil {
-		return err
+		if err.Error() == "state not found" {
+			s = f.createState()
+		} else {
+			return err
+		}
 	}
 	err = action(s.(*FinishedState))
 	if err != nil {

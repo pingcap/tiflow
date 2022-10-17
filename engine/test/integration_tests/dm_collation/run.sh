@@ -27,6 +27,8 @@ function run() {
 	# create job
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_collation")
 
+	read -p 123
+
 	# wait for dump and load finished
 
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMSyncTask\" and .task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
