@@ -36,7 +36,7 @@ type EventSorter struct {
 	unresolved      eventHeap
 	resolved        []*model.PolymorphicEvent
 	resolvedTsGroup []uint64
-	onResolves      []func(model.TableID, model.Ts)
+	onResolves      []func(model.TableID, Position)
 }
 
 type EventIter struct {
@@ -97,10 +97,13 @@ func (s *EventSorter) SetOnResolve(action func(model.TableID, Position)) {
 }
 
 // FetchByTable implements sorter.EventSortEngine.
-func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position, upperBound ...Position) sorter.EventIterator {
-	if tableID != -1 {
-		panic("only for DDL puller")
-	}
+func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position) sorter.EventIterator[Position] {
+	panic("FetchByTable should never be called")
+	return nil
+}
+
+// FetchAllTables implements sorter.EventSortEngine.
+func (s *EventSorter) FetchAllTables(lowerBound Position) sorter.EventIterator[Position] {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -110,7 +113,7 @@ func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position, u
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
-		return s.resolved[idx].CRTs >= lowerBound
+		return s.resolved[idx].CRTs >= lowerBound.ts
 	})
 	endIdx := sort.Search(len(s.resolved), func(idx int) bool {
 		return s.resolved[idx].CRTs > s.resolvedTsGroup[len(s.resolvedTsGroup)-1]
@@ -119,27 +122,44 @@ func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound Position, u
 	return iter
 }
 
-// Clean implements sorter.EventSortEngine.
-func (s *EventSorter) Clean(tableID model.TableID, upperBound model.Ts) {
-	if tableID != -1 {
-		panic("only for DDL puller")
-	}
+// CleanByTable implements sorter.EventSortEngine.
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound Position) error {
+	panic("CleanByTable should never be called")
+	return nil
+}
+
+// CleanAllTables implements sorter.EventSortEngine.
+func (s *EventSorter) CleanAllTables(upperBound Position) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	idx := sort.Search(len(s.resolvedTsGroup), func(idx int) bool {
-		return s.resolvedTsGroup[idx] > upperBound
+		return s.resolvedTsGroup[idx] > upperBound.ts
 	})
 	s.resolvedTsGroup = s.resolvedTsGroup[idx:]
 	s.resolved = s.resolved[idx:]
+	return nil
+}
+
+// Close implements sorter.EventSortEngine.
+func (s *EventSorter) Close() error {
+	return nil
+}
+
+// ZeroPosition implements sorter.EventSortEngine.
+func (s *EventSorter) ZeroPosition(tableID ...model.TableID) Position {
+	return Position{model.Ts(0)}
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, pos Position, err error) {
 	if len(s.resolved) == 0 {
 		return
 	}
 	event = s.resolved[s.position]
+	if event.IsResolved() {
+		pos.ts = event.CRTs
+	}
 	s.position += 1
 	if s.position >= len(s.resolved) {
 		s.resolved = nil
@@ -151,6 +171,11 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
 func (s *EventIter) Close() error {
 	s.resolved = nil
 	return nil
+}
+
+// Next implements sorter.Position.
+func (p Position) Next() Position {
+	return Position{ts: p.ts + 1}
 }
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {

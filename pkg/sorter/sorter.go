@@ -20,7 +20,7 @@ import (
 // EventSortEngine is a storage engine to store and sort CDC events.
 // Every changefeed will have one EventSortEngine instance.
 // NOTE: All interfaces are thread-safe.
-type EventSortEngine[Pos Position] interface {
+type EventSortEngine[Pos Position[Pos]] interface {
 	// IsTableBased tells whether the sort engine is based on table or not.
 	// If it's based on table, fetching events by table is prefered.
 	IsTableBased() bool
@@ -57,25 +57,29 @@ type EventSortEngine[Pos Position] interface {
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: CleanByTable is always available even if IsTableBased returns false.
-	CleanByTable(tableID model.TableID, upperBound Pos)
+	CleanByTable(tableID model.TableID, upperBound Pos) error
 
 	// CleanAllTables tells the engine events of all tables in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	CleanAllTables(upperBound Pos)
+	CleanAllTables(upperBound Pos) error
 
 	// Close closes the engine. All data written by this instance can be deleted.
-	Close()
+	//
+	// NOTE: it leads an undefined behavior to close an engine with active iterators.
+	Close() error
 
 	// Create a zero position to fetch events for the first time.
-	ZeroPosition() Pos
+	// If tableID is given, the returned position is for that table. Otherwise
+	// the returned position is for all tables.
+	ZeroPosition(tableID ...model.TableID) Pos
 }
 
 // EventIterator is an iterator to fetch events from EventSortEngine.
 // It's unnecessary to be thread-safe.
-type EventIterator[Pos Position] interface {
+type EventIterator[Pos Position[Pos]] interface {
 	// Next is used to fetch one event. nil indicates it reaches the stop point.
 	Next() (*model.PolymorphicEvent, Pos, error)
 
@@ -87,6 +91,6 @@ type EventIterator[Pos Position] interface {
 //  1. notify downstream components events are available, see EventSortEngine.SetOnResolve.
 //  2. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
 //  3. calculate the next position with method Next.
-type Position interface {
-	Next() Position
+type Position[T any] interface {
+	Next() T
 }
