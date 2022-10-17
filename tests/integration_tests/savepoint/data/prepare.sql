@@ -156,3 +156,6 @@ savepoint s1;
 delete from t where id in (1, 3);
 rollback to s1;
 commit;
+
+create table finish_mark (id int PRIMARY KEY);
+
