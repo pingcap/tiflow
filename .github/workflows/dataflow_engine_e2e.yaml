@@ -17,34 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Basic-workflow:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
-
-      - name: Build images
-        run: make engine_image
-
-      - name: Run containers
-        run: docker compose -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/demo.yaml up -d
-
-      - name: Run tests
-        run: |
-          cd $GITHUB_WORKSPACE/engine/test/e2e
-          go test -count=1 -v -run=TestSubmitTest
-
-      - name: Upload logs to GitHub
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@master
-        with:
-          name: basic-workflow-logs
-          path: /tmp/tiflow_engine_test/*log
-
   Node-failure-workflow:
     runs-on: ubuntu-latest
 
