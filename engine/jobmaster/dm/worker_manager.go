@@ -263,7 +263,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
+		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -333,7 +333,6 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
-	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
