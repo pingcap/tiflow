@@ -252,13 +252,13 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		if retry, err = tryCommitPendingPatches(); err != nil {
 			return err
 		}
-		if retry {
-			continue
-		}
 		if exiting {
 			// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick,
 			// and all pending patches is applied.
 			return nil
+		}
+		if retry {
+			continue
 		}
 		if worker.revision < worker.barrierRev {
 			// We hold off notifying the Reactor because barrierRev has not been reached.
