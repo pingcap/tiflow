@@ -191,7 +191,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, nil
 	}()
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
-		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
+		log.Error("failed to mount and unmarshal entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
@@ -276,6 +276,15 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	job.StartTS = startTs
 	job.BinlogInfo.FinishedTS = CRTs
 	return job, nil
+}
+
+type datum2ColumnConverter struct {
+	columns    []*model.Column
+	rawColumns []types.Datum
+}
+
+func (c *datum2ColumnConverter) convert(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) error {
+	return nil
 }
 
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
