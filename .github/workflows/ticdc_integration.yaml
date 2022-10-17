@@ -78,7 +78,8 @@ jobs:
         with:
           name: logs
           path: |
-            ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*/!(oom_record)/*
+            chmod -R 777 ${{ github.workspace }}/deployments/ticdc/docker-compose/logs
+            ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
