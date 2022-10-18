@@ -96,7 +96,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return csvMsg2RowChangedEvent(b.msg), nil
 }
 
-// NextDDLEVent implements the EventBatchDecoder interface.
+// NextDDLEvent implements the EventBatchDecoder interface.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return nil, nil
 }
