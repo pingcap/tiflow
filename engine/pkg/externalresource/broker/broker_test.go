@@ -33,7 +33,7 @@ import (
 func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 	tmpDir := t.TempDir()
 	cli := manager.NewMockClient()
-	broker, err := NewBroker(&resModel.Config{Local: resModel.LocalFileConfig{BaseDir: tmpDir}},
+	broker, err := NewBrokerWithConfig(&resModel.Config{Local: resModel.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		cli)
 	require.NoError(t, err)
@@ -102,12 +102,13 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 		CreatorWorkerId: "worker-2",
 	}, mock.Anything).Return(nil)
 
+	opts := []OpenStorageOption{}
 	hdl, err := brk.OpenStorage(
 		context.Background(),
 		fakeProjectInfo,
 		"worker-2",
 		"job-1",
-		resID)
+		resID, opts...)
 	require.NoError(t, err)
 
 	err = hdl.Persist(context.Background())

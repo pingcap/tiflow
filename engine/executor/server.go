@@ -444,11 +444,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
-		return err
-	}
-
-	s.resourceBroker, err = broker.NewBroker(&s.cfg.Storage, s.selfID, s.masterClient)
+	s.resourceBroker, err = broker.NewBroker(ctx, s.selfID, s.masterClient)
 	if err != nil {
 		return err
 	}

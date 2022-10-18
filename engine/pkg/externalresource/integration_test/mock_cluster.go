@@ -120,7 +120,7 @@ func (c *mockCluster) Stop() {
 func (c *mockCluster) AddBroker(id model.ExecutorID, baseDir string) {
 	config := &resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}}
 	cli := &resourceClientStub{service: c.service}
-	brk, err := broker.NewBroker(config, id, cli)
+	brk, err := broker.NewBrokerWithConfig(config, id, cli)
 	if err != nil {
 		log.Panic("create broker failed", zap.Error(err))
 	}
