@@ -49,7 +49,7 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 			Data: make([]map[string]interface{}, 1),
 		},
 		enableTiDBExtension: enableTiDBExtension,
-		messages:            make([]*common.Message, 0),
+		messages:            make([]*common.Message, 0, 1),
 	}
 
 	if enableTiDBExtension {
@@ -63,64 +63,49 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error {
-	var (
-		data    map[string]interface{}
-		oldData map[string]interface{}
-	)
 	isDelete := e.IsDelete()
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
-	if len(e.PreColumns) > 0 {
-		oldData = make(map[string]interface{}, len(e.PreColumns))
-	}
-	for _, column := range e.PreColumns {
-		if column != nil {
-			mysqlType := getMySQLType(column)
-			javaType, err := getJavaSQLType(column, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := c.builder.formatValue(column.Value, javaType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			if isDelete {
-				sqlTypeMap[column.Name] = int32(javaType)
-				mysqlTypeMap[column.Name] = mysqlType
-			}
 
-			if column.Value == nil {
-				oldData[column.Name] = nil
-			} else {
-				oldData[column.Name] = value
+	filling := func(columns []*model.Column, data map[string]interface{}, fillTypes bool) error {
+		if len(columns) == 0 {
+			return nil
+		}
+		data = make(map[string]interface{}, len(columns))
+		for _, col := range columns {
+			if col != nil {
+				mysqlType := getMySQLType(col)
+				javaType, err := getJavaSQLType(col, mysqlType)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				value, err := c.builder.formatValue(col.Value, javaType)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				if fillTypes {
+					sqlTypeMap[col.Name] = int32(javaType)
+					mysqlTypeMap[col.Name] = mysqlType
+				}
+
+				if col.Value == nil {
+					data[col.Name] = nil
+				} else {
+					data[col.Name] = value
+				}
 			}
 		}
+		return nil
 	}
 
-	if len(e.Columns) > 0 {
-		data = make(map[string]interface{}, len(e.Columns))
+	var oldData map[string]interface{}
+	if err := filling(e.PreColumns, oldData, isDelete); err != nil {
+		return err
 	}
-	for _, column := range e.Columns {
-		if column != nil {
-			mysqlType := getMySQLType(column)
-			javaType, err := getJavaSQLType(column, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := c.builder.formatValue(column.Value, javaType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			if !isDelete {
-				sqlTypeMap[column.Name] = int32(javaType)
-				mysqlTypeMap[column.Name] = mysqlType
-			}
-			if column.Value == nil {
-				data[column.Name] = nil
-			} else {
-				data[column.Name] = value
-			}
-		}
+
+	var data map[string]interface{}
+	if err := filling(e.Columns, data, !isDelete); err != nil {
+		return err
 	}
 
 	var baseMessage *canalJSONMessage
