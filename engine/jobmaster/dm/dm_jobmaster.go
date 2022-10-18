@@ -22,8 +22,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -41,6 +39,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 // JobMaster defines job master of dm job
@@ -107,7 +106,7 @@ func (j dmJobMasterFactory) IsRetryableError(err error) bool {
 // it need to be called firstly in InitImpl and OnMasterRecovered
 // we should create all components if there is any error
 // CloseImpl/StopImpl will be called later to close components
-func (jm *JobMaster) initComponents(ctx context.Context) error {
+func (jm *JobMaster) initComponents() error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
@@ -121,7 +120,7 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
+	if err := jm.initComponents(); err != nil {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
@@ -140,7 +139,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 // When it is called, the jobCfg may not be in the metadata, and we should not report an error
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	jm.Logger().Info("recovering the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
+	if err := jm.initComponents(); err != nil {
 		return err
 	}
 	return jm.bootstrap(ctx)
@@ -411,7 +410,7 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	}
 	job := state.(*metadata.Job)
 	for _, task := range job.Tasks {
-		cfg := (*config.JobCfg)(task.Cfg)
+		cfg := task.Cfg.ToJobCfg()
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")

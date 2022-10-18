@@ -123,7 +123,7 @@ func init() {
 		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh)
+		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh, changefeedID)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 }

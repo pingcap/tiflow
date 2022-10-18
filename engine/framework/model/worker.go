@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )

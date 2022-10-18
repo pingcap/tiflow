@@ -20,9 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // keepAliveTTL is set to 0 because the actual ttl is set to minLeaseTTL of etcd

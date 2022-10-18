@@ -19,11 +19,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 type checkpointFlushTask struct {

@@ -20,15 +20,14 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	"go.uber.org/zap"
 )
 
 var _ = Suite(&statusSuite{})

@@ -74,6 +74,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -86,9 +88,6 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	shardmeta "github.com/pingcap/tiflow/dm/syncer/sharding-meta"
-
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 )
 

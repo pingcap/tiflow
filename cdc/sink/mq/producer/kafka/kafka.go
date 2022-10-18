@@ -325,8 +325,8 @@ func NewKafkaSaramaProducer(
 	config *Config,
 	saramaConfig *sarama.Config,
 	errCh chan error,
+	changefeedID model.ChangeFeedID,
 ) (*kafkaSaramaProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("namespace", changefeedID.Namespace),

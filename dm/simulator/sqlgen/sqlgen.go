@@ -15,8 +15,8 @@
 package sqlgen
 
 import (
-	"github.com/pingcap/tiflow/dm/simulator/internal/config"
-	"github.com/pingcap/tiflow/dm/simulator/internal/mcp"
+	"github.com/pingcap/tiflow/dm/simulator/config"
+	"github.com/pingcap/tiflow/dm/simulator/mcp"
 )
 
 // SQLGenerator contains all the operations for generating SQLs.
@@ -35,4 +35,6 @@ type SQLGenerator interface {
 	GenUpdateRow(*mcp.UniqueKey) (string, error)
 	// GenDeleteRow generates a DELETE SQL for the given unique key.
 	GenDeleteRow(*mcp.UniqueKey) (string, error)
+	// GenCreateTable generates a CreateTable SQL by table config.
+	GenCreateTable() string
 }

@@ -21,10 +21,9 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
 	timock "github.com/pingcap/tidb/util/mock"
-	"github.com/stretchr/testify/require"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 )
 
 func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {

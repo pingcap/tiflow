@@ -21,14 +21,13 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 func runFakeJobCase(ctx context.Context, cfg *config) error {

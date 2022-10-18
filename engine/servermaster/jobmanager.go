@@ -20,17 +20,8 @@ import (
 	"sort"
 	"time"
 
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/pkg/label"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -48,10 +39,17 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // JobManager defines manager of job master
@@ -120,7 +118,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 	if err != nil {
 		return nil, err
 	}
-	if pbJob.State == pb.Job_Finished || pbJob.State == pb.Job_Canceled {
+	if isJobTerminated(meta.State) {
 		return pbJob, nil
 	}
 
@@ -166,14 +164,24 @@ func (jm *JobManagerImpl) DeleteJob(ctx context.Context, req *pb.DeleteJobReques
 		return nil, err
 	}
 
-	// Only stopped (canceled) jobs can be deleted.
-	if masterMeta.State != frameModel.MasterStateStopped && masterMeta.State != frameModel.MasterStateFinished {
-		return nil, ErrJobNotStopped.GenWithStack(&JobNotStoppedError{JobID: req.Id})
+	// Only terminated jobs can be deleted.
+	if !isJobTerminated(masterMeta.State) {
+		return nil, ErrJobNotTerminated.GenWithStack(&JobNotTerminatedError{JobID: req.Id})
 	}
+
 	if err := jm.deleteJobMeta(ctx, req.Id); err != nil {
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func isJobTerminated(state frameModel.MasterState) bool {
+	switch state {
+	case frameModel.MasterStateFinished, frameModel.MasterStateStopped, frameModel.MasterStateFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (jm *JobManagerImpl) deleteJobMeta(ctx context.Context, jobID string) error {
@@ -272,13 +280,11 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 		return nil, status.Errorf(codes.InvalidArgument, "job type %v is not supported", job.Type)
 	}
 
-	// Store job master metadata before creating it.
-	// FIXME: note the following two operations are not atomic. We should use
-	//  a transaction or an insert statement to avoid inconsistent result.
-	if _, err := jm.frameMetaClient.GetJobByID(ctx, job.Id); err == nil {
-		return nil, ErrJobAlreadyExists.GenWithStack(&JobAlreadyExistsError{JobID: job.Id})
-	}
-	if err := metadata.StoreMasterMeta(ctx, jm.frameMetaClient, meta); err != nil {
+	// create job master metadata before creating it.
+	if err := jm.frameMetaClient.InsertJob(ctx, meta); err != nil {
+		if pkgOrm.IsDuplicateEntryError(err) {
+			return nil, ErrJobAlreadyExists.GenWithStack(&JobAlreadyExistsError{JobID: job.Id})
+		}
 		return nil, err
 	}
 

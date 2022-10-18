@@ -47,15 +47,17 @@ func TestQueryStatusAPI(t *testing.T) {
 			BaseJobMaster: mockBaseJobmaster,
 			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
 		}
-		job = &metadata.Job{
+		jobCfg  = &config.JobCfg{ModRevision: 4}
+		taskCfg = jobCfg.ToTaskCfg()
+		job     = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
-				"task1": {Stage: metadata.StagePaused, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task2": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task3": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task4": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task5": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task6": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
-				"task7": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task1": {Stage: metadata.StagePaused, Cfg: taskCfg},
+				"task2": {Stage: metadata.StageFinished, Cfg: taskCfg},
+				"task3": {Stage: metadata.StageFinished, Cfg: taskCfg},
+				"task4": {Stage: metadata.StageRunning, Cfg: taskCfg},
+				"task5": {Stage: metadata.StageRunning, Cfg: taskCfg},
+				"task6": {Stage: metadata.StageRunning, Cfg: taskCfg},
+				"task7": {Stage: metadata.StageFinished, Cfg: taskCfg},
 			},
 		}
 		dumpStatus = &pb.DumpStatus{

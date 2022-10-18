@@ -19,8 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -32,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -430,4 +429,19 @@ func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
 		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
 	}
 	return nil
+}
+
+func (n *sinkNode) Stats() Stats {
+	return Stats{
+		CheckpointTs: n.CheckpointTs(),
+		ResolvedTs:   n.getResolvedTs().Ts,
+		BarrierTs:    n.barrierTs,
+	}
+}
+
+// Stats of a sink.
+type Stats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
 }

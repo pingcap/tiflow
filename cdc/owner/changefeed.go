@@ -41,9 +41,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerV2FromCtx(
+func newSchedulerFromCtx(
 	ctx cdcContext.Context, startTs uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
@@ -64,8 +64,10 @@ func newSchedulerV2FromCtx(
 	return ret, errors.Trace(err)
 }
 
-func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
-	return newSchedulerV2FromCtx(ctx, startTs)
+func newScheduler(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	return newSchedulerFromCtx(ctx, startTs)
 }
 
 type changefeed struct {
@@ -119,6 +121,7 @@ type changefeed struct {
 	metricsChangefeedResolvedTsGauge       prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
 	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge                prometheus.Gauge
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
@@ -130,7 +133,7 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error)
 
-	newSink      func() DDLSink
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -168,7 +171,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -488,8 +491,8 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.sink.run(cancelCtx, c.id, c.state.Info)
+	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.sink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
@@ -549,6 +552,7 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsCurrentPDTsGauge = currentPDTsGauge.WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
@@ -615,9 +619,11 @@ func (c *changefeed) cleanupMetrics() {
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	currentPDTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 	c.metricsChangefeedResolvedTsLagDuration = nil
+	c.metricsCurrentPDTsGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -753,6 +759,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
 			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
 
@@ -903,6 +910,8 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	resolvedLag := float64(currentTs-phyRTs) / 1e3
 	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
 	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
+
+	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {

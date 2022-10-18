@@ -19,12 +19,11 @@ import (
 	"strings"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
 )
 
 const (

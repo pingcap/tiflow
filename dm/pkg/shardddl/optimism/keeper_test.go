@@ -20,11 +20,10 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/tests/v3/integration"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 type testKeeper struct{}

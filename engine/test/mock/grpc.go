@@ -19,10 +19,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 var container *grpcContainer

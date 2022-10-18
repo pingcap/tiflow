@@ -31,8 +31,6 @@ import (
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -43,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
+	"github.com/stretchr/testify/require"
 )
 
 const (

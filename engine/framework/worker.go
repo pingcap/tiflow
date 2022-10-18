@@ -20,9 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -46,6 +43,8 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // Worker defines an interface that provides all methods that will be used in

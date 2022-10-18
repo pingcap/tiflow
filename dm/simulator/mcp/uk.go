@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -72,6 +73,24 @@ func (uk *UniqueKey) GetValue() map[string]interface{} {
 		result[k] = v
 	}
 	return result
+}
+
+// GetValueHash return hash for values.
+func (uk *UniqueKey) GetValueHash() string {
+	uk.RLock()
+	defer uk.RUnlock()
+
+	keys := make([]string, 0)
+	for k := range uk.value {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		v := uk.value[k]
+		fmt.Fprintf(&b, "%s = %v; ", k, v)
+	}
+	return b.String()
 }
 
 // SetValue sets the UK value map.

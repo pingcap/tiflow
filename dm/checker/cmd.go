@@ -78,7 +78,13 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 // RunCheckOnConfigs returns the check result for given subtask configs. Caller
 // should be noticed that result may be very large.
 // check result may be nil when check is not run.
-func RunCheckOnConfigs(ctx context.Context, cfgs []*config.SubTaskConfig) (*checker.Results, error) {
+// when `dumpWholeInstance` is true, checker will require SELECT ON *.* privileges
+// for SourceDumpPrivilegeChecker.
+func RunCheckOnConfigs(
+	ctx context.Context,
+	cfgs []*config.SubTaskConfig,
+	dumpWholeInstance bool,
+) (*checker.Results, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
 	}
@@ -90,6 +96,7 @@ func RunCheckOnConfigs(ctx context.Context, cfgs []*config.SubTaskConfig) (*chec
 	}
 
 	c := NewChecker(cfgs, checkingItems, 0, 0)
+	c.dumpWholeInstance = dumpWholeInstance
 
 	if err := c.Init(ctx); err != nil {
 		return nil, terror.Annotate(err, "fail to initialize checker")

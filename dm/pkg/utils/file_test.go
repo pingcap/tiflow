@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 
 	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 

@@ -176,31 +176,6 @@ func (o *TableOperation) Clone() *TableOperation {
 	return &clone
 }
 
-// TaskWorkload records the workloads of a task
-// the value of the struct is the workload
-type TaskWorkload map[TableID]WorkloadInfo
-
-// WorkloadInfo records the workload info of a table
-type WorkloadInfo struct {
-	Workload uint64 `json:"workload"`
-}
-
-// Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
-func (w *TaskWorkload) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, w)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
-}
-
-// Marshal returns the json marshal format of a TaskWorkload
-func (w *TaskWorkload) Marshal() (string, error) {
-	if w == nil {
-		return "{}", nil
-	}
-	data, err := json.Marshal(w)
-	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
-}
-
 // TableReplicaInfo records the table replica info
 type TableReplicaInfo struct {
 	StartTs Ts `json:"start-ts"`
