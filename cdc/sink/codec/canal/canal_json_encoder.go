@@ -36,6 +36,7 @@ type JSONBatchEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 
+	// messageHolder is used to hold each message and will be reset after each message is encoded.
 	messageHolder canalJSONMessageInterface
 	messages      []*common.Message
 }
