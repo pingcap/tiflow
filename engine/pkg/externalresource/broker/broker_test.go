@@ -102,12 +102,13 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 		CreatorWorkerId: "worker-2",
 	}, mock.Anything).Return(nil)
 
+	opts := []OpenStorageOption{}
 	hdl, err := brk.OpenStorage(
 		context.Background(),
 		fakeProjectInfo,
 		"worker-2",
 		"job-1",
-		resID)
+		resID, opts...)
 	require.NoError(t, err)
 
 	err = hdl.Persist(context.Background())
