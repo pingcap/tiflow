@@ -1272,13 +1272,13 @@ func (s *Server) getStatusFromWorkers(
 }
 
 // TODO: refine the call stack of this API, query worker configs that we needed only.
-func (s *Server) getSourceConfigs(sources []*config.MySQLInstance) map[string]config.DBConfig {
-	cfgs := make(map[string]config.DBConfig)
+func (s *Server) getSourceConfigs(sources []*config.MySQLInstance) map[string]*config.SourceConfig {
+	cfgs := make(map[string]*config.SourceConfig)
 	for _, source := range sources {
 		if cfg := s.scheduler.GetSourceCfgByID(source.SourceID); cfg != nil {
 			// check the password
 			cfg.DecryptPassword()
-			cfgs[source.SourceID] = cfg.From
+			cfgs[source.SourceID] = cfg
 		}
 	}
 	return cfgs
@@ -1382,6 +1382,26 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 		cfgs[i] = cfg
 	}
 	return cfgs, nil
+}
+
+func GetNewestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
+	cfg := *dbConfig
+	if len(cfg.Password) > 0 {
+		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
+	}
+
+	fromDB, err := conn.DefaultDBProvider.Apply(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer fromDB.Close()
+
+	pos, gtidSet, err := conn.GetPosAndGs(tcontext.NewContext(ctx, log.L()), fromDB, flavor)
+	if err != nil {
+		return nil, err
+	}
+
+	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gtidSet.String()}, nil
 }
 
 func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
@@ -1614,23 +1634,31 @@ func (s *Server) generateSubTask(
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
-	if cfg.TaskMode == config.ModeIncrement && (cliArgs == nil || cliArgs.StartTime == "") {
-		for _, inst := range cfg.MySQLInstances {
-			// incremental task need to specify meta or start time
-			if inst.Meta == nil {
-				return nil, nil, terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, config.ModeIncrement)
-			}
-		}
-	}
-
 	err = AdjustTargetDB(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
+	dbConfigs := make(map[string]config.DBConfig, len(sourceCfgs))
+	for _, sourceCfg := range sourceCfgs {
+		dbConfigs[sourceCfg.SourceID] = sourceCfg.From
+	}
 
-	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
+	if cfg.TaskMode == config.ModeIncrement && (cliArgs == nil || cliArgs.StartTime == "") {
+		for _, inst := range cfg.MySQLInstances {
+			if inst.Meta == nil {
+				sourceCfg := sourceCfgs[inst.SourceID]
+				meta, err2 := GetNewestMeta(ctx, sourceCfg.Flavor, &sourceCfg.From)
+				if err2 != nil {
+					return nil, nil, err2
+				}
+				inst.Meta = meta
+			}
+		}
+	}
+
+	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, dbConfigs)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}

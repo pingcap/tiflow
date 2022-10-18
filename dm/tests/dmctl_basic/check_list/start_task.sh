@@ -49,7 +49,7 @@ function start_task_wrong_no_source_meta() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $task_conf" \
-		"must set meta for task-mode incremental" 1
+		"must specify \`binlog-name\` without GTID enabled for the source or specify \`binlog-gtid\` with GTID enabled for the source" 1
 }
 
 function start_task_no_source_meta_but_start_time() {
@@ -58,6 +58,6 @@ function start_task_no_source_meta_but_start_time() {
 		"start-task $task_conf --start-time '2006-01-02 15:04:05'" \
 		"\"result\": true" 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $task_conf" \
+		"query-status test_incremental_no_source_meta" \
 		"\"result\": true" 3
 }
