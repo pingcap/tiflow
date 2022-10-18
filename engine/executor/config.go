@@ -169,9 +169,6 @@ func GetDefaultExecutorConfig() *Config {
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
-		Storage: resModel.Config{
-			Local: resModel.LocalFileConfig{BaseDir: ""},
-			S3:    resModel.S3Config{Bucket: ""},
-		},
+		Storage:              resModel.DefaultConfig,
 	}
 }

@@ -1,0 +1,12 @@
+keepalive-ttl = "20s"
+keepalive-interval = "500ms"
+session-ttl = 20
+
+[log] 
+level = "debug"
+
+[storage.s3]
+bucket = "engine-it"
+endpoint = "http://minio-standalone:9000/"
+access-key = "engine"
+secret-access-key = "engineSecret"
