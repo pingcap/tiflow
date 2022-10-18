@@ -86,7 +86,7 @@ func newBrokerForS3WithPrefix(
 			CreatorWorkerId: s3.DummyWorkerID,
 		}, mock.Anything).Return(nil)
 
-	broker, err := NewBroker(&resModel.Config{
+	broker, err := NewBrokerWithConfig(&resModel.Config{
 		Local: resModel.LocalFileConfig{BaseDir: tmpDir},
 		S3: resModel.S3Config{
 			S3BackendOptions: *s3Cfg,
