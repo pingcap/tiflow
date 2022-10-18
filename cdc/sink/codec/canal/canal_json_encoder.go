@@ -15,9 +15,9 @@ package canal
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -63,8 +63,8 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 
 	if enableTiDBExtension {
 		encoder.messageHolder = &canalJSONMessageWithTiDBExtension{
-			canalJSONMessage: encoder.messageHolder.(*canalJSONMessage),
-			Extensions:       &tidbExtension{},
+			JSONMessage: encoder.messageHolder.(*JSONMessage),
+			Extensions:  &tidbExtension{},
 		}
 	}
 
@@ -72,11 +72,11 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 }
 
 func (c *JSONBatchEncoder) cleanUpMaps() {
-	var baseMessage *canalJSONMessage
+	var baseMessage *JSONMessage
 	if !c.enableTiDBExtension {
-		baseMessage = c.messageHolder.(*canalJSONMessage)
+		baseMessage = c.messageHolder.(*JSONMessage)
 	} else {
-		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).canalJSONMessage
+		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).JSONMessage
 	}
 	for k := range baseMessage.Data[0] {
 		delete(baseMessage.Data[0], k)
@@ -135,11 +135,11 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 		return err
 	}
 
-	var baseMessage *canalJSONMessage
+	var baseMessage *JSONMessage
 	if !c.enableTiDBExtension {
-		baseMessage = c.messageHolder.(*canalJSONMessage)
+		baseMessage = c.messageHolder.(*JSONMessage)
 	} else {
-		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).canalJSONMessage
+		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).JSONMessage
 	}
 
 	baseMessage.ID = 0 // ignored by both Canal Adapter and Flink
@@ -185,7 +185,7 @@ func eventTypeString(e *model.RowChangedEvent) string {
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-	msg := &canalJSONMessage{
+	msg := &JSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        e.TableInfo.TableName.Schema,
 		Table:         e.TableInfo.TableName.Table,
@@ -202,14 +202,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 	}
 
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: msg,
-		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
+		JSONMessage: msg,
+		Extensions:  &tidbExtension{CommitTs: e.CommitTs},
 	}
 }
 
 func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONMessageWithTiDBExtension {
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: &canalJSONMessage{
+		JSONMessage: &JSONMessage{
 			ID:            0,
 			IsDDL:         false,
 			EventType:     tidbWaterMarkType,
