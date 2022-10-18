@@ -68,21 +68,21 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, data map[string]interface{}, fillTypes bool) error {
+	filling := func(columns []*model.Column, fillTypes bool) (map[string]interface{}, error) {
 		if len(columns) == 0 {
-			return nil
+			return nil, nil
 		}
-		data = make(map[string]interface{}, len(columns))
+		data := make(map[string]interface{}, len(columns))
 		for _, col := range columns {
 			if col != nil {
 				mysqlType := getMySQLType(col)
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				value, err := c.builder.formatValue(col.Value, javaType)
 				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				if fillTypes {
 					sqlTypeMap[col.Name] = int32(javaType)
@@ -96,16 +96,16 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 				}
 			}
 		}
-		return nil
+		return data, nil
 	}
 
-	var oldData map[string]interface{}
-	if err := filling(e.PreColumns, oldData, isDelete); err != nil {
+	oldData, err := filling(e.PreColumns, isDelete)
+	if err != nil {
 		return err
 	}
 
-	var data map[string]interface{}
-	if err := filling(e.Columns, data, !isDelete); err != nil {
+	data, err := filling(e.Columns, !isDelete)
+	if err != nil {
 		return err
 	}
 
