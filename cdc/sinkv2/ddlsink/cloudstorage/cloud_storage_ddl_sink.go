@@ -40,6 +40,7 @@ type ddlSink struct {
 	tableSet   map[int64]struct{}
 }
 
+// NewCloudStorageDDLSink creates a ddl sink for cloud storage.
 func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, error) {
 	// parse backend storage from sinkURI
 	bs, err := storage.ParseBackend(sinkURI.String(), &storage.BackendOptions{})

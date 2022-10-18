@@ -308,7 +308,6 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 		require.Nil(t, err, tc.name)
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
 	}
-
 }
 
 func TestBuildTableDefFromTableInfo(t *testing.T) {

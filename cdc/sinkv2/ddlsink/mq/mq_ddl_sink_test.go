@@ -253,19 +253,19 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 
 	checkpointTs := uint64(417318403368288260)
 	tables := []*model.TableInfo{
-		&model.TableInfo{
+		{
 			TableName: model.TableName{
 				Schema: "cdc",
 				Table:  "person",
 			},
 		},
-		&model.TableInfo{
+		{
 			TableName: model.TableName{
 				Schema: "cdc",
 				Table:  "person1",
 			},
 		},
-		&model.TableInfo{
+		{
 			TableName: model.TableName{
 				Schema: "cdc",
 				Table:  "person2",

@@ -128,7 +128,8 @@ func TestKafkaSink(t *testing.T) {
 		TableName: model.TableName{
 			Schema: "test",
 			Table:  "t1",
-		}}})
+		},
+	}})
 	require.Nil(t, err)
 	defer func() {
 		err = sink.Close(ctx)
