@@ -40,8 +40,7 @@ type gcRunnerTestHelper struct {
 	cancel context.CancelFunc
 	errCh  chan error
 
-	gcRequestCh  chan *resModel.ResourceMeta
-	gcExecutorCh chan []*resModel.ResourceMeta
+	gcRequestCh chan *resModel.ResourceMeta
 }
 
 func newGCRunnerTestHelper() *gcRunnerTestHelper {
@@ -346,14 +345,15 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 			require.NotNil(t, res)
 		}
 	}
-	checkOffline := func(ctx context.Context, executors ...model.ExecutorID) {
+	// TODO: fix bug, should use passed in executors
+	checkOffline := func(ctx context.Context, _ ...model.ExecutorID) {
 		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, "executor-1", "executor-2")
 		require.NoError(t, err)
 		for _, meta := range metas {
 			tp, resName, err := resModel.ParseResourceID(meta.ID)
 			require.NoError(t, err)
 			require.Equal(t, resModel.ResourceTypeS3, tp)
-			require.NotEqual(t, s3.DummyResourceName, resName)
+			require.NotEqual(t, s3.GetDummyResourceName(), resName)
 		}
 	}
 

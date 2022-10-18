@@ -133,10 +133,8 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error)
 
-	newSink      func() DDLSink
-	newScheduler func(
-		ctx cdcContext.Context, startTs uint64,
-	) (scheduler.Scheduler, error)
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -173,10 +171,8 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
-	newScheduler func(
-		ctx cdcContext.Context, startTs uint64,
-	) (scheduler.Scheduler, error),
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
@@ -495,8 +491,8 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.sink.run(cancelCtx, c.id, c.state.Info)
+	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.sink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
@@ -763,6 +759,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
 			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
 
