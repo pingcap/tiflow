@@ -15,11 +15,10 @@ package canal
 
 import (
 	"github.com/goccy/go-json"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -66,7 +65,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
-		return nil, cerrors.ErrCanalDecodeFailed.
+		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
 	result, err := canalJSONMessage2RowChange(b.msg)
@@ -81,7 +80,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.
+		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found ddl event message")
 	}
 
@@ -94,7 +93,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.
+		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found resolved event message")
 	}
 
@@ -102,7 +101,7 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if !ok {
 		log.Error("canal-json resolved event message should have tidb extension, but not found",
 			zap.Any("msg", b.msg))
-		return 0, cerrors.ErrCanalDecodeFailed.
+		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
 	b.msg = nil
