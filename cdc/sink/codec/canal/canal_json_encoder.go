@@ -15,9 +15,9 @@ package canal
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	json "github.com/bytedance/sonic"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
