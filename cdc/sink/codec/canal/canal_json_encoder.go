@@ -71,6 +71,24 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	return encoder
 }
 
+func (c *JSONBatchEncoder) cleanUpMaps() {
+	var baseMessage *canalJSONMessage
+	if !c.enableTiDBExtension {
+		baseMessage = c.messageHolder.(*canalJSONMessage)
+	} else {
+		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).canalJSONMessage
+	}
+	for k := range baseMessage.Data[0] {
+		delete(baseMessage.Data[0], k)
+	}
+	for k := range baseMessage.SQLType {
+		delete(baseMessage.SQLType, k)
+	}
+	for k := range baseMessage.MySQLType {
+		delete(baseMessage.MySQLType, k)
+	}
+}
+
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error {
 	isDelete := e.IsDelete()
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
