@@ -28,6 +28,7 @@ function run() {
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_collation")
 
 	read -p 123
+	# test full mode task finished output
 
 	# wait for dump and load finished
 

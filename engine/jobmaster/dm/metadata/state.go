@@ -34,13 +34,16 @@ type stateFactory interface {
 	key() string
 }
 
-// Store persists one state instance.
+// Store holds one state instance.
 type Store interface {
 	Put(ctx context.Context, state state) error
 	Delete(ctx context.Context) error
 	Get(ctx context.Context) (state, error)
 }
 
+// frameworkMetaStore implements Store interface. It persists a state instance in
+// framework metadata with given encode/decode function, and will cache the latest
+// state. It's thread-safe.
 type frameworkMetaStore struct {
 	stateFactory
 

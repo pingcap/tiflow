@@ -42,7 +42,7 @@ type JobStatus struct {
 	TaskStatus map[string]TaskStatus `json:"task_status"`
 	// FinishedUnitStatus records the finished unit status of a task. This field
 	// is not atomic with TaskStatus (current status).
-	FinishedUnitStatus *metadata.FinishedState `json:"finished_unit_status,omitempty"`
+	FinishedUnitStatus map[string][]*metadata.FinishedTaskStatus `json:"finished_unit_status,omitempty"`
 }
 
 // QueryJobStatus is the api of query job status.
@@ -120,7 +120,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	if err != nil {
 		return nil, err
 	}
-	jobStatus.FinishedUnitStatus = s.(*metadata.FinishedState)
+	if state, ok := s.(*metadata.FinishedState); ok {
+		jobStatus.FinishedUnitStatus = state.FinishedUnitStatus
+	}
 	return jobStatus, nil
 }
 
@@ -171,21 +173,6 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	}
 	// we don't know whether we can remove the old checkpoint, so we just create new checkpoint when update.
 	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
-		return err
-	}
-
-	// reset finished status, all tasks will be restarted now.
-	store := jm.metadata.FinishedStateStore()
-	err := store.ReadModifyWrite(ctx, func(state *metadata.FinishedState) error {
-		for k := range state.FinishedUnitStatus {
-			length := len(state.FinishedUnitStatus[k])
-			if length > 0 {
-				state.FinishedUnitStatus[k] = state.FinishedUnitStatus[k][:length-1]
-			}
-		}
-		return nil
-	})
-	if err != nil {
 		return err
 	}
 
