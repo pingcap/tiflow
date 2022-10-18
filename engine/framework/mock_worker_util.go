@@ -34,7 +34,7 @@ import (
 // BaseWorkerForTesting mocks base worker
 type BaseWorkerForTesting struct {
 	*DefaultBaseWorker
-	Broker *broker.LocalBroker
+	Broker *broker.MockBroker
 }
 
 // MockBaseWorker creates a mock base worker for test

@@ -17,7 +17,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-// NewDMResourceID returns a ResourceID in DM's style. Currently only support local resource.
+// NewDMResourceID returns a ResourceID in DM's style. Currently only support s3 resource.
 func NewDMResourceID(taskName, sourceName string) resModel.ResourceID {
-	return "/" + string(resModel.ResourceTypeLocalFile) + "/" + taskName + "/" + sourceName
+	return "/" + string(resModel.ResourceTypeS3) + "/" + taskName + "-" + sourceName
 }
