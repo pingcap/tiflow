@@ -82,7 +82,7 @@ func (c *canalJSONMessage) getTable() *string {
 	return &c.Table
 }
 
-// for CanalJSONMessage, we lost the commitTs.
+// for canalJSONMessage, we lost the commitTs.
 func (c *canalJSONMessage) getCommitTs() uint64 {
 	return 0
 }
