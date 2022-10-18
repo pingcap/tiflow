@@ -196,7 +196,7 @@ func (w *dmWorker) setupStorage(ctx context.Context) error {
 	openStorageFunc := func() (broker.Handle, error) {
 		if w.workerType == frameModel.WorkerDMDump {
 			// always use an empty storage for dumpling task
-			return w.OpenStorage(ctx, rid, broker.WithEmptyOption())
+			return w.OpenStorage(ctx, rid, broker.WithCleanBeforeOpen())
 		}
 		return w.OpenStorage(ctx, rid)
 	}

@@ -49,15 +49,15 @@ type Broker interface {
 }
 
 type openStorageOptions struct {
-	needEmpty bool
+	cleanBeforeOpen bool
 }
 
 // OpenStorageOption is an option for OpenStorage.
 type OpenStorageOption func(*openStorageOptions)
 
-// WithEmptyOption indicates that returned resource should be empty.
-func WithEmptyOption() OpenStorageOption {
+// WithCleanBeforeOpen indicates that the storage should be cleaned before open.
+func WithCleanBeforeOpen() OpenStorageOption {
 	return func(opts *openStorageOptions) {
-		opts.needEmpty = true
+		opts.cleanBeforeOpen = true
 	}
 }

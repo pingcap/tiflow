@@ -281,5 +281,5 @@ message QueryStorageConfigRequest {
 
 message QueryStorageConfigResponse {
     Error err = 1;
-    string address = 2;
+    string config = 2;
 }

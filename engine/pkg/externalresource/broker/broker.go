@@ -80,7 +80,7 @@ func NewBroker(
 		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp.Err))
 	}
 	var storageConfig resModel.Config
-	err = json.Unmarshal([]byte(resp.Address), &storageConfig)
+	err = json.Unmarshal([]byte(resp.Config), &storageConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -345,7 +345,7 @@ func (b *DefaultBroker) getPersistResource(
 		return nil, err
 	}
 
-	if options.needEmpty {
+	if options.cleanBeforeOpen {
 		err := fm.RemoveResource(ctx, ident)
 		if err != nil {
 			return nil, err

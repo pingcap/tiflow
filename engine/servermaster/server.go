@@ -425,7 +425,7 @@ func (s *Server) QueryStorageConfig(
 		}, nil
 	}
 	return &pb.QueryStorageConfigResponse{
-		Address: string(b),
+		Config: string(b),
 	}, nil
 }
 

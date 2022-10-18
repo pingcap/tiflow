@@ -711,7 +711,7 @@
         "err": {
           "$ref": "#/definitions/enginepbError"
         },
-        "address": {
+        "config": {
           "type": "string"
         }
       }
