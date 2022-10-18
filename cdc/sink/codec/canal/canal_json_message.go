@@ -44,8 +44,8 @@ type canalJSONMessageInterface interface {
 	pkNameSet() map[string]struct{}
 }
 
-// adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
-type canalJSONMessage struct {
+// JSONMessage adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
+type JSONMessage struct {
 	// ignored by consumers
 	ID        int64    `json:"id"`
 	Schema    string   `json:"database"`
@@ -70,50 +70,50 @@ type canalJSONMessage struct {
 	tikvTs uint64
 }
 
-func (c *canalJSONMessage) getTikvTs() uint64 {
+func (c *JSONMessage) getTikvTs() uint64 {
 	return c.tikvTs
 }
 
-func (c *canalJSONMessage) getSchema() *string {
+func (c *JSONMessage) getSchema() *string {
 	return &c.Schema
 }
 
-func (c *canalJSONMessage) getTable() *string {
+func (c *JSONMessage) getTable() *string {
 	return &c.Table
 }
 
-// for canalJSONMessage, we lost the commitTs.
-func (c *canalJSONMessage) getCommitTs() uint64 {
+// for JSONMessage, we lost the commitTs.
+func (c *JSONMessage) getCommitTs() uint64 {
 	return 0
 }
 
-func (c *canalJSONMessage) getQuery() string {
+func (c *JSONMessage) getQuery() string {
 	return c.Query
 }
 
-func (c *canalJSONMessage) getOld() map[string]interface{} {
+func (c *JSONMessage) getOld() map[string]interface{} {
 	if c.Old == nil {
 		return nil
 	}
 	return c.Old[0]
 }
 
-func (c *canalJSONMessage) getData() map[string]interface{} {
+func (c *JSONMessage) getData() map[string]interface{} {
 	if c.Data == nil {
 		return nil
 	}
 	return c.Data[0]
 }
 
-func (c *canalJSONMessage) getMySQLType() map[string]string {
+func (c *JSONMessage) getMySQLType() map[string]string {
 	return c.MySQLType
 }
 
-func (c *canalJSONMessage) getJavaSQLType() map[string]int32 {
+func (c *JSONMessage) getJavaSQLType() map[string]int32 {
 	return c.SQLType
 }
 
-func (c *canalJSONMessage) messageType() model.MessageType {
+func (c *JSONMessage) messageType() model.MessageType {
 	if c.IsDDL {
 		return model.MessageTypeDDL
 	}
@@ -125,11 +125,11 @@ func (c *canalJSONMessage) messageType() model.MessageType {
 	return model.MessageTypeRow
 }
 
-func (c *canalJSONMessage) eventType() canal.EventType {
+func (c *JSONMessage) eventType() canal.EventType {
 	return canal.EventType(canal.EventType_value[c.EventType])
 }
 
-func (c *canalJSONMessage) pkNameSet() map[string]struct{} {
+func (c *JSONMessage) pkNameSet() map[string]struct{} {
 	result := make(map[string]struct{}, len(c.PKNames))
 	for _, item := range c.PKNames {
 		result[item] = struct{}{}
@@ -143,7 +143,7 @@ type tidbExtension struct {
 }
 
 type canalJSONMessageWithTiDBExtension struct {
-	*canalJSONMessage
+	*JSONMessage
 	// Extensions is a TiCDC custom field that different from official Canal-JSON format.
 	// It would be useful to store something for special usage.
 	// At the moment, only store the `tso` of each event,
