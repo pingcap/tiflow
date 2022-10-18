@@ -46,7 +46,7 @@ type JSONBatchEncoder struct {
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
-	messageHolder := &canalJSONMessage{
+	messageHolder := &JSONMessage{
 		// for Data field, no matter event type, always be filled with only one item.
 		Data: make([]map[string]interface{}, 1),
 	}
@@ -58,7 +58,7 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 		builder:             newCanalEntryBuilder(),
 		messageHolder:       messageHolder,
 		enableTiDBExtension: enableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
+		messages:            make([]*common.Message, 1),
 	}
 
 	if enableTiDBExtension {
@@ -255,19 +255,13 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	m.IncRowsCount()
 	m.Callback = callback
 
-	c.messages = append(c.messages, m)
+	c.messages[0] = m
 	return nil
 }
 
 // Build implements the EventJSONBatchEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
-	if len(c.messages) == 0 {
-		return nil
-	}
-
-	result := c.messages
-	c.messages = c.messages[:0]
-	return result
+	return c.messages
 }
 
 // EncodeDDLEvent encodes DDL events
