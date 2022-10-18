@@ -155,6 +155,8 @@ func (f *frameworkMetaStore) cloneState() (state, error) {
 	return clone, nil
 }
 
+var stateTp = reflect.TypeOf((*state)(nil)).Elem()
+
 // checkAllFieldsIsPublic check all fields of a state is public.
 func checkAllFieldsIsPublic(state state) bool {
 	v := reflect.ValueOf(state)
@@ -167,7 +169,8 @@ func checkAllFieldsIsPublic(state state) bool {
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		if !field.CanSet() {
-			if field.IsNil() {
+			// skip report error for the embedded state field
+			if field.Type() == stateTp {
 				continue
 			}
 			return false

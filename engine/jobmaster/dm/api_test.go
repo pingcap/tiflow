@@ -467,8 +467,8 @@ func TestBinlog(t *testing.T) {
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, resp)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
-	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
 	job := metadata.NewJob(&config.JobCfg{Upstreams: []*config.UpstreamCfg{
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task1"}},
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task2"}},

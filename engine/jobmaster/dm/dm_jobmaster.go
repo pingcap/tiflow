@@ -392,6 +392,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	if err != nil {
 		jm.Logger().Error("failed to get status", zap.Error(err))
 	} else {
+		// here
 		detail = status.ExtBytes
 	}
 
