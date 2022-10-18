@@ -21,15 +21,13 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/pingcap/failpoint"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils" // TODO: move it to pkg
-	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 var defaultSlowLogThreshold = 200 * time.Millisecond
@@ -65,7 +63,7 @@ func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error 
 // InitEpochModel creates the backend logic epoch table if not exists
 // Only use for business meta currently
 // NOT thread-safe
-func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
+func InitEpochModel(ctx context.Context, cc metaModel.ClientConn) error {
 	gormDB, err := genGormDBFromClientConn(cc)
 	if err != nil {
 		return err
@@ -78,7 +76,7 @@ func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
 	return nil
 }
 
-func genGormDBFromClientConn(cc model.ClientConn) (*gorm.DB, error) {
+func genGormDBFromClientConn(cc metaModel.ClientConn) (*gorm.DB, error) {
 	if cc == nil {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
 	}

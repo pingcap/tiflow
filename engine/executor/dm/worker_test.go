@@ -21,9 +21,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/dig"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -41,6 +38,8 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
 )
 
 var jobTemplatePath = "../../jobmaster/dm/config/job_template.yaml"

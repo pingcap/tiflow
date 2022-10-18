@@ -22,13 +22,12 @@ import (
 	"strings"
 	"testing"
 
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
-
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 )
 
 func TestLog(t *testing.T) {

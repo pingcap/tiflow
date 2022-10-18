@@ -21,7 +21,7 @@ import (
 
 type caseFn func(context.Context, *config) error
 
-var cases = []caseFn{runFakeJobCase}
+var cases = []caseFn{runFakeJobCase, runDMJobCases}
 
 func runCases(ctx context.Context, cfg *config) error {
 	errg, ctx := errgroup.WithContext(ctx)

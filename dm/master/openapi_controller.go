@@ -24,22 +24,19 @@ import (
 	"fmt"
 	"strings"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/dm/master/scheduler"
-	"github.com/pingcap/tiflow/dm/pkg/ha"
-
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // nolint:unparam

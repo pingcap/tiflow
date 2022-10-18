@@ -21,7 +21,7 @@ jobs:
   base:
     # The type of runner that the job will run on
     runs-on: ubuntu-20.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +68,7 @@ jobs:
           key: ${{ runner.os }}-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
 
       - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.2.0
+        uses: helm/kind-action@v1.4.0
 
       - name: Print cluster information
         run: |
@@ -247,7 +247,6 @@ jobs:
         uses: chaos-mesh/chaos-mesh-action@master
         env:
           CFG_BASE64: ${{ env.CFG_BASE64 }}
-          CHAOS_MESH_VERSION: v1.0.0
 
       # check whether complete with 1m * 20 times.
       - name: Wait for chaos test case complete

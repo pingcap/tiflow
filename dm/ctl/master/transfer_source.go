@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
-
 	"github.com/spf13/cobra"
 )
 

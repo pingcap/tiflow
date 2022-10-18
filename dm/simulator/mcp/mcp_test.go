@@ -18,9 +18,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/suite"
 )
 
 type testMCPSuite struct {

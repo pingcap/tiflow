@@ -63,3 +63,6 @@ tools/bin/goimports: tools/check/go.mod
 
 tools/bin/protoc-gen-openapiv2: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-openapiv2 github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
+
+tools/bin/gci: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gci github.com/daixiang0/gci

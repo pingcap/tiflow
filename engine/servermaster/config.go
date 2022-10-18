@@ -23,14 +23,13 @@ import (
 	"github.com/BurntSushi/toml"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"go.uber.org/zap"
 )
 
 const (
@@ -175,10 +174,7 @@ func GetDefaultMasterConfig() *Config {
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
 		JobBackoff:           jobop.NewDefaultBackoffConfig(),
-		Storage: resModel.Config{
-			Local: resModel.LocalFileConfig{BaseDir: ""},
-			S3:    resModel.S3Config{Bucket: ""},
-		},
+		Storage:              resModel.DefaultConfig,
 	}
 }
 

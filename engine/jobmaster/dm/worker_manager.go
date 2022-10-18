@@ -245,7 +245,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		} else if !runningWorker.RunAsExpected() {
 			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", nextUnit))
 		}
 
 		var resources []resModel.ResourceID
@@ -263,7 +263,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
+		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -333,7 +333,6 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
-	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,

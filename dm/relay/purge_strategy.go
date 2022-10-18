@@ -18,13 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 type strategyType uint32

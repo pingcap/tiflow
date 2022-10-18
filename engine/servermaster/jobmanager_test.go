@@ -20,13 +20,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/pingcap/tiflow/engine/enginepb"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -45,6 +38,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 func prepareMockJobManager(
@@ -506,8 +504,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:     "new-job",
-		Type:   enginepb.Job_FakeJob,
-		State:  enginepb.Job_Running,
+		Type:   pb.Job_FakeJob,
+		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
 		Error: &pb.Error{
 			Message: "error_message",
@@ -530,8 +528,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error_message",
 		},
@@ -553,8 +551,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error test",
 		},

@@ -27,9 +27,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -46,6 +43,8 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
