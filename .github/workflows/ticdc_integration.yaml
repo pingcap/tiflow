@@ -69,16 +69,6 @@ jobs:
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./mq_protocol_tests -protocol=mysql
 
-      - name: Try to dump container logs
-        if: ${{ failure() }}
-        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
-
       - name: Clean Up
         if: ${{ always() }}
         run: |
@@ -130,16 +120,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./mq_protocol_tests -protocol=canal
-
-      - name: Try to dump container logs
-        if: ${{ failure() }}
-        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-canal.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
@@ -197,16 +177,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           ./mq_protocol_tests
-
-      - name: Try to dump container logs
-        if: ${{ failure() }}
-        run: docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-avro.yml logs -t
-
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: ${{ github.workspace }}/deployments/ticdc/docker-compose/logs/*
 
       - name: Clean Up
         if: ${{ always() }}
