@@ -281,10 +281,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 	// This means that the cached DDL has been executed,
-	// and we need to use the latest table names.
+	// and we need to use the latest tables.
 	if c.currentTables == nil {
 		c.currentTables = c.schema.AllTables()
-		log.Debug("changefeed current table names updated",
+		log.Debug("changefeed current tables updated",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
 			zap.Any("tables", c.currentTables),
@@ -826,7 +826,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
-		// So let's remember the name of the table before processing and cache the DDL.
+		// So let's remember the tables before processing and cache the DDL.
 		c.currentTables = c.schema.AllTables()
 		checkpointTs := c.state.Status.CheckpointTs
 		// refresh checkpointTs and currentTables when a ddl job is received
