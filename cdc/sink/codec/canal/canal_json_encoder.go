@@ -36,6 +36,7 @@ type JSONBatchEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 
+	// messageHolder is used to hold each message and will be reset after each message is encoded.
 	messageHolder canalJSONMessageInterface
 	messages      []*common.Message
 }
@@ -45,10 +46,11 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
 		builder: newCanalEntryBuilder(),
 		messageHolder: &JSONMessage{
-			Data: make([]map[string]interface{}, 0),
+			// for Data field, no matter event type, always be filled with only one item.
+			Data: make([]map[string]interface{}, 1),
 		},
 		enableTiDBExtension: enableTiDBExtension,
-		messages:            make([]*common.Message, 0),
+		messages:            make([]*common.Message, 0, 1),
 	}
 
 	if enableTiDBExtension {
@@ -62,64 +64,49 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error {
-	var (
-		data    map[string]interface{}
-		oldData map[string]interface{}
-	)
 	isDelete := e.IsDelete()
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
-	if len(e.PreColumns) > 0 {
-		oldData = make(map[string]interface{}, len(e.PreColumns))
-	}
-	for _, column := range e.PreColumns {
-		if column != nil {
-			mysqlType := getMySQLType(column)
-			javaType, err := getJavaSQLType(column, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := c.builder.formatValue(column.Value, javaType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			if isDelete {
-				sqlTypeMap[column.Name] = int32(javaType)
-				mysqlTypeMap[column.Name] = mysqlType
-			}
 
-			if column.Value == nil {
-				oldData[column.Name] = nil
-			} else {
-				oldData[column.Name] = value
+	filling := func(columns []*model.Column, fillTypes bool) (map[string]interface{}, error) {
+		if len(columns) == 0 {
+			return nil, nil
+		}
+		data := make(map[string]interface{}, len(columns))
+		for _, col := range columns {
+			if col != nil {
+				mysqlType := getMySQLType(col)
+				javaType, err := getJavaSQLType(col, mysqlType)
+				if err != nil {
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				value, err := c.builder.formatValue(col.Value, javaType)
+				if err != nil {
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				if fillTypes {
+					sqlTypeMap[col.Name] = int32(javaType)
+					mysqlTypeMap[col.Name] = mysqlType
+				}
+
+				if col.Value == nil {
+					data[col.Name] = nil
+				} else {
+					data[col.Name] = value
+				}
 			}
 		}
+		return data, nil
 	}
 
-	if len(e.Columns) > 0 {
-		data = make(map[string]interface{}, len(e.Columns))
+	oldData, err := filling(e.PreColumns, isDelete)
+	if err != nil {
+		return err
 	}
-	for _, column := range e.Columns {
-		if column != nil {
-			mysqlType := getMySQLType(column)
-			javaType, err := getJavaSQLType(column, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := c.builder.formatValue(column.Value, javaType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			if !isDelete {
-				sqlTypeMap[column.Name] = int32(javaType)
-				mysqlTypeMap[column.Name] = mysqlType
-			}
-			if column.Value == nil {
-				data[column.Name] = nil
-			} else {
-				data[column.Name] = value
-			}
-		}
+
+	data, err := filling(e.Columns, !isDelete)
+	if err != nil {
+		return err
 	}
 
 	var baseMessage *JSONMessage
@@ -140,17 +127,16 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.Query = ""
 	baseMessage.SQLType = sqlTypeMap
 	baseMessage.MySQLType = mysqlTypeMap
-	baseMessage.Data = baseMessage.Data[:0]
 	baseMessage.Old = nil
 	baseMessage.tikvTs = e.CommitTs
 
 	if e.IsDelete() {
-		baseMessage.Data = append(baseMessage.Data, oldData)
+		baseMessage.Data[0] = oldData
 	} else if e.IsInsert() {
-		baseMessage.Data = append(baseMessage.Data, data)
+		baseMessage.Data[0] = data
 	} else if e.IsUpdate() {
+		baseMessage.Data[0] = data
 		baseMessage.Old = []map[string]interface{}{oldData}
-		baseMessage.Data = append(baseMessage.Data, data)
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}

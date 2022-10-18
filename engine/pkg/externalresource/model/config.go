@@ -17,6 +17,18 @@ import (
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
+// DefaultConfig defines the default configuration for external storage
+var DefaultConfig = Config{
+	Local: LocalFileConfig{BaseDir: ""},
+	S3: S3Config{
+		S3BackendOptions: brStorage.S3BackendOptions{
+			ForcePathStyle: true,
+		},
+		Bucket: "",
+		Prefix: "",
+	},
+}
+
 // Config defines configurations for an external storage resource
 type Config struct {
 	Local LocalFileConfig `json:"local" toml:"local"`

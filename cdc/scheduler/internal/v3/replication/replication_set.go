@@ -415,7 +415,10 @@ func (r *ReplicationSet) poll(
 			log.Info("schedulerv3: replication state transition, poll",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
-				zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+				zap.Stringer("old", oldState),
+				zap.Stringer("new", r.State),
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID))
 		}
 	}
 

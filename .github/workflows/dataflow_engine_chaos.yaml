@@ -138,7 +138,38 @@ jobs:
           echo describe pvc
           kubectl describe pvc -l app=tidb
           kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
-     
+
+      # Set up minio and create a bucket for tests
+      - name: Set up minio
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio.yaml  
+          kubectl get -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio.yaml 
+          kubectl describe -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio.yaml 
+      - name: Wait for minio ready
+        run: |
+          kubectl wait --for=condition=Ready pod/chaos-minio-0 --timeout=10m || true
+          echo show pvc
+          kubectl get pvc -l app=minio -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=minio -o wide
+          echo show sts
+          kubectl get sts -l app=minio -o wide
+          echo show po
+          kubectl get po -l app=minio -o wide
+          echo describe po
+          kubectl describe po -l app=minio
+          echo describe pvc
+          kubectl describe pvc -l app=minio
+          kubectl wait --for=condition=Ready pod/chaos-minio-0 --timeout=0s
+      - name: Set up minio-create-bucket job
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio-create-bucket.yaml 
+          kubectl get -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio-create-bucket.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/deployments/engine/helm/minio/minio-create-bucket.yaml
+          kubectl wait --for=condition=Complete job/chaos-minio-create-bucket-job --timeout=2m
+
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |

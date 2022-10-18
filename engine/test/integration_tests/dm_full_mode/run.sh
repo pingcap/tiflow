@@ -5,7 +5,7 @@ set -eu
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG="$DOCKER_COMPOSE_DIR/3m3e_with_s3.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 

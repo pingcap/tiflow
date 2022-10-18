@@ -37,24 +37,24 @@ func getPathPredByName(target string) pathPredFunc {
 }
 
 func getPathPredByPersistedResources(
-	resources persistedResources, prefixCnt int,
+	resourcePaths map[string]struct{}, prefixCnt int,
 ) pathPredFunc {
 	return func(path string) bool {
-		resName := ""
+		resPath := ""
 		for i := 0; i < prefixCnt; i++ {
 			prefix, newPath, ok := strings.Cut(path, "/")
 			if !ok {
 				return false
 			}
 
-			if resName == "" {
-				resName = prefix
+			if resPath == "" {
+				resPath = prefix
 			} else {
-				resName = fmt.Sprintf("%s/%s", resName, prefix)
+				resPath = fmt.Sprintf("%s/%s", resPath, prefix)
 			}
 			path = newPath
 		}
-		_, ok := resources[resName]
+		_, ok := resourcePaths[resPath]
 		return !ok
 	}
 }
