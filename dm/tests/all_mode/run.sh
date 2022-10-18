@@ -437,6 +437,10 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
+	# create table with unsupported charset
+	run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
+	run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
+
 	# start DM worker and master
 	# set log level of DM-master to info, because debug level will let etcd print KV, thus expose the password in task config
 	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -460,6 +464,18 @@ function run() {
 	# start DM task only
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
+		"Unknown character set: 'greek'"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $ILLEGAL_CHAR_NAME" \
+		"Unknown character set: 'greek'" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $WORK_DIR/dm-task.yaml"
+
+	run_sql_tidb "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=utf8mb4;"
+
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	# check task has started
 	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker1\"}" 10 1 3
@@ -467,6 +483,8 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# check data of no_diff2
+	run_sql_tidb_with_retry "select count(1) from all_mode.no_diff2 where name = 'αβγ'" "count(1): 1"
 
 	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
 	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
@@ -575,7 +593,11 @@ function run() {
 	check_contains "all_mode"
 
 	echo "check dump files have been cleaned"
-	ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker1 auto removed dump files"
+	# source1 contains unsupported charset, so dump files is uncleaned. files are
+	# all_mode.no_diff2-schema.sql  all_mode.t1-schema.sql
+	# all_mode.no_diff-schema.sql   metadata
+	# all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
+	[ $(ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l) -eq 6 ]
 	ls $WORK_DIR/worker2/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker2 auto removed dump files"
 
 	echo "check no password in log"
