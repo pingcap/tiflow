@@ -38,17 +38,25 @@ type JSONBatchEncoder struct {
 
 	// messageHolder is used to hold each message and will be reset after each message is encoded.
 	messageHolder canalJSONMessageInterface
-	messages      []*common.Message
+	// oldDataHolder is only used for `update` event
+	oldDataHolder map[string]interface{}
+
+	messages []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
+	messageHolder := &canalJSONMessage{
+		// for Data field, no matter event type, always be filled with only one item.
+		Data: make([]map[string]interface{}, 1),
+	}
+	messageHolder.Data[0] = make(map[string]interface{})
+	messageHolder.SQLType = make(map[string]int32)
+	messageHolder.MySQLType = make(map[string]string)
+
 	encoder := &JSONBatchEncoder{
-		builder: newCanalEntryBuilder(),
-		messageHolder: &canalJSONMessage{
-			// for Data field, no matter event type, always be filled with only one item.
-			Data: make([]map[string]interface{}, 1),
-		},
+		builder:             newCanalEntryBuilder(),
+		messageHolder:       messageHolder,
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
 	}
