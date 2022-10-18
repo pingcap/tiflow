@@ -759,6 +759,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
 			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
 
