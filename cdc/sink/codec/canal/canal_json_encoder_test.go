@@ -52,7 +52,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	err := encoder.newJSONMessageForDML(testCaseInsert)
 	require.Nil(t, err)
-	jsonMsg, ok := encoder.messageHolder.(*canalJSONMessage)
+	jsonMsg, ok := encoder.messageHolder.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
@@ -93,7 +93,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	err = encoder.newJSONMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
-	jsonMsg, ok = encoder.messageHolder.(*canalJSONMessage)
+	jsonMsg, ok = encoder.messageHolder.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
@@ -101,7 +101,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	err = encoder.newJSONMessageForDML(testCaseDelete)
 	require.Nil(t, err)
-	jsonMsg, ok = encoder.messageHolder.(*canalJSONMessage)
+	jsonMsg, ok = encoder.messageHolder.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
@@ -130,7 +130,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
 
-	msg, ok := message.(*canalJSONMessage)
+	msg, ok := message.(*JSONMessage)
 	require.True(t, ok)
 	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
 	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
@@ -173,7 +173,7 @@ func TestBatching(t *testing.T) {
 			for j := range msgs {
 				require.Equal(t, 1, msgs[j].GetRowsCount())
 
-				var msg canalJSONMessage
+				var msg JSONMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				require.Nil(t, err)
 				require.Equal(t, "UPDATE", msg.EventType)
@@ -236,7 +236,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 	// Unmarshal from the data we have encoded.
 	jsonMsg := canalJSONMessageWithTiDBExtension{
-		&canalJSONMessage{},
+		&JSONMessage{},
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &jsonMsg)
