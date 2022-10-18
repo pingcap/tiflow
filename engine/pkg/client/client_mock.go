@@ -200,6 +200,21 @@ func (mr *MockServerMasterClientMockRecorder) QueryResource(arg0, arg1 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryResource", reflect.TypeOf((*MockServerMasterClient)(nil).QueryResource), arg0, arg1)
 }
 
+// QueryStorageConfig mocks base method.
+func (m *MockServerMasterClient) QueryStorageConfig(arg0 context.Context, arg1 *enginepb.QueryStorageConfigRequest) (*enginepb.QueryStorageConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryStorageConfig", arg0, arg1)
+	ret0, _ := ret[0].(*enginepb.QueryStorageConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryStorageConfig indicates an expected call of QueryStorageConfig.
+func (mr *MockServerMasterClientMockRecorder) QueryStorageConfig(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryStorageConfig", reflect.TypeOf((*MockServerMasterClient)(nil).QueryStorageConfig), arg0, arg1)
+}
+
 // RegisterExecutor mocks base method.
 func (m *MockServerMasterClient) RegisterExecutor(arg0 context.Context, arg1 *enginepb.RegisterExecutorRequest) (model.DeployNodeID, error) {
 	m.ctrl.T.Helper()
