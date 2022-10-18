@@ -19,7 +19,7 @@ import (
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
-const defaultLocalStorageDirPrefix = "/tmp/dfe-storage/"
+const defaultLocalStorageDirPrefix = "/tmp/dfe-storage"
 
 // DefaultConfig defines the default configuration for external storage
 var DefaultConfig = Config{
