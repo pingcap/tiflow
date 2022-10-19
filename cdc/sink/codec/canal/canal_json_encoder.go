@@ -44,21 +44,31 @@ type JSONBatchEncoder struct {
 	messages []*common.Message
 }
 
+const (
+	// defaultColumnCount is the default column count for each row
+	// since we doesn't know the column count in advance, we use a default value to prevent frequent memory allocation.
+	defaultColumnCount = 16
+)
+
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	messageHolder := &JSONMessage{
 		// for Data field, no matter event type, always be filled with only one item.
 		Data: make([]map[string]interface{}, 1),
 	}
-	messageHolder.Data[0] = make(map[string]interface{})
-	messageHolder.SQLType = make(map[string]int32)
-	messageHolder.MySQLType = make(map[string]string)
+	messageHolder.Data[0] = make(map[string]interface{}, defaultColumnCount)
+	messageHolder.SQLType = make(map[string]int32, defaultColumnCount)
+	messageHolder.MySQLType = make(map[string]string, defaultColumnCount)
 
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		messageHolder:       messageHolder,
 		enableTiDBExtension: enableTiDBExtension,
-		messages:            make([]*common.Message, 1),
+		// canal-json does not batch multiple messages, so only one message is delivered each time
+		messages: make([]*common.Message, 1),
+
+		// even though `oldDataHolder` is only used for `update` event, we still preallocate it
+		oldDataHolder: make(map[string]interface{}, defaultColumnCount),
 	}
 
 	if enableTiDBExtension {
@@ -71,75 +81,95 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	return encoder
 }
 
-func (c *JSONBatchEncoder) cleanUpMaps() {
-	var baseMessage *JSONMessage
-	if !c.enableTiDBExtension {
-		baseMessage = c.messageHolder.(*JSONMessage)
-	} else {
-		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).JSONMessage
+func (c *JSONBatchEncoder) fillByColumns(message *JSONMessage, columns []*model.Column, fillTypes bool) error {
+	if len(columns) == 0 {
+		return nil
 	}
-	for k := range baseMessage.Data[0] {
-		delete(baseMessage.Data[0], k)
+
+	for _, col := range columns {
+		if col != nil {
+			mysqlType := getMySQLType(col)
+			javaType, err := getJavaSQLType(col, mysqlType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			if fillTypes {
+				message.SQLType[col.Name] = int32(javaType)
+				message.MySQLType[col.Name] = mysqlType
+			}
+
+			if col.Value == nil {
+				message.Data[0][col.Name] = nil
+			} else {
+				value, err := c.builder.formatValue(col.Value, javaType)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				message.Data[0][col.Name] = value
+			}
+		}
 	}
-	for k := range baseMessage.SQLType {
-		delete(baseMessage.SQLType, k)
+	return nil
+}
+
+func (c *JSONBatchEncoder) fillOldData(columns []*model.Column) error {
+	if len(columns) == 0 {
+		return nil
 	}
-	for k := range baseMessage.MySQLType {
-		delete(baseMessage.MySQLType, k)
+
+	for k := range c.oldDataHolder {
+		delete(c.oldDataHolder, k)
 	}
+
+	for _, col := range columns {
+		if col.Value == nil {
+			c.oldDataHolder[col.Name] = nil
+		} else {
+			javaType, err := getJavaSQLType(col, getMySQLType(col))
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			value, err := c.builder.formatValue(col.Value, javaType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			c.oldDataHolder[col.Name] = value
+		}
+	}
+	return nil
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error {
-	isDelete := e.IsDelete()
-	sqlTypeMap := make(map[string]int32, len(e.Columns))
-	mysqlTypeMap := make(map[string]string, len(e.Columns))
-
-	filling := func(columns []*model.Column, fillTypes bool) (map[string]interface{}, error) {
-		if len(columns) == 0 {
-			return nil, nil
-		}
-		data := make(map[string]interface{}, len(columns))
-		for _, col := range columns {
-			if col != nil {
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
-				if err != nil {
-					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				value, err := c.builder.formatValue(col.Value, javaType)
-				if err != nil {
-					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				if fillTypes {
-					sqlTypeMap[col.Name] = int32(javaType)
-					mysqlTypeMap[col.Name] = mysqlType
-				}
-
-				if col.Value == nil {
-					data[col.Name] = nil
-				} else {
-					data[col.Name] = value
-				}
-			}
-		}
-		return data, nil
-	}
-
-	oldData, err := filling(e.PreColumns, isDelete)
-	if err != nil {
-		return err
-	}
-
-	data, err := filling(e.Columns, !isDelete)
-	if err != nil {
-		return err
-	}
-
 	var baseMessage *JSONMessage
 	if !c.enableTiDBExtension {
 		baseMessage = c.messageHolder.(*JSONMessage)
 	} else {
 		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).JSONMessage
+	}
+	baseMessage.reset()
+
+	if e.IsDelete() {
+		if err := c.fillByColumns(baseMessage, e.PreColumns, true); err != nil {
+			return err
+		}
+		baseMessage.EventType = "DELETE"
+	} else if e.IsInsert() {
+		if err := c.fillByColumns(baseMessage, e.Columns, true); err != nil {
+			return err
+		}
+		baseMessage.EventType = "INSERT"
+	} else if e.IsUpdate() {
+		if err := c.fillOldData(e.PreColumns); err != nil {
+			return err
+		}
+		baseMessage.Old = []map[string]interface{}{c.oldDataHolder}
+
+		if err := c.fillByColumns(baseMessage, e.Columns, true); err != nil {
+			return err
+		}
+		baseMessage.EventType = "UPDATE"
+	} else {
+		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
 	baseMessage.ID = 0 // ignored by both Canal Adapter and Flink
@@ -147,41 +177,16 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.Table = e.Table.Table
 	baseMessage.PKNames = e.PrimaryKeyColumnNames()
 	baseMessage.IsDDL = false
-	baseMessage.EventType = eventTypeString(e)
 	baseMessage.ExecutionTime = convertToCanalTs(e.CommitTs)
 	baseMessage.BuildTime = time.Now().UnixNano() / 1e6 // ignored by both Canal Adapter and Flink
 	baseMessage.Query = ""
-	baseMessage.SQLType = sqlTypeMap
-	baseMessage.MySQLType = mysqlTypeMap
-	baseMessage.Old = nil
 	baseMessage.tikvTs = e.CommitTs
-
-	if e.IsDelete() {
-		baseMessage.Data[0] = oldData
-	} else if e.IsInsert() {
-		baseMessage.Data[0] = data
-	} else if e.IsUpdate() {
-		baseMessage.Data[0] = data
-		baseMessage.Old = []map[string]interface{}{oldData}
-	} else {
-		log.Panic("unreachable event type", zap.Any("event", e))
-	}
 
 	if c.enableTiDBExtension {
 		c.messageHolder.(*canalJSONMessageWithTiDBExtension).Extensions.CommitTs = e.CommitTs
 	}
 
 	return nil
-}
-
-func eventTypeString(e *model.RowChangedEvent) string {
-	if e.IsDelete() {
-		return "DELETE"
-	}
-	if len(e.PreColumns) == 0 {
-		return "INSERT"
-	}
-	return "UPDATE"
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {

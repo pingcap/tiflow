@@ -70,6 +70,19 @@ type JSONMessage struct {
 	tikvTs uint64
 }
 
+func (c *JSONMessage) reset() {
+	for k := range c.Data[0] {
+		delete(c.Data[0], k)
+	}
+	for k := range c.SQLType {
+		delete(c.SQLType, k)
+	}
+	for k := range c.MySQLType {
+		delete(c.MySQLType, k)
+	}
+	c.Old = nil
+}
+
 func (c *JSONMessage) getTikvTs() uint64 {
 	return c.tikvTs
 }
