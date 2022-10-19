@@ -96,14 +96,14 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 // FetchByTable implements sorter.EventSortEngine.
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
-	lowerBound, upperBound model.Ts,
+	lowerBound, upperBound sorter.Position,
 ) sorter.EventIterator {
 	log.Panic("FetchByTable should never be called")
 	return nil
 }
 
 // FetchAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound model.Ts) sorter.EventIterator {
+func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIterator {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -113,7 +113,9 @@ func (s *EventSorter) FetchAllTables(lowerBound model.Ts) sorter.EventIterator {
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
-		return s.resolved[idx].CRTs >= lowerBound
+        x := s.resolved[idx]
+        return x.CRTs > lowerBound.CommitTs ||
+            x.CRTs == lowerBound.CommitTs && x.StartTs >= lowerBound.StartTs
 	})
 	endIdx := sort.Search(len(s.resolved), func(idx int) bool {
 		return s.resolved[idx].CRTs > s.resolvedTsGroup[len(s.resolvedTsGroup)-1]
@@ -123,21 +125,16 @@ func (s *EventSorter) FetchAllTables(lowerBound model.Ts) sorter.EventIterator {
 }
 
 // CleanByTable implements sorter.EventSortEngine.
-func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound model.Ts) error {
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound sorter.Position) error {
 	log.Panic("CleanByTable should never be called")
 	return nil
 }
 
 // CleanAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) CleanAllTables(upperBound model.Ts) error {
+func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	idx := sort.Search(len(s.resolvedTsGroup), func(idx int) bool {
-		return s.resolvedTsGroup[idx] > upperBound
-	})
-	s.resolvedTsGroup = s.resolvedTsGroup[idx:]
-	s.resolved = s.resolved[idx:]
+    // FIXME: complete this.
 	return nil
 }
 

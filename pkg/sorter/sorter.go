@@ -45,27 +45,27 @@ type EventSortEngine interface {
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(tableID model.TableID, lowerBound, upperBound model.Ts) EventIterator
+	FetchByTable(tableID model.TableID, lowerBound, upperBound Position) EventIterator
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	FetchAllTables(lowerBound model.Ts) EventIterator
+	FetchAllTables(lowerBound Position) EventIterator
 
 	// CleanByTable tells the engine events of the given table in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: CleanByTable is always available even if IsTableBased returns false.
-	CleanByTable(tableID model.TableID, upperBound model.Ts) error
+	CleanByTable(tableID model.TableID, upperBound Position) error
 
 	// CleanAllTables tells the engine events of all tables in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	CleanAllTables(upperBound model.Ts) error
+	CleanAllTables(upperBound Position) error
 
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
@@ -81,4 +81,19 @@ type EventIterator interface {
 
 	// Close closes the iterator.
 	Close() error
+}
+
+// Position is used to
+//  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
+//  2. calculate the next position with method Next.
+type Position struct {
+    CommitTs model.Ts
+    StartTs model.Ts
+}
+
+func (p Position) Next() Position {
+    return Position {
+        CommitTs: p.CommitTs,
+        StartTs: p.StartTs + 1, // it will never overflow.
+    }
 }

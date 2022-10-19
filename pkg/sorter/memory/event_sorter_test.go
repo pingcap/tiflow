@@ -15,12 +15,12 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,7 +100,7 @@ func TestEventSorter(t *testing.T) {
 	}
 
 	es := New(context.Background())
-	nextToFetch := model.Ts(0)
+	var nextToFetch sorter.Position
 	for i, tc := range testCases {
 		for _, entry := range tc.input {
 			es.Add(0, model.NewPolymorphicEvent(entry))
@@ -108,13 +108,12 @@ func TestEventSorter(t *testing.T) {
 		es.Add(0, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		iter := es.FetchAllTables(nextToFetch)
 		for j, expect := range tc.expect {
-			fmt.Printf("checking %d.%d\n", i, j)
 			event, err := iter.Next()
 			require.Nil(t, err)
 			require.NotNil(t, event)
 			require.Equal(t, expect, event.RawKV)
 			if event.IsResolved() {
-				nextToFetch = event.CRTs + 1
+				nextToFetch.CommitTs = event.CRTs + 1
 			}
 		}
 	}
@@ -149,7 +148,7 @@ func TestEventSorterRandomly(t *testing.T) {
 	}()
 
 	var lastTs uint64
-	nextToFetch := model.Ts(0)
+	var nextToFetch sorter.Position
 	lastOpType := model.OpTypePut
 	for {
 		iter := es.FetchAllTables(nextToFetch)
@@ -160,7 +159,7 @@ func TestEventSorterRandomly(t *testing.T) {
 			}
 
 			require.GreaterOrEqual(t, entry.CRTs, lastTs)
-			require.GreaterOrEqual(t, entry.CRTs, nextToFetch)
+			require.GreaterOrEqual(t, entry.CRTs, nextToFetch.CommitTs)
 
 			if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
 				require.Greater(t, entry.CRTs, lastTs)
@@ -168,10 +167,10 @@ func TestEventSorterRandomly(t *testing.T) {
 			lastTs = entry.CRTs
 			lastOpType = entry.RawKV.OpType
 			if entry.IsResolved() {
-				nextToFetch = entry.CRTs + 1
+				nextToFetch.CommitTs = entry.CRTs + 1
 			}
 		}
-		if nextToFetch > maxTs {
+		if nextToFetch.CommitTs > maxTs {
 			break
 		}
 	}
@@ -304,7 +303,7 @@ func BenchmarkSorter(b *testing.B) {
 		es.Add(0, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 
-	nextToFetch := model.Ts(0)
+	var nextToFetch sorter.Position
 	for {
 		_ = <-esResolved
 		iter := es.FetchAllTables(nextToFetch)
@@ -314,9 +313,9 @@ func BenchmarkSorter(b *testing.B) {
 				break
 			}
 			if entry.IsResolved() {
-				nextToFetch = entry.CRTs + 1
+				nextToFetch.CommitTs = entry.CRTs + 1
 			}
-			if nextToFetch > maxTs {
+			if nextToFetch.CommitTs > maxTs {
 				break
 			}
 		}
