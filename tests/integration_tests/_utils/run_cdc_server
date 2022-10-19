@@ -9,6 +9,8 @@
 # --pd: pd address
 
 set -e
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
 
 workdir=
 tls=
@@ -18,7 +20,7 @@ certcn_name="server"
 binary=
 logsuffix=
 addr=
-addr_url="127.0.0.1:8300"
+addr_url="$CDC_HOST:$CDC_PORT"
 pd_addr=
 pwd=$pwd
 log_level=debug
