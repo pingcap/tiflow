@@ -340,10 +340,7 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	desc, err := fm.GetPersistedResource(ctx, ident)
-	if err != nil {
-		return nil, err
-	}
+	var desc internal.ResourceDescriptor
 
 	if options.cleanBeforeOpen {
 		err := fm.RemoveResource(ctx, ident)
@@ -354,6 +351,12 @@ func (b *DefaultBroker) getPersistResource(
 		if err != nil {
 			return nil, err
 		}
+		return desc, nil
+	}
+
+	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
 	}
 	return desc, nil
 }
