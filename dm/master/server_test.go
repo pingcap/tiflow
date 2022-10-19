@@ -2871,7 +2871,7 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
 }
 
-func (t *testMaster) TestGetNewestMeta() {
+func (t *testMaster) TestGetNewestMeta(*check.C) {
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.testT, err)
 	getMasterStatusError := errors.New("failed to get master status")
