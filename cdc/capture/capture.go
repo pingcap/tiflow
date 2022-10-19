@@ -311,11 +311,12 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
-		// so we should also stop the owner and let capture restart or exit
+		// so we should also stop the owner and let capture **restart**
 		err := c.campaignOwner(ctx)
-		log.Info("owner routine exited",
+		log.Error("owner routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
-		return err
+		// If we throw an ErrCaptureSuicide error, the capture will restart.
+		return cerror.ErrCaptureSuicide.FastGenByArgs()
 	})
 
 	g.Go(func() error {
