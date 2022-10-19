@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -61,6 +62,8 @@ type processor struct {
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	upstream *upstream.Upstream
+
+    sortEngineCreator: *sortfactory.EventSortEngineFactory,
 
 	tables map[model.TableID]tablepb.TablePipeline
 
@@ -401,6 +404,7 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+    sortEngineCreator *sortfactory.EventSortEngineFactory,
 ) *processor {
 	p := &processor{
 		changefeed:   state,
@@ -411,6 +415,7 @@ func newProcessor(
 		captureInfo:  captureInfo,
 		cancel:       func() {},
 		liveness:     liveness,
+        sortEngineCreator: sortEngineCreator,
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),

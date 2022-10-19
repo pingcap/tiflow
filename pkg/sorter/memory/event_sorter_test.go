@@ -100,7 +100,7 @@ func TestEventSorter(t *testing.T) {
 	}
 
 	es := New(context.Background())
-	nextToFetch := es.ZeroPosition()
+	nextToFetch := model.Ts(0)
 	for i, tc := range testCases {
 		for _, entry := range tc.input {
 			es.Add(0, model.NewPolymorphicEvent(entry))
@@ -109,12 +109,12 @@ func TestEventSorter(t *testing.T) {
 		iter := es.FetchAllTables(nextToFetch)
 		for j, expect := range tc.expect {
 			fmt.Printf("checking %d.%d\n", i, j)
-			event, pos, err := iter.Next()
+			event, err := iter.Next()
 			require.Nil(t, err)
 			require.NotNil(t, event)
 			require.Equal(t, expect, event.RawKV)
 			if event.IsResolved() {
-				nextToFetch = pos.Next()
+				nextToFetch = event.CRTs + 1
 			}
 		}
 	}
@@ -149,18 +149,18 @@ func TestEventSorterRandomly(t *testing.T) {
 	}()
 
 	var lastTs uint64
-	nextToFetch := es.ZeroPosition()
+	nextToFetch := model.Ts(0)
 	lastOpType := model.OpTypePut
 	for {
 		iter := es.FetchAllTables(nextToFetch)
 		for {
-			entry, pos, _ := iter.Next()
+			entry, _ := iter.Next()
 			if entry == nil {
 				break
 			}
 
 			require.GreaterOrEqual(t, entry.CRTs, lastTs)
-			require.GreaterOrEqual(t, entry.CRTs, nextToFetch.ts)
+			require.GreaterOrEqual(t, entry.CRTs, nextToFetch)
 
 			if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
 				require.Greater(t, entry.CRTs, lastTs)
@@ -168,10 +168,10 @@ func TestEventSorterRandomly(t *testing.T) {
 			lastTs = entry.CRTs
 			lastOpType = entry.RawKV.OpType
 			if entry.IsResolved() {
-				nextToFetch = pos.Next()
+				nextToFetch = entry.CRTs + 1
 			}
 		}
-		if nextToFetch.ts > maxTs {
+		if nextToFetch > maxTs {
 			break
 		}
 	}
@@ -277,7 +277,7 @@ func TestEventLess(t *testing.T) {
 func BenchmarkSorter(b *testing.B) {
 	es := New(context.Background())
 	esResolved := make(chan model.Ts, 128)
-	es.SetOnResolve(func(_ model.TableID, ts model.Ts) { esResolved <- ts })
+	es.OnResolve(func(_ model.TableID, ts model.Ts) { esResolved <- ts })
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()
@@ -304,19 +304,19 @@ func BenchmarkSorter(b *testing.B) {
 		es.Add(0, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 
-	nextToFetch := es.ZeroPosition()
+	nextToFetch := model.Ts(0)
 	for {
 		_ = <-esResolved
 		iter := es.FetchAllTables(nextToFetch)
 		for {
-			entry, pos, _ := iter.Next()
+			entry, _ := iter.Next()
 			if entry == nil {
 				break
 			}
 			if entry.IsResolved() {
-				nextToFetch = pos.Next()
+				nextToFetch = entry.CRTs + 1
 			}
-			if nextToFetch.ts > maxTs {
+			if nextToFetch > maxTs {
 				break
 			}
 		}

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -38,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
@@ -83,8 +85,9 @@ type server struct {
 	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
 
-	sorterSystem     *ssystem.System
 	tableActorSystem *system.System
+
+	sortEngineCreator *sorter.EventSortEngineFactory
 }
 
 // New creates a server instance.
@@ -184,7 +187,7 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 
 	s.capture = capture.NewCapture(
-		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sorterSystem, s.tableActorSystem)
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sortEngineCreator, s.tableActorSystem)
 
 	return nil
 }
@@ -201,18 +204,25 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		return nil
 	}
 
-	if s.sorterSystem != nil {
-		s.sorterSystem.Stop()
-	}
+    if s.sortEngineCreator != nil {
+        if err := s.sortEngineCreator.Close(); err != nil {
+            log.Error("fails to close sort engine factory", zap.Error(err))
+        }
+        s.sortEngineCreator = nil
+    }
+
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
-	err := s.sorterSystem.Start(ctx)
+
+	totalMemory, err := memory.MemTotal()
 	if err != nil {
 		return errors.Trace(err)
 	}
+	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
+	memInBytes := uint64(float64(totalMemory) * s.memPercentage)
+    s.sortEngineCreator = sorter.NewPebbleFactory(memInBytes, conf.Debug.DB)
+
 	return nil
 }
 
@@ -394,10 +404,12 @@ func (s *server) stopActorSystems() {
 	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
 
 	start = time.Now()
-	if s.sorterSystem != nil {
-		s.sorterSystem.Stop()
-		s.sorterSystem = nil
-	}
+    if s.sortEngineCreator != nil {
+        if err := s.sortEngineCreator.Close(); err != nil {
+            log.Error("fails to close sort engine factory", zap.Error(err))
+        }
+    }
+
 	log.Info("sorter actor system closed", zap.Duration("duration", time.Since(start)))
 }
 

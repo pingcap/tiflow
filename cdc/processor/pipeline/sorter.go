@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/db"
+	newSorter "github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -118,7 +118,9 @@ func newSorterNode(
 	}
 }
 
-func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
+func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) error {
+    return nil
+    /********************************************************
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	// `file` and `memory` become aliases of `unified` for backward compatibility.
@@ -137,19 +139,12 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			startTs := ctx.ChangefeedVars().Info.StartTs
-			ssystem := ctx.GlobalVars().SorterSystem
-			dbActorID := ssystem.DBActorID(uint64(tableID))
-			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter, err := db.NewSorter(
-				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
-				ssystem.WriterSystem, ssystem.WriterRouter,
-				ssystem.ReaderSystem, ssystem.ReaderRouter,
-				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+            sortEngineCreator := ctx.GlobalVars().SortEngineCreator
+            sorter, err := sortEngineCreator.Create(ctx.ChangefeedVars().ID)
 			if err != nil {
 				return nil, err
 			}
-			return levelSorter, nil
+			return sorter, nil
 		}
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
@@ -162,6 +157,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	default:
 		return nil, cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
+    ********************************************************/
 }
 
 func (n *sorterNode) start(

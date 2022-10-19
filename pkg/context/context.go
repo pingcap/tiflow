@@ -20,10 +20,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -35,7 +35,7 @@ type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
-	SorterSystem     *ssystem.System
+    SortEngineCreator *sortfactory.EventSortEngineFactory
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64

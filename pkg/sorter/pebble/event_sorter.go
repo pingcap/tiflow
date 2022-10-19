@@ -14,7 +14,6 @@
 package pebble
 
 import (
-	"context"
 	"encoding/binary"
 	"hash/fnv"
 	"math"
@@ -31,13 +30,14 @@ import (
 )
 
 var (
-	_ sorter.EventSortEngine[Position] = (*EventSorter)(nil)
-	_ sorter.EventIterator[Position]   = (*EventIter)(nil)
+	_ sorter.EventSortEngine = (*EventSorter)(nil)
+	_ sorter.EventIterator   = (*EventIter)(nil)
 )
 
 // EventSorter is an event sort engine.
 type EventSorter struct {
 	// Read-only fields.
+    changefeedID model.ChangeFeedID
 	uniqueID uint32
 	dbs      []*pebble.DB
 	channs   []*chann.Chann[eventWithTableID]
@@ -59,18 +59,14 @@ type EventIter struct {
 	serde   encoding.MsgPackGenSerde
 }
 
-type Position struct {
-	tableID model.TableID
-	ts      model.Ts
-}
-
-func New(ctx context.Context, dbs []*pebble.DB) *EventSorter {
+func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
 		channs = append(channs, chann.New[eventWithTableID](chann.Cap(-1)))
 	}
 
 	eventSorter := &EventSorter{
+        changefeedID: ID,
 		uniqueID: genUniqueID(),
 		dbs:      dbs,
 		channs:   channs,
@@ -133,8 +129,8 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	return
 }
 
-// SetOnResolve implements sorter.EventSortEngine.
-func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
+// OnResolve implements sorter.EventSortEngine.
+func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
@@ -143,12 +139,8 @@ func (s *EventSorter) SetOnResolve(action func(model.TableID, model.Ts)) {
 // FetchByTable implements sorter.EventSortEngine.
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
-	lowerBound, upperBound Position,
-) sorter.EventIterator[Position] {
-	if tableID != lowerBound.tableID {
-		log.Panic("tableID doesn't match the boundary")
-	}
-
+	lowerBound, upperBound model.Ts,
+) sorter.EventIterator {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	if !exists {
@@ -156,27 +148,23 @@ func (s *EventSorter) FetchByTable(
 	}
 	s.mu.Unlock()
 
-	if upperBound.ts > atomic.LoadUint64(&state.resolved) {
+	if upperBound > atomic.LoadUint64(&state.resolved) {
 		log.Panic("fetch unresolved events")
 	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
-	iter := iterTable(db, s.uniqueID, tableID, lowerBound.ts, upperBound.ts+1)
+	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound+1)
 	return &EventIter{tableID, iter, s.serde}
 }
 
 // FetchAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound Position) sorter.EventIterator[Position] {
+func (s *EventSorter) FetchAllTables(lowerBound model.Ts) sorter.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }
 
 // CleanByTable implements sorter.EventSortEngine.
-func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound Position) error {
-	if tableID != upperBound.tableID {
-		log.Panic("tableID doesn't match the boundary")
-	}
-
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound model.Ts) error {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	if !exists {
@@ -188,7 +176,7 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound Position) e
 }
 
 // CleanAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) CleanAllTables(upperBound Position) error {
+func (s *EventSorter) CleanAllTables(upperBound model.Ts) error {
 	log.Panic("CleanAllTables should never be called")
 	return nil
 }
@@ -213,24 +201,11 @@ func (s *EventSorter) Close() error {
 	return nil
 }
 
-// ZeroPosition implements sorter.EventSortEngine.
-func (s *EventSorter) ZeroPosition(tableID ...model.TableID) Position {
-	if len(tableID) == 0 || len(tableID) > 1 {
-		log.Panic("must retrieve one tableID")
-	}
-
-	return Position{tableID: tableID[0], ts: model.Ts(0)}
-}
-
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, pos Position, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, err error) {
 	if s.iter != nil && s.iter.Valid() {
 		event = &model.PolymorphicEvent{}
 		_, err = s.serde.Unmarshal(event, s.iter.Value())
-		if event.IsResolved() {
-			pos.tableID = s.tableID
-			pos.ts = event.CRTs
-		}
 	}
 	return
 }
@@ -241,16 +216,6 @@ func (s *EventIter) Close() error {
 		return s.iter.Close()
 	}
 	return nil
-}
-
-// Next implements sorter.Position.
-func (p Position) Next() Position {
-	return Position{tableID: p.tableID, ts: p.ts + 1}
-}
-
-// Ts implements sorter.Position.
-func (p Position) Ts() model.Ts {
-	return p.ts
 }
 
 type eventWithTableID struct {
@@ -324,12 +289,12 @@ func (s *EventSorter) handleEvents(offset int) {
 }
 
 // cleanTable uses DeleteRange to clean data of the given table.
-func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upperBound ...Position) error {
+func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upperBound ...model.Ts) error {
 	var cleaned model.Ts
 	var start, end []byte
 
 	if len(upperBound) == 1 {
-		cleaned = upperBound[0].ts
+		cleaned = upperBound[0]
 	} else {
 		cleaned = math.MaxUint64
 	}

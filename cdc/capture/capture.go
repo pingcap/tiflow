@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -36,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -89,7 +89,7 @@ type captureImpl struct {
 	election election
 
 	EtcdClient       etcd.CDCEtcdClient
-	sorterSystem     *ssystem.System
+    sortEngineCreator *sortfactory.EventSortEngineFactory
 	tableActorSystem *system.System
 
 	// MessageServer is the receiver of the messages from the other nodes.
@@ -122,7 +122,7 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
-	sorterSystem *ssystem.System,
+    sortEngineCreator *sortfactory.EventSortEngineFactory,
 	tableActorSystem *system.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
@@ -133,7 +133,7 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
-		sorterSystem:        sorterSystem,
+        sortEngineCreator: sortEngineCreator,
 		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -303,6 +303,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
 		TableActorSystem: c.tableActorSystem,
+        SortEngineCreator c.SortEngineCreator,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,

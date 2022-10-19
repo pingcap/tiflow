@@ -20,7 +20,7 @@ import (
 // EventSortEngine is a storage engine to store and sort CDC events.
 // Every changefeed will have one EventSortEngine instance.
 // NOTE: All interfaces are thread-safe.
-type EventSortEngine[Pos Position[Pos]] interface {
+type EventSortEngine interface {
 	// IsTableBased tells whether the sort engine is based on table or not.
 	// If it's based on table, fetching events by table is prefered.
 	IsTableBased() bool
@@ -32,68 +32,53 @@ type EventSortEngine[Pos Position[Pos]] interface {
 	RemoveTable(tableID model.TableID)
 
 	// Add adds the given events into the sort engine.
+	//
 	// NOTE: it's an asynchronous interface. To get the notification of when
-	// events are available for `Fetch`, SetOnResolve is what you want.
+	// events are available for fetching, OnResolve is what you want.
 	Add(tableID model.TableID, events ...*model.PolymorphicEvent) error
 
-	// SetOnResolve pushes action into EventSortEngine's hook list, which
+	// OnResolve pushes action into EventSortEngine's hook list, which
 	// will be called after any events are resolved.
-	SetOnResolve(action func(model.TableID, model.Ts))
+	OnResolve(action func(model.TableID, model.Ts))
 
 	// FetchByTable creates an iterator to fetch events from the given table.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(tableID model.TableID, lowerBound, upperBound Pos) EventIterator[Pos]
+	FetchByTable(tableID model.TableID, lowerBound, upperBound model.Ts) EventIterator
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	FetchAllTables(lowerBound Pos) EventIterator[Pos]
+	FetchAllTables(lowerBound model.Ts) EventIterator
 
 	// CleanByTable tells the engine events of the given table in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: CleanByTable is always available even if IsTableBased returns false.
-	CleanByTable(tableID model.TableID, upperBound Pos) error
+	CleanByTable(tableID model.TableID, upperBound model.Ts) error
 
 	// CleanAllTables tells the engine events of all tables in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
 	// NOTE: It's only available if IsTableBased returns true.
-	CleanAllTables(upperBound Pos) error
+	CleanAllTables(upperBound model.Ts) error
 
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.
 	Close() error
-
-	// Create a zero position to fetch events for the first time.
-	// If tableID is given, the returned position is for that table. Otherwise
-	// the returned position is for all tables.
-	ZeroPosition(tableID ...model.TableID) Pos
 }
 
 // EventIterator is an iterator to fetch events from EventSortEngine.
 // It's unnecessary to be thread-safe.
-type EventIterator[Pos Position[Pos]] interface {
+type EventIterator interface {
 	// Next is used to fetch one event. nil indicates it reaches the stop point.
-	Next() (*model.PolymorphicEvent, Pos, error)
+	Next() (*model.PolymorphicEvent, error)
 
 	// Close closes the iterator.
 	Close() error
-}
-
-// Position is used to
-//  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
-//  2. calculate the next position with method Next.
-type Position[T any] interface {
-	// Next gets the next position used in the next fetch.
-	Next() T
-
-	// Ts returns the internal timestamp of the position.
-	Ts() model.Ts
 }

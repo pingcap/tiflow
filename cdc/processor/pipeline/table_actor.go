@@ -547,9 +547,9 @@ var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
+    // TODO: create the table if the engine is unified sorter.
+	err := createSorter(ctx, t.tableName, t.tableID)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
 }
