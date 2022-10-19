@@ -1401,7 +1401,11 @@ func GetNewestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig
 		return nil, err
 	}
 
-	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gtidSet.String()}, nil
+	gSet := ""
+	if gtidSet != nil {
+		gSet = gtidSet.String()
+	}
+	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gSet}, nil
 }
 
 func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
