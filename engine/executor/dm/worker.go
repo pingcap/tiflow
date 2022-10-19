@@ -156,6 +156,7 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	}
 	// update unit status periodically to update metrics
 	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.discardResource4Syncer(ctx)
 	return w.messageAgent.Tick(ctx)
 }
 
@@ -234,10 +235,21 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return w.UpdateStatus(ctx, status)
 	}
 
-	if w.workerType == frameModel.WorkerDMDump {
+	// now we are in StageFinished
+	switch w.workerType {
+	case frameModel.WorkerDMDump:
 		if err := w.persistStorage(ctx); err != nil {
 			w.Logger().Error("failed to persist storage", zap.Error(err))
 			// persist in next tick
+			return nil
+		}
+	case frameModel.WorkerDMLoad:
+		if w.cfg.Mode != dmconfig.ModeFull {
+			break
+		}
+		if err := w.storageWriteHandle.Discard(ctx); err != nil {
+			w.Logger().Error("failed to discard storage", zap.Error(err))
+			// discard in next tick
 			return nil
 		}
 	}
@@ -317,4 +329,28 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (w *dmWorker) discardResource4Syncer(ctx context.Context) {
+	if w.workerType != frameModel.WorkerDMSync || !w.needExtStorage {
+		return
+	}
+	impl, ok := w.unitHolder.(*unitHolderImpl)
+	if !ok {
+		return
+	}
+	isFresh, err := impl.unit.IsFreshTask(ctx)
+	if err != nil {
+		w.Logger().Warn("failed to check if task is fresh", zap.Error(err))
+		return
+	}
+	if isFresh {
+		return
+	}
+
+	if err := w.storageWriteHandle.Discard(ctx); err != nil {
+		w.Logger().Error("failed to discard storage", zap.Error(err))
+		return
+	}
+	w.needExtStorage = false
 }
