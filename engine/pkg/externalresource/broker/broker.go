@@ -344,7 +344,7 @@ func (b *DefaultBroker) getPersistResource(
 
 	if options.cleanBeforeOpen {
 		err := fm.RemoveResource(ctx, ident)
-		if err != nil {
+		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
 			return nil, err
 		}
 		desc, err = fm.CreateResource(ctx, ident)
