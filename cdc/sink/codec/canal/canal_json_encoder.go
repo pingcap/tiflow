@@ -81,7 +81,7 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	return encoder
 }
 
-func (c *JSONBatchEncoder) fillByColumns(message *JSONMessage, columns []*model.Column, fillTypes bool) error {
+func (c *JSONBatchEncoder) fillData(message *JSONMessage, columns []*model.Column, fillTypes bool) error {
 	if len(columns) == 0 {
 		return nil
 	}
@@ -149,12 +149,12 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.reset()
 
 	if e.IsDelete() {
-		if err := c.fillByColumns(baseMessage, e.PreColumns, true); err != nil {
+		if err := c.fillData(baseMessage, e.PreColumns, true); err != nil {
 			return err
 		}
 		baseMessage.EventType = "DELETE"
 	} else if e.IsInsert() {
-		if err := c.fillByColumns(baseMessage, e.Columns, true); err != nil {
+		if err := c.fillData(baseMessage, e.Columns, true); err != nil {
 			return err
 		}
 		baseMessage.EventType = "INSERT"
@@ -164,7 +164,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 		}
 		baseMessage.Old = []map[string]interface{}{c.oldDataHolder}
 
-		if err := c.fillByColumns(baseMessage, e.Columns, true); err != nil {
+		if err := c.fillData(baseMessage, e.Columns, true); err != nil {
 			return err
 		}
 		baseMessage.EventType = "UPDATE"
