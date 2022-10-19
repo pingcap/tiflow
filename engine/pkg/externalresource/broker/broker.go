@@ -344,6 +344,8 @@ func (b *DefaultBroker) getPersistResource(
 
 	if options.cleanBeforeOpen {
 		err := fm.RemoveResource(ctx, ident)
+		// LocalFileManager may return ErrResourceDoesNotExist, which can be 
+		// ignored because the resource no longer exists.
 		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
 			return nil, err
 		}
