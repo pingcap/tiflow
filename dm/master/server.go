@@ -1384,6 +1384,7 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 	return cfgs, nil
 }
 
+// GetNewestMeta gets newest meta(binlog name, pos, gtid) from upstream.
 func GetNewestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
