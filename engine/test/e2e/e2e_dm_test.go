@@ -30,9 +30,6 @@ import (
 	"testing"
 	"time"
 
-	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -186,18 +183,22 @@ func testSimpleAllModeTask(
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
 
-	binlogName, binlogPos, err := getMasterStatus(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
-	require.NoError(t, err)
-
 	// start incremental job
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: full"), []byte("task-mode: incremental"))
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-name: ON.000001"), []byte(fmt.Sprintf("binlog-name: %s", binlogName)))
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-pos: 4"), []byte(fmt.Sprintf("binlog-pos: %d", binlogPos)))
 	require.Eventually(t, func() bool {
 		var err error
 		jobID, err = e2e.CreateJobViaHTTP(ctx, masterAddr, tenantID, projectID, pb.Job_DM, dmJobCfg)
 		return err == nil
 	}, time.Second*5, time.Millisecond*100)
+
+	var jobStatus *dm.JobStatus
+	// wait job online
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(ctx, httpClient, jobID, []string{source1, source2})
+		return err == nil && jobStatus.JobID == jobID
+	}, time.Second*5, time.Millisecond*100)
+	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
+	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// incremental phase
 	noError(mysql.Exec("insert into " + db + ".t1 values(2)"))
@@ -212,15 +213,6 @@ func testSimpleAllModeTask(
 
 	// check auto resume
 	waitRow("c = 3", db)
-
-	var jobStatus *dm.JobStatus
-	// wait job online
-	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(ctx, httpClient, jobID, []string{source1, source2})
-		return err == nil && jobStatus.JobID == jobID
-	}, time.Second*5, time.Millisecond*100)
-	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
-	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// pause task
 	err = operateJob(ctx, httpClient, jobID, []string{source1}, dmpkg.Pause)
@@ -564,9 +556,4 @@ func setBinlogSchema(
 	var binlogSchemaResp dmpkg.BinlogSchemaResponse
 	err = json.Unmarshal(respBody, &binlogSchemaResp)
 	return &binlogSchemaResp, err
-}
-
-func getMasterStatus(ctx *tcontext.Context, db *conn.BaseDB, flavor string) (string, uint32, error) {
-	binlogName, pos, _, _, _, err := conn.GetMasterStatus(ctx, db, flavor)
-	return binlogName, pos, err
 }
