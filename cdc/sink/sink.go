@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	"github.com/pingcap/tiflow/cdc/sink/wasm"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -135,6 +136,15 @@ func init() {
 		return mq.NewPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
+
+	// register wasm plugin sink
+	sinkIniterMap["wasm"] = func(
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
+		errCh chan error,
+	) (Sink, error) {
+		return wasm.NewWasmPluginSink(ctx, sinkURI, config, opts, errCh)
+	}
 
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
 		sinkIniterMap["simple-mysql"] = func(

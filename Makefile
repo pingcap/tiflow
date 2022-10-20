@@ -22,7 +22,7 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+GOBUILD  := CGO_ENABLED=1 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
