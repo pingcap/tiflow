@@ -284,3 +284,38 @@ type ProcInfoSnap struct {
 	CfID      ChangeFeedID `json:"changefeed-id"`
 	CaptureID string       `json:"capture-id"`
 }
+
+type TableSet struct {
+	memo map[TableID]struct{}
+}
+
+func NewTableSet() *TableSet {
+	return &TableSet{
+		memo: make(map[TableID]struct{}),
+	}
+}
+
+func (s *TableSet) Add(tableID TableID) {
+	s.memo[tableID] = struct{}{}
+}
+
+func (s *TableSet) Remove(tableID TableID) {
+	delete(s.memo, tableID)
+}
+
+func (s *TableSet) Keys() []TableID {
+	result := make([]TableID, 0, len(s.memo))
+	for k := range s.memo {
+		result = append(result, k)
+	}
+	return result
+}
+
+func (s *TableSet) Contain(tableID TableID) bool {
+	_, ok := s.memo[tableID]
+	return ok
+}
+
+func (s *TableSet) Size() int {
+	return len(s.memo)
+}

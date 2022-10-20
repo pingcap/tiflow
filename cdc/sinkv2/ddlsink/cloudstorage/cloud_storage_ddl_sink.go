@@ -37,7 +37,7 @@ type ddlSink struct {
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
-	tableSet   map[int64]struct{}
+	tables     *model.TableSet
 }
 
 // NewCloudStorageDDLSink creates a ddl sink for cloud storage.
@@ -58,7 +58,7 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	d := &ddlSink{
 		id:         changefeedID,
 		storage:    storage,
-		tableSet:   make(map[int64]struct{}),
+		tables:     model.NewTableSet(),
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 	}
 
@@ -85,7 +85,7 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 			return err1
 		}
 
-		d.tableSet[ddl.TableInfo.ID] = struct{}{}
+		d.tables.Add(ddl.TableInfo.ID)
 		return nil
 	})
 
@@ -96,7 +96,7 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	for _, table := range tables {
-		_, ok := d.tableSet[table.ID]
+		ok := d.tables.Contain(table.ID)
 		if !ok {
 			var def tableDef
 			def.fromTableInfo(table)
@@ -111,7 +111,7 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 			if err != nil {
 				return errors.Trace(err)
 			}
-			d.tableSet[table.ID] = struct{}{}
+			d.tables.Add(table.ID)
 		}
 	}
 
