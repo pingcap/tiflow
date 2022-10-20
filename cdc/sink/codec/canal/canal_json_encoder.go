@@ -50,7 +50,13 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 			Data: make([]map[string]interface{}, 1),
 		},
 		enableTiDBExtension: enableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
+		messages:            make([]*common.Message, 1),
+	}
+
+	encoder.messages[0] = &common.Message{
+		Protocol: config.ProtocolCanalJSON,
+		Value:    make([]byte, 0, 1024),
+		Type:     model.MessageTypeRow,
 	}
 
 	if enableTiDBExtension {
@@ -59,7 +65,6 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 			Extensions:  &tidbExtension{},
 		}
 	}
-
 	return encoder
 }
 
@@ -224,12 +229,14 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		log.Panic("JSONBatchEncoder", zap.Error(err))
 		return nil
 	}
-	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
-		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
-	m.IncRowsCount()
-	m.Callback = callback
 
-	c.messages = append(c.messages, m)
+	c.messages[0].Value = value
+	c.messages[0].Ts = e.CommitTs
+	c.messages[0].Schema = c.messageHolder.getSchema()
+	c.messages[0].Table = c.messageHolder.getTable()
+	c.messages[0].IncRowsCount()
+	c.messages[0].Callback = callback
+
 	return nil
 }
 
@@ -238,10 +245,7 @@ func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil
 	}
-
-	result := c.messages
-	c.messages = c.messages[:0]
-	return result
+	return c.messages
 }
 
 // EncodeDDLEvent encodes DDL events
