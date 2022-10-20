@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	"github.com/pingcap/tiflow/cdc/sink/udflib"
 	"github.com/pingcap/tiflow/cdc/sink/wasm"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -136,6 +137,15 @@ func init() {
 		return mq.NewPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
+
+	// register udflib.so plugin sink
+	sinkIniterMap["udflib"] = func(
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
+		errCh chan error,
+	) (Sink, error) {
+		return udflib.NewUdflibSink(ctx, sinkURI, config, opts, errCh)
+	}
 
 	// register wasm plugin sink
 	sinkIniterMap["wasm"] = func(
