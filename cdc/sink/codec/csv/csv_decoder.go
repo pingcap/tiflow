@@ -15,6 +15,7 @@ package csv
 
 import (
 	"context"
+	"io"
 
 	"github.com/pingcap/errors"
 	lconfig "github.com/pingcap/tidb/br/pkg/lightning/config"
@@ -72,6 +73,9 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	err := b.parser.ReadRow()
 	if err != nil {
 		b.closed = true
+		if errors.Cause(err) == io.EOF {
+			return model.MessageTypeUnknown, false, nil
+		}
 		return model.MessageTypeUnknown, false, err
 	}
 

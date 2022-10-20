@@ -77,12 +77,13 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig       *CSVConfig        `toml:"csv" json:"csv"`
-	Protocol        string            `toml:"protocol" json:"protocol"`
-	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
+	Protocol                 string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity             AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -287,7 +288,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	}
 
 	// validate that protocol is compatible with the scheme
-	if sink.IsMQScheme(sinkURI.Scheme) {
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
 		_, err := ParseSinkProtocolFromString(s.Protocol)
 		if err != nil {
 			return err

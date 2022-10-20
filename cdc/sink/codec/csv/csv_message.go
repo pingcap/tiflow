@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -130,7 +129,10 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 				fmt.Errorf("the 4th column(%s) of csv row should be a valid commit-ts", datums[3].GetString()))
 		}
 		c.commitTs = commitTs
+	} else {
+		c.commitTs = 0
 	}
+	c.columns = c.columns[:0]
 
 	for i := 4; i < len(datums); i++ {
 		if datums[i].IsNull() {
@@ -333,17 +335,7 @@ func csvColumns2RowChangeColumns(csvCols []any) []*model.Column {
 	for _, csvCol := range csvCols {
 		col := new(model.Column)
 		col.Charset = mysql.DefaultCharset
-
-		if str, ok := csvCol.(string); ok {
-			if blob, err := base64.StdEncoding.DecodeString(str); err == nil {
-				col.Value = blob
-				col.Charset = charset.CharsetBin
-			} else {
-				col.Value = csvCol
-			}
-		} else {
-			col.Value = csvCol
-		}
+		col.Value = csvCol
 
 		tp := new(types.FieldType)
 		types.DefaultTypeForValue(csvCol, tp, mysql.DefaultCharset, mysql.DefaultCollationName)
