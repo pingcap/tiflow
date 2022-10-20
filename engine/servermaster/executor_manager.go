@@ -27,7 +27,6 @@ import (
 	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"go.uber.org/zap"
@@ -60,9 +59,8 @@ type ExecutorManager interface {
 
 // ExecutorManagerImpl holds all the executors' info, including liveness, status, resource usage.
 type ExecutorManagerImpl struct {
-	testContext *test.Context
-	wg          sync.WaitGroup
-	metaClient  executormeta.Client
+	wg         sync.WaitGroup
+	metaClient executormeta.Client
 
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
@@ -77,9 +75,8 @@ type ExecutorManagerImpl struct {
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
-func NewExecutorManagerImpl(metaClient executormeta.Client, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
+func NewExecutorManagerImpl(metaClient executormeta.Client, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManagerImpl {
 	return &ExecutorManagerImpl{
-		testContext:       ctx,
 		metaClient:        metaClient,
 		executors:         make(map[model.ExecutorID]*Executor),
 		initHeartbeatTTL:  initHeartbeatTTL,
@@ -103,13 +100,6 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	delete(e.executors, id)
 	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
-
-	if test.GetGlobalTestFlag() {
-		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
-			Tp:   test.Delete,
-			Time: time.Now(),
-		})
-	}
 
 	e.notifier.Notify(model.ExecutorStatusChange{
 		ID:   id,

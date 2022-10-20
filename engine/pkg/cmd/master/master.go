@@ -76,7 +76,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	ticdcutil.LogHTTPProxies()
 
-	server, err := servermaster.NewServer(o.masterConfig, nil)
+	server, err := servermaster.NewServer(o.masterConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}

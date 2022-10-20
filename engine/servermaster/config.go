@@ -35,7 +35,6 @@ import (
 const (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
-	defaultRPCTimeout        = "3s"
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
 
@@ -71,11 +70,9 @@ type Config struct {
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
-	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
-	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
 	Storage resModel.Config `toml:"storage" json:"storage"`
 
@@ -139,11 +136,6 @@ func (c *Config) AdjustAndValidate() (err error) {
 		return err
 	}
 
-	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
-	if err != nil {
-		return err
-	}
-
 	return validation.ValidateStruct(c,
 		validation.Field(&c.FrameworkMeta),
 		validation.Field(&c.BusinessMeta),
@@ -172,7 +164,6 @@ func GetDefaultMasterConfig() *Config {
 		BusinessMeta:         NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
-		RPCTimeoutStr:        defaultRPCTimeout,
 		JobBackoff:           jobop.NewDefaultBackoffConfig(),
 		Storage:              resModel.DefaultConfig,
 	}
