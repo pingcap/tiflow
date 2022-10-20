@@ -55,7 +55,6 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 
 	encoder.messages[0] = &common.Message{
 		Protocol: config.ProtocolCanalJSON,
-		Value:    make([]byte, 0, 1024),
 		Type:     model.MessageTypeRow,
 	}
 
@@ -242,7 +241,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 
 // Build implements the EventJSONBatchEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
-	if len(c.messages) == 0 {
+	if c.messages[0].Value == nil {
 		return nil
 	}
 	return c.messages
