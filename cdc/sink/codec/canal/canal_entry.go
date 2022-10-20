@@ -50,7 +50,7 @@ type canalEntryBuilder struct {
 func newCanalEntryBuilder() *canalEntryBuilder {
 	return &canalEntryBuilder{
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
-		rawValue:     make([]byte, 16),
+		rawValue:     make([]byte, 0, 16),
 	}
 }
 
