@@ -570,7 +570,6 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-
 	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
