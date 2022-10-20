@@ -340,20 +340,25 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	desc, err := fm.GetPersistedResource(ctx, ident)
-	if err != nil {
-		return nil, err
-	}
+	var desc internal.ResourceDescriptor
 
 	if options.cleanBeforeOpen {
 		err := fm.RemoveResource(ctx, ident)
-		if err != nil {
+		// LocalFileManager may return ErrResourceDoesNotExist, which can be
+		// ignored because the resource no longer exists.
+		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
 			return nil, err
 		}
 		desc, err = fm.CreateResource(ctx, ident)
 		if err != nil {
 			return nil, err
 		}
+		return desc, nil
+	}
+
+	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
 	}
 	return desc, nil
 }
