@@ -339,11 +339,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
+	// if redo is not enabled, use the barrierTs as the `newResolvedTs`
+	// not need to wait the slowest table
+	if c.redoManager.Enabled() {
+		if newResolvedTs > barrierTs {
+			newResolvedTs = barrierTs
+		}
+	}
+
 	// If the owner is just initialized, barrierTs can be `checkpoint-1`. To avoid
 	// global resolvedTs and checkpointTs regression, we need to handle the case.
-	if newResolvedTs > barrierTs {
-		newResolvedTs = barrierTs
-	}
 	if newCheckpointTs > barrierTs {
 		newCheckpointTs = barrierTs
 	}
