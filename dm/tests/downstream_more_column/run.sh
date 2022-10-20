@@ -43,9 +43,7 @@ function run() {
 
 	# start DM task in incremental mode
 	# schemaTracker create table from downstream
-	master_status=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	cp $cur/conf/dm-task-incremental.yaml $WORK_DIR/dm-task-incremental.yaml
-	sed -i "s/binlog-gtid-placeholder/${master_status[2]}/g" $WORK_DIR/dm-task-incremental.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task-incremental.yaml --remove-meta" \
 		"\"result\": true" 2
@@ -54,8 +52,8 @@ function run() {
 	# Column count doesn't match value count
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"sourceTable: $(${db1}).$(${tb1})" 1 \
-		"targetTable: $(${db}).$(${tb})" 1 \
+		"sourceTable: \`${db1}\`.\`${tb1}\`" 1 \
+		"targetTable: \`${db}\`.\`${tb}\`" 1 \
 		"Column count doesn't match value count" 1
 
 	# operate-schema: flush checkpoint default
