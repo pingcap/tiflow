@@ -6,7 +6,7 @@ FROM golang:1.19-alpine as builder
 # rebuild this image as well
 RUN apk update && apk add --no-cache docker-cli \
     make bash curl git \
-    jq mariadb-client openssl
+    jq mariadb-client openssl mc
 
 # For better compatibility, use `docker-compose` directly instead of the subcommand 'docker compose'
 RUN wget -O /usr/bin/docker-compose https://github.com/docker/compose/releases/download/v2.10.2/docker-compose-linux-x86_64 && \
