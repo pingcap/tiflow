@@ -23,6 +23,8 @@ mysql-instances:
     # sync t_1's alter event by task config(overwrite)
     # ignore t_2's alter event by source config
     filter-rules: ["user-filter-1"]
+    meta:
+      binlog-gtid: ""
 
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
@@ -33,6 +35,8 @@ mysql-instances:
     syncer-config-name: "global"
     # ignore t_2's alter event by task config
     filter-rules: ["user-filter-2"]
+    meta:
+      binlog-gtid: ""
 
 block-allow-list:
   instance:
