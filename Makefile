@@ -512,10 +512,14 @@ check_third_party_binary_for_engine:
 	@which go || (echo "go not found in ${PATH}"; exit 1)
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+	@which bin/mc || (echo "run 'make bin/mc' to download it if you need"; exit 1)
 	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
+
+bin/mc:
+	./scripts/download-mc.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh
