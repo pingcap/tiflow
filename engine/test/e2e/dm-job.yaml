@@ -26,9 +26,6 @@ upstreams:
       password: ""
 #      session: {}
     source-id: mysql-replica-01
-    meta:
-      binlog-name: ON.000001
-      binlog-pos: 4
     #filter-rules:
     #- filter-01
     #column-mapping-rules:
