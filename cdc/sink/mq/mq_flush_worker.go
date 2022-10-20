@@ -178,7 +178,6 @@ func (w *flushWorker) asyncSend(
 				}
 				thisBatchSize += message.GetRowsCount()
 			}
-			log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
 			return thisBatchSize, nil
 		})
 		if err != nil {

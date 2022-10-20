@@ -75,7 +75,7 @@ services:
     ports:
       - "11241:10241"
     volumes:
-      - ./config/executor_with_s3.toml:/config.toml
+      - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
@@ -101,7 +101,7 @@ services:
     ports:
       - "11242:10241"
     volumes:
-      - ./config/executor_with_s3.toml:/config.toml
+      - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"
@@ -127,7 +127,7 @@ services:
     ports:
       - "11243:10241"
     volumes:
-      - ./config/executor_with_s3.toml:/config.toml
+      - ./config/executor.toml:/config.toml
       - /tmp/tiflow_engine_test:/log
     command:
       - "/tiflow"

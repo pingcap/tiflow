@@ -365,8 +365,6 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("oldResolvedTs", oldResolvedTs))
 		}
-		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
-
 		if resolvedTs > n.BarrierTs() && !n.redoLogEnabled {
 			// Do not send resolved ts events that is larger than
 			// barrier ts.
