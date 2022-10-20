@@ -46,7 +46,8 @@ type JSONBatchEncoder struct {
 
 const (
 	// defaultColumnCount is the default column count for each row
-	// since we doesn't know the column count in advance, we use a default value to prevent frequent memory allocation.
+	// since we don't know the column count in advance,
+	// we use a default value to prevent frequent memory allocation.
 	defaultColumnCount = 16
 )
 
@@ -81,11 +82,11 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	return encoder
 }
 
-func (c *JSONBatchEncoder) fillData(message *JSONMessage, columns []*model.Column, fillTypes bool) error {
-	if len(columns) == 0 {
-		return nil
-	}
-
+func (c *JSONBatchEncoder) fillData(
+	message *JSONMessage,
+	columns []*model.Column,
+	fillTypes bool,
+) error {
 	for _, col := range columns {
 		if col != nil {
 			mysqlType := getMySQLType(col)
@@ -113,14 +114,9 @@ func (c *JSONBatchEncoder) fillData(message *JSONMessage, columns []*model.Colum
 }
 
 func (c *JSONBatchEncoder) fillOldData(columns []*model.Column) error {
-	if len(columns) == 0 {
-		return nil
-	}
-
 	for k := range c.oldDataHolder {
 		delete(c.oldDataHolder, k)
 	}
-
 	for _, col := range columns {
 		if col.Value == nil {
 			c.oldDataHolder[col.Name] = nil
