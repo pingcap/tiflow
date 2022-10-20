@@ -343,7 +343,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	if cfg.TaskMode == dmconfig.ModeIncrement {
 		for _, inst := range cfg.Upstreams {
 			if inst.Meta == nil {
-				meta, err2 := master.GetNewestMeta(ctx, inst.Flavor, inst.DBCfg)
+				meta, err2 := master.GetLatestMeta(ctx, inst.Flavor, inst.DBCfg)
 				if err2 != nil {
 					return err2
 				}

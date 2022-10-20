@@ -2871,12 +2871,12 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
 }
 
-func (t *testMaster) TestGetNewestMeta(*check.C) {
+func (t *testMaster) TestGetLatestMeta(*check.C) {
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.testT, err)
 	getMasterStatusError := errors.New("failed to get master status")
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
-	meta, err := GetNewestMeta(context.Background(), "", &config.DBConfig{})
+	meta, err := GetLatestMeta(context.Background(), "", &config.DBConfig{})
 	require.Contains(t.testT, err.Error(), getMasterStatusError.Error())
 	require.Nil(t.testT, meta)
 
@@ -2884,7 +2884,7 @@ func (t *testMaster) TestGetNewestMeta(*check.C) {
 	require.NoError(t.testT, err)
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetNewestMeta(context.Background(), "", &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), "", &config.DBConfig{})
 	require.True(t.testT, terror.ErrNoMasterStatus.Equal(err))
 	require.Nil(t.testT, meta)
 
@@ -2895,7 +2895,7 @@ func (t *testMaster) TestGetNewestMeta(*check.C) {
 		"mysql-bin.000009", 11232, "do_db", "ignore_db", "",
 	)
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetNewestMeta(context.Background(), mysql.MySQLFlavor, &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &config.DBConfig{})
 	require.NoError(t.testT, err)
 	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
 	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
@@ -2910,7 +2910,7 @@ func (t *testMaster) TestGetNewestMeta(*check.C) {
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 	rows = mockDB.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
 	mockDB.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
-	meta, err = GetNewestMeta(context.Background(), mysql.MariaDBFlavor, &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &config.DBConfig{})
 	require.NoError(t.testT, err)
 	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
 	require.Equal(t.testT, meta.BinLogPos, uint32(11232))

@@ -1384,8 +1384,8 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 	return cfgs, nil
 }
 
-// GetNewestMeta gets newest meta(binlog name, pos, gtid) from upstream.
-func GetNewestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
+// GetLatestMeta gets newest meta(binlog name, pos, gtid) from upstream.
+func GetLatestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1654,7 +1654,7 @@ func (s *Server) generateSubTask(
 		for _, inst := range cfg.MySQLInstances {
 			if inst.Meta == nil {
 				sourceCfg := sourceCfgs[inst.SourceID]
-				meta, err2 := GetNewestMeta(ctx, sourceCfg.Flavor, &sourceCfg.From)
+				meta, err2 := GetLatestMeta(ctx, sourceCfg.Flavor, &sourceCfg.From)
 				if err2 != nil {
 					return nil, nil, err2
 				}
