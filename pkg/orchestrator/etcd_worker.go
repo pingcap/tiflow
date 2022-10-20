@@ -76,6 +76,7 @@ type EtcdWorker struct {
 
 	migrator     migrate.Migrator
 	ownerMetaKey string
+	isOwner      bool
 }
 
 type etcdWorkerMetrics struct {
@@ -132,7 +133,7 @@ func (worker *EtcdWorker) initMetrics() {
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
-
+	worker.isOwner = role == pkgutil.RoleOwner.String()
 	// migrate data here
 	err := worker.checkAndMigrateMetaData(ctx, role)
 	if err != nil {
@@ -229,7 +230,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				// handleEvent will apply the event to our internal `rawState`.
 				err = worker.handleEvent(ctx, event)
 				if err != nil {
-					return err
+					// This error means owner is resigned by itself,
+					// and we should exit etcd worker and campaign owner again.
+					return nil
 				}
 			}
 
@@ -353,11 +356,16 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 		if string(event.Kv.Key) == worker.ownerMetaKey {
-			log.Error("owner key is deleted externally, "+
-				"exit etcd worker and suicide the capture",
-				zap.String("ownerMetaKey", worker.ownerMetaKey),
-				zap.String("value", string(event.Kv.Value)))
-			return cerrors.ErrCaptureSuicide.GenWithStackByArgs()
+			if worker.isOwner {
+				err := cerrors.ErrNotOwner.GenWithStackByArgs()
+				log.Error("owner key is delete, it may causes by "+
+					"owner resign or externally delete operation"+
+					"exit etcd worker and campaign again",
+					zap.String("ownerMetaKey", worker.ownerMetaKey),
+					zap.String("value", string(event.Kv.Value)),
+					zap.Error(err))
+				return err
+			}
 		}
 	}
 	return nil
