@@ -4760,7 +4760,7 @@
           }
         },
         {
-          "datasource": "playground",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
