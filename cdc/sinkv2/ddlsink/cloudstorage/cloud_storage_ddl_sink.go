@@ -66,12 +66,12 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	return d, nil
 }
 
-func (d *ddlSink) generateSchemaPath(def cloudstorage.TableDef) string {
+func (d *ddlSink) generateSchemaPath(def cloudstorage.TableDetail) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.Version)
 }
 
 func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	var def cloudstorage.TableDef
+	var def cloudstorage.TableDetail
 
 	def.FromTableInfo(ddl.TableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
@@ -101,7 +101,7 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 		// if table is not cached before, then create the corresponding
 		// schema.json file anyway.
 		if !ok {
-			var def cloudstorage.TableDef
+			var def cloudstorage.TableDetail
 			def.FromTableInfo(table)
 
 			encodedDef, err := json.MarshalIndent(def, "", "    ")

@@ -311,7 +311,7 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 
 func TestBuildTableDefFromTableInfo(t *testing.T) {
 	var columns []*timodel.ColumnInfo
-	var def TableDef
+	var def TableDetail
 
 	tableInfo := &model.TableInfo{
 		TableInfoVersion: 100,

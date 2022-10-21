@@ -83,8 +83,8 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	}
 }
 
-// TableDef is the detailed table definition used for cloud storage sink.
-type TableDef struct {
+// TableDetail is the detailed table definition used for cloud storage sink.
+type TableDetail struct {
 	Table        string     `json:"Table"`
 	Schema       string     `json:"Schema"`
 	Version      uint64     `json:"Version"`
@@ -92,8 +92,8 @@ type TableDef struct {
 	TotalColumns int        `json:"TableColumnsTotal"`
 }
 
-// FromTableInfo converts from TableInfo to TableDef.
-func (t *TableDef) FromTableInfo(info *model.TableInfo) {
+// FromTableInfo converts from TableInfo to TableDetail.
+func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
 	t.Version = info.TableInfoVersion
