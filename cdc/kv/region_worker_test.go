@@ -62,9 +62,7 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[idx]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.RLock()
 				require.Equal(t, uint64(idx+1), s.requestID)
-				s.lock.RUnlock()
 			}
 		}()
 	}
@@ -79,10 +77,10 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[rand.Intn(regionCount)]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.Lock()
-				s.lastResolvedTs += 10
-				s.lock.Unlock()
+				lastResolvedTs := s.getLastResolvedTs()
+				s.updateResolvedTs(s.getLastResolvedTs() + 10)
 				rsm.setState(regionID, s)
+				require.GreaterOrEqual(t, s.getLastResolvedTs(), lastResolvedTs)
 			}
 		}()
 	}
@@ -95,9 +93,6 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 		require.Greater(t, s.lastResolvedTs, uint64(1000))
 		totalResolvedTs += s.lastResolvedTs
 	}
-	// 100 regions, initial resolved ts 1000;
-	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
-	require.Equal(t, uint64(100*1000+2000*10*concurrency), totalResolvedTs)
 }
 
 func TestRegionStateManagerBucket(t *testing.T) {
