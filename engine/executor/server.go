@@ -396,6 +396,7 @@ func (s *Server) Run(ctx context.Context) error {
 		limit, err := memory.MemTotal()
 		if err != nil {
 			log.L().Warn("get memory failed", zap.Error(err))
+			limit = 0
 		}
 		threshold := limit * 7 / 10
 		gctuner.Tuning(threshold)
