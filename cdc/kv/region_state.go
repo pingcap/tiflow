@@ -54,7 +54,6 @@ type regionFeedState struct {
 	requestID uint64
 	stopped   int32
 
-	//lock           sync.RWMutex
 	initialized    bool
 	matcher        *matcher
 	startFeedTime  time.Time
@@ -80,7 +79,7 @@ func (s *regionFeedState) markStopped() {
 }
 
 func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) != 0
+	return atomic.LoadInt32(&s.stopped) > 0
 }
 
 func (s *regionFeedState) isInitialized() bool {
@@ -91,16 +90,8 @@ func (s *regionFeedState) setInitialized() {
 	s.initialized = true
 }
 
-func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
-	return s.sri.span
-}
-
 func (s *regionFeedState) getRegionID() uint64 {
 	return s.sri.verID.GetID()
-}
-
-func (s *regionFeedState) getRequestID() uint64 {
-	return s.requestID
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
@@ -121,10 +112,6 @@ func (s *regionFeedState) setRegionInfoResolvedTs() {
 		return
 	}
 	s.sri.resolvedTs = s.lastResolvedTs
-}
-
-func (s *regionFeedState) getRegionInfoResolvedTs() uint64 {
-	return s.sri.resolvedTs
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {
@@ -181,8 +168,8 @@ func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFee
 
 func (m *syncRegionFeedStateMap) getByRegionID(regionID uint64) (*regionFeedState, bool) {
 	m.mu.RLock()
+	defer m.mu.RUnlock()
 	result, ok := m.states[regionID]
-	m.mu.RUnlock()
 	return result, ok
 }
 
