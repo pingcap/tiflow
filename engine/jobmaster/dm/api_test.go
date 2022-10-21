@@ -119,7 +119,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", frameModel.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
@@ -332,7 +332,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {

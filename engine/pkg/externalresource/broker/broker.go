@@ -418,6 +418,11 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
+func (b *DefaultBroker) IsS3StorageEnabled() bool {
+	_, ok := b.fileManagers[resModel.ResourceTypeS3]
+	return ok
+}
+
 // PreCheckConfig checks the configuration of external storage.
 func PreCheckConfig(config resModel.Config) error {
 	if config.LocalEnabled() {
