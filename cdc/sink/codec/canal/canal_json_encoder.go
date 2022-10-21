@@ -61,15 +61,21 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	messageHolder.SQLType = make(map[string]int32, defaultColumnCount)
 	messageHolder.MySQLType = make(map[string]string, defaultColumnCount)
 
+	messages := make([]*common.Message, 1)
+	messages[0] = &common.Message{
+		Protocol: config.ProtocolCanalJSON,
+		Type:     model.MessageTypeRow,
+	}
+	messages[0].IncRowsCount()
+
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		messageHolder:       messageHolder,
 		enableTiDBExtension: enableTiDBExtension,
-		// canal-json does not batch multiple messages, so only one message is delivered each time
-		messages: make([]*common.Message, 1),
-
 		// even though `oldDataHolder` is only used for `update` event, we still preallocate it
 		oldDataHolder: make(map[string]interface{}, defaultColumnCount),
+		// canal-json does not batch multiple messages, so only one message is delivered each time
+		messages: messages,
 	}
 
 	if enableTiDBExtension {
@@ -78,7 +84,6 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 			Extensions:  &tidbExtension{},
 		}
 	}
-
 	return encoder
 }
 
@@ -251,18 +256,19 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		log.Panic("JSONBatchEncoder", zap.Error(err))
 		return nil
 	}
-	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
-		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
-	m.IncRowsCount()
-	m.Callback = callback
 
-	c.messages[0] = m
+	c.messages[0].Value = value
+	c.messages[0].Ts = e.CommitTs
+	c.messages[0].Schema = c.messageHolder.getSchema()
+	c.messages[0].Table = c.messageHolder.getTable()
+	c.messages[0].Callback = callback
+
 	return nil
 }
 
 // Build implements the EventJSONBatchEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
-	if c.messages[0] == nil {
+	if c.messages[0].Value == nil {
 		return nil
 	}
 	return c.messages
