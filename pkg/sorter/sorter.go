@@ -28,7 +28,7 @@ type EventSortEngine interface {
 	// AddTable adds the table into the engine.
 	AddTable(tableID model.TableID)
 
-	// Remove removes the table from the engine.
+	// RemoveTable removes the table from the engine.
 	RemoveTable(tableID model.TableID)
 
 	// Add adds the given events into the sort engine.
