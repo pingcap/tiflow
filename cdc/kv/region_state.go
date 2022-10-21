@@ -54,7 +54,7 @@ type regionFeedState struct {
 	requestID uint64
 	stopped   int32
 
-	lock           sync.RWMutex
+	//lock           sync.RWMutex
 	initialized    bool
 	matcher        *matcher
 	startFeedTime  time.Time
@@ -75,101 +75,63 @@ func (s *regionFeedState) start() {
 	s.matcher = newMatcher()
 }
 
-func (s *regionFeedState) getStartTime() time.Time {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.startFeedTime
-}
-
 func (s *regionFeedState) markStopped() {
 	atomic.StoreInt32(&s.stopped, 1)
 }
 
 func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) > 0
+	return atomic.LoadInt32(&s.stopped) != 0
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.initialized
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 	s.initialized = true
 }
 
 func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.sri.span
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.sri.verID.GetID()
 }
 
 func (s *regionFeedState) getRequestID() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.requestID
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.lastResolvedTs
+	return atomic.LoadUint64(&s.lastResolvedTs)
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 	if resolvedTs > s.getLastResolvedTs() {
-		s.lock.Lock()
-		defer s.lock.Unlock()
-		s.lastResolvedTs = resolvedTs
+		atomic.StoreUint64(&s.lastResolvedTs, resolvedTs)
 	}
-}
-
-func (s *regionFeedState) getStoreAddr() string {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.sri.rpcCtx.Addr
 }
 
 // setRegionInfoResolvedTs is only called when the region disconnect,
 // to update the `singleRegionInfo` which is reused by reconnect.
 func (s *regionFeedState) setRegionInfoResolvedTs() {
-	s.lock.RLock()
-	if s.lastResolvedTs <= s.sri.resolvedTs {
-		s.lock.RUnlock()
+	if s.getLastResolvedTs() <= s.sri.resolvedTs {
 		return
 	}
-	s.lock.RUnlock()
-
-	s.lock.Lock()
-	defer s.lock.Unlock()
 	s.sri.resolvedTs = s.lastResolvedTs
 }
 
 func (s *regionFeedState) getRegionInfoResolvedTs() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.sri.resolvedTs
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.sri
 }
 
 func (s *regionFeedState) getRegionMeta() (uint64, regionspan.ComparableSpan, time.Time, string) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	return s.sri.verID.GetID(), s.sri.span, s.startFeedTime, s.sri.rpcCtx.Addr
 }
 
@@ -219,8 +181,8 @@ func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFee
 
 func (m *syncRegionFeedStateMap) getByRegionID(regionID uint64) (*regionFeedState, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	result, ok := m.states[regionID]
+	m.mu.RUnlock()
 	return result, ok
 }
 

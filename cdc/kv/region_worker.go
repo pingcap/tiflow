@@ -727,7 +727,7 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
+		if state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
@@ -762,7 +762,7 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
+		if state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		state.updateResolvedTs(resolvedTs)
