@@ -50,6 +50,9 @@ type Config struct {
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	Labels map[string]string `toml:"labels" json:"labels"`
+	// ExclusivelyDeployed means only one executor is deployed in the container/machine,
+	// which means it can consume almost all the resources of the container/machine.
+	ExclusivelyDeployed bool `toml:"exclusively-deployed" json:"exclusively-deployed"`
 
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -144,6 +147,7 @@ func GetDefaultExecutorConfig() *Config {
 		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
+		ExclusivelyDeployed:  true, // currently 1 container 1 executor
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
