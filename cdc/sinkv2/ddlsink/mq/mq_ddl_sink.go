@@ -129,7 +129,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 }
 
 func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
-	ts uint64, tables []model.TableName,
+	ts uint64, tables []*model.TableInfo,
 ) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -153,7 +153,11 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	topics := k.eventRouter.GetActiveTopics(tables)
+	var tableNames []model.TableName
+	for _, table := range tables {
+		tableNames = append(tableNames, table.TableName)
+	}
+	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
