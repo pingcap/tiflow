@@ -155,10 +155,12 @@ function test_owner_retryable_error() {
 	# resign the first capture, the second capture campaigns to be owner.
 	# However we have injected two failpoints, the second capture owner runs
 	# with error and before it exits resign owner also failed, so the second
-	# capture will exit and the first capture campaigns to be owner again.
+	# capture will restart and the first capture campaigns to be owner again.
 	curl -X POST http://127.0.0.1:8300/capture/owner/resign
 	ensure $MAX_RETRIES "ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/owner --prefix | grep  '$owner_id'"
-	ensure $MAX_RETRIES "ps -C $CDC_BINARY -o pid= | awk '{print \$1}' | wc -l | grep 1"
+	# The second capture will restart but not exit, so there are two capture servers.
+	# So the wc -l will be 2.
+	ensure $MAX_RETRIES "ps -C $CDC_BINARY -o pid= | awk '{print \$1}' | wc -l | grep 2"
 	echo "test_owner_retryable_error pass"
 	export GO_FAILPOINTS=''
 	cleanup_process $CDC_BINARY
