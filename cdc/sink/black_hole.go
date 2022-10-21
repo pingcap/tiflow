@@ -80,7 +80,7 @@ func (b *blackHoleSink) FlushRowChangedEvents(
 	return resolved, err
 }
 
-func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
+func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*model.TableInfo) error {
 	log.Debug("BlockHoleSink: Checkpoint Event", zap.Uint64("ts", ts), zap.Any("tables", tables))
 	return nil
 }
