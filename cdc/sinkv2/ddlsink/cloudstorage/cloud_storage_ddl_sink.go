@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
 // Assert DDLEventSink implementation
@@ -65,14 +66,14 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	return d, nil
 }
 
-func (d *ddlSink) generateSchemaPath(def tableDef) string {
+func (d *ddlSink) generateSchemaPath(def cloudstorage.TableDef) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.Version)
 }
 
 func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	var def tableDef
+	var def cloudstorage.TableDef
 
-	def.fromTableInfo(ddl.TableInfo)
+	def.FromTableInfo(ddl.TableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	if err != nil {
 		return errors.Trace(err)
@@ -97,9 +98,11 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 ) error {
 	for _, table := range tables {
 		ok := d.tables.Contain(table.ID)
+		// if table is not cached before, then create the corresponding
+		// schema.json file anyway.
 		if !ok {
-			var def tableDef
-			def.fromTableInfo(table)
+			var def cloudstorage.TableDef
+			def.FromTableInfo(table)
 
 			encodedDef, err := json.MarshalIndent(def, "", "    ")
 			if err != nil {

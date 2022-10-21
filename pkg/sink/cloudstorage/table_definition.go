@@ -22,7 +22,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-type tableColumn struct {
+// TableCol denotes the column info for a table definition.
+type TableCol struct {
 	Name      string `json:"ColumnName" `
 	Tp        string `json:"ColumnType"`
 	Length    string `json:"ColumnLength,omitempty"`
@@ -32,7 +33,8 @@ type tableColumn struct {
 	IsPK      string `json:"ColumnIsPk,omitempty"`
 }
 
-func (t *tableColumn) fromTiColumnInfo(col *timodel.ColumnInfo) {
+// FromTiColumnInfo converts from TiDB ColumnInfo to TableCol.
+func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(col.GetType())
 	isDecimalNotDefault := col.GetDecimal() != defaultDecimal &&
 		col.GetDecimal() != 0 &&
@@ -81,22 +83,24 @@ func (t *tableColumn) fromTiColumnInfo(col *timodel.ColumnInfo) {
 	}
 }
 
-type tableDef struct {
-	Table        string        `json:"Table"`
-	Schema       string        `json:"Schema"`
-	Version      uint64        `json:"Version"`
-	Columns      []tableColumn `json:"TableColumns"`
-	TotalColumns int           `json:"TableColumnsTotal"`
+// TableDef is the detailed table definition used for cloud storage sink.
+type TableDef struct {
+	Table        string     `json:"Table"`
+	Schema       string     `json:"Schema"`
+	Version      uint64     `json:"Version"`
+	Columns      []TableCol `json:"TableColumns"`
+	TotalColumns int        `json:"TableColumnsTotal"`
 }
 
-func (t *tableDef) fromTableInfo(info *model.TableInfo) {
+// FromTableInfo converts from TableInfo to TableDef.
+func (t *TableDef) FromTableInfo(info *model.TableInfo) {
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
 	t.Version = info.TableInfoVersion
 	t.TotalColumns = len(info.Columns)
 	for _, col := range info.Columns {
-		var tableCol tableColumn
-		tableCol.fromTiColumnInfo(col)
+		var tableCol TableCol
+		tableCol.FromTiColumnInfo(col)
 		t.Columns = append(t.Columns, tableCol)
 	}
 }

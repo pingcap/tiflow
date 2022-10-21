@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-
 	"github.com/stretchr/testify/require"
 )
 

@@ -19,11 +19,10 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildTableColFromTiColumnInfo(t *testing.T) {
@@ -302,8 +301,8 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 			ft.SetFlag(tc.flag)
 		}
 		col := &timodel.ColumnInfo{FieldType: *ft}
-		var tableCol tableColumn
-		tableCol.fromTiColumnInfo(col)
+		var tableCol TableCol
+		tableCol.FromTiColumnInfo(col)
 		encodedCol, err := json.Marshal(tableCol)
 		require.Nil(t, err, tc.name)
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
@@ -312,7 +311,7 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 
 func TestBuildTableDefFromTableInfo(t *testing.T) {
 	var columns []*timodel.ColumnInfo
-	var def tableDef
+	var def TableDef
 
 	tableInfo := &model.TableInfo{
 		TableInfoVersion: 100,
@@ -343,7 +342,7 @@ func TestBuildTableDefFromTableInfo(t *testing.T) {
 	columns = append(columns, col)
 
 	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
-	def.fromTableInfo(tableInfo)
+	def.FromTableInfo(tableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	require.Nil(t, err)
 	fmt.Println(string(encodedDef))

@@ -285,24 +285,29 @@ type ProcInfoSnap struct {
 	CaptureID string       `json:"capture-id"`
 }
 
+// TableSet maintains a set of TableID.
 type TableSet struct {
 	memo map[TableID]struct{}
 }
 
+// NewTableSet creates a TableSet.
 func NewTableSet() *TableSet {
 	return &TableSet{
 		memo: make(map[TableID]struct{}),
 	}
 }
 
+// Add adds a tableID to TableSet.
 func (s *TableSet) Add(tableID TableID) {
 	s.memo[tableID] = struct{}{}
 }
 
+// Remove removes a tableID from a TableSet.
 func (s *TableSet) Remove(tableID TableID) {
 	delete(s.memo, tableID)
 }
 
+// Keys returns a collection of TableID.
 func (s *TableSet) Keys() []TableID {
 	result := make([]TableID, 0, len(s.memo))
 	for k := range s.memo {
@@ -311,11 +316,13 @@ func (s *TableSet) Keys() []TableID {
 	return result
 }
 
+// Contain checks whether a TableID is in TableSet.
 func (s *TableSet) Contain(tableID TableID) bool {
 	_, ok := s.memo[tableID]
 	return ok
 }
 
+// Size returns the size of TableSet.
 func (s *TableSet) Size() int {
 	return len(s.memo)
 }
