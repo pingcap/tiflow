@@ -418,6 +418,7 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
+// IsS3StorageEnabled returns true if s3 storage is enabled.
 func (b *DefaultBroker) IsS3StorageEnabled() bool {
 	_, ok := b.fileManagers[resModel.ResourceTypeS3]
 	return ok
