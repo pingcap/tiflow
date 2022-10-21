@@ -212,15 +212,17 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	finishedStateStore := jm.metadata.FinishedStateStore()
 	err := finishedStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.FinishedState) error {
+		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
+			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
+			if status.Unit == taskStatus.Unit {
+				state.FinishedUnitStatus[taskStatus.Task][i] = &finishedTaskStatus
+				state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:i+1]
+				return nil
+			}
+		}
 		state.FinishedUnitStatus[taskStatus.Task] = append(
 			state.FinishedUnitStatus[taskStatus.Task], &finishedTaskStatus,
 		)
-		length := len(state.FinishedUnitStatus[taskStatus.Task])
-		// avoid duplicate append
-		if length >= 2 && state.FinishedUnitStatus[taskStatus.Task][length-1].Unit == state.FinishedUnitStatus[taskStatus.Task][length-2].Unit {
-			state.FinishedUnitStatus[taskStatus.Task][length-2] = state.FinishedUnitStatus[taskStatus.Task][length-1]
-			state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:length-1]
-		}
 		return nil
 	})
 	if err != nil {
@@ -392,7 +394,6 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	if err != nil {
 		jm.Logger().Error("failed to get status", zap.Error(err))
 	} else {
-		// here
 		detail = status.ExtBytes
 	}
 
