@@ -40,7 +40,7 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context,
 }
 
 func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
-	ts uint64, tables []model.TableName,
+	ts uint64, tables []*model.TableInfo,
 ) error {
 	log.Debug("BlackHoleSink: Checkpoint Ts Event", zap.Uint64("ts", ts), zap.Any("tables", tables))
 	return nil

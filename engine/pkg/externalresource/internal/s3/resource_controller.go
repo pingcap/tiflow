@@ -36,6 +36,7 @@ type resourceController struct {
 
 // NewResourceController creates a new s3 resourceController.
 func NewResourceController(config resModel.S3Config) *resourceController {
+	log.Debug("create s3 resource controller", zap.Any("config", config))
 	fm := NewFileManagerWithConfig(defaultControllerID, config)
 	return &resourceController{fm: fm}
 }

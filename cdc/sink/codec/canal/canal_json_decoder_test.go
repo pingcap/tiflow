@@ -25,7 +25,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		encoder := newJSONBatchEncoder(encodeEnable)
 		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)

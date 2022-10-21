@@ -14,10 +14,18 @@
 package s3
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"path/filepath"
+	"testing"
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -55,4 +63,57 @@ func GetS3OptionsForUT() (*brStorage.S3BackendOptions, error) {
 		Provider:        "minio",
 		ForcePathStyle:  true,
 	}, nil
+}
+
+type mockExternalStorageFactory struct {
+	baseDir string
+	bucket  string
+}
+
+func newMockExternalStorageFactory(tempDir string, bucket string) *mockExternalStorageFactory {
+	return &mockExternalStorageFactory{
+		baseDir: tempDir,
+		bucket:  bucket,
+	}
+}
+
+func (f *mockExternalStorageFactory) newS3ExternalStorageForScope(
+	ctx context.Context, scope internal.ResourceScope,
+) (brStorage.ExternalStorage, error) {
+	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
+	return f.newS3ExternalStorageFromURI(ctx, uri)
+}
+
+func (f *mockExternalStorageFactory) newS3ExternalStorageFromURI(
+	ctx context.Context,
+	uri string,
+) (brStorage.ExternalStorage, error) {
+	return brStorage.NewLocalStorage(uri)
+}
+
+func (f *mockExternalStorageFactory) baseURI() string {
+	return fmt.Sprintf("%s/%s", f.baseDir, f.bucket)
+}
+
+func (f *mockExternalStorageFactory) assertFileExists(t *testing.T, uri string) {
+	require.FileExists(t, filepath.Join(f.baseDir, uri))
+}
+
+func (f *mockExternalStorageFactory) assertFileNotExist(t *testing.T, uri string) {
+	require.NoFileExists(t, filepath.Join(f.baseDir, uri))
+}
+
+// NewFileManagerForUT returns a file manager for UT.
+func NewFileManagerForUT(tempDir string, executorID resModel.ExecutorID) (*FileManager, *mockExternalStorageFactory) {
+	factory := newMockExternalStorageFactory(tempDir, UtBucketName)
+	return NewFileManager(
+		executorID,
+		factory,
+	), factory
+}
+
+func newFileManagerForUTFromSharedStorageFactory(
+	executorID model.ExecutorID, factory *mockExternalStorageFactory,
+) *FileManager {
+	return NewFileManager(MockExecutorID, factory)
 }

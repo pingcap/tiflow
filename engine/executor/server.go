@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -72,8 +71,7 @@ const (
 
 // Server is an executor server.
 type Server struct {
-	cfg     *Config
-	testCtx *test.Context
+	cfg *Config
 
 	tcpServer     tcpserver.TCPServer
 	grpcSrv       *grpc.Server
@@ -96,13 +94,12 @@ type Server struct {
 }
 
 // NewServer creates a new executor server instance
-func NewServer(cfg *Config, ctx *test.Context) *Server {
+func NewServer(cfg *Config) *Server {
 	log.Info("creating executor", zap.Stringer("config", cfg))
 
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:        cfg,
-		testCtx:    ctx,
 		jobAPISrv:  newJobAPIServer(),
 		metastores: server.NewMetastoreManager(),
 	}
@@ -374,27 +371,6 @@ func (s *Server) Stop() {
 	// TODO: unregister self from master.
 }
 
-func (s *Server) startForTest(ctx context.Context) (err error) {
-	s.mockSrv, err = mock.NewExecutorServer(s.cfg.Addr, s)
-	if err != nil {
-		return err
-	}
-
-	err = s.initClients()
-	if err != nil {
-		return err
-	}
-	err = s.selfRegister(ctx)
-	if err != nil {
-		return err
-	}
-	go func() {
-		err := s.keepHeartbeat(ctx)
-		log.L().Info("heartbeat quits", zap.Error(err))
-	}()
-	return nil
-}
-
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
 	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.selfID), nil, s.grpcSrv)
 	if err != nil {
@@ -414,10 +390,6 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
-	if test.GetGlobalTestFlag() {
-		return s.startForTest(ctx)
-	}
-
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
@@ -444,11 +416,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
-		return err
-	}
-
-	s.resourceBroker, err = broker.NewBroker(&s.cfg.Storage, s.selfID, s.masterClient)
+	s.resourceBroker, err = broker.NewBroker(ctx, s.selfID, s.masterClient)
 	if err != nil {
 		return err
 	}
@@ -655,14 +623,6 @@ func (s *Server) selfRegister(ctx context.Context) error {
 func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
-	defer func() {
-		if test.GetGlobalTestFlag() {
-			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
-				Tp:   test.Delete,
-				Time: time.Now(),
-			})
-		}
-	}()
 	rl := rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/)
 	for {
 		select {

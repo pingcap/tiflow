@@ -435,7 +435,7 @@ func (n *sinkNode) Stats() Stats {
 	return Stats{
 		CheckpointTs: n.CheckpointTs(),
 		ResolvedTs:   n.getResolvedTs().Ts,
-		BarrierTs:    n.barrierTs,
+		BarrierTs:    n.BarrierTs(),
 	}
 }
 

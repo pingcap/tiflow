@@ -172,3 +172,30 @@ services:
       interval: 10s
       timeout: 600s
       retries: 60
+  minio-standalone:
+    image: minio/minio
+    container_name: minio-standalone
+    command: server --console-address ":9001" /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: engine
+      MINIO_ROOT_PASSWORD: engineSecret
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 60s
+      retries: 6
+  minio-createbuckets:
+    image: minio/mc
+    container_name: minio-createbuckets
+    depends_on:
+      - minio-standalone
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio-standalone:9000 engine engineSecret || exit 1;
+      /usr/bin/mc mb myminio/engine-it || exit 1;
+      /usr/bin/mc version enable myminio/engine-ut;
+      exit 0;
+      "

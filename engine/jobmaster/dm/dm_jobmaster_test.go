@@ -217,6 +217,20 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("Exit").Return(exitError).Once()
 	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
 
+	jm.initJobCfg.TaskMode = dmconfig.ModeIncrement
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t.T(), err)
+	getMasterStatusError := errors.New("failed to get master status")
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
+	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockBaseJobmaster.On("Exit").Return(exitError).Once()
+	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
+
+	jm.initJobCfg.TaskMode = dmconfig.ModeAll
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
