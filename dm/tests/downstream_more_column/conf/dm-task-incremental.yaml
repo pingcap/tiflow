@@ -21,8 +21,6 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
-    meta:
-      binlog-gtid: binlog-gtid-placeholder
 
 black-white-list: # compatible with deprecated config
   instance:

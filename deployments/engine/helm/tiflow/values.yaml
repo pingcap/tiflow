@@ -43,8 +43,6 @@ executor:
   config: |
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
-    session-ttl = 20
-
 metastore:
   frameworkStorage: 5Gi
   businessStorage: 5Gi

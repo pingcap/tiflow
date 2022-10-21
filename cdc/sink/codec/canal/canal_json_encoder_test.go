@@ -153,37 +153,6 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.CommitTs, withExtension.Extensions.CommitTs)
 }
 
-func TestBatching(t *testing.T) {
-	t.Parallel()
-	encoder := newJSONBatchEncoder(false)
-	require.NotNil(t, encoder)
-
-	updateCase := *testCaseUpdate
-	for i := 1; i <= 1000; i++ {
-		ts := uint64(i)
-		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
-		require.Nil(t, err)
-
-		if i%100 == 0 {
-			msgs := encoder.Build()
-			require.NotNil(t, msgs)
-			require.Len(t, msgs, 100)
-
-			for j := range msgs {
-				require.Equal(t, 1, msgs[j].GetRowsCount())
-
-				var msg JSONMessage
-				err := json.Unmarshal(msgs[j].Value, &msg)
-				require.Nil(t, err)
-				require.Equal(t, "UPDATE", msg.EventType)
-			}
-		}
-	}
-
-	require.Len(t, encoder.(*JSONBatchEncoder).messages, 0)
-}
-
 func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
@@ -312,6 +281,10 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	encoder := newJSONBatchEncoder(true)
 	require.NotNil(t, encoder)
 
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
 	count := 0
 
 	row := &model.RowChangedEvent{
@@ -324,63 +297,26 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
-	}
-
-	// Empty build makes sure that the callback build logic not broken.
-	msgs := encoder.Build()
-	require.Len(t, msgs, 0, "no message should be built and no panic")
-
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.Nil(t, err)
-	}
-	require.Equal(t, 0, count, "nothing should be called")
+	ctx := context.Background()
+	err := encoder.AppendRowChangedEvent(ctx, "", row, func() {
+		count += 1
+	})
+	require.NoError(t, err)
 
 	msgs = encoder.Build()
-	require.Len(t, msgs, 5, "expected 5 messages")
+	require.Len(t, msgs, 1, "only 1 message")
+
 	msgs[0].Callback()
-	require.Equal(t, 1, count, "expected one callback be called")
-	msgs[1].Callback()
-	require.Equal(t, 3, count, "expected one callback be called")
-	msgs[2].Callback()
-	require.Equal(t, 6, count, "expected one callback be called")
-	msgs[3].Callback()
-	require.Equal(t, 10, count, "expected one callback be called")
-	msgs[4].Callback()
-	require.Equal(t, 15, count, "expected one callback be called")
+	require.Equal(t, 1, count, "expect callback be called")
+
+	err = encoder.AppendRowChangedEvent(ctx, "", row, func() {
+		count += 2
+	})
+	require.NoError(t, err)
+
+	msgs = encoder.Build()
+	require.Len(t, msgs, 1, "only 1 message")
+
+	msgs[0].Callback()
+	require.Equal(t, 3, count, "expect callbacks be called")
 }

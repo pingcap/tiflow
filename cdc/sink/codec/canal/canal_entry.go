@@ -43,12 +43,14 @@ const (
 
 type canalEntryBuilder struct {
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
+	rawValue     []byte
 }
 
 // newCanalEntryBuilder creates a new canalEntryBuilder
 func newCanalEntryBuilder() *canalEntryBuilder {
 	return &canalEntryBuilder{
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		rawValue:     make([]byte, 0, 16),
 	}
 }
 
@@ -86,15 +88,15 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 	switch v := value.(type) {
 	case int64:
-		result = strconv.FormatInt(v, 10)
+		b.rawValue = strconv.AppendInt(b.rawValue, v, 10)
 	case uint64:
-		result = strconv.FormatUint(v, 10)
+		b.rawValue = strconv.AppendUint(b.rawValue, v, 10)
 	case float32:
-		result = strconv.FormatFloat(float64(v), 'f', -1, 32)
+		b.rawValue = strconv.AppendFloat(b.rawValue, float64(v), 'f', -1, 32)
 	case float64:
-		result = strconv.FormatFloat(v, 'f', -1, 64)
+		b.rawValue = strconv.AppendFloat(b.rawValue, v, 'f', -1, 64)
 	case string:
-		result = v
+		return v, nil
 	case []byte:
 		//  JavaSQLTypeVARCHAR / JavaSQLTypeCHAR / JavaSQLTypeBLOB / JavaSQLTypeCLOB /
 		// special handle for text and blob
@@ -102,18 +104,21 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 		switch javaType {
 		// for normal text
 		case internal.JavaSQLTypeVARCHAR, internal.JavaSQLTypeCHAR, internal.JavaSQLTypeCLOB:
-			result = string(v)
+			return string(v), nil
 		default:
 			// JavaSQLTypeBLOB
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
 			}
-			result = string(decoded)
+			return string(decoded), nil
 		}
 	default:
-		result = fmt.Sprintf("%v", v)
+		return fmt.Sprintf("%v", v), nil
 	}
+
+	result = string(b.rawValue)
+	b.rawValue = b.rawValue[:0]
 	return result, nil
 }
 

@@ -30,7 +30,6 @@ import (
 
 var (
 	defaultJoinAddr          = "127.0.0.1:10240"
-	defaultSessionTTL        = 20
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
@@ -51,8 +50,6 @@ type Config struct {
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	Labels map[string]string `toml:"labels" json:"labels"`
-
-	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
 
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -147,7 +144,6 @@ func GetDefaultExecutorConfig() *Config {
 		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
-		SessionTTL:           defaultSessionTTL,
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
