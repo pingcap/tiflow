@@ -76,7 +76,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	ticdcutil.LogHTTPProxies()
 
-	server := executor.NewServer(o.executorConfig, nil)
+	server := executor.NewServer(o.executorConfig)
 
 	err = server.Run(cmdconetxt.GetDefaultContext())
 	if err != nil && errors.Cause(err) != context.Canceled {

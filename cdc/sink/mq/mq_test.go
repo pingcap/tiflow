@@ -125,9 +125,11 @@ func TestKafkaSink(t *testing.T) {
 	require.Equal(t, uint64(120), checkpoint.Ts)
 
 	// mock kafka broker processes 1 checkpoint ts event
-	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
-		Schema: "test",
-		Table:  "t1",
+	err = sink.EmitCheckpointTs(ctx, uint64(120), []*model.TableInfo{{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
 	}})
 	require.Nil(t, err)
 	defer func() {
