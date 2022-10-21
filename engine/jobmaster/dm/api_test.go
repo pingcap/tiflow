@@ -491,8 +491,8 @@ func TestBinlogSchema(t *testing.T) {
 	resp := jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{})
 	require.Equal(t, "must specify at least one source", resp.ErrorMsg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
-	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
 	resp = jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{Sources: []string{"task1", "task2"}})
 	require.Equal(t, "", resp.ErrorMsg)
 	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
