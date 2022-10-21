@@ -90,7 +90,6 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 func (c *JSONBatchEncoder) fillData(
 	message *JSONMessage,
 	columns []*model.Column,
-	fillTypes bool,
 ) error {
 	for _, col := range columns {
 		if col != nil {
@@ -99,11 +98,8 @@ func (c *JSONBatchEncoder) fillData(
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
-			if fillTypes {
-				message.SQLType[col.Name] = int32(javaType)
-				message.MySQLType[col.Name] = mysqlType
-			}
-
+			message.SQLType[col.Name] = int32(javaType)
+			message.MySQLType[col.Name] = mysqlType
 			if col.Value == nil {
 				message.Data[0][col.Name] = nil
 			} else {
@@ -123,9 +119,11 @@ func (c *JSONBatchEncoder) fillOldData(columns []*model.Column) error {
 		delete(c.oldDataHolder, k)
 	}
 	for _, col := range columns {
-		if col.Value == nil {
-			c.oldDataHolder[col.Name] = nil
-		} else {
+		if col != nil {
+			if col.Value == nil {
+				c.oldDataHolder[col.Name] = nil
+				continue
+			}
 			javaType, err := getJavaSQLType(col, getMySQLType(col))
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -150,12 +148,12 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	baseMessage.reset()
 
 	if e.IsDelete() {
-		if err := c.fillData(baseMessage, e.PreColumns, true); err != nil {
+		if err := c.fillData(baseMessage, e.PreColumns); err != nil {
 			return err
 		}
 		baseMessage.EventType = "DELETE"
 	} else if e.IsInsert() {
-		if err := c.fillData(baseMessage, e.Columns, true); err != nil {
+		if err := c.fillData(baseMessage, e.Columns); err != nil {
 			return err
 		}
 		baseMessage.EventType = "INSERT"
@@ -165,7 +163,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 		}
 		baseMessage.Old = []map[string]interface{}{c.oldDataHolder}
 
-		if err := c.fillData(baseMessage, e.Columns, true); err != nil {
+		if err := c.fillData(baseMessage, e.Columns); err != nil {
 			return err
 		}
 		baseMessage.EventType = "UPDATE"
