@@ -332,7 +332,7 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 }
 
 func (w *dmWorker) discardResource4Syncer(ctx context.Context) {
-	if w.workerType != frameModel.WorkerDMSync || !w.needExtStorage {
+	if w.storageWriteHandle == nil || w.workerType != frameModel.WorkerDMSync || !w.needExtStorage {
 		return
 	}
 	impl, ok := w.unitHolder.(*unitHolderImpl)
