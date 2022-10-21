@@ -17,12 +17,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"net"
 	"net/url"
 	"strings"
 	"time"
 
-	dmysql "github.com/go-sql-driver/mysql"
+	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -82,7 +83,7 @@ func newMySQLSyncPointStore(
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
 		name := "cdc_mysql_tls" + "syncpoint" + id.ID
-		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		err = gmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
@@ -116,7 +117,7 @@ func newMySQLSyncPointStore(
 	host := net.JoinHostPort(sinkURI.Hostname(), port)
 
 	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, tlsParam)
-	dsn, err := dmysql.ParseDSN(dsnStr)
+	dsn, err := gmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -231,6 +232,22 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
+	// set global tidb_external_ts to secondary ts
+	query = fmt.Sprintf("set global tidb_external_ts = %s", secondaryTs)
+	_, err = tx.Exec(query)
+	if err != nil {
+		if errorutil.IsSyncPointIgnoreError(err) {
+			// TODO(dongmen): to confirm if we need to log this error.
+			log.Warn("set global external ts failed, ignore this error", zap.Error(err))
+		} else {
+			err2 := tx.Rollback()
+			if err2 != nil {
+				log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			}
+			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+		}
+	}
+
 	// clean stale ts map in downstream
 	if time.Since(s.lastCleanSyncPointTime) >= s.syncPointRetention {
 		query = fmt.Sprintf(
@@ -243,11 +260,8 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			s.syncPointRetention.Seconds())
 		_, err = tx.Exec(query)
 		if err != nil {
-			err2 := tx.Rollback()
-			// It is ok to ignore the error, since clear sync point is not necessary.
-			if err2 != nil {
-				log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
-			}
+			// It is ok to ignore the error, since clean sync point is not necessary.
+			log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err)))
 		}
 		s.lastCleanSyncPointTime = time.Now()
 		log.Info("clean outdate syncpoint successfully", zap.String("query", query))

@@ -111,3 +111,19 @@ func TestIsRetryableDDLError(t *testing.T) {
 		require.Equal(t, c.ret, IsRetryableDDLError(c.err))
 	}
 }
+
+func TestIsSyncPointIgnoreError(t *testing.T) {
+	cases := []struct {
+		err error
+		ret bool
+	}{
+		{errors.New("raw error"), false},
+		{newMysqlErr(tmysql.ErrDupKeyName, "Error: Duplicate key name 'some_key'"), false},
+		{newMysqlErr(tmysql.ErrNoDB, "Error: Duplicate key name 'some_key'"), false},
+		{newMysqlErr(tmysql.ErrParse, "Can't create database"), false},
+		{newMysqlErr(tmysql.ErrUnknownSystemVariable, "Unknown system variable"), true},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.ret, IsSyncPointIgnoreError(c.err))
+	}
+}
