@@ -8,17 +8,13 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 const DefaultPluginPath = "/home/ubuntu/cdc_wasm_plugins"
 
-type WasmPluginConfig struct {
-	Name   string
-	Binary string
-}
-
 func (h *openAPI) UploadWasmPlugin(c *gin.Context) {
-	var cfg WasmPluginConfig
+	var cfg model.WasmPluginConfig
 	if err := c.BindJSON(&cfg); err != nil {
 		_ = c.Error(err)
 		return
@@ -52,14 +48,14 @@ func saveWasmPlugin(name string, binary string) error {
 	return err
 }
 
-func listWasmPlugins(withBinary bool) ([]*WasmPluginConfig, error) {
+func listWasmPlugins(withBinary bool) ([]*model.WasmPluginConfig, error) {
 	infos, err := ioutil.ReadDir(DefaultPluginPath)
 	if err != nil {
 		return nil, err
 	}
-	var rets []*WasmPluginConfig
+	var rets []*model.WasmPluginConfig
 	for _, info := range infos {
-		ret := &WasmPluginConfig{
+		ret := &model.WasmPluginConfig{
 			Name: info.Name(),
 		}
 		if withBinary {
