@@ -104,7 +104,7 @@ build-failpoint: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 cdc:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' --ldflags '-extldflags="-Wl,--allow-multiple-definition"' -o bin/cdc ./cmd/cdc/main.go
 
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
