@@ -107,6 +107,10 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	// capture API
 	captureGroup := v1.Group("/captures")
 	captureGroup.GET("", api.ListCapture)
+
+	pluginGroup := v1.Group("/plugins")
+	pluginGroup.POST("/wasm/:name", api.UploadWasmPlugin)
+	pluginGroup.GET("/wasm", api.ListWasmPlugins)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
