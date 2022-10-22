@@ -27,7 +27,6 @@ func NewWasmPlugin(guest []byte) (*WasmPluginWrapper, error) {
 		Logger: defaultLogger,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
-		FS:     os.DirFS("/"),
 	})
 	if err != nil {
 		return nil, err

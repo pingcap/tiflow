@@ -280,4 +280,4 @@ replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
 
-replace github.com/wapc/wapc-go => ../../wapc/wapc-go
+replace github.com/wapc/wapc-go => github.com/eastfisher/wapc-go v0.0.0-20221007142003-56fedd79348f
