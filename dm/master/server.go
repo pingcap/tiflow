@@ -509,12 +509,12 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	if err != nil {
 		return respWithErr(err)
 	}
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
-	if err != nil {
-		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
-		return resp, nil
-	}
-	resp.CheckResult = msg
+	//msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	//if err != nil {
+	//	resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
+	//	return resp, nil
+	//}
+	//resp.CheckResult = msg
 
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
@@ -1331,9 +1331,9 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 		if err != nil {
 			return cfgs, err
 		}
-		if err := checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg); err != nil {
-			return cfgs, err
-		}
+		//if err := checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg); err != nil {
+		//	return cfgs, err
+		//}
 		cfgs[i] = cfg
 	}
 	return cfgs, nil

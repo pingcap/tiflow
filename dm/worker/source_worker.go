@@ -144,6 +144,9 @@ func (w *SourceWorker) Start() {
 	}
 
 	var err error
+	w.l.Info("start running")
+	w.closed.Store(false)
+	return
 	w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
 	if err != nil {
 		w.l.Error("can't connected to upstream", zap.Error(err))
@@ -256,6 +259,11 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	} else {
 		cfg = w.cfg
 	}
+
+	w.sourceStatus.Store(&binlog.SourceStatus{
+		UpdateTime: time.Now(),
+	})
+	return nil
 	w.sourceDBMu.Lock()
 	if w.sourceDB == nil {
 		var err error

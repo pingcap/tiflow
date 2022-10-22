@@ -365,14 +365,15 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		failpoint.Return()
 	})
 
-	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
-	if err != nil {
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
-		pr <- pb.ProcessResult{
-			Errors: []*pb.ProcessError{unit.NewProcessError(err)},
-		}
-		return
-	}
+	//binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
+	//if err != nil {
+	//	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
+	//	pr <- pb.ProcessResult{
+	//		Errors: []*pb.ProcessError{unit.NewProcessError(err)},
+	//	}
+	//	return
+	//}
+	binlog, gtid := "", ""
 	if binlog != "" {
 		l.metaBinlog.Store(binlog)
 	}

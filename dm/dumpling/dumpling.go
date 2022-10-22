@@ -166,6 +166,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		dumpling *export.Dumper
 		err      error
 	)
+	m.dumpConfig.SQLType = "postgresql"
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling
@@ -320,6 +321,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.Password = db.Password
 	dumpConfig.OutputDirPath = cfg.Dir // use LoaderConfig.Dir as output dir
 	dumpConfig.CollationCompatible = cfg.CollationCompatible
+	dumpConfig.Databases = []string{"test"}
 	tableFilter, err := filter.ParseMySQLReplicationRules(cfg.BAList)
 	if err != nil {
 		return nil, err
@@ -328,23 +330,23 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.CompleteInsert = true // always keep column name in `INSERT INTO` statements.
 	dumpConfig.Logger = m.logger.Logger
 
-	tz := m.cfg.Timezone
-	if len(tz) == 0 {
-		// use target db time_zone as default
-		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
-		if err2 != nil {
-			return nil, err2
-		}
-		defer baseDB.Close()
-		var err1 error
-		tz, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
-		if err1 != nil {
-			return nil, err1
-		}
-	}
-	dumpConfig.SessionParams = map[string]interface{}{
-		"time_zone": tz,
-	}
+	//tz := m.cfg.Timezone
+	//if len(tz) == 0 {
+	//	// use target db time_zone as default
+	//	baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+	//	if err2 != nil {
+	//		return nil, err2
+	//	}
+	//	defer baseDB.Close()
+	//	var err1 error
+	//	tz, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
+	//	if err1 != nil {
+	//		return nil, err1
+	//	}
+	//}
+	//dumpConfig.SessionParams = map[string]interface{}{
+	//	"time_zone": tz,
+	//}
 
 	if cfg.Threads > 0 {
 		dumpConfig.Threads = cfg.Threads
@@ -401,7 +403,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	}
 
 	// update sql_mode if needed
-	m.detectSQLMode(ctx, dumpConfig)
+	//m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
 
 	return dumpConfig, nil

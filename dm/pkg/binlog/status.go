@@ -119,6 +119,7 @@ type SourceStatus struct {
 
 func GetSourceStatus(tctx *tcontext.Context, db *conn.BaseDB, flavor string) (*SourceStatus, error) {
 	ret := &SourceStatus{}
+	return ret, nil
 	ctx, cancel := tctx.WithTimeout(conn.DefaultDBTimeout)
 	defer cancel()
 	pos, gtidSet, err := conn.GetPosAndGs(ctx, db, flavor)
