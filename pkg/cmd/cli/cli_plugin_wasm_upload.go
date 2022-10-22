@@ -83,7 +83,7 @@ func sendCaptureUploadWasmPluginQuery(ctx context.Context, capture *capture, nam
 func newCmdPluginWasmUpload(f factory.Factory) *cobra.Command {
 	o := &uploadWasmPluginOptions{}
 	cmds := &cobra.Command{
-		Use:   "plugin wasm upload",
+		Use:   "upload",
 		Short: "Manage Wasm plugin upload",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

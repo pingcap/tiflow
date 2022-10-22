@@ -67,7 +67,7 @@ func sendCaptureListWasmPluginQuery(ctx context.Context, capture *capture, withB
 func newCmdPluginWasmList(f factory.Factory) *cobra.Command {
 	o := &listWasmPluginOptions{}
 	cmds := &cobra.Command{
-		Use:   "plugin wasm list",
+		Use:   "list",
 		Short: "Manage Wasm plugin upload",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

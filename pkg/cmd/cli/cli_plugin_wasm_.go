@@ -7,7 +7,7 @@ import (
 
 func newCmdPluginWasm(f factory.Factory) *cobra.Command {
 	cmds := &cobra.Command{
-		Use:   "plugin wasm",
+		Use:   "wasm",
 		Short: "Manage Wasm plugin",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
