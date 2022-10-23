@@ -17,12 +17,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tidb/sessionctx"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.

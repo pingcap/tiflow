@@ -203,7 +203,7 @@ func startDataService(ctx context.Context) {
 		log.Info("preparing data...", zap.Any("num", dataNum))
 		resp, _ := s.GenerateData(ctx, &pb.GenerateDataRequest{ // nolint: errcheck
 			FileNum:   10,
-			RecordNum: int32(dataNum),
+			RecordNum: int32(dataNum), //nolint:gosec
 		})
 		if len(resp.ErrMsg) > 0 {
 			log.Error("generate data failed", zap.String("err", resp.ErrMsg))

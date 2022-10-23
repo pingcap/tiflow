@@ -54,6 +54,7 @@ func newTestReader() *reader {
 			serde:   &encoding.MsgPackGenSerde{},
 		},
 		state: pollState{
+			metricIterRequest: metricIterDuration.WithLabelValues("request"),
 			metricIterFirst:   metricIterDuration.WithLabelValues("first"),
 			metricIterRelease: metricIterDuration.WithLabelValues("release"),
 		},
@@ -808,6 +809,7 @@ func TestReaderPoll(t *testing.T) {
 		// Do not send delete range.
 		r.delete.countThreshold = 1000
 		r.delete.period = 100 * time.Second
+		r.state.metricIterRequest = metricIterDuration.WithLabelValues("request")
 		r.state.metricIterFirst = metricIterDuration.WithLabelValues("first")
 		r.state.metricIterRelease = metricIterDuration.WithLabelValues("release")
 		for j, cs := range css {

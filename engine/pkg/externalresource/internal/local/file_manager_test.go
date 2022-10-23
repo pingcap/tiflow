@@ -20,11 +20,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
+	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/stretchr/testify/require"
 )
 
 func newResourceIdentForTesting(executor, workerID, resourceName string) internal.ResourceIdent {
@@ -41,8 +41,9 @@ func newResourceIdentForTesting(executor, workerID, resourceName string) interna
 func TestFileManagerBasics(t *testing.T) {
 	t.Parallel()
 
+	executorID := "executor-1"
 	dir := t.TempDir()
-	fm := NewLocalFileManager("", resModel.LocalFileConfig{BaseDir: dir})
+	fm := NewLocalFileManager(model.ExecutorID(executorID), resModel.LocalFileConfig{BaseDir: dir})
 
 	// In this test, we create resource-1 and resource-2, and only
 	// resource-1 will be marked as persisted.
@@ -54,17 +55,18 @@ func TestFileManagerBasics(t *testing.T) {
 	ctx := context.Background()
 	// Creates resource-1
 	res, err := fm.CreateResource(ctx,
-		newResourceIdentForTesting("", "worker-1", "resource-1"))
+		newResourceIdentForTesting(executorID, "worker-1", "resource-1"))
 	require.NoError(t, err)
-	res1, ok := res.(*FileResourceDescriptor)
+	res1, ok := res.(*resourceDescriptor)
 	require.True(t, ok)
-	require.Equal(t, &FileResourceDescriptor{
+	require.Equal(t, &resourceDescriptor{
 		BasePath: dir,
 		Ident: internal.ResourceIdent{
 			Name: "resource-1",
 			ResourceScope: internal.ResourceScope{
 				ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
 				WorkerID:    "worker-1",
+				Executor:    model.ExecutorID(executorID),
 			},
 		},
 	}, res1)
@@ -77,20 +79,21 @@ func TestFileManagerBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.FileExists(t, res1.AbsolutePath()+"/1.txt")
 
-	fm.SetPersisted(ctx, newResourceIdentForTesting("", "worker-1", "resource-1"))
+	fm.SetPersisted(ctx, newResourceIdentForTesting(executorID, "worker-1", "resource-1"))
 
 	// Creates resource-2
-	res, err = fm.CreateResource(ctx, newResourceIdentForTesting("", "worker-1", "resource-2"))
+	res, err = fm.CreateResource(ctx, newResourceIdentForTesting(executorID, "worker-1", "resource-2"))
 	require.NoError(t, err)
-	res2, ok := res.(*FileResourceDescriptor)
+	res2, ok := res.(*resourceDescriptor)
 	require.True(t, ok)
-	require.Equal(t, &FileResourceDescriptor{
+	require.Equal(t, &resourceDescriptor{
 		BasePath: dir,
 		Ident: internal.ResourceIdent{
 			Name: "resource-2",
 			ResourceScope: internal.ResourceScope{
 				ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
 				WorkerID:    "worker-1",
+				Executor:    model.ExecutorID(executorID),
 			},
 		},
 	}, res2)
@@ -104,19 +107,21 @@ func TestFileManagerBasics(t *testing.T) {
 	require.FileExists(t, res2.AbsolutePath()+"/1.txt")
 
 	// Clean up temporary files
-	err = fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{WorkerID: "worker-1"})
+	err = fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+		Executor: model.ExecutorID(executorID), WorkerID: "worker-1",
+	})
 	require.NoError(t, err)
 
 	require.NoDirExists(t, res2.AbsolutePath())
 	require.DirExists(t, res1.AbsolutePath())
 
 	// Clean up persisted resource
-	err = fm.RemoveResource(ctx, newResourceIdentForTesting("", "worker-1", "resource-1"))
+	err = fm.RemoveResource(ctx, newResourceIdentForTesting(executorID, "worker-1", "resource-1"))
 	require.NoError(t, err)
 	require.NoDirExists(t, res1.AbsolutePath())
 
 	// Test repeated removals
-	err = fm.RemoveResource(ctx, newResourceIdentForTesting("", "worker-1", "resource-1"))
+	err = fm.RemoveResource(ctx, newResourceIdentForTesting(executorID, "worker-1", "resource-1"))
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 }
@@ -136,7 +141,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 			fmt.Sprintf("worker-%d", i),
 			fmt.Sprintf("resource-%d-1", i)))
 		require.NoError(t, err)
-		res1, ok := res.(*FileResourceDescriptor)
+		res1, ok := res.(*resourceDescriptor)
 		require.True(t, ok)
 
 		storage, err := newBrStorageForLocalFile(res1.AbsolutePath())
@@ -156,7 +161,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 			fmt.Sprintf("worker-%d", i),
 			fmt.Sprintf("resource-%d-2", i)))
 		require.NoError(t, err)
-		res2, ok := res.(*FileResourceDescriptor)
+		res2, ok := res.(*resourceDescriptor)
 		require.True(t, ok)
 
 		storage, err = newBrStorageForLocalFile(res2.AbsolutePath())
@@ -265,18 +270,18 @@ func TestPreCheckConfig(t *testing.T) {
 
 	// Happy path
 	dir := t.TempDir()
-	err := PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: dir}})
+	err := PreCheckConfig(resModel.LocalFileConfig{BaseDir: dir})
 	require.NoError(t, err)
 
 	// Directory does not exist but can be created.
 	baseDir := filepath.Join(dir, "not-exist")
-	err = PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}})
+	err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
 	require.NoError(t, err)
 
 	// Directory exists but not writable
 	baseDir = filepath.Join(dir, "not-writable")
 	require.NoError(t, os.MkdirAll(baseDir, 0o400))
-	err = PreCheckConfig(resModel.Config{Local: resModel.LocalFileConfig{BaseDir: baseDir}})
+	err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrLocalFileDirNotWritable.*", err)
 }

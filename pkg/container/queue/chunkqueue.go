@@ -86,7 +86,7 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 		},
 	}
 
-	q.chunks = make([]*chunk[T], defaultPitchArrayLen, defaultPitchArrayLen)
+	q.chunks = make([]*chunk[T], defaultPitchArrayLen)
 	q.addSpace(minCapacity)
 	return q
 }
@@ -199,7 +199,7 @@ func (q *ChunkQueue[T]) adjustChunksArray(extend int) {
 	}
 	if newLen != len(q.chunks) {
 		// If the length changed, allocate a new array and do copy
-		newChunks := make([]*chunk[T], newLen, newLen)
+		newChunks := make([]*chunk[T], newLen)
 		copy(newChunks[:used], q.chunks[q.head:q.tail])
 		q.chunks = newChunks
 	} else if q.head > 0 {
@@ -304,7 +304,7 @@ func (q *ChunkQueue[T]) PopMany(n int) ([]T, bool) {
 		n = q.size
 	}
 
-	res := make([]T, n, n)
+	res := make([]T, n)
 	cnt := 0
 	for i := q.head; i < q.tail && cnt < n; i++ {
 		c := q.chunks[i]
@@ -330,7 +330,7 @@ func (q *ChunkQueue[T]) PopMany(n int) ([]T, bool) {
 // Clear clears the queue and shrinks the chunks array
 func (q *ChunkQueue[T]) Clear() {
 	if !q.Empty() {
-		emptyChunk := make([]T, q.chunkLength, q.chunkLength)
+		emptyChunk := make([]T, q.chunkLength)
 		for i := q.head; i < q.tail; i++ {
 			q.size -= q.chunks[i].len()
 			copy(q.chunks[i].data[:], emptyChunk[:])

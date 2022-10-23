@@ -311,11 +311,17 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
-		// so we should also stop the owner and let capture restart or exit
+		// so we should restart the capture.
 		err := c.campaignOwner(ctx)
-		log.Info("owner routine exited",
-			zap.String("captureID", c.info.ID), zap.Error(err))
-		return err
+		if err != nil {
+			log.Error("campaign owner routine exited with error, restart the capture",
+				zap.String("captureID", c.info.ID), zap.Error(err))
+		} else {
+			log.Info("campaign owner routine exited, restart the capture",
+				zap.String("captureID", c.info.ID))
+		}
+		// If we throw an ErrCaptureSuicide error, the capture will restart.
+		return cerror.ErrCaptureSuicide.FastGenByArgs()
 	})
 
 	g.Go(func() error {
@@ -445,6 +451,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		err = c.runEtcdWorker(ownerCtx, owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleOwner.String())
+		c.owner.AsyncStop()
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,

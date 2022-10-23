@@ -41,22 +41,34 @@ const (
 	defaultPullerOutputChanSize = 128
 )
 
+// Stats of a puller.
+type Stats struct {
+	RegionCount         uint64
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
+	CheckpointTsEgress  model.Ts
+	ResolvedTsEgress    model.Ts
+}
+
 // Puller pull data from tikv and push changes into a buffer.
 type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer.
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
+	Stats() Stats
 }
 
 type pullerImpl struct {
-	kvCli        kv.CDCKVClient
-	kvStorage    tikv.Storage
+	kvCli     kv.CDCKVClient
+	kvStorage tikv.Storage
+	spans     []regionspan.ComparableSpan
+	outputCh  chan *model.RawKVEntry
+	tsTracker frontier.Frontier
+	// The commit ts of the latest raw kv event that puller has sent.
 	checkpointTs uint64
-	spans        []regionspan.ComparableSpan
-	outputCh     chan *model.RawKVEntry
-	tsTracker    frontier.Frontier
-	resolvedTs   uint64
+	// The latest resolved ts that puller has sent.
+	resolvedTs uint64
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
@@ -88,7 +100,13 @@ func New(ctx context.Context,
 	// To make puller level resolved ts initialization distinguishable, we set
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
-	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+	pullerType := "dml"
+	if len(spans) > 1 {
+		pullerType = "ddl"
+	}
+	metricMissedRegionCollectCounter := missedRegionCollectCounter.
+		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
+	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, comparableSpans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName)
 	p := &pullerImpl{
@@ -163,10 +181,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					zap.Any("row", raw))
 				return nil
 			}
+			commitTs := raw.CRTs
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case p.outputCh <- raw:
+				if atomic.LoadUint64(&p.checkpointTs) < commitTs {
+					atomic.StoreUint64(&p.checkpointTs, commitTs)
+				}
 			}
 			return nil
 		}
@@ -195,8 +217,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved)))
-				for _, resolvedSpan := range e.Resolved {
+				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Spans)))
+				for _, resolvedSpan := range e.Resolved.Spans {
 					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
 						log.Panic("the resolved span is not in the total span",
 							zap.String("namespace", p.changefeed.Namespace),
@@ -208,34 +230,34 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						)
 					}
 					// Forward is called in a single thread
-					p.tsTracker.Forward(resolvedSpan.Span, resolvedSpan.ResolvedTs)
-					resolvedTs := p.tsTracker.Frontier()
-					if resolvedTs > 0 && !initialized {
-						initialized = true
-
-						spans := make([]string, 0, len(p.spans))
-						for i := range p.spans {
-							spans = append(spans, p.spans[i].String())
-						}
-						log.Info("puller is initialized",
-							zap.String("namespace", p.changefeed.Namespace),
-							zap.String("changefeed", p.changefeed.ID),
-							zap.Int64("tableID", p.tableID),
-							zap.String("tableName", p.tableName),
-							zap.Uint64("resolvedTs", resolvedTs),
-							zap.Duration("duration", time.Since(start)),
-							zap.Strings("spans", spans))
-					}
-					if !initialized || resolvedTs == lastResolvedTs {
-						continue
-					}
-					lastResolvedTs = resolvedTs
-					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-					if err != nil {
-						return errors.Trace(err)
-					}
-					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
 				}
+				resolvedTs := p.tsTracker.Frontier()
+				if resolvedTs > 0 && !initialized {
+					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
+					log.Info("puller is initialized",
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
+						zap.Int64("tableID", p.tableID),
+						zap.String("tableName", p.tableName),
+						zap.Uint64("resolvedTs", resolvedTs),
+						zap.Duration("duration", time.Since(start)),
+						zap.Strings("spans", spans))
+				}
+				if !initialized || resolvedTs == lastResolvedTs {
+					continue
+				}
+				lastResolvedTs = resolvedTs
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+				if err != nil {
+					return errors.Trace(err)
+				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})
@@ -248,4 +270,14 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
+}
+
+func (p *pullerImpl) Stats() Stats {
+	return Stats{
+		RegionCount:         p.kvCli.RegionCount(),
+		ResolvedTsIngress:   p.kvCli.ResolvedTs(),
+		CheckpointTsIngress: p.kvCli.CommitTs(),
+		ResolvedTsEgress:    atomic.LoadUint64(&p.resolvedTs),
+		CheckpointTsEgress:  atomic.LoadUint64(&p.checkpointTs),
+	}
 }

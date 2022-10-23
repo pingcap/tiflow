@@ -15,6 +15,7 @@ package writer
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -480,14 +481,18 @@ func TestNewLogWriter(t *testing.T) {
 }
 
 func TestDeleteAllLogs(t *testing.T) {
-	fileName := "1"
-	fileName1 := "11"
+	// only file belong to changefeed `test-cf` should be deleted
+	changefeedID1 := model.DefaultChangeFeedID("test-cf")
+	fileName := fmt.Sprintf("_%s_uuid1.log", changefeedID1.ID)
+	fileName1 := fmt.Sprintf("_%s_uuid2.log", changefeedID1.ID)
+	changefeedID2 := model.DefaultChangeFeedID("test-cf2")
 
 	type args struct {
 		enableS3 bool
 	}
 
 	tests := []struct {
+		changefeed         model.ChangeFeedID
 		name               string
 		args               args
 		closeErr           error
@@ -497,41 +502,58 @@ func TestDeleteAllLogs(t *testing.T) {
 		wantErr            string
 	}{
 		{
-			name: "happy local",
-			args: args{enableS3: false},
+			changefeed: changefeedID1,
+			name:       "happy local",
+			args:       args{enableS3: false},
 		},
 		{
-			name: "happy s3",
-			args: args{enableS3: true},
+			changefeed: changefeedID1,
+			name:       "happy s3",
+			args:       args{enableS3: true},
 		},
 		{
-			name:     "close err",
-			args:     args{enableS3: true},
-			closeErr: errors.New("xx"),
-			wantErr:  ".*xx*.",
+			changefeed: changefeedID1,
+			name:       "close err",
+			args:       args{enableS3: true},
+			closeErr:   errors.New("xx"),
+			wantErr:    ".*xx*.",
 		},
 		{
+			changefeed:         changefeedID1,
 			name:               "getAllFilesInS3 err",
 			args:               args{enableS3: true},
 			getAllFilesInS3Err: errors.New("xx"),
 			wantErr:            ".*xx*.",
 		},
 		{
+			changefeed:    changefeedID1,
 			name:          "deleteFile normal err",
 			args:          args{enableS3: true},
 			deleteFileErr: errors.New("xx"),
 			wantErr:       ".*ErrS3StorageAPI*.",
 		},
 		{
+			changefeed:    changefeedID1,
 			name:          "deleteFile notExist err",
 			args:          args{enableS3: true},
 			deleteFileErr: awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil),
 		},
 		{
+			changefeed:   changefeedID1,
 			name:         "writerFile err",
 			args:         args{enableS3: true},
 			writeFileErr: errors.New("xx"),
 			wantErr:      ".*xx*.",
+		},
+		{
+			changefeed: changefeedID2,
+			name:       "do not delete other changefeed's file 1",
+			args:       args{enableS3: false},
+		},
+		{
+			changefeed: changefeedID2,
+			name:       "do not delete other changefeed's file 2",
+			args:       args{enableS3: true},
 		},
 	}
 
@@ -558,7 +580,7 @@ func TestDeleteAllLogs(t *testing.T) {
 		mockWriter.On("Close").Return(tt.closeErr)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
+			ChangeFeedID:      tt.changefeed,
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -581,9 +603,16 @@ func TestDeleteAllLogs(t *testing.T) {
 			require.Regexp(t, tt.wantErr, ret.Error(), tt.name)
 		} else {
 			require.Nil(t, ret, tt.name)
-			if !tt.args.enableS3 {
+			if tt.changefeed == changefeedID1 {
 				_, err := os.Stat(dir)
 				require.True(t, os.IsNotExist(err), tt.name)
+			} else {
+				files, err := os.ReadDir(dir)
+				require.Nil(t, err, tt.name)
+				require.Equal(t, 2, len(files), tt.name)
+				for _, file := range files {
+					require.Contains(t, file.Name(), fmt.Sprintf("_%s_", changefeedID1.ID), tt.name)
+				}
 			}
 		}
 		getAllFilesInS3 = origin

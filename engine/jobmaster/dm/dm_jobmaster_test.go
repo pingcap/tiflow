@@ -25,20 +25,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/coreos/go-semver/semver"
 	"github.com/golang/mock/gomock"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	dmpb "github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -48,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -58,6 +52,11 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 func TestDMJobmasterSuite(t *testing.T) {
@@ -109,6 +108,8 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 	mockServerMasterClient := client.NewMockServerMasterClient(gomock.NewController(t.T()))
 	mockExecutorGroup := client.NewMockExecutorGroup()
+	broker := broker.NewBrokerForTesting("test-executor-id")
+	defer broker.Close()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
@@ -116,7 +117,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ExecutorGroup:         mockExecutorGroup,
 		ServerMasterClient:    mockServerMasterClient,
-		ResourceBroker:        nil,
+		ResourceBroker:        broker,
 	}
 
 	RegisterWorker()
@@ -218,6 +219,20 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("Exit").Return(exitError).Once()
 	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
 
+	jm.initJobCfg.TaskMode = dmconfig.ModeIncrement
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t.T(), err)
+	getMasterStatusError := errors.New("failed to get master status")
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
+	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockBaseJobmaster.On("Exit").Return(exitError).Once()
+	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
+
+	jm.initJobCfg.TaskMode = dmconfig.ModeAll
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
@@ -439,6 +454,10 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Error(0)
+}
+
+func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
+	return false
 }
 
 type MockCheckpointAgent struct {

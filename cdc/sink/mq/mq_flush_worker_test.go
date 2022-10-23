@@ -447,10 +447,8 @@ func TestFlush(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		select {
-		case <-flushedChan:
-			flushed.Store(true)
-		}
+		<-flushedChan
+		flushed.Store(true)
 	}()
 	wg.Add(1)
 	go func() {
@@ -590,10 +588,8 @@ func TestWorker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan1:
-			flushed1.Store(true)
-		}
+		<-flushedChan1
+		flushed1.Store(true)
 	}()
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(100),
@@ -606,10 +602,8 @@ func TestWorker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan2:
-			flushed2.Store(true)
-		}
+		<-flushedChan2
+		flushed2.Store(true)
 	}()
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(200),

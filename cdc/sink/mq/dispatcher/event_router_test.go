@@ -383,8 +383,10 @@ func TestGetTopicForDDL(t *testing.T) {
 	}{
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test",
+					},
 				},
 				Type: timodel.ActionCreateSchema,
 			},
@@ -392,8 +394,10 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test",
+					},
 				},
 				Type: timodel.ActionDropSchema,
 			},
@@ -401,9 +405,11 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
-					Table:  "tb1",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test",
+						Table:  "tb1",
+					},
 				},
 				Type: timodel.ActionCreateTable,
 			},
@@ -411,9 +417,11 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
-					Table:  "tb1",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test",
+						Table:  "tb1",
+					},
 				},
 				Type: timodel.ActionDropTable,
 			},
@@ -421,9 +429,11 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test1",
-					Table:  "view1",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test1",
+						Table:  "view1",
+					},
 				},
 				Type: timodel.ActionDropView,
 			},
@@ -431,9 +441,11 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test1",
-					Table:  "tb1",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test1",
+						Table:  "tb1",
+					},
 				},
 				Type: timodel.ActionAddColumn,
 			},
@@ -441,9 +453,11 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test1",
-					Table:  "tb1",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test1",
+						Table:  "tb1",
+					},
 				},
 				Type: timodel.ActionDropColumn,
 			},
@@ -451,13 +465,17 @@ func TestGetTopicForDDL(t *testing.T) {
 		},
 		{
 			ddl: &model.DDLEvent{
-				PreTableInfo: &model.SimpleTableInfo{
-					Schema: "test1",
-					Table:  "tb1",
+				PreTableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test1",
+						Table:  "tb1",
+					},
 				},
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test1",
-					Table:  "tb2",
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test1",
+						Table:  "tb2",
+					},
 				},
 				Type: timodel.ActionRenameTable,
 			},

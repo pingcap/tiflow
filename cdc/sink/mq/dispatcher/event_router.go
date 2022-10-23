@@ -130,17 +130,17 @@ func (s *EventRouter) GetTopicForRowChange(row *model.RowChangedEvent) string {
 func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 	var schema, table string
 	if ddl.PreTableInfo != nil {
-		if ddl.PreTableInfo.Table == "" {
+		if ddl.PreTableInfo.TableName.Table == "" {
 			return s.defaultTopic
 		}
-		schema = ddl.PreTableInfo.Schema
-		table = ddl.PreTableInfo.Table
+		schema = ddl.PreTableInfo.TableName.Schema
+		table = ddl.PreTableInfo.TableName.Table
 	} else {
-		if ddl.TableInfo.Table == "" {
+		if ddl.TableInfo.TableName.Table == "" {
 			return s.defaultTopic
 		}
-		schema = ddl.TableInfo.Schema
-		table = ddl.TableInfo.Table
+		schema = ddl.TableInfo.TableName.Schema
+		table = ddl.TableInfo.TableName.Table
 	}
 
 	topicDispatcher, _ := s.matchDispatcher(schema, table)
@@ -261,8 +261,8 @@ func getTopicDispatcher(
 	topicExpr := topic.Expression(ruleConfig.TopicRule)
 
 	if protocol != "" {
-		var p config.Protocol
-		if err := p.FromString(protocol); err != nil {
+		p, err := config.ParseSinkProtocolFromString(protocol)
+		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 

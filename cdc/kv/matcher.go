@@ -96,7 +96,7 @@ func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
 			// the same key and start-ts must have been received.
 			log.Info("ignore commit event without prewrite",
 				zap.Binary("key", cacheEntry.GetKey()),
-				zap.Uint64("ts", cacheEntry.GetStartTs()))
+				zap.Uint64("startTs", cacheEntry.GetStartTs()))
 			continue
 		}
 		cachedCommit[top] = cacheEntry

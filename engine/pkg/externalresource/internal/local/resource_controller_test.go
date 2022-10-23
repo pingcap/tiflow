@@ -29,7 +29,7 @@ func TestRemoveFileOnExecutor(t *testing.T) {
 	clientGroup.AddClient("executor-1", mockCli)
 
 	resourceTp := NewFileResourceController(clientGroup)
-	gcHandler := resourceTp.GCHandler()
+	gcHandler := resourceTp.GCSingleResource
 
 	resMeta := &resModel.ResourceMeta{
 		ID:       "resource-1",

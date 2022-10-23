@@ -22,10 +22,9 @@ import (
 	"strings"
 
 	"github.com/docker/go-units"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 // IsFileExists checks if file exists.

@@ -16,12 +16,11 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/pkg/retry"
-
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // DiscoveryClient is a client to the Discovery service on the server master.
@@ -30,49 +29,55 @@ type DiscoveryClient interface {
 	// will allocate and records a UUID.
 	RegisterExecutor(
 		ctx context.Context,
-		request *enginepb.RegisterExecutorRequest,
+		request *pb.RegisterExecutorRequest,
 	) (model.ExecutorID, error)
 
 	// ListExecutors lists all executors.
-	ListExecutors(ctx context.Context) ([]*enginepb.Executor, error)
+	ListExecutors(ctx context.Context) ([]*pb.Executor, error)
 
 	// ListMasters lists all masters.
-	ListMasters(ctx context.Context) ([]*enginepb.Master, error)
+	ListMasters(ctx context.Context) ([]*pb.Master, error)
 
 	// Heartbeat sends a heartbeat message to the server.
 	Heartbeat(
 		ctx context.Context,
-		request *enginepb.HeartbeatRequest,
-	) (*enginepb.HeartbeatResponse, error)
+		request *pb.HeartbeatRequest,
+	) (*pb.HeartbeatResponse, error)
 
 	// RegisterMetaStore registers a new metastore.
 	// Deprecated
 	RegisterMetaStore(
 		ctx context.Context,
-		request *enginepb.RegisterMetaStoreRequest,
+		request *pb.RegisterMetaStoreRequest,
 	) error
 
 	// QueryMetaStore queries the details of a metastore.
 	QueryMetaStore(
 		ctx context.Context,
-		request *enginepb.QueryMetaStoreRequest,
-	) (*enginepb.QueryMetaStoreResponse, error)
+		request *pb.QueryMetaStoreRequest,
+	) (*pb.QueryMetaStoreResponse, error)
+
+	// QueryStorageConfig queries the storage config.
+	QueryStorageConfig(
+		ctx context.Context,
+		in *pb.QueryStorageConfigRequest,
+	) (*pb.QueryStorageConfigResponse, error)
 }
 
 var _ DiscoveryClient = &discoveryClient{}
 
 type discoveryClient struct {
-	cli enginepb.DiscoveryClient
+	cli pb.DiscoveryClient
 }
 
 // NewDiscoveryClient returns a DiscoveryClient.
-func NewDiscoveryClient(cli enginepb.DiscoveryClient) DiscoveryClient {
+func NewDiscoveryClient(cli pb.DiscoveryClient) DiscoveryClient {
 	return &discoveryClient{cli: cli}
 }
 
 func (c *discoveryClient) RegisterExecutor(
 	ctx context.Context,
-	request *enginepb.RegisterExecutorRequest,
+	request *pb.RegisterExecutorRequest,
 ) (model.ExecutorID, error) {
 	var ret model.ExecutorID
 	err := retry.Do(ctx, func() error {
@@ -96,8 +101,8 @@ func (c *discoveryClient) RegisterExecutor(
 	return ret, nil
 }
 
-func (c *discoveryClient) ListExecutors(ctx context.Context) ([]*enginepb.Executor, error) {
-	call := internal.NewCall(c.cli.ListExecutors, &enginepb.ListExecutorsRequest{})
+func (c *discoveryClient) ListExecutors(ctx context.Context) ([]*pb.Executor, error) {
+	call := internal.NewCall(c.cli.ListExecutors, &pb.ListExecutorsRequest{})
 	resp, err := call.Do(ctx)
 	if err != nil {
 		return nil, err
@@ -105,8 +110,8 @@ func (c *discoveryClient) ListExecutors(ctx context.Context) ([]*enginepb.Execut
 	return resp.Executors, nil
 }
 
-func (c *discoveryClient) ListMasters(ctx context.Context) ([]*enginepb.Master, error) {
-	call := internal.NewCall(c.cli.ListMasters, &enginepb.ListMastersRequest{})
+func (c *discoveryClient) ListMasters(ctx context.Context) ([]*pb.Master, error) {
+	call := internal.NewCall(c.cli.ListMasters, &pb.ListMastersRequest{})
 	resp, err := call.Do(ctx)
 	if err != nil {
 		return nil, err
@@ -120,8 +125,8 @@ func (c *discoveryClient) ListMasters(ctx context.Context) ([]*enginepb.Master, 
 // TODO refactor this.
 func (c *discoveryClient) Heartbeat(
 	ctx context.Context,
-	request *enginepb.HeartbeatRequest,
-) (*enginepb.HeartbeatResponse, error) {
+	request *pb.HeartbeatRequest,
+) (*pb.HeartbeatResponse, error) {
 	call := internal.NewCall(
 		c.cli.Heartbeat,
 		request,
@@ -132,7 +137,7 @@ func (c *discoveryClient) Heartbeat(
 
 func (c *discoveryClient) RegisterMetaStore(
 	ctx context.Context,
-	request *enginepb.RegisterMetaStoreRequest,
+	request *pb.RegisterMetaStoreRequest,
 ) error {
 	call := internal.NewCall(
 		c.cli.RegisterMetaStore,
@@ -141,7 +146,7 @@ func (c *discoveryClient) RegisterMetaStore(
 	if err != nil {
 		return err
 	}
-	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
+	if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
 		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Message)
 	}
 	return nil
@@ -149,10 +154,20 @@ func (c *discoveryClient) RegisterMetaStore(
 
 func (c *discoveryClient) QueryMetaStore(
 	ctx context.Context,
-	request *enginepb.QueryMetaStoreRequest,
-) (*enginepb.QueryMetaStoreResponse, error) {
+	request *pb.QueryMetaStoreRequest,
+) (*pb.QueryMetaStoreResponse, error) {
 	call := internal.NewCall(
 		c.cli.QueryMetaStore,
+		request)
+	return call.Do(ctx)
+}
+
+func (c *discoveryClient) QueryStorageConfig(
+	ctx context.Context,
+	request *pb.QueryStorageConfigRequest,
+) (*pb.QueryStorageConfigResponse, error) {
+	call := internal.NewCall(
+		c.cli.QueryStorageConfig,
 		request)
 	return call.Do(ctx)
 }

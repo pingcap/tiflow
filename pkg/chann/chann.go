@@ -223,11 +223,9 @@ func (ch *Chann[T]) unboundedTerminate() {
 		ch.q = append(ch.q, e)
 	}
 	for len(ch.q) > 0 {
-		select {
 		// NOTICE: If no receiver is receiving the element, it will be blocked.
 		// So the consumer have to deal with all the elements in the queue.
-		case ch.out <- ch.q[0]:
-		}
+		ch.out <- ch.q[0]
 		ch.q[0] = zeroT // de-reference earlier to help GC
 		ch.q = ch.q[1:]
 	}

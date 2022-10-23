@@ -177,9 +177,22 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
+		var csvConfig *config.CSVConfig
+		if c.Sink.CSVConfig != nil {
+			csvConfig = &config.CSVConfig{
+				Delimiter:       c.Sink.CSVConfig.Delimiter,
+				Quote:           c.Sink.CSVConfig.Quote,
+				Terminator:      c.Sink.CSVConfig.Terminator,
+				NullString:      c.Sink.CSVConfig.NullString,
+				DateSeparator:   c.Sink.CSVConfig.DateSeparator,
+				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+			}
+		}
+
 		res.Sink = &config.SinkConfig{
 			DispatchRules:   dispatchRules,
 			Protocol:        c.Sink.Protocol,
+			CSVConfig:       csvConfig,
 			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors: columnSelectors,
 			SchemaRegistry:  c.Sink.SchemaRegistry,
@@ -259,10 +272,23 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
+		var csvConfig *CSVConfig
+		if cloned.Sink.CSVConfig != nil {
+			csvConfig = &CSVConfig{
+				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
+				Quote:           cloned.Sink.CSVConfig.Quote,
+				Terminator:      cloned.Sink.CSVConfig.Terminator,
+				NullString:      cloned.Sink.CSVConfig.NullString,
+				DateSeparator:   cloned.Sink.CSVConfig.DateSeparator,
+				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+			}
+		}
+
 		res.Sink = &SinkConfig{
 			Protocol:        cloned.Sink.Protocol,
 			SchemaRegistry:  cloned.Sink.SchemaRegistry,
 			DispatchRules:   dispatchRules,
+			CSVConfig:       csvConfig,
 			ColumnSelectors: columnSelectors,
 			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
 		}
@@ -392,9 +418,21 @@ type Table struct {
 type SinkConfig struct {
 	Protocol        string            `json:"protocol"`
 	SchemaRegistry  string            `json:"schema_registry"`
+	CSVConfig       *CSVConfig        `json:"csv"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers,omitempty"`
 	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
 	TxnAtomicity    string            `json:"transaction_atomicity"`
+}
+
+// CSVConfig denotes the csv config
+// This is the same as config.CSVConfig
+type CSVConfig struct {
+	Delimiter       string `json:"delimiter"`
+	Quote           string `json:"quote"`
+	Terminator      string `json:"terminator"`
+	NullString      string `json:"null"`
+	DateSeparator   string `json:"date_separator"`
+	IncludeCommitTs bool   `json:"include_commit_ts"`
 }
 
 // DispatchRule represents partition rule for a table

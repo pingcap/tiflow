@@ -390,6 +390,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 			ResolvedTs:   table.ResolvedTs(),
 		},
 		State: table.State(),
+		Stats: table.Stats(),
 	}
 }
 
@@ -565,12 +566,11 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	p.pushResolvedTs2Table()
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-
 	p.handlePosition(oracle.GetPhysical(pdTime))
-	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage()
 
@@ -858,7 +858,10 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// handlePosition calculates the local resolved ts and local checkpoint ts
+// handlePosition calculates the local resolved ts and local checkpoint ts.
+// resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
+// table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
+// checkpointTs = min(resolvedTs, all table's checkpointTs).
 func (p *processor) handlePosition(currentTs int64) {
 	minResolvedTs := uint64(math.MaxUint64)
 	minResolvedTableID := int64(0)
@@ -975,7 +978,6 @@ func (p *processor) createTablePipelineImpl(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-
 	} else {
 		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, tableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(

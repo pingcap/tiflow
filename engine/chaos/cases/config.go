@@ -30,6 +30,8 @@ type config struct {
 
 	MasterCount int `toml:"master-count" yaml:"master-count" json:"master-count"`
 	WorkerCount int `toml:"worker-count" yaml:"worker-count" json:"worker-count"`
+
+	ConfigDir string `toml:"config-dir" yaml:"config-dir" json:"config-dir"`
 }
 
 // newConfig creates a config for this chaos testing suite.
@@ -46,6 +48,7 @@ func newConfig() *config {
 
 	fs.IntVar(&cfg.MasterCount, "master-count", 3, "expect count of server-master")
 	fs.IntVar(&cfg.WorkerCount, "worker-count", 4, "expect count of executor")
+	fs.StringVar(&cfg.ConfigDir, "config-dir", "/", "path of the source and task config files")
 
 	return cfg
 }

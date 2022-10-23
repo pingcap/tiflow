@@ -41,9 +41,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerV2FromCtx(
+func newSchedulerFromCtx(
 	ctx cdcContext.Context, startTs uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
@@ -64,8 +64,10 @@ func newSchedulerV2FromCtx(
 	return ret, errors.Trace(err)
 }
 
-func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
-	return newSchedulerV2FromCtx(ctx, startTs)
+func newScheduler(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	return newSchedulerFromCtx(ctx, startTs)
 }
 
 type changefeed struct {
@@ -88,9 +90,9 @@ type changefeed struct {
 	// isRemoved is true if the changefeed is removed,
 	// which means it will be removed from memory forever
 	isRemoved bool
-	// isReleased is true if the changefeed's resource is released
-	// but it will still be kept in the memory and it will be check
-	// in every tick
+	// isReleased is true if the changefeed's resources were released,
+	// but it will still be kept in the memory, and it will be check
+	// in every tick. Such as the changefeed that is stopped or encountered an error.
 	isReleased bool
 
 	// only used for asyncExecDDL function
@@ -99,10 +101,10 @@ type changefeed struct {
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
 	ddlEventCache []*model.DDLEvent
-	// currentTableNames is the table names that the changefeed is watching.
+	// currentTables is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
-	currentTableNames []model.TableName
+	currentTables []*model.TableInfo
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -119,6 +121,7 @@ type changefeed struct {
 	metricsChangefeedResolvedTsGauge       prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
 	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge                prometheus.Gauge
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
@@ -130,7 +133,7 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error)
 
-	newSink      func() DDLSink
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -168,7 +171,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -180,20 +183,14 @@ func newChangefeed4Test(
 
 func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
-	if err := c.upstream.Error(); err != nil {
-		c.handleErr(ctx, err)
+
+	if skip, err := c.checkUpstream(); skip {
+		if err != nil {
+			c.handleErr(ctx, err)
+		}
 		return
 	}
-	if c.upstream.IsClosed() {
-		log.Panic("upstream is closed",
-			zap.Uint64("upstreamID", c.upstream.ID),
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
-	}
-	// skip this tick
-	if !c.upstream.IsNormal() {
-		return
-	}
+
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -252,8 +249,8 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
-	// to ensure an error or stopped changefeed also be checked
+	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
+	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
 	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
@@ -271,6 +268,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	if !c.preflightCheck(captures) {
 		return nil
 	}
+
 	if err := c.initialize(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -280,22 +278,22 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	default:
 	}
-	// we need to wait sink to be ready before we do the other things
-	// otherwise, we may cause a nil pointer panic
+	// we need to wait ddl sink to be ready before we do the other things
+	// otherwise, we may cause a nil pointer panic when we try to write to the ddl sink.
 	if !c.sink.isInitialized() {
 		return nil
 	}
 	// This means that the cached DDL has been executed,
-	// and we need to use the latest table names.
-	if c.currentTableNames == nil {
-		c.currentTableNames = c.schema.AllTableNames()
-		log.Debug("changefeed current table names updated",
+	// and we need to use the latest tables.
+	if c.currentTables == nil {
+		c.currentTables = c.schema.AllTables()
+		log.Debug("changefeed current tables updated",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
-			zap.Any("tables", c.currentTableNames),
+			zap.Any("tables", c.currentTables),
 		)
 	}
-	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
@@ -332,66 +330,71 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-	if newCheckpointTs != scheduler.CheckpointCannotProceed {
-		// If the owner is just initialized, barrierTs can be `checkpoint-1`. To avoid
-		// global resolvedTs and checkpointTs regression, we need to handle the case.
-		if newResolvedTs > barrierTs {
-			newResolvedTs = barrierTs
+	if newCheckpointTs == scheduler.CheckpointCannotProceed {
+		if c.state.Status != nil {
+			// We should keep the metrics updated even if the scheduler cannot
+			// advance the watermarks for now.
+			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 		}
-		if newCheckpointTs > barrierTs {
-			newCheckpointTs = barrierTs
-		}
-		prevResolvedTs := c.state.Status.ResolvedTs
-		if c.redoManager.Enabled() {
-			var flushedCheckpointTs, flushedResolvedTs model.Ts
-			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
-			// we can only upload it to etcd after it has been flushed into redo meta.
-			// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
-			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
-			log.Debug("owner gets flushed meta",
-				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-				zap.Uint64("newResolvedTs", newResolvedTs),
-				zap.Uint64("newCheckpointTs", newCheckpointTs),
-				zap.String("namespace", c.id.Namespace),
-				zap.String("changefeed", c.id.ID))
-			if flushedResolvedTs != 0 {
-				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
-				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-				newResolvedTs = flushedResolvedTs
-			} else {
-				newResolvedTs = prevResolvedTs
-			}
-		}
-		log.Debug("owner prepares to update status",
-			zap.Uint64("prevResolvedTs", prevResolvedTs),
+		return nil
+	}
+
+	// If the owner is just initialized, barrierTs can be `checkpoint-1`. To avoid
+	// global resolvedTs and checkpointTs regression, we need to handle the case.
+	if newResolvedTs > barrierTs {
+		newResolvedTs = barrierTs
+	}
+	if newCheckpointTs > barrierTs {
+		newCheckpointTs = barrierTs
+	}
+	prevResolvedTs := c.state.Status.ResolvedTs
+	if c.redoManager.Enabled() {
+		var flushedCheckpointTs, flushedResolvedTs model.Ts
+		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
+		// we can only upload it to etcd after it has been flushed into redo meta.
+		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
+		c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+		c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+		log.Debug("owner gets flushed meta",
+			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
 			zap.Uint64("newResolvedTs", newResolvedTs),
 			zap.Uint64("newCheckpointTs", newCheckpointTs),
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID))
-		// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
-		// been decreased when the owner is initialized.
-		if newResolvedTs < prevResolvedTs {
+		if flushedResolvedTs != 0 {
+			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
+			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
+			newResolvedTs = flushedResolvedTs
+		} else {
 			newResolvedTs = prevResolvedTs
 		}
-		failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
-			if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
-				log.Info("owner won't update checkpoint because of failpoint",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
-					zap.Uint64("skipCheckpoint", newCheckpointTs))
-				newCheckpointTs = c.state.Status.CheckpointTs
-			}
-		})
-		c.updateStatus(newCheckpointTs, newResolvedTs)
-		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
-	} else if c.state.Status != nil {
-		// We should keep the metrics updated even if the scheduler cannot
-		// advance the watermarks for now.
-		c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 	}
+	log.Debug("owner prepares to update status",
+		zap.Uint64("prevResolvedTs", prevResolvedTs),
+		zap.Uint64("newResolvedTs", newResolvedTs),
+		zap.Uint64("newCheckpointTs", newCheckpointTs),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID))
+	// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
+	// been decreased when the owner is initialized.
+	if newResolvedTs < prevResolvedTs {
+		newResolvedTs = prevResolvedTs
+	}
+	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
+		if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
+			log.Info("owner won't update checkpoint because of failpoint",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
+				zap.Uint64("skipCheckpoint", newCheckpointTs))
+			newCheckpointTs = c.state.Status.CheckpointTs
+		}
+	})
+
+	c.updateStatus(newCheckpointTs, newResolvedTs)
+	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+
 	return nil
 }
 
@@ -488,8 +491,8 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.sink.run(cancelCtx, c.id, c.state.Info)
+	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.sink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
@@ -549,6 +552,7 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsCurrentPDTsGauge = currentPDTsGauge.WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
@@ -615,9 +619,11 @@ func (c *changefeed) cleanupMetrics() {
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	currentPDTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 	c.metricsChangefeedResolvedTsLagDuration = nil
+	c.metricsCurrentPDTsGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -692,7 +698,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
 				status = &model.ChangeFeedStatus{
-					// the changefeed status is nil when the changefeed is just created.
+					// changefeed status is nil when the changefeed has just created.
 					ResolvedTs:   c.state.Info.StartTs,
 					CheckpointTs: c.state.Info.StartTs,
 					AdminJobType: model.AdminNone,
@@ -715,27 +721,59 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	return
 }
 
+// handleBarrier calculates the barrierTs of the changefeed.
+// barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
-	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
-	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
-	ddlBlocked := barrierTs == c.state.Status.CheckpointTs
-	blocked := ddlBlocked && barrierTs == c.state.Status.ResolvedTs
+
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
+
+	// It means:
+	//   1. All data before the barrierTs was sent to downstream.
+	//   2. No more data after barrierTs was sent to downstream.
+	// So we can execute the DDL job at the barrierTs.
+	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
+
+	// TODO: To check if we can remove the `barrierTs == c.state.Status.ResolvedTs` condition.
+	fullyBlocked := checkpointReachBarrier && barrierTs == c.state.Status.ResolvedTs
+
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
+		// ddlJob is nil means there is no ddl job in the queue
+		// and the ddlResolvedTs is updated by resolvedTs event.
 		if ddlJob == nil || ddlResolvedTs != barrierTs {
+			// This situation should only happen when the changefeed release
+			// but the `c.barriers` is not cleaned.
+			// In this case, ddlPuller would restart at `checkpointTs - 1`,
+			// so ddlResolvedTs would be less than barrierTs for a short time.
+			// TODO: To check if we can remove it, since the `c.barriers` is cleaned now.
 			if ddlResolvedTs < barrierTs {
 				return barrierTs, nil
 			}
+			// If the ddlResolvedTs is greater than barrierTs, we should not execute
+			// the DDL job, because the changefeed is not blocked by the DDL job yet,
+			// which also means not all data before the DDL job is sent to downstream.
+			// For example, let say barrierTs(ts=10) and there are some ddl jobs in
+			// the queue: [ddl-1(ts=11), ddl-2(ts=12), ddl-3(ts=13)] => ddlResolvedTs(ts=11)
+			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
+			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
-		if !ddlBlocked {
-			// DDL shouldn't be blocked by resolvedTs because DDL puller is created
-			// with checkpointTs instead of resolvedTs.
+
+		// TiCDC guarantees all dml(s) that happen before a ddl was sent to
+		// downstream when this ddl is sent. So, we need to wait checkpointTs is
+		// fullyBlocked at ddl resolvedTs (equivalent to ddl barrierTs here) before we
+		// execute the next ddl.
+		// For example, let say there are some events are replicated by cdc:
+		// [dml-1(ts=5), dml-2(ts=8), ddl-1(ts=11), ddl-2(ts=12)].
+		// We need to wait `checkpointTs == ddlResolvedTs(ts=11)` before execute ddl-1.
+		if !checkpointReachBarrier {
 			return barrierTs, nil
 		}
+
 		done, err := c.asyncExecDDLJob(ctx, ddlJob)
 		if err != nil {
 			return 0, errors.Trace(err)
@@ -743,12 +781,15 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !done {
 			return barrierTs, nil
 		}
+
+		// If the last ddl was executed successfully, we can pop it
+		// from ddlPuller and update the ddl barrierTs.
 		c.lastDDLTs = ddlResolvedTs
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 	case syncPointBarrier:
-		if !blocked {
+		if !fullyBlocked {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
@@ -757,7 +798,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 	case finishBarrier:
-		if blocked {
+		if fullyBlocked {
 			c.feedStateManager.MarkFinished()
 		}
 		return barrierTs, nil
@@ -792,11 +833,11 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
-		// So let's remember the name of the table before processing and cache the DDL.
-		c.currentTableNames = c.schema.AllTableNames()
+		// So let's remember the tables before processing and cache the DDL.
+		c.currentTables = c.schema.AllTables()
 		checkpointTs := c.state.Status.CheckpointTs
-		// refresh checkpointTs and currentTableNames when a ddl job is received
-		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// refresh checkpointTs and currentTables when a ddl job is received
+		c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
@@ -828,7 +869,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = nil
 		// It has expired.
 		// We should use the latest table names now.
-		c.currentTableNames = nil
+		c.currentTables = nil
 	}
 
 	return jobDone, nil
@@ -842,7 +883,7 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 		return false, err
 	}
 	if ddlEvent.TableInfo != nil &&
-		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
+		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableName.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
 			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
@@ -869,6 +910,8 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	resolvedLag := float64(currentTs-phyRTs) / 1e3
 	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
 	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
+
+	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
@@ -908,6 +951,29 @@ func (c *changefeed) GetInfoProvider() scheduler.InfoProvider {
 		return provider
 	}
 	return nil
+}
+
+// checkUpstream returns skip = true if the upstream is still in initializing phase,
+// and returns an error if the upstream is unavailable.
+func (c *changefeed) checkUpstream() (skip bool, err error) {
+	if err = c.upstream.Error(); err != nil {
+		return true, err
+	}
+	if c.upstream.IsClosed() {
+		log.Warn("upstream is closed",
+			zap.Uint64("upstreamID", c.upstream.ID),
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
+		return true, cerror.
+			WrapChangefeedUnretryableErr(
+				cerror.ErrUpstreamClosed.GenWithStackByArgs())
+	}
+	// upstream is still in initializing phase
+	// skip this changefeed tick
+	if !c.upstream.IsNormal() {
+		return true, nil
+	}
+	return
 }
 
 // addSpecialComment translate tidb feature to comment

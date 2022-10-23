@@ -253,8 +253,10 @@ func testDelete(t *testing.T) {
 func testDdl(t *testing.T) {
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  mm.ActionCreateTable,
@@ -264,8 +266,8 @@ func testDdl(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	require.Equal(t, testCaseDdl.TableInfo.Schema, header.GetSchemaName())
-	require.Equal(t, testCaseDdl.TableInfo.Table, header.GetTableName())
+	require.Equal(t, testCaseDdl.TableInfo.TableName.Schema, header.GetSchemaName())
+	require.Equal(t, testCaseDdl.TableInfo.TableName.Table, header.GetTableName())
 	require.Equal(t, canal.EventType_CREATE, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
@@ -273,5 +275,5 @@ func testDdl(t *testing.T) {
 	err = proto.Unmarshal(store, rc)
 	require.Nil(t, err)
 	require.True(t, rc.GetIsDdl())
-	require.Equal(t, testCaseDdl.TableInfo.Schema, rc.GetDdlSchemaName())
+	require.Equal(t, testCaseDdl.TableInfo.TableName.Schema, rc.GetDdlSchemaName())
 }

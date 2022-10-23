@@ -20,13 +20,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/pingcap/tiflow/engine/enginepb"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -45,6 +38,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 func prepareMockJobManager(
@@ -108,6 +106,18 @@ func TestJobManagerCreateJob(t *testing.T) {
 			Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 		},
 	}
+	_, err = mgr.CreateJob(ctx, req)
+	require.True(t, ErrJobAlreadyExists.Is(err))
+
+	// delete a finished job, re-create job with the same id will meet error
+	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
+		map[string]interface{}{
+			"state": frameModel.MasterStateFinished,
+		},
+	)
+	require.NoError(t, err)
+	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{Id: job.Id})
+	require.NoError(t, err)
 	_, err = mgr.CreateJob(ctx, req)
 	require.True(t, ErrJobAlreadyExists.Is(err))
 }
@@ -494,8 +504,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:     "new-job",
-		Type:   enginepb.Job_FakeJob,
-		State:  enginepb.Job_Running,
+		Type:   pb.Job_FakeJob,
+		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
 		Error: &pb.Error{
 			Message: "error_message",
@@ -518,8 +528,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error_message",
 		},
@@ -541,8 +551,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error test",
 		},
@@ -683,7 +693,9 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
-	mockBackoffMgr := jobopMock.NewMockBackoffManager(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	mockBackoffMgr := jobopMock.NewMockBackoffManager(ctrl)
+	mockJobOperator := jobopMock.NewMockJobOperator(ctrl)
 	mgr := &JobManagerImpl{
 		BaseMaster:      mockMaster,
 		JobFsm:          NewJobFsm(),
@@ -691,37 +703,67 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 		frameMetaClient: mockMaster.GetFrameMetaClient(),
 		jobHTTPClient:   jobMock.NewMockNilReturnJobHTTPClient(),
 		JobBackoffMgr:   mockBackoffMgr,
+		jobOperator:     mockJobOperator,
 	}
 	mockMaster.Impl = mgr
 	err := mockMaster.Init(ctx)
 	require.NoError(t, err)
 
-	// save job master meta
-	jobID := "job-backoff-test"
-	meta := &frameModel.MasterMeta{
-		ID:    jobID,
-		State: frameModel.MasterStateInit,
+	dispatchJobAndMeetError := func(jobID string) {
+		// save job master meta
+		meta := &frameModel.MasterMeta{
+			ID:    jobID,
+			State: frameModel.MasterStateInit,
+		}
+		err = mgr.frameMetaClient.UpsertJob(ctx, meta)
+		require.NoError(t, err)
+
+		// dispatch job, meet error and move it to pending job list
+		mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: jobID}, false)
+		require.NotNil(t, mgr.QueryJob(jobID))
+		mockHandle := &framework.MockHandle{WorkerID: jobID}
+		mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
 	}
-	err = mgr.frameMetaClient.UpsertJob(ctx, meta)
-	require.NoError(t, err)
 
-	// dispatch job, meet error and move it to pending job list
-	mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: jobID}, false)
-	require.NotNil(t, mgr.QueryJob(jobID))
-	mockHandle := &framework.MockHandle{WorkerID: jobID}
-	mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
+	jobMgrTickAndCheckJobState := func(jobID string, state frameModel.MasterState) {
+		err := mgr.Tick(ctx)
+		require.NoError(t, err)
+		meta, err := mgr.frameMetaClient.GetJobByID(ctx, jobID)
+		require.NoError(t, err)
+		require.Equal(t, state, meta.State)
+	}
 
-	// job is being backoff
-	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(false)
-	mockBackoffMgr.EXPECT().Allow(jobID).Times(1).Return(false)
-	err = mgr.Tick(ctx)
-	require.NoError(t, err)
+	{
+		jobID := "job-backoff-test-1"
+		dispatchJobAndMeetError(jobID)
 
-	// job will be terminated
-	mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(true)
-	err = mgr.Tick(ctx)
-	require.NoError(t, err)
-	meta, err = mgr.frameMetaClient.GetJobByID(ctx, jobID)
-	require.NoError(t, err)
-	require.Equal(t, frameModel.MasterStateFailed, meta.State)
+		// job is being backoff
+		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Allow(jobID).Times(1).Return(false)
+		err = mgr.Tick(ctx)
+		require.NoError(t, err)
+
+		// job will be terminated because it exceeds max try time
+		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Terminate(jobID).Times(1).Return(true)
+		jobMgrTickAndCheckJobState(jobID, frameModel.MasterStateFailed)
+	}
+
+	{
+		jobID := "job-backoff-test-2"
+		dispatchJobAndMeetError(jobID)
+
+		// job will be terminated because it is canceled
+		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(true)
+		jobMgrTickAndCheckJobState(jobID, frameModel.MasterStateStopped)
+	}
+}
+
+func TestIsJobTerminated(t *testing.T) {
+	require.False(t, isJobTerminated(frameModel.MasterStateUninit))
+	require.False(t, isJobTerminated(frameModel.MasterStateInit))
+	require.True(t, isJobTerminated(frameModel.MasterStateFinished))
+	require.True(t, isJobTerminated(frameModel.MasterStateFailed))
+	require.True(t, isJobTerminated(frameModel.MasterStateStopped))
 }

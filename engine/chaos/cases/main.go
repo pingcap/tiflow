@@ -60,13 +60,13 @@ func main() {
 	}
 
 	go func() {
-		//nolint:errcheck
+		//nolint:errcheck,gosec
 		http.ListenAndServe("0.0.0.0:8899", nil) // for pprof
 	}()
 
 	rand.Seed(time.Now().UnixNano())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration)
 	defer cancel()
 
 	sc := make(chan os.Signal, 1)

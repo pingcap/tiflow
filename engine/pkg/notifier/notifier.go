@@ -19,9 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/engine/pkg/containers"
+	"go.uber.org/atomic"
 )
 
 type receiverID = int64

@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
@@ -48,8 +49,11 @@ func TestMaxwellBatchCodec(t *testing.T) {
 
 	ddlCases := [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+			TableInfo: &timodel.TableInfo{},
 		},
 		Query: "create table a",
 		Type:  1,

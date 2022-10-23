@@ -14,9 +14,8 @@
 package version
 
 import (
-	"github.com/spf13/cobra"
-
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/spf13/cobra"
 )
 
 // NewCmdVersion creates the `version` command.

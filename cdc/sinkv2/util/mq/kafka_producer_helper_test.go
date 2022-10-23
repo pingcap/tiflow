@@ -47,6 +47,7 @@ func TestGetTopic(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			sinkURI, err := url.Parse(tc.sinkURI)
 			require.NoError(t, err)
 			topic, err := GetTopic(sinkURI)

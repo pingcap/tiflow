@@ -30,8 +30,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-var _ pb.ResourceManagerServer = (*Service)(nil)
-
 type serviceTestSuite struct {
 	service              *Service
 	executorInfoProvider *MockExecutorInfoProvider
@@ -83,7 +81,7 @@ func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 	id := "leader"
 	leaderVal := &atomic.Value{}
 	leaderVal.Store(&rpcutil.Member{Name: id})
-	srvc := NewService(meta, execPro, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
+	srvc := NewService(meta, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
 		id,
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},

@@ -26,10 +26,8 @@ import (
 // blackHoleSink defines a blackHole storage, it receives events and persists
 // without any latency
 type blackHoleWriter struct {
-	tableRtsMap  map[model.TableID]uint64
-	tableRtsMu   sync.RWMutex
-	resolvedTs   uint64
-	checkpointTs uint64
+	tableRtsMap map[model.TableID]uint64
+	tableRtsMu  sync.RWMutex
 }
 
 func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {

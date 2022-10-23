@@ -21,11 +21,10 @@ import (
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (

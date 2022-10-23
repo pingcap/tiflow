@@ -23,10 +23,9 @@ import (
 
 	capturer "github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
-	"go.etcd.io/etcd/server/v3/embed"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 var _ = check.Suite(&testConfigSuite{})

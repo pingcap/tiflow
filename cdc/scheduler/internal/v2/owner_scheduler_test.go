@@ -233,8 +233,7 @@ func TestSchedulerNoPeer(t *testing.T) {
 }
 
 func TestInfoProvider(t *testing.T) {
-	var sched interface{}
-	sched = new(SchedulerV2)
+	var sched interface{} = new(SchedulerV2)
 	_, ok := sched.(internal.InfoProvider)
 	require.True(t, ok)
 }
