@@ -125,7 +125,7 @@ func (w *worker) runBackgroundLoop() {
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID))
 
-		timer := time.NewTicker(w.flushInterval)
+		ticker := time.NewTicker(w.flushInterval)
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(time.Second)
 		defer overseerTimer.Stop()
@@ -149,7 +149,7 @@ func (w *worker) runBackgroundLoop() {
 				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
-			case <-timer.C:
+			case <-ticker.C:
 				if w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
@@ -167,6 +167,8 @@ func (w *worker) runBackgroundLoop() {
 	}()
 }
 
+// onEvent is called when a new event is received.
+// It returns true if the event is sent to backend.
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
