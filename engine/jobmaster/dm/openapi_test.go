@@ -69,7 +69,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)
