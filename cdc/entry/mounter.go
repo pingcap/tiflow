@@ -118,7 +118,6 @@ func (m *mounter) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEven
 	pEvent.Row = row
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
-
 	return false, nil
 }
 
