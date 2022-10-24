@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -35,7 +36,13 @@ type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
-	SorterSystem     *ssystem.System
+
+	// SortEngineCreator is introduced to replace SorterSystem.
+	// The former is pull based and the latter is push-based.
+	// TODO(qupeng): remove SorterSystem after unified sorter has been transformed
+	// into pull based module.
+	SorterSystem      *ssystem.System
+	SortEngineCreator *sortfactory.EventSortEngineFactory
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64

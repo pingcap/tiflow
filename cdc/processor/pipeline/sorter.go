@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -137,19 +136,8 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			startTs := ctx.ChangefeedVars().Info.StartTs
-			ssystem := ctx.GlobalVars().SorterSystem
-			dbActorID := ssystem.DBActorID(uint64(tableID))
-			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter, err := db.NewSorter(
-				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
-				ssystem.WriterSystem, ssystem.WriterRouter,
-				ssystem.ReaderSystem, ssystem.ReaderRouter,
-				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
-			if err != nil {
-				return nil, err
-			}
-			return levelSorter, nil
+			log.Panic("DB sorter has been switched into a new implementation in pkg/sorter")
+			return nil, nil
 		}
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275

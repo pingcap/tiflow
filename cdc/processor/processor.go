@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,6 +73,8 @@ type processor struct {
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 	redoManager   redo.LogManager
+
+	eventSortEngine sorter.EventSortEngine
 
 	initialized bool
 	errCh       chan error
@@ -620,6 +623,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
+
+	if p.eventSortEngine == nil {
+		engine, err := ctx.GlobalVars().SortEngineCreator.Create(p.changefeed.ID)
+		if err != nil {
+			log.Error("create sort engine fail", zap.Error(err))
+			return err
+		}
+		p.eventSortEngine = engine
+	}
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel

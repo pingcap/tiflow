@@ -27,55 +27,55 @@ import (
 type sortEngineType int
 
 const (
-    memoryEngine sortEngineType = iota + 1
-    pebbleEngine
+	memoryEngine sortEngineType = iota + 1
+	pebbleEngine
 )
 
 // EventSortEngineFactory is a factory to create EventSortEngine.
 type EventSortEngineFactory struct {
-    mu sync.Mutex
-    engineType sortEngineType
+	mu         sync.Mutex
+	engineType sortEngineType
 
-    dir string
-    memQuotaInBytes uint64
+	dir             string
+	memQuotaInBytes uint64
 
-    // Following fields are valid if engineType is pebbleEngine.
-    pebbleConfig *config.DBConfig
-    dbs []*pebble.DB
+	// Following fields are valid if engineType is pebbleEngine.
+	pebbleConfig *config.DBConfig
+	dbs          []*pebble.DB
 }
 
 func (f *EventSortEngineFactory) Create(ID model.ChangeFeedID) (engine sorter.EventSortEngine, err error) {
-    f.mu.Lock()
-    defer f.mu.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-    switch f.engineType {
-    case pebbleEngine:
-        if len(f.dbs) == 0 {
-            f.dbs, err = ngpebble.OpenDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
-            if err != nil {
-                return
-            }
-        }
-        engine = ngpebble.New(ID, f.dbs)
-        return
-    default:
-        panic("not implemented")
-    }
+	switch f.engineType {
+	case pebbleEngine:
+		if len(f.dbs) == 0 {
+			f.dbs, err = ngpebble.OpenDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
+			if err != nil {
+				return
+			}
+		}
+		engine = ngpebble.New(ID, f.dbs)
+		return
+	default:
+		panic("not implemented")
+	}
 }
 
 func (f *EventSortEngineFactory) Close() (err error) {
-    f.mu.Lock()
-    defer f.mu.Unlock()
-    for _, db := range f.dbs {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, db := range f.dbs {
 		err = multierr.Append(err, db.Close())
-    }
-    return
+	}
+	return
 }
 
 func NewPebbleFactory(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *EventSortEngineFactory {
-    return &EventSortEngineFactory {
-        engineType: pebbleEngine,
-        memQuotaInBytes: memQuotaInBytes,
-        pebbleConfig: cfg,
-    }
+	return &EventSortEngineFactory{
+		engineType:      pebbleEngine,
+		memQuotaInBytes: memQuotaInBytes,
+		pebbleConfig:    cfg,
+	}
 }

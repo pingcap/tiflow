@@ -98,10 +98,7 @@ func (s *EventSorter) AddTable(tableID model.TableID) {
 	if _, exists := s.tables[tableID]; exists {
 		log.Panic("add an exist table")
 	}
-	s.tables[tableID] = &tableState{
-		ch:       s.channs[getDB(tableID, len(s.dbs))],
-		resolved: uint64(0),
-	}
+	s.tables[tableID] = &tableState{ch: s.channs[getDB(tableID, len(s.dbs))]}
 }
 
 // RemoveTable implements sorter.EventSortEngine.
@@ -126,8 +123,23 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 
 	for _, event := range events {
 		state.ch.In() <- eventWithTableID{tableID, event}
+		if event.IsResolved() {
+			atomic.StoreUint64(&s.tables[tableID].pendingResolved, event.CRTs)
+		}
 	}
 	return
+}
+
+// GetResolvedTs implements sorter.EventSortEngine.
+func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	if !exists {
+		log.Panic("get resolved ts from an unexist table")
+	}
+	s.mu.Unlock()
+
+	return atomic.LoadUint64(&state.pendingResolved)
 }
 
 // OnResolve implements sorter.EventSortEngine.
@@ -149,7 +161,7 @@ func (s *EventSorter) FetchByTable(
 	}
 	s.mu.Unlock()
 
-	if upperBound.CommitTs > atomic.LoadUint64(&state.resolved) {
+	if upperBound.CommitTs > atomic.LoadUint64(&state.sortedResolved) {
 		log.Panic("fetch unresolved events")
 	}
 
@@ -241,8 +253,9 @@ type eventWithTableID struct {
 }
 
 type tableState struct {
-	ch       *chann.Chann[eventWithTableID]
-	resolved uint64
+	ch              *chann.Chann[eventWithTableID]
+	sortedResolved  uint64
+	pendingResolved uint64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
@@ -303,6 +316,7 @@ func (s *EventSorter) handleEvents(offset int) {
 			for _, onResolve := range s.onResolves {
 				onResolve(table, resolved)
 			}
+			atomic.StoreUint64(&s.tables[table].sortedResolved, resolved)
 		}
 		s.mu.RUnlock()
 	}

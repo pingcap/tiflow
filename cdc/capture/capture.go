@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -89,8 +90,16 @@ type captureImpl struct {
 	election election
 
 	EtcdClient       etcd.CDCEtcdClient
-	sorterSystem     *ssystem.System
 	tableActorSystem *system.System
+
+	// useEventSortEngine indicates whether uses the new pull based sorter engine or
+	// use push based sorter system. sorterSystem will be removed after unified sorter
+	// has been transformed into pull based model.
+	useEventSortEngine bool
+	// sorterSystem
+	sorterSystem *ssystem.System
+	// sortEngineCreator is used to create pkg/sorter.EventSortEngine instances.
+	sortEngineCreator *sortfactory.EventSortEngineFactory
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -122,8 +131,9 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
-	sorterSystem *ssystem.System,
 	tableActorSystem *system.System,
+	sortEngineCreator *sortfactory.EventSortEngineFactory,
+	sorterSystem *ssystem.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -133,11 +143,14 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
-		sorterSystem:        sorterSystem,
 		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
+
+		useEventSortEngine: sortEngineCreator == nil,
+		sortEngineCreator:  sortEngineCreator,
+		sorterSystem:       sorterSystem,
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
@@ -303,9 +316,11 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
 		TableActorSystem: c.tableActorSystem,
-		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
+
+		SorterSystem:      c.sorterSystem,
+		SortEngineCreator: c.sortEngineCreator,
 	})
 
 	g.Go(func() error {
