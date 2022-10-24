@@ -128,6 +128,24 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	return false, nil
 }
 
+func (m *mounterImpl) isWrittenByTiCDC(raw *model.RawKVEntry) (bool, error) {
+	var rowMeta types.Datum
+	// If it is an update event, check the new value is enough.
+	if len(raw.Value) != 0 {
+		rowMeta, err := decodeRowMeta(raw.Value, m.tz)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		return !rowMeta.IsNull(), nil
+	}
+
+	rowMeta, err := decodeRowMeta(raw.OldValue, m.tz)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return !rowMeta.IsNull(), nil
+}
+
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
@@ -167,6 +185,19 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
+
+		// check if this row is written by another TiCDC and
+		// whether we should ignore it.
+		if ok, err := m.isWrittenByTiCDC(raw); err != nil {
+			return nil, errors.Trace(err)
+		} else if ok {
+			if m.filter.ShouldIgnoreReplicationEvent(
+				tableInfo.TableName.Schema,
+				tableInfo.TableName.Table) {
+				return nil, nil
+			}
+		}
+
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
@@ -550,11 +581,7 @@ func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	return defaultDatum.GetValue()
 }
 
-// DecodeTableID decodes the raw key to a table ID
-func DecodeTableID(key []byte) (model.TableID, error) {
-	_, physicalTableID, err := decodeTableID(key)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return physicalTableID, nil
+// checkMetaColumn return true if the meta column tidb_write_by_ticdc=1.
+func checkMetaColumn() bool {
+	return false
 }

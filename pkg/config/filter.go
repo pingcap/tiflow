@@ -37,4 +37,5 @@ type EventFilterRule struct {
 	IgnoreUpdateNewValueExpr string `toml:"ignore-update-new-value-expr" json:"ignore-update-new-value-expr"`
 	IgnoreUpdateOldValueExpr string `toml:"ignore-update-old-value-expr" json:"ignore-update-old-value-expr"`
 	IgnoreDeleteValueExpr    string `toml:"ignore-delete-value-expr" json:"ignore-delete-value-expr"`
+	IgnoreRowsWrittenByTiCDC bool   `toml:"ignore-rows-written-by-ticdc" json:"ignore-rows-written-by-ticdc"`
 }

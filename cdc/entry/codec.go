@@ -43,6 +43,14 @@ var (
 	prefixRecordIDLen = recordPrefixLen + intLen /*recordID*/
 )
 
+var (
+	metaColID  = int64(0)
+	rowMetaMap = map[int64]*types.FieldType{
+		// TODO(dongmen): use tidb model package const
+		metaColID: types.NewFieldType(mysql.TypeBit),
+	}
+)
+
 // MetaType is for data structure meta/data flag.
 type MetaType byte
 
@@ -164,7 +172,7 @@ func decodeMetaKey(ek []byte) (meta, error) {
 	return nil, cerror.ErrUnknownMetaType.GenWithStackByArgs(rawTp)
 }
 
-// decodeRow decodes a byte slice into datums with a existing row map.
+// decodeRow decodes a byte slice into datums with an existing row map.
 func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
 		return map[int64]types.Datum{}, nil
@@ -300,4 +308,12 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		datum.SetMysqlBit(types.NewBinaryLiteralFromUint(val, byteSize))
 	}
 	return datum, nil
+}
+
+func decodeRowMeta(rowByte []byte, tz *time.Location) (types.Datum, error) {
+	datums, err := tablecodec.DecodeRowToDatumMap(rowByte, rowMetaMap, tz)
+	if err != nil {
+		return types.Datum{}, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+	}
+	return datums[metaColID], nil
 }
