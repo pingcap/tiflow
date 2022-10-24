@@ -251,8 +251,8 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	// Don't cancel this context until it meets first error.
+	ctx, _ = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)

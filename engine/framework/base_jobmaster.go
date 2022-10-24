@@ -191,8 +191,8 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
-	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	// Don't cancel this context until it meets first error.
+	ctx, _ = d.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
