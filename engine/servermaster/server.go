@@ -51,7 +51,6 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
@@ -121,8 +120,6 @@ type Server struct {
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
 
-	testCtx *test.Context
-
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
 	frameworkClientConn metaModel.ClientConn
@@ -155,7 +152,7 @@ func newServerMasterMetric() *serverMasterMetric {
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+func NewServer(cfg *Config) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
 	id := generateNodeID(cfg.Name)
@@ -166,7 +163,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		id:                id,
 		cfg:               cfg,
 		leaderInitialized: *atomic.NewBool(false),
-		testCtx:           ctx,
 		leader:            atomic.Value{},
 		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:        msgService,
@@ -411,6 +407,24 @@ func (s *Server) QueryMetaStore(
 	}
 }
 
+// QueryStorageConfig implements gRPC interface
+func (s *Server) QueryStorageConfig(
+	ctx context.Context, req *pb.QueryStorageConfigRequest,
+) (*pb.QueryStorageConfigResponse, error) {
+	b, err := json.Marshal(s.cfg.Storage)
+	if err != nil {
+		return &pb.QueryStorageConfigResponse{
+			Err: &pb.Error{
+				Code:    pb.ErrorCode_MetaStoreSerializeFail,
+				Message: fmt.Sprintf("raw storage config params: %v", s.cfg.Storage),
+			},
+		}, nil
+	}
+	return &pb.QueryStorageConfigResponse{
+		Config: string(b),
+	}, nil
+}
+
 // GetLeader implements DiscoveryServer.GetLeader.
 func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLeaderResponse, error) {
 	leaderAddr, ok := s.LeaderAddr()
@@ -442,20 +456,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-func (s *Server) startForTest() (err error) {
-	// TODO: implement mock-etcd and leader election
-
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
-	if err != nil {
-		return err
-	}
-
-	// TODO: start job manager
-	s.leader.Store(&rpcutil.Member{Name: s.name(), IsLeader: true})
-	s.leaderInitialized.Store(true)
-	return
-}
-
 // Stop and clean resources.
 // TODO: implement stop gracefully.
 func (s *Server) Stop() {
@@ -482,10 +482,6 @@ func (s *Server) Stop() {
 
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
-	if test.GetGlobalTestFlag() {
-		return s.startForTest()
-	}
-
 	err := s.registerMetaStore(ctx)
 	if err != nil {
 		return err
@@ -505,7 +501,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval, s.testCtx)
+	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
 
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.

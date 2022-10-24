@@ -40,8 +40,7 @@ type gcRunnerTestHelper struct {
 	cancel context.CancelFunc
 	errCh  chan error
 
-	gcRequestCh  chan *resModel.ResourceMeta
-	gcExecutorCh chan []*resModel.ResourceMeta
+	gcRequestCh chan *resModel.ResourceMeta
 }
 
 func newGCRunnerTestHelper() *gcRunnerTestHelper {
@@ -347,13 +346,13 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 		}
 	}
 	checkOffline := func(ctx context.Context, executors ...model.ExecutorID) {
-		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, "executor-1", "executor-2")
+		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, executors...)
 		require.NoError(t, err)
 		for _, meta := range metas {
 			tp, resName, err := resModel.ParseResourceID(meta.ID)
 			require.NoError(t, err)
 			require.Equal(t, resModel.ResourceTypeS3, tp)
-			require.NotEqual(t, s3.DummyResourceName, resName)
+			require.NotEqual(t, s3.GetDummyResourceName(), resName)
 		}
 	}
 
@@ -389,7 +388,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	checkOffline(ctx, "executor-1", "executor-2")
 	checkAlive(ctx, "executor-3", "executor-never-offline")
 
-	helper.Runner.GCExecutors(ctx, "executor-2")
+	helper.Runner.GCExecutors(ctx, "executor-3")
 	checkOffline(ctx, "executor-3")
 	checkAlive(ctx, "executor-never-offline")
 }

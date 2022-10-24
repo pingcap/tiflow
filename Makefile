@@ -80,9 +80,9 @@ ifeq ($(RELEASE_VERSION),)
 	RELEASE_VERSION := v6.3.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
-	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
 		# If we are in release branch, try to use tag version.
-		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+		ifneq ($(shell git describe --tags --dirty | grep -E $(release_version_regex)),)
 			RELEASE_VERSION := $(shell git describe --tags --dirty)
 		endif
 	else ifneq ($(shell git status --porcelain),)
@@ -484,7 +484,7 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow tiflow-demo
+engine: tiflow
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
@@ -512,10 +512,14 @@ check_third_party_binary_for_engine:
 	@which go || (echo "go not found in ${PATH}"; exit 1)
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+	@which mc || (echo "mc not found in ${PATH}, you can use 'make bin/mc' and move bin/mc to ${PATH}"; exit 1)
 	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
+
+bin/mc:
+	./scripts/download-mc.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

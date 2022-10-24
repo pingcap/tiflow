@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFromString(t *testing.T) {
+func TestParseSinkProtocolFromString(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		protocol             string
@@ -65,8 +65,7 @@ func TestFromString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		var protocol Protocol
-		err := protocol.FromString(tc.protocol)
+		protocol, err := ParseSinkProtocolFromString(tc.protocol)
 		if tc.expectedErr != "" {
 			require.Regexp(t, tc.expectedErr, err)
 		} else {
@@ -77,6 +76,7 @@ func TestFromString(t *testing.T) {
 
 func TestString(t *testing.T) {
 	t.Parallel()
+
 	testCases := []struct {
 		protocolEnum     Protocol
 		expectedProtocol string
@@ -113,5 +113,47 @@ func TestString(t *testing.T) {
 
 	for _, tc := range testCases {
 		require.Equal(t, tc.expectedProtocol, tc.protocolEnum.String())
+	}
+}
+
+func TestIsBatchEncoder(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		protocolEnum Protocol
+		expect       bool
+	}{
+		{
+			protocolEnum: ProtocolDefault,
+			expect:       false,
+		},
+		{
+			protocolEnum: ProtocolCanal,
+			expect:       true,
+		},
+		{
+			protocolEnum: ProtocolCanalJSON,
+			expect:       false,
+		},
+		{
+			protocolEnum: ProtocolMaxwell,
+			expect:       true,
+		},
+		{
+			protocolEnum: ProtocolAvro,
+			expect:       false,
+		},
+		{
+			protocolEnum: ProtocolCraft,
+			expect:       true,
+		},
+		{
+			protocolEnum: ProtocolOpen,
+			expect:       true,
+		},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.expect, tc.protocolEnum.IsBatchEncode())
 	}
 }

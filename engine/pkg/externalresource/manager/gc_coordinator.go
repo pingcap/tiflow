@@ -70,6 +70,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		default:
 		}
 
+		// add unit test for initializeGC
 		jobReceiver, executorReceiver, err := c.initializeGC(ctx)
 		if err != nil {
 			log.Warn("GC error", zap.Error(err))
@@ -189,7 +190,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 				return err
 			}
 			if tp == resModel.ResourceTypeLocalFile ||
-				tp == resModel.ResourceTypeS3 && resName == s3.DummyResourceName {
+				tp == resModel.ResourceTypeS3 && resName == s3.GetDummyResourceName() {
 				toGCExecutorSet[resMeta.Executor] = struct{}{}
 			}
 			continue

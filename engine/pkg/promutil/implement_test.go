@@ -408,10 +408,3 @@ func compareCounter(t *testing.T, expected *dto.Counter, actual *dto.Counter) {
 		}
 	}
 }
-
-// nolint: deadcode
-func compareGauge(t *testing.T, expected *dto.Gauge, actual *dto.Gauge) {
-	require.NotNil(t, expected)
-	require.NotNil(t, actual)
-	require.Equal(t, expected.Value, actual.Value)
-}

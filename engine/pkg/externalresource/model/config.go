@@ -14,8 +14,24 @@
 package model
 
 import (
+	"path/filepath"
+
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 )
+
+const defaultLocalStorageDirPrefix = "/tmp/dfe-storage"
+
+// DefaultConfig defines the default configuration for external storage
+var DefaultConfig = Config{
+	Local: LocalFileConfig{BaseDir: ""},
+	S3: S3Config{
+		S3BackendOptions: brStorage.S3BackendOptions{
+			ForcePathStyle: true,
+		},
+		Bucket: "",
+		Prefix: "",
+	},
+}
 
 // Config defines configurations for an external storage resource
 type Config struct {
@@ -34,9 +50,21 @@ func (c *Config) S3Enabled() bool {
 		c.S3.AccessKey != "" && c.S3.SecretAccessKey != ""
 }
 
+// ValidateAndAdjust validates and adjusts the configuration
+func (c *Config) ValidateAndAdjust(executorID ExecutorID) {
+	c.Local.validateAndAdjust(executorID)
+}
+
 // LocalFileConfig defines configurations for a local file based resource
 type LocalFileConfig struct {
 	BaseDir string `json:"base-dir" toml:"base-dir"`
+}
+
+func (c *LocalFileConfig) validateAndAdjust(executorID ExecutorID) {
+	if c.BaseDir == "" {
+		c.BaseDir = defaultLocalStorageDirPrefix
+	}
+	c.BaseDir = filepath.Join(c.BaseDir, string(executorID))
 }
 
 // S3Config defines configurations for s3 based resources

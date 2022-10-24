@@ -83,15 +83,15 @@ func (m *moveTableScheduler) Schedule(
 		return result
 	}
 
-	allTables := newTableSet()
+	allTables := model.NewTableSet()
 	for _, tableID := range currentTables {
-		allTables.add(tableID)
+		allTables.Add(tableID)
 	}
 
 	for tableID, task := range m.tasks {
 		// table may not in the all current tables
 		// if it was removed after manual move table triggered.
-		if !allTables.contain(tableID) {
+		if !allTables.Contain(tableID) {
 			log.Warn("schedulerv3: move table ignored, since the table cannot found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),

@@ -209,7 +209,13 @@ func (c *TablesChecker) checkTable(ctx context.Context) error {
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				opt := &incompatibilityOption{
+					state:      StateWarning,
+					tableID:    dbutil.TableName(table.Schema, table.Name),
+					errMessage: err.Error(),
+				}
+				c.optCh <- opt
+				return nil
 			}
 			opts := c.checkAST(ctStmt)
 			for _, opt := range opts {
@@ -248,8 +254,8 @@ func (c *TablesChecker) checkAST(st *ast.CreateTableStmt) []*incompatibilityOpti
 	}
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
-			state:       StateFailure,
-			instruction: "please set primary/unique key for the table",
+			state:       StateWarning,
+			instruction: "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised",
 			errMessage:  "primary/unique key does not exist",
 		})
 	}
@@ -296,7 +302,7 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 		cs := strings.ToLower(opt.StrValue)
 		if cs != "binary" && !charset.ValidCharsetAndCollation(cs, "") {
 			return &incompatibilityOption{
-				state:       StateFailure,
+				state:       StateWarning,
 				instruction: "https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 				errMessage:  fmt.Sprintf("unsupport charset %s", opt.StrValue),
 			}
@@ -376,7 +382,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	c.firstCreateTableStmtNode, err = getCreateTableStmt(p, statement)
 	if err != nil {
-		markCheckError(r, err)
+		markCheckErrorFromParser(r, err)
 		return r
 	}
 
@@ -438,7 +444,10 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				c.reMu.Lock()
+				markCheckErrorFromParser(r, err)
+				c.reMu.Unlock()
+				continue
 			}
 
 			if has := hasAutoIncrementKey(ctStmt); has {
@@ -668,7 +677,10 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				c.reMu.Lock()
+				markCheckErrorFromParser(r, err)
+				c.reMu.Unlock()
+				continue
 			}
 
 			if has := hasAutoIncrementKey(ctStmt); has {
