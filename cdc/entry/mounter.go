@@ -160,6 +160,23 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Any("row", raw))
 	}
+
+	// check if this row is written by another TiCDC and
+	// whether we should ignore it.
+	if m.filter.ShouldIgnoreReplicationEvent() {
+		ok, err := m.isWrittenByTiCDC(raw)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ok {
+			// TODO(dongmen): remove this log after fully tested.
+			log.Warn("ignore the DML written by another TiCDC",
+				zap.Uint64("ts", raw.CRTs),
+				zap.Int64("tableID", physicalTableID))
+			return nil, nil
+		}
+	}
+
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
 		CRTs:            raw.CRTs,
@@ -185,23 +202,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
-
-		// check if this row is written by another TiCDC and
-		// whether we should ignore it.
-		if m.filter.ShouldIgnoreReplicationEvent() {
-			ok, err := m.isWrittenByTiCDC(raw)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if ok {
-				// TODO(dongmen): remove this log after fully tested.
-				log.Warn("ignore the DML written by another TiCDC",
-					zap.Uint64("ts", raw.CRTs),
-					zap.Int64("tableID", physicalTableID))
-				return nil, nil
-			}
-		}
-
+		
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
