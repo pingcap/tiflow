@@ -166,14 +166,19 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Any("row", raw))
 	}
+	recordID, err := tablecodec.DecodeRowKey(raw.Key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	baseInfo := baseKVEntry{
+		RecordID:        recordID,
 		StartTs:         raw.StartTs,
 		CRTs:            raw.CRTs,
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
-		rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
+		rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Value, raw.OldValue, baseInfo)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -204,16 +209,12 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	return row, err
 }
 
-func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
-	recordID, err := tablecodec.DecodeRowKey(rawKey)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
 		if len(rawColValue) == 0 {
 			return nil, false, nil
 		}
-		row, err := decodeRow(rawColValue, recordID, tableInfo, m.tz)
+		row, err := decodeRow(rawColValue, base.RecordID, tableInfo, m.tz)
 		if err != nil {
 			return nil, false, errors.Trace(err)
 		}
@@ -229,7 +230,6 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 		return nil, errors.Trace(err)
 	}
 
-	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
