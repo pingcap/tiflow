@@ -399,6 +399,8 @@ func (s *Server) Run(ctx context.Context) error {
 			limit = 0
 		}
 		threshold := limit * 7 / 10
+		log.L().Info("set memory threshold to GC tuner", zap.Uint64("threshold", threshold))
+		gctuner.EnableGOGCTuner.Store(true)
 		gctuner.Tuning(threshold)
 	}
 

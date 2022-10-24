@@ -398,6 +398,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
+		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
@@ -405,9 +406,11 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	for {
 		select {
 		case <-ctx.Done():
+			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
 			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
+				jm.Logger().Info("all worker are offline, will exit")
 				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
