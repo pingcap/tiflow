@@ -91,6 +91,12 @@ func NewMySQLBackends(
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
+	_, err = db.ExecContext(ctx, "SET SESSION tidb_write_by_ticdc = true")
+	if err != nil {
+		// TODO(dongmen): should only log warn if this global variable is not supported.
+		panic(err)
+	}
+
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
