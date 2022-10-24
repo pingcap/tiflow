@@ -26,6 +26,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -226,6 +228,20 @@ func (s *server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	limit, err := memory.MemTotal()
+	if err != nil {
+		log.Warn("get memory failed", zap.Error(err))
+		limit = 0
+	}
+
+	threshold := limit * 7 / 10
+	log.Info("set memory threshold to GC tuner",
+		zap.Uint64("Limit", limit),
+		zap.Uint64("threshold", threshold))
+
+	gctuner.EnableGOGCTuner.Store(true)
+	gctuner.Tuning(threshold)
 
 	return s.run(ctx)
 }
