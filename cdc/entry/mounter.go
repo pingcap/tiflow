@@ -131,17 +131,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, err
 	}
-	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
-		log.Warn("empty value and old value",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Any("row", raw))
-	}
-	baseInfo := baseKVEntry{
-		StartTs:         raw.StartTs,
-		CRTs:            raw.CRTs,
-		PhysicalTableID: physicalTableID,
-		Delete:          raw.OpType == model.OpTypeDelete,
+	if !bytes.HasPrefix(key, recordPrefix) {
+		return nil, nil
 	}
 	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
 	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
@@ -169,33 +160,42 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 	}
+	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
+		log.Warn("empty value and old value",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Any("row", raw))
+	}
+	baseInfo := baseKVEntry{
+		StartTs:         raw.StartTs,
+		CRTs:            raw.CRTs,
+		PhysicalTableID: physicalTableID,
+		Delete:          raw.OpType == model.OpTypeDelete,
+	}
 	row, err := func() (*model.RowChangedEvent, error) {
-		if bytes.HasPrefix(key, recordPrefix) {
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if rowKV == nil {
-				return nil, nil
-			}
-			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
-			if err != nil {
-				return nil, err
-			}
-			// We need to filter a row here because we need its tableInfo.
-			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
-			if err != nil {
-				return nil, err
-			}
-			// TODO(dongmen): try to find better way to indicate this row has been filtered.
-			// Return a nil RowChangedEvent if this row should be ignored.
-			if ignore {
-				m.metricIgnoredDMLEventCounter.Inc()
-				return nil, nil
-			}
-			return row, nil
+		rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-		return nil, nil
+		if rowKV == nil {
+			return nil, nil
+		}
+		row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+		if err != nil {
+			return nil, err
+		}
+		// We need to filter a row here because we need its tableInfo.
+		ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(dongmen): try to find better way to indicate this row has been filtered.
+		// Return a nil RowChangedEvent if this row should be ignored.
+		if ignore {
+			m.metricIgnoredDMLEventCounter.Inc()
+			return nil, nil
+		}
+		return row, nil
 	}()
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
