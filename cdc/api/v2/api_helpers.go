@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -237,8 +238,17 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
-		return nil, err
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewSink {
+		s, err := factory.New(ctx, cfg.SinkURI, replicaCfg)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		}
+		s.Close()
+	} else {
+		if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+			return nil, err
+		}
 	}
 
 	return &model.ChangeFeedInfo{
@@ -338,8 +348,17 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	// verify SinkURI
 	if cfg.SinkURI != "" {
 		newInfo.SinkURI = cfg.SinkURI
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
-			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		conf := config.GetGlobalServerConfig()
+		if conf.Debug.EnableNewSink {
+			s, err := factory.New(ctx, newInfo.SinkURI, newInfo.Config)
+			if err != nil {
+				return nil, nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+			}
+			s.Close()
+		} else {
+			if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	if cfg.Engine != "" {

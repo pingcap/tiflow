@@ -146,10 +146,11 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			}
 		}
 		res.Filter = &config.FilterConfig{
-			Rules:                 c.Filter.Rules,
-			MySQLReplicationRules: mySQLReplicationRules,
-			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			Rules:                    c.Filter.Rules,
+			MySQLReplicationRules:    mySQLReplicationRules,
+			IgnoreTxnStartTs:         c.Filter.IgnoreTxnStartTs,
+			EventFilters:             efs,
+			IgnoreRowsWrittenByTiCDC: c.IgnoreIneligibleTable,
 		}
 	}
 	if c.Consistent != nil {
@@ -250,10 +251,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: mySQLReplicationRules,
-			Rules:                 cloned.Filter.Rules,
-			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			MySQLReplicationRules:    mySQLReplicationRules,
+			Rules:                    cloned.Filter.Rules,
+			IgnoreTxnStartTs:         cloned.Filter.IgnoreTxnStartTs,
+			EventFilters:             efs,
+			IgnoreRowsWrittenByTiCDC: cloned.Filter.IgnoreRowsWrittenByTiCDC,
 		}
 	}
 	if cloned.Sink != nil {
@@ -330,9 +332,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
 	*MySQLReplicationRules
-	Rules            []string          `json:"rules,omitempty"`
-	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
-	EventFilters     []EventFilterRule `json:"event_filters"`
+	Rules                    []string          `json:"rules,omitempty"`
+	IgnoreTxnStartTs         []uint64          `json:"ignore_txn_start_ts,omitempty"`
+	EventFilters             []EventFilterRule `json:"event_filters"`
+	IgnoreRowsWrittenByTiCDC bool              `json:"ignore-rows-written-by-ticdc"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
