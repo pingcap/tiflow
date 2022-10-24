@@ -67,7 +67,7 @@ type Mounter interface {
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
 }
 
-type mounterImpl struct {
+type mounter struct {
 	schemaStorage                SchemaStorage
 	tz                           *time.Location
 	enableOldValue               bool
@@ -85,7 +85,7 @@ func NewMounter(schemaStorage SchemaStorage,
 	filter pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
-	return &mounterImpl{
+	return &mounter{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
@@ -103,7 +103,7 @@ func NewMounter(schemaStorage SchemaStorage,
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
 // Note: If pEvent.Row is nil after decode, it means this event should be ignored.
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) (bool, error) {
+func (m *mounter) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) (bool, error) {
 	m.metricTotalRows.Inc()
 	if pEvent.IsResolved() {
 		return true, nil
@@ -128,7 +128,7 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	return false, nil
 }
 
-func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -201,7 +201,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	recordID, err := tablecodec.DecodeRowKey(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -331,7 +331,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, rawCols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
+func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
