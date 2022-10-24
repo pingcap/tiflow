@@ -462,7 +462,7 @@ func NewDDLJobPuller(
 		return nil, errors.Trace(err)
 	}
 
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.New(replicaConfig, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

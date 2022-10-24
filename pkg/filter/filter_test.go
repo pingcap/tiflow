@@ -26,7 +26,7 @@ import (
 func TestShouldUseDefaultRules(t *testing.T) {
 	t.Parallel()
 
-	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "")
+	filter, err := New(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
@@ -39,7 +39,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 func TestShouldUseCustomRules(t *testing.T) {
 	t.Parallel()
 
-	filter, err := NewFilter(&config.ReplicaConfig{
+	filter, err := New(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
@@ -54,7 +54,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("sns", "log"))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 
-	filter, err = NewFilter(&config.ReplicaConfig{
+	filter, err = New(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			// 1. match all schema and table
 			// 2. do not match test.season
@@ -119,7 +119,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 	}
 
 	for _, ftc := range testCases {
-		filter, err := NewFilter(&config.ReplicaConfig{
+		filter, err := New(&config.ReplicaConfig{
 			Filter: &config.FilterConfig{
 				IgnoreTxnStartTs: ftc.ignoreTxnStartTs,
 				Rules:            ftc.rules,
@@ -144,7 +144,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 	cfg := &config.ReplicaConfig{
 		Filter: &config.FilterConfig{},
 	}
-	filter, err := NewFilter(cfg, "")
+	filter, err := New(cfg, "")
 	require.Nil(t, err)
 
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropSchema, "", ""))
@@ -310,7 +310,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 	}}
 
 	for _, ftc := range testCases {
-		filter, err := NewFilter(&config.ReplicaConfig{
+		filter, err := New(&config.ReplicaConfig{
 			Filter: &config.FilterConfig{
 				Rules:            ftc.rules,
 				IgnoreTxnStartTs: ftc.ignoredTs,

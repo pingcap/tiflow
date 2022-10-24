@@ -66,7 +66,7 @@ func newSchemaWrap4Owner(
 	}
 	// It is no matter to use an empty as timezone here because schemaWrap4Owner
 	// doesn't use expression filter's method.
-	f, err := filter.NewFilter(config, "")
+	f, err := filter.New(config, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

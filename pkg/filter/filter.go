@@ -62,7 +62,7 @@ type Filter interface {
 	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
 	// ShouldIgnoreDDLEvent returns true and nil if the DDL event should be ignored.
-	// If a ddl is ignored, it will applied to cdc's schema storage,
+	// If a ddl is ignored, it will be applied to cdc's schema storage,
 	// but not sent to downstream.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
@@ -88,8 +88,8 @@ type filter struct {
 	ignoreTxnStartTs []uint64
 }
 
-// NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
+// New creates a filter.
+func New(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
 		return nil, err

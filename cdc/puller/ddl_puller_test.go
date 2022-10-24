@@ -158,7 +158,7 @@ func TestHandleRenameTable(t *testing.T) {
 		"Test3.t1",
 		"Test3.t2",
 	}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.New(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 	ctx, cancel := context.WithCancel(context.Background())
@@ -332,7 +332,7 @@ func TestHandleJob(t *testing.T) {
 		"test1.t1",
 		"test1.t2",
 	}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.New(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 

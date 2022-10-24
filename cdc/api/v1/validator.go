@@ -142,7 +142,7 @@ func verifyCreateChangefeedConfig(
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
 	}
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.New(replicaConfig, "")
 	if err != nil {
 		return nil, err
 	}

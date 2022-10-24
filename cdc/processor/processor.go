@@ -648,7 +648,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	tzLoc := contextutil.TimezoneFromCtx(ctx)
 	var err error
-	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
+	p.filter, err = filter.New(p.changefeed.Info.Config,
 		util.GetTimeZoneName(tzLoc))
 	if err != nil {
 		return errors.Trace(err)

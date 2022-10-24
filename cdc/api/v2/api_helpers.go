@@ -215,7 +215,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 				"if use force replicate, old value feature must be enabled")
 		}
 	}
-	f, err := filter.NewFilter(replicaCfg, "")
+	f, err := filter.New(replicaCfg, "")
 	if err != nil {
 		return nil, errors.Cause(err)
 	}
@@ -318,7 +318,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		}
 	}
 
-	f, err := filter.NewFilter(newInfo.Config, "")
+	f, err := filter.New(newInfo.Config, "")
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs(errors.Cause(err).Error())
@@ -444,7 +444,7 @@ func (h APIV2HelpersImpl) getVerfiedTables(replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
 	eligibleTables []model.TableName, err error,
 ) {
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.New(replicaConfig, "")
 	if err != nil {
 		return
 	}
