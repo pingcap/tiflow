@@ -14,10 +14,9 @@
 package v1workermeta
 
 import (
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
-
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // kvConfig is the configuration of goleveldb.

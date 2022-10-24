@@ -31,6 +31,7 @@ import (
 type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
+	plr        puller.Puller
 	tableID    model.TableID
 	startTs    model.Ts
 	changefeed model.ChangeFeedID
@@ -70,7 +71,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.New(
+	n.plr = puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,
@@ -85,7 +86,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		n.tableName,
 	)
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(plr.Run(ctxC)))
+		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))
 		return nil
 	})
 	n.wg.Go(func() error {
@@ -93,7 +94,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 			select {
 			case <-ctxC.Done():
 				return nil
-			case rawKV := <-plr.Output():
+			case rawKV := <-n.plr.Output():
 				if rawKV == nil {
 					continue
 				}

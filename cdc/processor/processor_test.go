@@ -168,8 +168,8 @@ func (m *mockTablePipeline) AsyncStop() bool {
 	return true
 }
 
-func (m *mockTablePipeline) Workload() model.WorkloadInfo {
-	return model.WorkloadInfo{Workload: 1}
+func (m *mockTablePipeline) Stats() tablepb.Stats {
+	return tablepb.Stats{}
 }
 
 func (m *mockTablePipeline) RemainEvents() int64 {

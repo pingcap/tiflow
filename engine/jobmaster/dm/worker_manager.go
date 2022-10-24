@@ -66,21 +66,33 @@ type WorkerManager struct {
 	checkpointAgent CheckpointAgent
 	logger          *zap.Logger
 
+	isS3StorageEnabled bool
+
 	// workerStatusMap record the runtime worker status
 	// taskID -> WorkerStatus
 	workerStatusMap sync.Map
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(jobID string, initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
+func NewWorkerManager(
+	jobID string,
+	initWorkerStatus []runtime.WorkerStatus,
+	jobStore *metadata.JobStore,
+	workerAgent WorkerAgent,
+	messageAgent dmpkg.MessageAgent,
+	checkpointAgent CheckpointAgent,
+	pLogger *zap.Logger,
+	isS3StorageEnabled bool,
+) *WorkerManager {
 	workerManager := &WorkerManager{
-		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
-		jobID:           jobID,
-		jobStore:        jobStore,
-		workerAgent:     workerAgent,
-		messageAgent:    messageAgent,
-		checkpointAgent: checkpointAgent,
-		logger:          pLogger.With(zap.String("component", "worker_manager")),
+		DefaultTicker:      ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:              jobID,
+		jobStore:           jobStore,
+		workerAgent:        workerAgent,
+		messageAgent:       messageAgent,
+		checkpointAgent:    checkpointAgent,
+		logger:             pLogger.With(zap.String("component", "worker_manager")),
+		isS3StorageEnabled: isS3StorageEnabled,
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
 
@@ -245,19 +257,26 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		} else if !runningWorker.RunAsExpected() {
 			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", runningWorker.Unit))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", nextUnit))
 		}
 
 		var resources []resModel.ResourceID
+		taskCfg := persistentTask.Cfg
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
-			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
+			resId := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
+			resources = append(resources, resId)
+		}
+
+		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+		if nextUnit != frameModel.WorkerDMSync || isFresh {
+			taskCfg.NeedExtStorage = true
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg, resources...); err != nil {
+		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -327,7 +346,6 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
-	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,

@@ -41,9 +41,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerV2FromCtx(
+func newSchedulerFromCtx(
 	ctx cdcContext.Context, startTs uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
@@ -64,8 +64,10 @@ func newSchedulerV2FromCtx(
 	return ret, errors.Trace(err)
 }
 
-func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
-	return newSchedulerV2FromCtx(ctx, startTs)
+func newScheduler(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	return newSchedulerFromCtx(ctx, startTs)
 }
 
 type changefeed struct {
@@ -99,10 +101,10 @@ type changefeed struct {
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
 	ddlEventCache []*model.DDLEvent
-	// currentTableNames is the table names that the changefeed is watching.
+	// currentTables is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
-	currentTableNames []model.TableName
+	currentTables []*model.TableInfo
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -119,6 +121,7 @@ type changefeed struct {
 	metricsChangefeedResolvedTsGauge       prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
 	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge                prometheus.Gauge
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
@@ -130,7 +133,7 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error)
 
-	newSink      func() DDLSink
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -168,7 +171,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -281,16 +284,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 	// This means that the cached DDL has been executed,
-	// and we need to use the latest table names.
-	if c.currentTableNames == nil {
-		c.currentTableNames = c.schema.AllTableNames()
-		log.Debug("changefeed current table names updated",
+	// and we need to use the latest tables.
+	if c.currentTables == nil {
+		c.currentTables = c.schema.AllTables()
+		log.Debug("changefeed current tables updated",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
-			zap.Any("tables", c.currentTableNames),
+			zap.Any("tables", c.currentTables),
 		)
 	}
-	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
@@ -488,8 +491,8 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
-	c.sink = c.newSink()
-	c.sink.run(cancelCtx, c.id, c.state.Info)
+	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.sink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
 	if err != nil {
@@ -549,6 +552,7 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagDuration = changefeedResolvedTsLagDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+	c.metricsCurrentPDTsGauge = currentPDTsGauge.WithLabelValues(c.id.Namespace, c.id.ID)
 
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
@@ -615,9 +619,11 @@ func (c *changefeed) cleanupMetrics() {
 	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedResolvedTsLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	currentPDTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 	c.metricsChangefeedResolvedTsLagDuration = nil
+	c.metricsCurrentPDTsGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
@@ -753,6 +759,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
 			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
 
@@ -826,11 +833,11 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
-		// So let's remember the name of the table before processing and cache the DDL.
-		c.currentTableNames = c.schema.AllTableNames()
+		// So let's remember the tables before processing and cache the DDL.
+		c.currentTables = c.schema.AllTables()
 		checkpointTs := c.state.Status.CheckpointTs
-		// refresh checkpointTs and currentTableNames when a ddl job is received
-		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// refresh checkpointTs and currentTables when a ddl job is received
+		c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
@@ -862,7 +869,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		c.ddlEventCache = nil
 		// It has expired.
 		// We should use the latest table names now.
-		c.currentTableNames = nil
+		c.currentTables = nil
 	}
 
 	return jobDone, nil
@@ -903,6 +910,8 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	resolvedLag := float64(currentTs-phyRTs) / 1e3
 	c.metricsChangefeedResolvedTsLagGauge.Set(resolvedLag)
 	c.metricsChangefeedResolvedTsLagDuration.Observe(resolvedLag)
+
+	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {

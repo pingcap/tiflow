@@ -17,9 +17,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/config"
-
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/config"
 )
 
 func (t *testForEtcd) TestSourceBoundJSON(c *C) {

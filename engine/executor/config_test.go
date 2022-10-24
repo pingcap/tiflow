@@ -14,7 +14,6 @@
 package executor
 
 import (
-	"encoding/hex"
 	"os"
 	"testing"
 
@@ -36,10 +35,8 @@ join = "127.0.0.1:10240"
 	err = cfg.Adjust()
 	require.NoError(t, err)
 
-	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-1"))
 	require.Equal(t, "executor-1", cfg.Name)
 	require.Equal(t, "0.0.0.0:10241", cfg.AdvertiseAddr)
-	require.Equal(t, expectedPath, cfg.Storage.Local.BaseDir)
 }
 
 func TestConfigDefaultLocalStoragePathNoName(t *testing.T) {
@@ -56,9 +53,7 @@ join = "127.0.0.1:10240"
 	err = cfg.Adjust()
 	require.NoError(t, err)
 
-	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-0.0.0.0:10241"))
 	require.Equal(t, "0.0.0.0:10241", cfg.AdvertiseAddr)
-	require.Equal(t, expectedPath, cfg.Storage.Local.BaseDir)
 }
 
 func TestConfigStorage(t *testing.T) {
@@ -68,9 +63,6 @@ func TestConfigStorage(t *testing.T) {
 name = "executor-1"
 addr = "0.0.0.0:10241"
 join = "127.0.0.1:10240"
-
-[storage]
-local.base-dir = "/tmp/my-base-dir"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 	cfg := GetDefaultExecutorConfig()
@@ -78,8 +70,6 @@ local.base-dir = "/tmp/my-base-dir"
 	require.NoError(t, err)
 	err = cfg.Adjust()
 	require.NoError(t, err)
-
-	require.Equal(t, "/tmp/my-base-dir", cfg.Storage.Local.BaseDir)
 }
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {

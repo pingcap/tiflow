@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -40,12 +41,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	toolutils "github.com/pingcap/tidb/util"
 	tidbmock "github.com/pingcap/tidb/util/mock"
-	"github.com/tikv/pd/pkg/tempurl"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/verify"
-	"go.etcd.io/etcd/tests/v3/integration"
-	"google.golang.org/grpc"
-
 	"github.com/pingcap/tiflow/dm/checker"
 	common2 "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
@@ -66,6 +61,12 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/verify"
+	"go.etcd.io/etcd/tests/v3/integration"
+	"google.golang.org/grpc"
 )
 
 // use task config from integration test `sharding`.
@@ -2868,4 +2869,50 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	content, err := ioutil.ReadFile(file.Name())
 	c.Assert(err, check.IsNil)
 	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
+}
+
+func (t *testMaster) TestGetLatestMeta(*check.C) {
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t.testT, err)
+	getMasterStatusError := errors.New("failed to get master status")
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
+	meta, err := GetLatestMeta(context.Background(), "", &config.DBConfig{})
+	require.Contains(t.testT, err.Error(), getMasterStatusError.Error())
+	require.Nil(t.testT, meta)
+
+	_, mockDB, err = conn.InitMockDBFull()
+	require.NoError(t.testT, err)
+	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+	meta, err = GetLatestMeta(context.Background(), "", &config.DBConfig{})
+	require.True(t.testT, terror.ErrNoMasterStatus.Equal(err))
+	require.Nil(t.testT, meta)
+
+	_, mockDB, err = conn.InitMockDBFull()
+	require.NoError(t.testT, err)
+	// 5 columns for MySQL
+	rows = mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db", "",
+	)
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &config.DBConfig{})
+	require.NoError(t.testT, err)
+	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
+	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
+	require.Equal(t.testT, meta.BinLogGTID, "")
+
+	_, mockDB, err = conn.InitMockDBFull()
+	require.NoError(t.testT, err)
+	// 4 columns for MariaDB
+	rows = mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db",
+	)
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+	rows = mockDB.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
+	mockDB.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
+	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &config.DBConfig{})
+	require.NoError(t.testT, err)
+	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
+	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
+	require.Equal(t.testT, meta.BinLogGTID, "1-2-100")
 }

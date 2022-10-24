@@ -5,7 +5,7 @@ set -eu
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG="$DOCKER_COMPOSE_DIR/3m3e_with_s3.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 TABLE_NUM=500
@@ -31,7 +31,7 @@ function run() {
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_many_tables")
 	# check progress is forwarded gradually, not jump to "finished"
 	exec_with_retry --count 500 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
-	exec_with_retry --count 50 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1

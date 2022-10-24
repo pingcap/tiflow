@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/mock"
@@ -30,7 +29,7 @@ import (
 
 func newResourceIdentForTesting(executor, workerID, resourceName string) internal.ResourceIdent {
 	return internal.ResourceIdent{
-		Name: resourceName,
+		Name: resModel.EncodeResourceName(resourceName),
 		ResourceScope: internal.ResourceScope{
 			ProjectInfo: tenant.NewProjectInfo("fakeTenant", "fakeProject"),
 			Executor:    resModel.ExecutorID(executor),
@@ -43,7 +42,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	executor := model.ExecutorID("executor-1")
+	executor := resModel.ExecutorID("executor-1")
 	ident := newResourceIdentForTesting(string(executor), "worker-1", "test-resource")
 	fm := local.NewLocalFileManager(executor, resModel.LocalFileConfig{BaseDir: dir})
 	cli := manager.NewMockClient()

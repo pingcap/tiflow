@@ -14,40 +14,37 @@
 package metadata
 
 import (
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // DDL represents the state of ddls.
 // TODO: implement DDL
 type DDL struct {
-	State
+	state
 }
 
 // DDLStore manages the state of ddls.
 // Write by DDLCoordinator.
 type DDLStore struct {
-	*TomlStore
-
-	id frameModel.MasterID
+	*frameworkMetaStore
 }
 
 // NewDDLStore returns a new DDLStore instance
 func NewDDLStore(kvClient metaModel.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
-		TomlStore: NewTomlStore(kvClient),
+		frameworkMetaStore: newTOMLFrameworkMetaStore(kvClient),
 	}
-	ddlStore.TomlStore.Store = ddlStore
+	ddlStore.frameworkMetaStore.stateFactory = ddlStore
 	return ddlStore
 }
 
 // CreateState creates an empty DDL object
-func (ddlStore *DDLStore) CreateState() State {
+func (ddlStore *DDLStore) createState() state {
 	return &DDL{}
 }
 
 // Key returns encoded key of ddl state store
 // TODO: add ddl key
-func (ddlStore *DDLStore) Key() string {
+func (ddlStore *DDLStore) key() string {
 	return ""
 }

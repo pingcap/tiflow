@@ -47,6 +47,7 @@ func (mc *mockPdClientForPullerTest) GetClusterID(ctx context.Context) uint64 {
 }
 
 type mockCDCKVClient struct {
+	kv.CDCKVClient
 	expectations chan model.RegionFeedEvent
 }
 
@@ -89,10 +90,6 @@ func (mc *mockCDCKVClient) EventFeed(
 			eventCh <- ev
 		}
 	}
-}
-
-func (mc *mockCDCKVClient) RegionCount() uint64 {
-	return 0
 }
 
 func (mc *mockCDCKVClient) Close() error {

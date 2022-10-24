@@ -20,9 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -46,6 +43,8 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // Worker defines an interface that provides all methods that will be used in
@@ -123,7 +122,12 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error)
+	OpenStorage(
+		ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+	) (broker.Handle, error)
+
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -506,10 +510,17 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(
+	ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
-	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
+	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath, opts...)
+}
+
+// IsS3StorageEnabled implements BaseWorker.IsS3StorageEnabled
+func (w *DefaultBaseWorker) IsS3StorageEnabled() bool {
+	return w.resourceBroker.IsS3StorageEnabled()
 }
 
 // Exit implements BaseWorker.Exit

@@ -1,16 +1,21 @@
 apiVersion: chaos-mesh.org/v1alpha1
-kind: PodChaos
+kind: Schedule
 metadata:
   name: pod-kill-dm
   labels:
     app: pod-kill-dm
 spec:
-  action: pod-kill
-  mode: one
-  gracePeriod: 30
-  selector:
-    pods:
-      default: # default namespace
+  schedule: '@every 1m'
+  type: PodChaos
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  podChaos:
+    action: pod-kill
+    mode: one
+    gracePeriod: 30
+    selector:
+      pods:
+        default:
         - dm-master-0
         - dm-master-1
         - dm-master-2
@@ -18,5 +23,3 @@ spec:
         - dm-worker-1
         - dm-worker-2
         - dm-worker-3
-  scheduler:
-    cron: "@every 1m"

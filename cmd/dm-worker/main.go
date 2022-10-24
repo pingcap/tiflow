@@ -23,8 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	globalLog "github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -32,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/worker"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/zap"
 )
 
 func main() {

@@ -21,10 +21,11 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/stretchr/testify/require"
-
+	"github.com/go-sql-driver/mysql"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsNotFoundError(t *testing.T) {
@@ -189,4 +190,32 @@ func TestInitEpochModel(t *testing.T) {
 
 	err = InitEpochModel(ctx, conn)
 	require.NoError(t, err)
+}
+
+func TestIsDuplicateEntryError(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			nil, false,
+		},
+		{
+			errors.New("invalid connection"), false,
+		},
+		{
+			&mysql.MySQLError{
+				Number:  tmysql.ErrDupEntry,
+				Message: "Duplicate entry '123456' for key 'index'",
+			}, true,
+		},
+		{
+			errors.New("constraint failed: UNIQUE constraint failed: master_meta.id (2067)"),
+			true,
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, IsDuplicateEntryError(tc.err))
+	}
 }

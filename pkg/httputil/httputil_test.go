@@ -24,10 +24,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/tidb/util"
 )
 
 var httputilServerMsg = "this is httputil test server"

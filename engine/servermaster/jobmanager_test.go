@@ -20,13 +20,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
-
-	"github.com/pingcap/tiflow/engine/enginepb"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -45,6 +38,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 func prepareMockJobManager(
@@ -108,6 +106,18 @@ func TestJobManagerCreateJob(t *testing.T) {
 			Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 		},
 	}
+	_, err = mgr.CreateJob(ctx, req)
+	require.True(t, ErrJobAlreadyExists.Is(err))
+
+	// delete a finished job, re-create job with the same id will meet error
+	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
+		map[string]interface{}{
+			"state": frameModel.MasterStateFinished,
+		},
+	)
+	require.NoError(t, err)
+	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{Id: job.Id})
+	require.NoError(t, err)
 	_, err = mgr.CreateJob(ctx, req)
 	require.True(t, ErrJobAlreadyExists.Is(err))
 }
@@ -494,8 +504,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:     "new-job",
-		Type:   enginepb.Job_FakeJob,
-		State:  enginepb.Job_Running,
+		Type:   pb.Job_FakeJob,
+		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
 		Error: &pb.Error{
 			Message: "error_message",
@@ -518,8 +528,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error_message",
 		},
@@ -541,8 +551,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
-		Type:  enginepb.Job_FakeJob,
-		State: enginepb.Job_Running,
+		Type:  pb.Job_FakeJob,
+		State: pb.Job_Running,
 		Error: &pb.Error{
 			Message: "error test",
 		},

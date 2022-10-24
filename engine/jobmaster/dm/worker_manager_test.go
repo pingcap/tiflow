@@ -40,7 +40,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
-	workerManager := NewWorkerManager("job_id", nil, jobStore, nil, nil, nil, log.L())
+	workerManager := NewWorkerManager("job_id", nil, jobStore, nil, nil, nil, log.L(), false)
 
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
@@ -100,7 +100,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	workerStatus1.Stage = runtime.WorkerOnline
 	workerStatus2.Stage = runtime.WorkerOnline
 	workerStatusList := []runtime.WorkerStatus{workerStatus1, workerStatus2}
-	workerManager = NewWorkerManager("job_id", workerStatusList, jobStore, nil, nil, nil, log.L())
+	workerManager = NewWorkerManager("job_id", workerStatusList, jobStore, nil, nil, nil, log.L(), false)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -138,7 +138,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	workerStatus1 := runtime.InitWorkerStatus(source1, frameModel.WorkerDMDump, "worker-id-1")
 	workerStatus2 := runtime.InitWorkerStatus(source2, frameModel.WorkerDMDump, "worker-id-2")
 
-	workerManager := NewWorkerManager("job_id", []runtime.WorkerStatus{workerStatus1, workerStatus2}, nil, nil, messageAgent, nil, log.L())
+	workerManager := NewWorkerManager("job_id", []runtime.WorkerStatus{workerStatus1, workerStatus2}, nil, nil, messageAgent, nil, log.L(), false)
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 
 	workerManager.removeOfflineWorkers()
@@ -157,10 +157,12 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
 	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
 	messageAgent.On("SendMessage").Return(destroyError).Once()
-	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	jobCfg := &config.JobCfg{ModRevision: 1}
+	taskCfg := jobCfg.ToTaskCfg()
+	job.Tasks[source2] = metadata.NewTask(taskCfg)
 	require.EqualError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job), destroyError.Error())
 	messageAgent.On("SendMessage").Return(nil).Once()
-	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	job.Tasks[source2] = metadata.NewTask(taskCfg)
 	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
 
 	job = metadata.NewJob(&config.JobCfg{})
@@ -220,9 +222,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 
 func (t *testDMJobmasterSuite) TestCreateWorker() {
 	mockAgent := &MockWorkerAgent{}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	workerManager := NewWorkerManager("job_id", nil, nil, mockAgent, nil, nil, log.L())
+	workerManager := NewWorkerManager("job_id", nil, nil, mockAgent, nil, nil, log.L(), false)
 
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
@@ -231,12 +231,12 @@ func (t *testDMJobmasterSuite) TestCreateWorker() {
 	worker1 := "worker1"
 	createError := errors.New("create error")
 	mockAgent.On("CreateWorker").Return("", createError).Once()
-	require.EqualError(t.T(), workerManager.createWorker(ctx, task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
+	require.EqualError(t.T(), workerManager.createWorker(task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	workerStatus1 := runtime.InitWorkerStatus(task1, frameModel.WorkerDMDump, worker1)
 	mockAgent.On("CreateWorker").Return(worker1, createError).Once()
-	require.EqualError(t.T(), workerManager.createWorker(ctx, task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
+	require.EqualError(t.T(), workerManager.createWorker(task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
 	workerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 1)
 	require.Contains(t.T(), workerStatusMap, task1)
@@ -246,7 +246,7 @@ func (t *testDMJobmasterSuite) TestCreateWorker() {
 	worker2 := "worker2"
 	workerStatus2 := runtime.InitWorkerStatus(task2, frameModel.WorkerDMLoad, worker2)
 	mockAgent.On("CreateWorker").Return(worker2, nil).Once()
-	require.NoError(t.T(), workerManager.createWorker(ctx, task2, frameModel.WorkerDMLoad, taskCfgs[task2]))
+	require.NoError(t.T(), workerManager.createWorker(task2, frameModel.WorkerDMLoad, taskCfgs[task2]))
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, task1)
@@ -261,7 +261,7 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	mockAgent := &MockCheckpointAgent{}
 	task := &metadata.Task{Cfg: &config.TaskCfg{}}
 	task.Cfg.TaskMode = dmconfig.ModeFull
-	workerManager := NewWorkerManager("job_id", nil, nil, nil, nil, mockAgent, log.L())
+	workerManager := NewWorkerManager("job_id", nil, nil, nil, nil, mockAgent, log.L(), false)
 
 	workerStatus := runtime.NewWorkerStatus("source", frameModel.WorkerDMDump, "worker-id-1", runtime.WorkerOnline, 0)
 	require.Equal(t.T(), getNextUnit(task, workerStatus), frameModel.WorkerDMDump)
@@ -340,7 +340,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	job := metadata.NewJob(jobCfg)
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
-	workerManager := NewWorkerManager("job_id", nil, nil, workerAgent, nil, checkpointAgent, log.L())
+	workerManager := NewWorkerManager("job_id", nil, nil, workerAgent, nil, checkpointAgent, log.L(), false)
 
 	// new tasks
 	worker1 := "worker1"
@@ -431,7 +431,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
 	messageAgent := &dmpkg.MockMessageAgent{}
-	workerManager := NewWorkerManager("job_id", nil, jobStore, workerAgent, messageAgent, checkpointAgent, log.L())
+	workerManager := NewWorkerManager("job_id", nil, jobStore, workerAgent, messageAgent, checkpointAgent, log.L(), false)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 

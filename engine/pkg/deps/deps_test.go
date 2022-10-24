@@ -16,9 +16,8 @@ package deps
 import (
 	"testing"
 
-	"go.uber.org/dig"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
 )
 
 type a struct {

@@ -18,13 +18,12 @@ import (
 	"time"
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"go.uber.org/atomic"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/atomic"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 // GRPCClient stores raw grpc connection and worker client.

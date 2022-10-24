@@ -32,22 +32,26 @@ type testCheckSuite struct{}
 
 func TestVerifyDumpPrivileges(t *testing.T) {
 	cases := []struct {
-		grants      []string
-		checkTables []*filter.Table
-		dumpState   State
-		errMatch    string
+		grants            []string
+		checkTables       []*filter.Table
+		dumpWholeInstance bool
+		dumpState         State
+		errStr            string
 	}{
 		{
 			grants:    nil, // non grants
 			dumpState: StateFailure,
+			errStr:    "there is no such grant defined for current user on host '%'",
 		},
 		{
 			grants:    []string{"invalid SQL statement"},
 			dumpState: StateFailure,
+			errStr:    "line 1 column 7 near \"invalid SQL statement\" ",
 		},
 		{
 			grants:    []string{"CREATE DATABASE db1"}, // non GRANT statement
 			dumpState: StateFailure,
+			errStr:    "CREATE DATABASE db1 is not grant statement",
 		},
 		{
 			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege
@@ -55,7 +59,11 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "db1", Name: "tb1"},
 			},
-			errMatch: "lack of Select privilege: {`db1`.`tb1`}; ",
+			errStr: "lack of Select privilege: {`db1`.`tb1`}; ",
+		},
+		{
+			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege but no do-tables
+			dumpState: StateSuccess,
 		},
 		{
 			grants: []string{ // lack optional privilege
@@ -66,9 +74,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "db1", Name: "anomaly_score"},
 			},
-			// `db1`.`anomaly_score`
-			// can't guarantee the order
-			errMatch: "lack of Select privilege: {.*}; ",
+			errStr: "lack of Select privilege: {`db1`.`anomaly_score`}; ",
 		},
 		{
 			grants: []string{ // have privileges
@@ -110,12 +116,18 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "tb1"},
+			},
 			dumpState: StateFailure,
-			errMatch:  "lack of .* privilege.*; lack of .* privilege.*; ",
+			errStr:    "lack of Select privilege: {`db1`.`tb1`}; lack of RELOAD global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "db1", Name: "tb1"},
 			},
 			dumpState: StateSuccess,
 		},
@@ -133,7 +145,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "medz", Name: "medz"},
 			},
-			errMatch: "lack of RELOAD privilege; ",
+			errStr: "lack of RELOAD global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // privilege on db/table level is not enough to execute SHOW MASTER STATUS
@@ -143,7 +155,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "medz", Name: "medz"},
 			},
-			errMatch: "lack of RELOAD privilege; ",
+			errStr: "lack of RELOAD global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // privilege on column level is not enough to execute SHOW CREATE TABLE
@@ -154,7 +166,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			checkTables: []*filter.Table{
 				{Schema: "lance", Name: "t"},
 			},
-			errMatch: "lack of Select privilege: {`lance`.`t`}; ",
+			errStr: "lack of Select privilege: {`lance`.`t`}; ",
 		},
 		{
 			grants: []string{
@@ -169,6 +181,16 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		},
 		{
 			grants: []string{
+				"GRANT RELOAD ON *.* TO `u1`@`localhost`",
+				"GRANT SELECT ON `db1`.* TO `u1`@`localhost`",
+				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
+			},
+			dumpState:         StateFailure,
+			dumpWholeInstance: true,
+			errStr:            "lack of Select global (*.*) privilege; ",
+		},
+		{
+			grants: []string{
 				"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, SHUTDOWN, PROCESS, FILE, REFERENCES, INDEX, ALTER, SHOW DATABASES, SUPER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, CREATE TABLESPACE, CREATE ROLE, DROP ROLE ON *.* TO `root`@`localhost` WITH GRANT OPTION",
 				"GRANT APPLICATION_PASSWORD_ADMIN,AUDIT_ADMIN,BACKUP_ADMIN,BINLOG_ADMIN,BINLOG_ENCRYPTION_ADMIN,CLONE_ADMIN,CONNECTION_ADMIN,ENCRYPTION_KEY_ADMIN,GROUP_REPLICATION_ADMIN,INNODB_REDO_LOG_ARCHIVE,PERSIST_RO_VARIABLES_ADMIN,REPLICATION_APPLIER,REPLICATION_SLAVE_ADMIN,RESOURCE_GROUP_ADMIN,RESOURCE_GROUP_USER,ROLE_ADMIN,SERVICE_CONNECTION_ADMIN,SESSION_VARIABLES_ADMIN,SET_USER_ID,SYSTEM_USER,SYSTEM_VARIABLES_ADMIN,TABLE_ENCRYPTION_ADMIN,XA_RECOVER_ADMIN ON *.* TO `root`@`localhost` WITH GRANT OPTION",
 				"GRANT PROXY ON ''@'' TO 'root'@'localhost' WITH GRANT OPTION",
@@ -176,21 +198,27 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			dumpState: StateSuccess,
 		},
 	}
-	dumpPrivileges := map[mysql.PrivilegeType]struct{}{
-		mysql.SelectPriv: {},
-		mysql.ReloadPriv: {},
-	}
+
 	for _, cs := range cases {
 		result := &Result{
 			State: StateFailure,
 		}
-		dumpLackGrants := genDumpPriv(dumpPrivileges, cs.checkTables)
-		err := verifyPrivilegesWithResult(result, cs.grants, dumpLackGrants)
+		dumpRequiredPrivs := map[mysql.PrivilegeType]priv{
+			mysql.SelectPriv: {
+				needGlobal: false,
+				dbs:        genTableLevelPrivs(cs.checkTables),
+			},
+			mysql.ReloadPriv: {needGlobal: true},
+		}
+		if cs.dumpWholeInstance {
+			dumpRequiredPrivs[mysql.SelectPriv] = priv{needGlobal: true}
+		}
+		err := verifyPrivilegesWithResult(result, cs.grants, dumpRequiredPrivs)
 		if cs.dumpState == StateSuccess {
 			require.Nil(t, err, "grants: %v", cs.grants)
 		} else {
 			require.NotNil(t, err, "grants: %v", cs.grants)
-			require.Regexp(t, cs.errMatch, err.ShortErr, "grants: %v", cs.grants)
+			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
 }
@@ -200,34 +228,37 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 		grants           []string
 		checkTables      []*filter.Table
 		replicationState State
-		errMatch         string
+		errStr           string
 	}{
 		{
 			grants:           nil, // non grants
 			replicationState: StateFailure,
+			errStr:           "there is no such grant defined for current user on host '%'",
 		},
 		{
 			grants:           []string{"invalid SQL statement"},
 			replicationState: StateFailure,
+			errStr:           "line 1 column 7 near \"invalid SQL statement\" ",
 		},
 		{
 			grants:           []string{"CREATE DATABASE db1"}, // non GRANT statement
 			replicationState: StateFailure,
+			errStr:           "CREATE DATABASE db1 is not grant statement",
 		},
 		{
 			grants:           []string{"GRANT SELECT ON *.* TO 'user'@'%'"}, // lack necessary privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of .* privilege; lack of .* privilege; ",
+			errStr:           "lack of REPLICATION CLIENT global (*.*) privilege; lack of REPLICATION SLAVE global (*.*) privilege; ",
 		},
 		{
 			grants:           []string{"GRANT REPLICATION SLAVE ON *.* TO 'user'@'%'"}, // lack REPLICATION CLIENT privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of REPLICATION CLIENT privilege; ",
+			errStr:           "lack of REPLICATION CLIENT global (*.*) privilege; ",
 		},
 		{
 			grants:           []string{"GRANT REPLICATION CLIENT ON *.* TO 'user'@'%'"}, // lack REPLICATION SLAVE privilege
 			replicationState: StateFailure,
-			errMatch:         "lack of REPLICATION SLAVE privilege; ",
+			errStr:           "lack of REPLICATION SLAVE global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // have privileges
@@ -270,7 +301,7 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
 			replicationState: StateFailure,
-			errMatch:         "lack of .* privilege; lack of .* privilege; ",
+			errStr:           "lack of REPLICATION CLIENT global (*.*) privilege; lack of REPLICATION SLAVE global (*.*) privilege; ",
 		},
 		{
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
@@ -286,19 +317,20 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 		},
 	}
 
-	replicationPrivileges := map[mysql.PrivilegeType]struct{}{
-		mysql.ReplicationClientPriv: {},
-		mysql.ReplicationSlavePriv:  {},
-	}
 	for _, cs := range cases {
 		result := &Result{
 			State: StateFailure,
 		}
-		replicationLackGrants := genReplicPriv(replicationPrivileges)
-		err := verifyPrivilegesWithResult(result, cs.grants, replicationLackGrants)
-		require.Equal(t, err == nil, cs.replicationState == StateSuccess)
-		if err != nil && len(cs.errMatch) != 0 {
-			require.Regexp(t, cs.errMatch, err.ShortErr)
+		replRequiredPrivs := map[mysql.PrivilegeType]priv{
+			mysql.ReplicationSlavePriv:  {needGlobal: true},
+			mysql.ReplicationClientPriv: {needGlobal: true},
+		}
+		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
+		if cs.replicationState == StateSuccess {
+			require.Nil(t, err, "grants: %v", cs.grants)
+		} else {
+			require.NotNil(t, err, "grants: %v", cs.grants)
+			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
 }

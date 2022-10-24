@@ -24,14 +24,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/label"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -39,6 +35,8 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -55,13 +53,13 @@ type tCase struct {
 	mockExpectResFn func(mock sqlmock.Sqlmock) // sqlmock expectation
 }
 
-func mockGetDBConn(t *testing.T) (*sql.DB, sqlmock.Sqlmock, error) {
+func mockGetDBConn(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	// common execution for orm
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
-	return db, mock, nil
+	return db, mock
 }
 
 type anyTime struct{}
@@ -79,10 +77,9 @@ func TestNewMetaOpsClient(t *testing.T) {
 	_, err := NewClient(nil)
 	require.Error(t, err)
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	_, err = newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 }
@@ -90,10 +87,9 @@ func TestNewMetaOpsClient(t *testing.T) {
 func TestProject(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -240,10 +236,9 @@ func TestProject(t *testing.T) {
 func TestProjectOperation(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t)
+	defer sqlDB.Close() //nolint: staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -349,10 +344,9 @@ func TestProjectOperation(t *testing.T) {
 func TestJob(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -373,6 +367,64 @@ func TestJob(t *testing.T) {
 	extJSONForTest := `{"selectors":[{"label":"test","target":"test-val","op":"eq"}]}`
 
 	testCases := []tCase{
+		{
+			fn: "InsertJob",
+			inputs: []interface{}{
+				&frameModel.MasterMeta{
+					Model: model.Model{
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO `master_meta` [(]`created_at`,"+
+					"`updated_at`,`project_id`,`id`,`type`,`state`,`node_id`,"+
+					"`address`,`epoch`,`config`,`error_message`,`detail`,"+
+					"`ext`,`deleted`[)]").
+					WithArgs(createdAt, updatedAt, "p111", "j111", 1, 1, "n111",
+						"127.0.0.1", 1, []byte{0x11, 0x22}, sqlmock.AnyArg(),
+						sqlmock.AnyArg(), extForTest, nil).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			fn: "InsertJob",
+			inputs: []interface{}{
+				&frameModel.MasterMeta{
+					Model: model.Model{
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ProjectID: "p111",
+					ID:        "j111",
+					Type:      1,
+					NodeID:    "n111",
+					Epoch:     1,
+					State:     1,
+					Addr:      "127.0.0.1",
+					Config:    []byte{0x11, 0x22},
+					Ext:       extForTest,
+				},
+			},
+			err: derror.ErrMetaOpFail.GenWithStackByArgs(),
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO `master_meta` [(]`created_at`," +
+					"`updated_at`,`project_id`,`id`,`type`,`state`,`node_id`," +
+					"`address`,`epoch`,`config`,`error_message`,`detail`," +
+					"`ext`,`deleted`[)]").
+					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry '123456' for key 'uidx_mid'"})
+			},
+		},
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
@@ -653,10 +705,9 @@ func TestJob(t *testing.T) {
 func TestWorker(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -905,10 +956,9 @@ func TestWorker(t *testing.T) {
 func TestResource(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -1324,10 +1374,9 @@ func TestResource(t *testing.T) {
 func TestError(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -1359,8 +1408,7 @@ func TestContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
-	db, mock, err := mockGetDBConn(t)
-	require.Nil(t, err)
+	db, mock := mockGetDBConn(t)
 	defer db.Close()
 	defer mock.ExpectClose()
 
@@ -1369,7 +1417,7 @@ func TestContext(t *testing.T) {
 	defer conn.Close()
 
 	// test normal function
-	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
 	require.NoError(t, err)
 	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
 		return ctx.Value(fpname) != nil
@@ -1386,10 +1434,9 @@ func TestContext(t *testing.T) {
 func TestJobOp(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t)
+	sqlDB, mock := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)

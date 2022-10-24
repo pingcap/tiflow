@@ -307,3 +307,10 @@ func (rsm *regionStateManager) delState(regionID uint64) {
 	bucket := rsm.getBucket(regionID)
 	rsm.states[bucket].delByRegionID(regionID)
 }
+
+func (rsm *regionStateManager) regionCount() (count int64) {
+	for _, bucket := range rsm.states {
+		count += int64(bucket.len())
+	}
+	return
+}
