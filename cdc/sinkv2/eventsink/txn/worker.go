@@ -126,6 +126,8 @@ func (w *worker) runBackgroundLoop() {
 			zap.Int("workerID", w.ID))
 
 		ticker := time.NewTicker(w.flushInterval)
+		defer ticker.Stop()
+
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(time.Second)
 		defer overseerTimer.Stop()
