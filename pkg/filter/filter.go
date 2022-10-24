@@ -115,7 +115,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	}, nil
 }
 
-// ShouldIgnoreDMLEvent checks if a DML event should be ignore by conditions below:
+// ShouldIgnoreDMLEvent checks if a DML event should be ignored by conditions below:
 // 0. By startTs.
 // 1. By table name.
 // 2. By type.

@@ -646,9 +646,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	tzLoc := contextutil.TimezoneFromCtx(ctx)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
-		util.GetTimeZoneName(contextutil.TimezoneFromCtx(ctx)))
+		util.GetTimeZoneName(tzLoc))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -658,15 +659,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
-		contextutil.TimezoneFromCtx(ctx),
+		tzLoc,
 		p.filter,
 		p.changefeed.Info.Config.EnableOldValue,
 	)
+
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
