@@ -335,11 +335,12 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
-	var err error
-	// Decode previous columns.
-	var preCols []*model.Column
-	var preRawCols []types.Datum
-	var rawRow model.RowChangedDatums
+	var (
+		err        error
+		preCols    []*model.Column
+		preRawCols []types.Datum
+		rawRow     model.RowChangedDatums
+	)
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -365,8 +366,10 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 	}
 
-	var cols []*model.Column
-	var rawCols []types.Datum
+	var (
+		cols    []*model.Column
+		rawCols []types.Datum
+	)
 	if row.RowExist {
 		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
@@ -374,8 +377,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 	}
 
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
 	var intRowID int64
 	if row.RecordID.IsInt() {
 		intRowID = row.RecordID.IntValue()
@@ -399,8 +400,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		RowID:            intRowID,
 		TableInfoVersion: tableInfoVersion,
 		Table: &model.TableName{
-			Schema:      schemaName,
-			Table:       tableName,
+			Schema:      tableInfo.TableName.Schema,
+			Table:       tableInfo.TableName.Table,
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
