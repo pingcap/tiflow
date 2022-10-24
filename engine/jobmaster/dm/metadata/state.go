@@ -41,6 +41,9 @@ type Store interface {
 	Get(ctx context.Context) (state, error)
 }
 
+// ErrStateNotFound is returned when the state is not found in metadata.
+var ErrStateNotFound = errors.New("state not found")
+
 // frameworkMetaStore implements Store interface. It persists a state instance in
 // framework metadata with given encode/decode function, and will cache the latest
 // state. It's thread-safe.
@@ -127,7 +130,7 @@ func (f *frameworkMetaStore) Get(ctx context.Context) (state, error) {
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, errors.New("state not found")
+		return nil, ErrStateNotFound
 	}
 
 	f.stateCache = f.createState()

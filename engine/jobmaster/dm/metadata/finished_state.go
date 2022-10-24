@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
@@ -55,7 +56,7 @@ func (f *FinishedStateStore) ReadModifyWrite(
 
 	s, err := f.Get(ctx)
 	if err != nil {
-		if err.Error() == "state not found" {
+		if errors.Cause(err) == ErrStateNotFound {
 			s = f.createState()
 		} else {
 			return err

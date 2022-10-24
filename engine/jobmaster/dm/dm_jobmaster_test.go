@@ -374,7 +374,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.CloseImpl(context.Background())
 
 	// OnCancel
-	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
 	mockMessageAgent.On("SendMessage").Return(nil).Twice()
 	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup

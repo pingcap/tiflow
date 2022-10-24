@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
@@ -63,7 +64,7 @@ func (clusterInfoStore *ClusterInfoStore) key() string {
 func (clusterInfoStore *ClusterInfoStore) UpdateVersion(ctx context.Context, newVer semver.Version) error {
 	state, err := clusterInfoStore.Get(ctx)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	clusterInfo := state.(*ClusterInfo)
 	clusterInfo.Version = newVer

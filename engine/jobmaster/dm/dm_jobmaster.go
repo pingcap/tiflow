@@ -451,7 +451,7 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if err != nil {
 		// put cluster info for new job
 		// TODO: better error handling by error code.
-		if err.Error() == "state not found" {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
 			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
 			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
 		}

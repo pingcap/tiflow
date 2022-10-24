@@ -118,6 +118,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 	s, err := jm.metadata.FinishedStateStore().Get(ctx)
 	if err != nil {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
+			return jobStatus, nil
+		}
 		return nil, err
 	}
 	if state, ok := s.(*metadata.FinishedState); ok {
@@ -144,7 +147,7 @@ func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg 
 	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
 	default:
-		return errors.Errorf("unsupport op type %d for operate task", op)
+		return errors.Errorf("unsupported op type %d for operate task", op)
 	}
 }
 
