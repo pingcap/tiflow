@@ -143,7 +143,12 @@ func (m *mounterImpl) isWrittenByTiCDC(raw *model.RawKVEntry) (bool, error) {
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	return !rowMeta.IsNull(), nil
+	if rowMeta.IsNull() {
+		return false, nil
+	}
+	compare := rowMeta.GetBinaryLiteral4Cmp().
+		Compare(types.NewBinaryLiteralFromUint(1, 1))
+	return compare == 0, nil
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
@@ -164,11 +169,11 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	// check if this row is written by another TiCDC and
 	// whether we should ignore it.
 	if m.filter.ShouldIgnoreReplicationEvent() {
-		ok, err := m.isWrittenByTiCDC(raw)
+		ignore, err := m.isWrittenByTiCDC(raw)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapChangefeedUnretryableErr(err)
 		}
-		if ok {
+		if ignore {
 			// TODO(dongmen): remove this log after fully tested.
 			log.Warn("ignore the DML written by another TiCDC",
 				zap.Uint64("ts", raw.CRTs),
@@ -202,7 +207,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
-		
+
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
