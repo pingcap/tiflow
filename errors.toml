@@ -86,6 +86,16 @@ error = '''
 puller mem buffer reach size limit
 '''
 
+["CDC:ErrCSVDecodeFailed"]
+error = '''
+csv decode failed
+'''
+
+["CDC:ErrCSVEncodeFailed"]
+error = '''
+csv encode failed
+'''
+
 ["CDC:ErrCachedTSONotExists"]
 error = '''
 GetCachedCurrentVersion: cache entry does not exist
@@ -1086,6 +1096,11 @@ error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
+["CDC:ErrStorageSinkInvalidDateSeparator"]
+error = '''
+date separator in cloud storage sink is invalid
+'''
+
 ["CDC:ErrSupportGetOnly"]
 error = '''
 this api supports GET method only
@@ -1194,6 +1209,11 @@ unmarshal failed
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed
+'''
+
+["CDC:ErrUpstreamClosed"]
+error = '''
+upstream has been closed
 '''
 
 ["CDC:ErrUpstreamManagerNotReady"]

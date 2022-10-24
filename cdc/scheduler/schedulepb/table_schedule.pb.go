@@ -354,6 +354,7 @@ func (m *RemoveTableResponse) GetCheckpoint() tablepb.Checkpoint {
 
 type DispatchTableResponse struct {
 	// Types that are valid to be assigned to Response:
+	//
 	//	*DispatchTableResponse_AddTable
 	//	*DispatchTableResponse_RemoveTable
 	Response isDispatchTableResponse_Response `protobuf_oneof:"response"`

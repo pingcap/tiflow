@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
@@ -31,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
+func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
@@ -41,15 +42,28 @@ func newTestWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLP
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	return newWorker(id, config.ProtocolOpen, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
 }
 
-func TestBatch(t *testing.T) {
+func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
+	// 200 is about the size of a rowEvent change.
+	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(200)
+	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	require.Nil(t, err)
+	encoder := builder.Build()
+	require.Nil(t, err)
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
+	require.Nil(t, err)
+	id := model.DefaultChangeFeedID("test")
+	return newWorker(id, config.ProtocolCanalJSON, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+}
+
+func TestBatchEncode_Batch(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 	key := mqv1.TopicPartitionKey{
 		Topic:     "test",
@@ -94,7 +108,7 @@ func TestBatch(t *testing.T) {
 	wg.Wait()
 }
 
-func TestGroup(t *testing.T) {
+func TestBatchEncode_Group(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
@@ -111,7 +125,7 @@ func TestGroup(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
 	tableStatus := state.TableSinkSinking
@@ -192,7 +206,7 @@ func TestGroup(t *testing.T) {
 	require.Len(t, paritionedRows[key3], 1)
 }
 
-func TestAsyncSend(t *testing.T) {
+func TestBatchEncode_AsyncSend(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
@@ -211,7 +225,7 @@ func TestAsyncSend(t *testing.T) {
 	tableStatus := state.TableSinkSinking
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, p := newTestWorker(ctx, t)
+	worker, p := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -298,7 +312,7 @@ func TestAsyncSend(t *testing.T) {
 	require.Len(t, mp.GetEvents(key3), 2)
 }
 
-func TestAsyncSendWhenTableStopping(t *testing.T) {
+func TestBatchEncode_AsyncSendWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
@@ -307,7 +321,7 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, p := newTestWorker(ctx, t)
+	worker, p := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoopedStatus := state.TableSinkStopping
@@ -357,11 +371,97 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 	require.Len(t, mp.GetAllEvents(), 2)
 }
 
-func TestAbort(t *testing.T) {
+func TestBatchEncodeWorker_Abort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newTestWorker(ctx, t)
+	worker, _ := newBatchEncodeWorker(ctx, t)
+	defer worker.close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := worker.run(ctx)
+		require.Error(t, context.Canceled, err)
+	}()
+
+	cancel()
+	wg.Wait()
+}
+
+func TestNonBatchEncode_Send(t *testing.T) {
+	t.Parallel()
+
+	key1 := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, p := newNonBatchEncodeWorker(ctx, t)
+	defer worker.close()
+	replicatingStatus := state.TableSinkSinking
+	stoopedStatus := state.TableSinkStopping
+	events := []mqEvent{
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 1,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				},
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 2,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+				},
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 3,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+				},
+				Callback:  func() {},
+				SinkState: &stoopedStatus,
+			},
+			key: key1,
+		},
+	}
+	for _, e := range events {
+		worker.msgChan.In() <- e
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Eventually(t, func() bool {
+		return len(mp.GetAllEvents()) == 2
+	}, 3*time.Second, 100*time.Millisecond)
+	cancel()
+	wg.Wait()
+}
+
+func TestNonBatchEncodeWorker_Abort(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
 	var wg sync.WaitGroup

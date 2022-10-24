@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -73,7 +74,7 @@ func newSink(ctx context.Context,
 	encoder := encoderBuilder.Build()
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	w := newWorker(changefeedID, encoder, producer, statistics)
+	w := newWorker(changefeedID, encoderConfig.Protocol, encoder, producer, statistics)
 
 	s := &dmlSink{
 		id:             changefeedID,
@@ -106,6 +107,12 @@ func newSink(ctx context.Context,
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
+		if row.GetTableSinkState() != state.TableSinkSinking {
+			// The table where the event comes from is in stopping, so it's safe
+			// to drop the event directly.
+			row.Callback()
+			continue
+		}
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
 		partitionNum, err := s.topicManager.GetPartitionNum(topic)
 		if err != nil {

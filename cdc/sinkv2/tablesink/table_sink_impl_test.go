@@ -55,7 +55,7 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackabl
 	}
 	ackedEvents := m.events[:i]
 	for _, event := range ackedEvents {
-		if event.GetTableSinkState() != state.TableSinkStopping {
+		if event.GetTableSinkState() == state.TableSinkSinking {
 			event.Callback()
 		} else {
 			event.Callback()
@@ -274,8 +274,8 @@ func TestClose(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		err := tb.Close(context.Background())
 		require.NoError(t, err, "close should not return error")
 		wg.Done()
@@ -305,8 +305,8 @@ func TestCloseCancellable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		err := tb.Close(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()
@@ -331,8 +331,8 @@ func TestCloseReentrant(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		err := tb.Close(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()
@@ -340,6 +340,43 @@ func TestCloseReentrant(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
+	wg.Wait()
+	err = tb.Close(ctx)
+	require.Nil(t, err, "table should not be stopping again")
+}
+
+// TestCheckpointTsFrozenWhenStopping make sure wo do not update checkpoint
+// ts when it is stopping.
+func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
+		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+
+	tb.AppendRowChangedEvents(getTestRows()...)
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
+	require.Len(t, sink.events, 7, "all events should be flushed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := tb.Close(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	}()
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopping == tb.state.Load()
+	}, time.Second, time.Microsecond, "table should be stopping")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		currentTs := tb.GetCheckpointTs()
+		sink.acknowledge(105)
+		require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
+	}()
 	wg.Wait()
 	err = tb.Close(ctx)
 	require.Nil(t, err, "table should not be stopping again")

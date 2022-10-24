@@ -157,8 +157,8 @@ func codecColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Col
 func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {
 	key := &internal.MessageKey{
 		Ts:     e.CommitTs,
-		Schema: e.TableInfo.Schema,
-		Table:  e.TableInfo.Table,
+		Schema: e.TableInfo.TableName.Schema,
+		Table:  e.TableInfo.TableName.Table,
 		Type:   model.MessageTypeDDL,
 	}
 	value := &messageDDL{
@@ -170,12 +170,14 @@ func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {
 
 func msgToDDLEvent(key *internal.MessageKey, value *messageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
-	e.TableInfo = new(model.SimpleTableInfo)
+	e.TableInfo = new(model.TableInfo)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.TableInfo.Table = key.Table
-	e.TableInfo.Schema = key.Schema
+	e.TableInfo.TableName = model.TableName{
+		Schema: key.Schema,
+		Table:  key.Table,
+	}
 	e.Type = value.Type
 	e.Query = value.Query
 	return e

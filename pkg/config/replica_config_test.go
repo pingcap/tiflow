@@ -43,9 +43,17 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			Columns: []string{"a", "b"},
 		},
 	}
+	conf.Sink.CSVConfig = &CSVConfig{
+		Delimiter:       ",",
+		Quote:           "\"",
+		Terminator:      "",
+		NullString:      `\N`,
+		DateSeparator:   "month",
+		IncludeCommitTs: true,
+	}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
@@ -83,6 +91,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
 	conf.Sink.TxnAtomicity = unknownTxnAtomicity
+	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }
 

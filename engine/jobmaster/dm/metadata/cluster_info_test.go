@@ -18,10 +18,9 @@ import (
 	"testing"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInfoStore(t *testing.T) {
@@ -30,13 +29,13 @@ func TestInfoStore(t *testing.T) {
 	require.True(t, clusterInfo.Version.Equal(ver1))
 
 	clusterInfoStore := NewClusterInfoStore(mock.NewMetaMock())
-	key := clusterInfoStore.Key()
+	key := clusterInfoStore.key()
 	keys, err := adapter.DMInfoKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, keys[0], "")
 
-	state := clusterInfoStore.CreateState()
+	state := clusterInfoStore.createState()
 	require.IsType(t, &ClusterInfo{}, state)
 
 	state, err = clusterInfoStore.Get(context.Background())

@@ -15,8 +15,10 @@ package db
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -45,6 +47,7 @@ var _ actor.Actor[message.Task] = (*writer)(nil)
 
 func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]) (running bool) {
 	kvEventCount, resolvedEventCount := 0, 0
+	maxCommitTs, maxResolvedTs := uint64(0), uint64(0)
 	writes := make(map[message.Key][]byte)
 	for i := range msgs {
 		switch msgs[i].Tp {
@@ -57,14 +60,14 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 
 		ev := msgs[i].Value.InputEvent
 		if ev.IsResolved() {
-			if w.maxResolvedTs < ev.CRTs {
-				w.maxResolvedTs = ev.CRTs
+			if maxResolvedTs < ev.CRTs {
+				maxResolvedTs = ev.CRTs
 			}
 			resolvedEventCount++
 			continue
 		}
-		if w.maxCommitTs < ev.CRTs {
-			w.maxCommitTs = ev.CRTs
+		if maxCommitTs < ev.CRTs {
+			maxCommitTs = ev.CRTs
 		}
 		kvEventCount++
 
@@ -79,6 +82,12 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 	w.metricTotalEventsKV.Add(float64(kvEventCount))
 	w.metricTotalEventsResolved.Add(float64(resolvedEventCount))
+	if atomic.LoadUint64(&w.maxCommitTs) < maxCommitTs {
+		atomic.StoreUint64(&w.maxCommitTs, maxCommitTs)
+	}
+	if atomic.LoadUint64(&w.maxResolvedTs) < maxResolvedTs {
+		atomic.StoreUint64(&w.maxResolvedTs, maxResolvedTs)
+	}
 
 	if len(writes) != 0 {
 		// Send write task to db.
@@ -117,8 +126,8 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			//        --------------------------------------------->
 			// writer:                          ^ actual maxCommitTs
 			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
-			MaxCommitTs:   w.maxCommitTs,
-			MaxResolvedTs: w.maxResolvedTs,
+			MaxCommitTs:   atomic.LoadUint64(&w.maxCommitTs),
+			MaxResolvedTs: atomic.LoadUint64(&w.maxResolvedTs),
 		},
 	})
 	// It's ok if send fails, as resolved ts events are received periodically.
@@ -133,4 +142,18 @@ func (w *writer) OnClose() {
 	}
 	w.stopped = true
 	w.common.closedWg.Done()
+}
+
+func (w *writer) stats() sorter.Stats {
+	maxCommitTs := atomic.LoadUint64(&w.maxCommitTs)
+	maxResolvedTs := atomic.LoadUint64(&w.maxResolvedTs)
+	if maxCommitTs < maxResolvedTs {
+		// In case, there is no write for the table,
+		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
+		maxCommitTs = maxResolvedTs
+	}
+	return sorter.Stats{
+		CheckpointTsIngress: maxCommitTs,
+		ResolvedTsIngress:   maxResolvedTs,
+	}
 }

@@ -82,8 +82,8 @@ type mockDDLSink struct {
 	ddlHistory []string
 	mu         struct {
 		sync.Mutex
-		checkpointTs      model.Ts
-		currentTableNames []model.TableName
+		checkpointTs  model.Ts
+		currentTables []*model.TableInfo
 	}
 	syncPoint    model.Ts
 	syncPointHis []model.Ts
@@ -91,7 +91,7 @@ type mockDDLSink struct {
 	wg sync.WaitGroup
 }
 
-func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
+func (m *mockDDLSink) run(ctx context.Context) {
 	m.wg.Add(1)
 	go func() {
 		<-ctx.Done()
@@ -99,7 +99,7 @@ func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model
 	}()
 }
 
-func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+func (m *mockDDLSink) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
 	defer func() {
 		if m.resetDDLDone {
@@ -114,7 +114,7 @@ func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	return m.ddlDone, nil
 }
 
-func (m *mockDDLSink) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (m *mockDDLSink) emitSyncPoint(ctx context.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
@@ -123,17 +123,17 @@ func (m *mockDDLSink) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 	return nil
 }
 
-func (m *mockDDLSink) emitCheckpointTs(ts uint64, tableNames []model.TableName) {
+func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.checkpointTs = ts
-	m.mu.currentTableNames = tableNames
+	m.mu.currentTables = tables
 }
 
-func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []model.TableName) {
+func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.mu.checkpointTs, m.mu.currentTableNames
+	return m.mu.checkpointTs, m.mu.currentTables
 }
 
 func (m *mockDDLSink) close(ctx context.Context) error {
@@ -207,7 +207,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
 		// new ddl sink
-		func() DDLSink {
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
 				recordDDLHistory: false,
@@ -390,7 +390,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	mockDDLSink := cf.sink.(*mockDDLSink)
 
-	require.Len(t, cf.schema.AllTableNames(), 1)
+	require.Len(t, cf.schema.AllTables(), 1)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
@@ -405,7 +405,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, cf.schema.AllTableNames(), 0)
+	require.Len(t, cf.schema.AllTables(), 0)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, mockDDLPuller.resolvedTs)
@@ -1011,15 +1011,14 @@ func TestBarrierAdvance(t *testing.T) {
 		mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 		mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 
-		// Then the first tick barrier won't be changed.
 		barrier, err := cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		require.Equal(t, cf.state.Info.StartTs, barrier)
+		if i == 0 {
+			require.Equal(t, mockDDLPuller.resolvedTs, barrier)
+		}
 
-		// If sync-point is enabled, must tick more 1 time to advance barrier.
+		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
-			barrier, err := cf.handleBarrier(ctx)
-			require.Nil(t, err)
 			require.Equal(t, cf.state.Info.StartTs+10, barrier)
 		}
 

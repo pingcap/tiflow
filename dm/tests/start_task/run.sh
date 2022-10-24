@@ -55,8 +55,10 @@ function init_tracker_test() {
 	done
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 20
 
+	# now syncer will save all table structure from dump files at Init, so all tables
+	# should be loaded into schema tracker.
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t50' 1
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51' 1
 
 	cleanup_process
 	cleanup_data start_task

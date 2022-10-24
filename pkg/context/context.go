@@ -208,7 +208,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 }
 
 // NewBackendContext4Test returns a new pipeline context for test, and us
-// context.Background() as ethe parent context
+// context.Background() as the parent context
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
 }

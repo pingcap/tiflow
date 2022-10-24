@@ -23,3 +23,9 @@ level = "debug"
 reset-interval = "2s"
 initial-interval = "1s"
 max-interval = "15s"
+
+[storage.s3]
+bucket = "engine-it"
+endpoint = "http://minio-standalone:9000/"
+access-key = "engine"
+secret-access-key = "engineSecret"

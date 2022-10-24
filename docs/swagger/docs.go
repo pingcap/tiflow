@@ -743,6 +743,29 @@ var doc = `{
         }
     },
     "definitions": {
+        "config.CSVConfig": {
+            "type": "object",
+            "properties": {
+                "date-separator": {
+                    "type": "string"
+                },
+                "delimiter": {
+                    "type": "string"
+                },
+                "include-commit-ts": {
+                    "type": "boolean"
+                },
+                "null": {
+                    "type": "string"
+                },
+                "quote": {
+                    "type": "string"
+                },
+                "terminator": {
+                    "type": "string"
+                }
+            }
+        },
         "config.ColumnSelector": {
             "type": "object",
             "properties": {
@@ -790,6 +813,9 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/config.ColumnSelector"
                     }
+                },
+                "csv": {
+                    "$ref": "#/definitions/config.CSVConfig"
                 },
                 "dispatchers": {
                     "type": "array",

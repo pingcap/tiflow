@@ -46,7 +46,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
-	Sink: &SinkConfig{},
+	Sink: &SinkConfig{
+		CSVConfig: &CSVConfig{
+			Quote:      string(DoubleQuoteChar),
+			Delimiter:  string(Comma),
+			Terminator: string(LF),
+			NullString: NULL,
+		},
+	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,

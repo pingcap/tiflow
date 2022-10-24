@@ -42,6 +42,13 @@ var (
 			Name:      "checkpoint_ts_lag",
 			Help:      "checkpoint ts lag of changefeeds in seconds",
 		}, []string{"namespace", "changefeed"})
+	currentPDTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "current_pd_ts",
+			Help:      "The current PD ts",
+		}, []string{"namespace", "changefeed"})
 
 	changefeedCheckpointLagDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -134,6 +141,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedResolvedTsLagGauge)
 	registry.MustRegister(changefeedResolvedTsLagDuration)
+	registry.MustRegister(currentPDTsGauge)
 
 	registry.MustRegister(ownershipCounter)
 	registry.MustRegister(changefeedStatusGauge)

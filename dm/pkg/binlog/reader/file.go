@@ -25,12 +25,11 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // FileReader is a binlog event reader which reads binlog events from a file.

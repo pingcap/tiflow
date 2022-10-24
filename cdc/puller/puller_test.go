@@ -47,6 +47,7 @@ func (mc *mockPdClientForPullerTest) GetClusterID(ctx context.Context) uint64 {
 }
 
 type mockCDCKVClient struct {
+	kv.CDCKVClient
 	expectations chan model.RegionFeedEvent
 }
 
@@ -89,10 +90,6 @@ func (mc *mockCDCKVClient) EventFeed(
 			eventCh <- ev
 		}
 	}
-}
-
-func (mc *mockCDCKVClient) RegionCount() uint64 {
-	return 0
 }
 
 func (mc *mockCDCKVClient) Close() error {
@@ -158,22 +155,25 @@ func TestPullerResolvedForward(t *testing.T) {
 	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)
 
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: []*model.ResolvedSpan{{
-			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
-			ResolvedTs: uint64(1001),
-		}},
+		Resolved: &model.ResolvedSpans{
+			Spans: []model.RegionComparableSpan{{
+				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
+			}}, ResolvedTs: uint64(1001),
+		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: []*model.ResolvedSpan{{
-			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
-			ResolvedTs: uint64(1002),
-		}},
+		Resolved: &model.ResolvedSpans{
+			Spans: []model.RegionComparableSpan{{
+				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
+			}}, ResolvedTs: uint64(1002),
+		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: []*model.ResolvedSpan{{
-			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
-			ResolvedTs: uint64(1000),
-		}},
+		Resolved: &model.ResolvedSpans{
+			Spans: []model.RegionComparableSpan{{
+				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
+			}}, ResolvedTs: uint64(1000),
+		},
 	})
 	ev := <-plr.Output()
 	require.Equal(t, model.OpTypeResolved, ev.OpType)

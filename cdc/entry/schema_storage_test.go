@@ -32,12 +32,11 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
-
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestSchema(t *testing.T) {
@@ -235,7 +234,7 @@ func TestTable(t *testing.T) {
 	}
 	preTableInfo, err := snap.PreTableInfo(job)
 	require.Nil(t, err)
-	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T"})
+	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T", TableID: 2})
 	require.Equal(t, preTableInfo.ID, int64(2))
 
 	err = snap.HandleDDL(job)
@@ -262,7 +261,7 @@ func TestTable(t *testing.T) {
 	}
 	preTableInfo, err = snap.PreTableInfo(job)
 	require.Nil(t, err)
-	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T"})
+	require.Equal(t, preTableInfo.TableName, model.TableName{Schema: "Test", Table: "T", TableID: 9})
 	require.Equal(t, preTableInfo.ID, int64(9))
 
 	err = snap.HandleDDL(job)

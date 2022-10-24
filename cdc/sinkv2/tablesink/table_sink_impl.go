@@ -28,8 +28,10 @@ import (
 )
 
 // Assert TableSink implementation
-var _ TableSink = (*EventTableSink[*model.RowChangedEvent])(nil)
-var _ TableSink = (*EventTableSink[*model.SingleTableTxn])(nil)
+var (
+	_ TableSink = (*EventTableSink[*model.RowChangedEvent])(nil)
+	_ TableSink = (*EventTableSink[*model.SingleTableTxn])(nil)
+)
 
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
@@ -70,11 +72,13 @@ func New[E eventsink.TableEvent](
 	}
 }
 
+// AppendRowChangedEvents appends row changed or txn events to the table sink.
 func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
+// UpdateResolvedTs advances the resolved ts of the table sink.
 func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
@@ -112,6 +116,7 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
+// GetCheckpointTs returns the checkpoint ts of the table sink.
 func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
@@ -129,6 +134,12 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		return nil
 	}
 
+	// Notice: We have to set the state to stopping first,
+	// otherwise the progressTracker may be advanced incorrectly.
+	// For example, if we do not freeze it and set the state to stooping
+	// then the progressTracker may be advanced to the checkpointTs
+	// because backend sink drops some events.
+	e.progressTracker.freezeProcess()
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
 	stoppingCheckpointTs := e.GetCheckpointTs()

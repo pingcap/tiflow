@@ -51,6 +51,7 @@ func TestExampleWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	broker := worker.BaseWorker.(*framework.BaseWorkerForTesting).Broker
+	defer broker.Close()
 	broker.AssertPersisted(t, "/local/example")
 	broker.AssertFileExists(t, workerID, "/local/example", "1.txt")
 	broker.AssertFileExists(t, workerID, "/local/example", "2.txt")

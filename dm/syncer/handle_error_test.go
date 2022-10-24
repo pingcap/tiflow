@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleError(t *testing.T) {

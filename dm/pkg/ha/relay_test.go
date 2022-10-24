@@ -14,9 +14,8 @@
 package ha
 
 import (
-	"github.com/pingcap/tiflow/dm/config"
-
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/config"
 )
 
 func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {

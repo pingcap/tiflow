@@ -24,9 +24,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
-
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/parser/model"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -41,13 +45,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-
-	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -774,8 +772,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	// TODO: refine dbConn and add ExecuteSQLAutoSplit
-	_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
+	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, cp.metricProxies, sqls, args...)
 	if err != nil {
 		return err
 	}

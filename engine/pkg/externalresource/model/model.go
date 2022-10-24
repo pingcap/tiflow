@@ -14,32 +14,44 @@
 package model
 
 import (
+	"encoding/hex"
+	"fmt"
 	"path"
 	"strings"
 
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type (
 	// WorkerID alias worker id string
 	WorkerID = string
-	// ResourceID should be in the form of `/<type>/<unique-name>`, currently
-	// only local type is available.
-	ResourceID = string
 	// JobID alias job id string
 	JobID = model.JobID
 	// ExecutorID alias model.ExecutorID
 	ExecutorID = model.ExecutorID
+
+	// ResourceType represents the type of the resource
+	ResourceType string
+	// ResourceID should be in the form of `/<type>/<unique-name>`, currently
+	// only local type is available.
+	ResourceID = string
+	// ResourceName is a string encoding raw resource name in hexadecimal.
+	// The raw resource name is the ResourceID with its type prefix removed.
+	// For example, the raw resource name of `/local/resource-1` is `resource-1`.
+	ResourceName = string
 )
 
 // ResourceUpdateColumns is used in gorm update
 var ResourceUpdateColumns = []string{
 	"updated_at",
 	"project_id",
+	"tenant_id",
 	"id",
 	"job_id",
 	"worker_id",
@@ -55,7 +67,7 @@ type ResourceKey struct {
 
 // ToResourceKeys converts resource requirements in pb to resource keys
 func ToResourceKeys(requires []*pb.ResourceKey) []ResourceKey {
-	if requires == nil || len(requires) == 0 {
+	if len(requires) == 0 {
 		return nil
 	}
 	rks := make([]ResourceKey, 0, len(requires))
@@ -83,6 +95,7 @@ func ToResourceRequirement(jobID JobID, resourceIDs ...ResourceID) []*pb.Resourc
 type ResourceMeta struct {
 	ormModel.Model
 	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;"`
+	TenantID  tenant.Tenant    `json:"tenant-id" gorm:"column:tenant_id;type:varchar(128) not null;"`
 	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:2;index:idx_rei,priority:2"`
 	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:1"`
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(128) not null"`
@@ -112,6 +125,7 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 func (m *ResourceMeta) Map() map[string]interface{} {
 	return map[string]interface{}{
 		"project_id":  m.ProjectID,
+		"tenant_id":   m.TenantID,
 		"id":          m.ID,
 		"job_id":      m.Job,
 		"worker_id":   m.Worker,
@@ -120,21 +134,20 @@ func (m *ResourceMeta) Map() map[string]interface{} {
 	}
 }
 
-// ResourceType represents the type of the resource
-type ResourceType string
-
-// ResourceName is the ResourceID with its type prefix removed.
-// For example, the resource name of `/local/resource-1` is `resource-1`.
-type ResourceName = string
-
-// Define all supported resource types
+// Define all supported resource types.
 const (
 	ResourceTypeLocalFile = ResourceType("local")
 	ResourceTypeS3        = ResourceType("s3")
 )
 
-// PasreResourceID returns the ResourceType and the path suffix.
-func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
+// BuildPrefix returns the prefix of the resource type.
+func (r ResourceType) BuildPrefix() string {
+	// For local file, the prefix is `/local`. For S3, the prefix is `/s3`.
+	return fmt.Sprintf("/%s", r)
+}
+
+// ParseResourceID returns the ResourceType and the path suffix.
+func ParseResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
 		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
@@ -155,10 +168,29 @@ func PasreResourceID(rpath ResourceID) (ResourceType, ResourceName, error) {
 	}
 
 	suffix := path.Join(segments[1:]...)
-	return resourceType, suffix, nil
+	return resourceType, EncodeResourceName(suffix), nil
 }
 
 // BuildResourceID returns an ResourceID based on given ResourceType and ResourceName.
-func BuildResourceID(rtype ResourceType, name ResourceName) ResourceID {
+func BuildResourceID(rtype ResourceType, resName ResourceName) ResourceID {
+	name, err := DecodeResourceName(resName)
+	if err != nil {
+		log.Panic("invalid resource name", zap.Error(err))
+	}
 	return path.Join("/"+string(rtype), name)
+}
+
+// EncodeResourceName encodes raw resource name to a valid resource name.
+func EncodeResourceName(rawResName string) ResourceName {
+	resName := hex.EncodeToString([]byte(rawResName))
+	return resName
+}
+
+// DecodeResourceName decodes resource name to raw resource name.
+func DecodeResourceName(resName ResourceName) (string, error) {
+	rawResName, err := hex.DecodeString(resName)
+	if err != nil {
+		return "", err
+	}
+	return string(rawResName), nil
 }

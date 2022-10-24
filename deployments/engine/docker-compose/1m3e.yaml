@@ -21,6 +21,8 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-executor-0:
     image: dataflow:test
     container_name: server-executor-0
@@ -41,6 +43,8 @@ services:
     restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-1:
     image: dataflow:test
     container_name: server-executor-1
@@ -61,6 +65,8 @@ services:
     restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-2:
     image: dataflow:test
     container_name: server-executor-2
@@ -81,6 +87,8 @@ services:
     restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -90,6 +98,7 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
+
   mysql-standalone:
     image: mysql:8.0
     container_name: mysql-standalone

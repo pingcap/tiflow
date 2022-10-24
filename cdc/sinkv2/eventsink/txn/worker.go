@@ -125,7 +125,9 @@ func (w *worker) runBackgroundLoop() {
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID))
 
-		timer := time.NewTicker(w.flushInterval)
+		ticker := time.NewTicker(w.flushInterval)
+		defer ticker.Stop()
+
 		var flushTimeSlice, totalTimeSlice time.Duration
 		overseerTimer := time.NewTicker(time.Second)
 		defer overseerTimer.Stop()
@@ -149,7 +151,7 @@ func (w *worker) runBackgroundLoop() {
 				if w.onEvent(txn) && w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
-			case <-timer.C:
+			case <-ticker.C:
 				if w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
@@ -167,8 +169,10 @@ func (w *worker) runBackgroundLoop() {
 	}()
 }
 
+// onEvent is called when a new event is received.
+// It returns true if the event is sent to backend.
 func (w *worker) onEvent(txn txnWithNotifier) bool {
-	if txn.txnEvent.GetTableSinkState() == state.TableSinkStopping {
+	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
 		txn.txnEvent.Callback()
@@ -180,10 +184,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
-	if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) {
-		return true
-	}
-	return false
+	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
 }
 
 // doFlush flushes the backend.

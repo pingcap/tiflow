@@ -20,9 +20,6 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -31,6 +28,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 var retryTimeout = 3 * time.Second
@@ -216,6 +215,25 @@ func (conn *DBConn) ExecuteSQL(
 	args ...[]interface{},
 ) (int, error) {
 	return conn.ExecuteSQLWithIgnore(tctx, metricProxies, nil, queries, args...)
+}
+
+// ExecuteSQLAutoSplit wraps BaseConn.ExecuteSQLAutoSplit.
+// TODO: refine DBConn and BaseConn.
+func (conn *DBConn) ExecuteSQLAutoSplit(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	queries []string,
+	args ...[]interface{},
+) error {
+	if conn == nil {
+		// only happens in test
+		return nil
+	}
+	var m *prometheus.HistogramVec
+	if metricProxies != nil {
+		m = metricProxies.StmtHistogram
+	}
+	return conn.baseConn.ExecuteSQLsAutoSplit(tctx, m, conn.cfg.Name, queries, args...)
 }
 
 func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {

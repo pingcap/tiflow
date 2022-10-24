@@ -20,11 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/engine/framework/taskutil"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 const (

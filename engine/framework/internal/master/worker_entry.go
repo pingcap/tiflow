@@ -19,11 +19,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // workerEntryState is the state of a worker
@@ -62,7 +61,6 @@ const (
 type workerEntry struct {
 	id         frameModel.WorkerID
 	executorID model.ExecutorID
-	epoch      frameModel.Epoch
 
 	mu       sync.Mutex
 	expireAt time.Time

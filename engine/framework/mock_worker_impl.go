@@ -17,15 +17,14 @@ import (
 	"context"
 	"sync"
 
-	"github.com/stretchr/testify/mock"
-	"go.uber.org/atomic"
-	"go.uber.org/dig"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
 )
 
 type mockWorkerImpl struct {
@@ -39,8 +38,7 @@ type mockWorkerImpl struct {
 	messageSender         *p2p.MockMessageSender
 	metaClient            pkgOrm.Client
 
-	failoverCount atomic.Int64
-	closed        atomic.Bool
+	closed atomic.Bool
 }
 
 type workerParamListForTest struct {

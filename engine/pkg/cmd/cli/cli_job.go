@@ -20,11 +20,10 @@ import (
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // defaultMasterAddr is the default master address.
@@ -62,7 +61,7 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 }
 
 // validate checks that the provided job options are valid.
-func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobGeneralOptions) validate(_ context.Context) error {
 	if len(o.masterAddrs) == 0 {
 		o.masterAddrs = []string{defaultMasterAddr}
 		log.Warn("the master-addrs are not assigned, use default addr: " + defaultMasterAddr)

@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -108,6 +109,7 @@ func TestServe(t *testing.T) {
 }
 
 func testPprof(t *testing.T, addr string) {
+	ctx := context.Background()
 	urls := []string{
 		"/debug/pprof/",
 		"/debug/pprof/cmdline",
@@ -121,8 +123,10 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/goroutine?debug=1",
 		"/debug/pprof/mutex?debug=1",
 	}
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	for _, uri := range urls {
-		resp, err := http.Get(addr + uri)
+		resp, err := cli.Get(ctx, addr+uri)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		_, err = io.ReadAll(resp.Body)
@@ -132,7 +136,10 @@ func testPprof(t *testing.T, addr string) {
 }
 
 func testPrometheusMetrics(t *testing.T, addr string) {
-	resp, err := http.Get(addr + "/metrics")
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
+	resp, err := cli.Get(ctx, addr+"/metrics")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -229,8 +236,11 @@ func TestCollectMetric(t *testing.T) {
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		resp, err := http.Get(addr + "/metrics")
+		resp, err := cli.Get(ctx, addr+"/metrics")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -287,15 +297,20 @@ func TestHTTPErrorHandler(t *testing.T) {
 		return true
 	}, time.Second*5, time.Millisecond*100, "wait for server start")
 
-	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
+
+	resp, err := cli.Get(ctx, fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
+	resp, err = cli.Get(ctx, fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	err = resp.Body.Close()
 	require.NoError(t, err)
 
 	var pbStatus spb.Status

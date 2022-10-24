@@ -16,9 +16,8 @@ package shardddl
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInfoSlice(t *testing.T) {

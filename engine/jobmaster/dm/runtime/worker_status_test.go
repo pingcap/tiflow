@@ -18,9 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWorkerStatus(t *testing.T) {
