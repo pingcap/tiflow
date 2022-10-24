@@ -211,22 +211,11 @@ func (m *mounter) buildRowChangedEvent(raw *model.RawKVEntry, tableInfo *model.T
 }
 
 func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
-	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
-		if len(rawColValue) == 0 {
-			return nil, false, nil
-		}
-		row, err := decodeRow(rawColValue, base.RecordID, tableInfo, m.tz)
-		if err != nil {
-			return nil, false, errors.Trace(err)
-		}
-		return row, true, nil
-	}
-
-	row, rowExist, err := decodeRow(rawValue)
+	row, rowExist, err := m.buildRow(rawValue, base.RecordID, tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	preRow, preRowExist, err := decodeRow(rawOldValue)
+	preRow, preRowExist, err := m.buildRow(rawOldValue, base.RecordID, tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -238,6 +227,17 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawValue []byt
 		RowExist:    rowExist,
 		PreRowExist: preRowExist,
 	}, nil
+}
+
+func (m *mounter) buildRow(rawValue []byte, recordID kv.Handle, tableInfo *model.TableInfo) (map[int64]types.Datum, bool, error) {
+	if len(rawValue) == 0 {
+		return nil, false, nil
+	}
+	row, err := decodeRow(rawValue, recordID, tableInfo, m.tz)
+	if err != nil {
+		return nil, false, errors.Trace(err)
+	}
+	return row, true, nil
 }
 
 // IsLegacyFormatJob returns true if the job is from the legacy DDL list key.
@@ -286,6 +286,68 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	return job, nil
 }
 
+type columnBuilder struct {
+	columns    []*model.Column
+	rawColumns []types.Datum
+}
+
+func NewColumnBuilder() columnBuilder {
+	return columnBuilder{
+		columns:    make([]*model.Column, 0),
+		rawColumns: make([]types.Datum, 0),
+	}
+}
+
+func (c columnBuilder) buildColumns(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
+	c.columns = c.columns[:0]
+	c.rawColumns = c.rawColumns[:0]
+	for _, colInfo := range tableInfo.Columns {
+		if !model.IsColCDCVisible(colInfo) {
+			log.Debug("skip the column which is not visible",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
+			continue
+		}
+		colName := colInfo.Name.O
+		colDatums, exist := datums[colInfo.ID]
+		if !exist && !fillWithDefaultValue {
+			log.Debug("column value is not found",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
+			continue
+		}
+		var (
+			err      error
+			warn     string
+			size     int
+			colValue interface{}
+		)
+		if exist {
+			colValue, size, warn, err = formatColVal(colDatums, colInfo)
+		} else if fillWithDefaultValue {
+			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+		}
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+		}
+		defaultValue := getDDLDefaultDefinition(colInfo)
+
+		c.rawColumns = append(c.rawColumns, colDatums)
+		c.columns = append(c.columns, &model.Column{
+			Name:    colName,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
+			Value:   colValue,
+			Default: defaultValue,
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+			// ApproximateBytes = column data size + column struct size
+			ApproximateBytes: size + sizeOfEmptyColumn,
+		})
+	}
+	return c.columns, c.rawColumns, nil
+}
+
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -298,15 +360,17 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
 			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
-		var err error
-		var warn string
-		var size int
+		var (
+			err      error
+			warn     string
+			size     int
+			colValue interface{}
+		)
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
@@ -320,8 +384,9 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		defaultValue := getDDLDefaultDefinition(colInfo)
 		colSize += size
-		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
-		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
+		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		rawCols[offset] = colDatums
+		cols[offset] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.GetType(),
 			Charset: colInfo.GetCharset(),
@@ -336,6 +401,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
+	cb := NewColumnBuilder()
 	var (
 		err        error
 		preCols    []*model.Column
@@ -350,7 +416,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		//preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		//if err != nil {
+		//	return nil, rawRow, errors.Trace(err)
+		//}
+
+		preCols, preRawCols, err = cb.buildColumns(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -372,7 +443,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		rawCols []types.Datum
 	)
 	if row.RowExist {
-		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, err = cb.buildColumns(tableInfo, row.Row, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
