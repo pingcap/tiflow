@@ -1,0 +1,19 @@
+task-mode: full
+target-database:
+  host: host.docker.internal
+  port: 4000
+  user: root
+  password: ''
+upstreams:
+  - db-config:
+      host: host.docker.internal
+      port: 3306
+      user: root
+      password: ''
+    source-id: mysql-01
+    block-allow-list: balist-01
+    loader-thread: 1
+block-allow-list:
+  balist-01:
+    do-dbs:
+      - dm_many_tables
