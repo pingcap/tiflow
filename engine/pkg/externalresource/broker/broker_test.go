@@ -41,6 +41,19 @@ func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 	return broker, cli, tmpDir
 }
 
+// func TestNewBroker(t *testing.T) {
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
+
+// 	c := client.NewMockServerMasterClient(gomock.NewController(t))
+// 	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryResourceRequest{}).Return(
+// 		nil, status.Error(codes.NotFound, "not found")).Times(1)
+
+// 	brk, err := NewBroker(ctx, "executor-1", &c)
+// 	require.Nil(t, brk)
+// 	require.ErrorContains(t, err, "query storage config failed")
+// }
+
 func TestBrokerOpenNewStorage(t *testing.T) {
 	t.Parallel()
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
