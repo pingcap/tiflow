@@ -36,11 +36,13 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestQueryStatusAPI(t *testing.T) {
 	var (
+		ctx               = context.Background()
 		metaKVClient      = kvmock.NewMetaMock()
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
@@ -104,30 +106,66 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
-		finishedTaskStatus = runtime.FinishedTaskStatus{
-			TaskStatus: runtime.TaskStatus{
-				Unit:           frameModel.WorkerDMLoad,
-				Task:           "task2",
-				Stage:          metadata.StageFinished,
-				CfgModRevision: 3,
+		finishedTaskState  = &metadata.FinishedState{
+			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
+				"task2": {
+					&metadata.FinishedTaskStatus{
+						TaskStatus: metadata.TaskStatus{
+							Unit:           frameModel.WorkerDMDump,
+							Task:           "task2",
+							Stage:          metadata.StageFinished,
+							CfgModRevision: 3,
+						},
+						Status: dumpStatusBytes,
+					},
+					&metadata.FinishedTaskStatus{
+						TaskStatus: metadata.TaskStatus{
+							Unit:           frameModel.WorkerDMLoad,
+							Task:           "task2",
+							Stage:          metadata.StageFinished,
+							CfgModRevision: 3,
+						},
+						Status: loadStatusBytes,
+					},
+				},
+				"task7": {
+					&metadata.FinishedTaskStatus{
+						TaskStatus: metadata.TaskStatus{
+							Unit:           frameModel.WorkerDMDump,
+							Task:           "task7",
+							Stage:          metadata.StageFinished,
+							CfgModRevision: 4,
+						},
+						Status: dumpStatusBytes,
+					},
+					&metadata.FinishedTaskStatus{
+						TaskStatus: metadata.TaskStatus{
+							Unit:           frameModel.WorkerDMLoad,
+							Task:           "task7",
+							Stage:          metadata.StageFinished,
+							CfgModRevision: 4,
+						},
+						Status: loadStatusBytes,
+					},
+				},
 			},
-			Result: &pb.ProcessResult{
-				IsCanceled: false,
-			},
-			Status: loadStatusBytes,
 		}
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", frameModel.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
+	messageAgent.On("SendRequest", mock.Anything, "task3", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", frameModel.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
+	messageAgent.On("SendRequest", mock.Anything, "task4", mock.Anything, mock.Anything).Return(dumpStatusResp, nil).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", frameModel.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
+	messageAgent.On("SendRequest", mock.Anything, "task5", mock.Anything, mock.Anything).Return(loadStatusResp, nil).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", frameModel.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
-	jm.finishedStatus.Store("task7", finishedTaskStatus)
+	messageAgent.On("SendRequest", mock.Anything, "task6", mock.Anything, mock.Anything).Return(syncStatusResp, nil).Once()
+
+	err := jm.metadata.FinishedStateStore().Put(ctx, finishedTaskState)
+	require.NoError(t, err)
 
 	// no job
 	jobStatus, err := jm.QueryJobStatus(context.Background(), nil)
@@ -136,10 +174,6 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	require.NoError(t, jm.metadata.JobStore().Put(context.Background(), job))
 
-	messageAgent.On("SendRequest").Return(nil, context.DeadlineExceeded).Once()
-	messageAgent.On("SendRequest").Return(dumpStatusResp, nil).Once()
-	messageAgent.On("SendRequest").Return(loadStatusResp, nil).Once()
-	messageAgent.On("SendRequest").Return(syncStatusResp, nil).Once()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -151,6 +185,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
+
 	require.NoError(t, err)
 
 	expectedStatus := `{
@@ -170,12 +205,12 @@ func TestQueryStatusAPI(t *testing.T) {
 		},
 		"task2": {
 			"expected_stage": "Finished",
-			"worker_id": "worker2",
+			"worker_id": "",
 			"config_outdated": true,
 			"status": {
-				"error_message": "task task2 is finished and status has been deleted",
-				"unit": "DMLoadTask",
-				"stage": "Finished",
+				"error_message": "worker for task task2 not found",
+				"unit": "",
+				"stage": "",
 				"result": null,
 				"status": null
 			}
@@ -198,6 +233,24 @@ func TestQueryStatusAPI(t *testing.T) {
 			"config_outdated": true,
 			"status": {
 				"error_message": "",
+				"unit": "DMDumpTask",
+				"stage": "Running",
+				"result": null,
+				"status": {
+					"totalTables": 10,
+					"completedTables": 1,
+					"finishedBytes": 100,
+					"finishedRows": 10,
+					"estimateTotalRows": 1000
+				}
+			}
+		},
+		"task5": {
+			"expected_stage": "Running",
+			"worker_id": "worker5",
+			"config_outdated": false,
+			"status": {
+				"error_message": "",
 				"unit": "DMLoadTask",
 				"stage": "Paused",
 				"result": {
@@ -212,10 +265,10 @@ func TestQueryStatusAPI(t *testing.T) {
 				}
 			}
 		},
-		"task5": {
+		"task6": {
 			"expected_stage": "Running",
-			"worker_id": "worker5",
-			"config_outdated": false,
+			"worker_id": "worker6",
+			"config_outdated": true,
 			"status": {
 				"error_message": "",
 				"unit": "DMSyncTask",
@@ -249,34 +302,42 @@ func TestQueryStatusAPI(t *testing.T) {
 				}
 			}
 		},
-		"task6": {
-			"expected_stage": "Running",
-			"worker_id": "worker6",
+		"task7": {
+			"expected_stage": "Finished",
+			"worker_id": "",
 			"config_outdated": true,
 			"status": {
-				"error_message": "",
-				"unit": "DMDumpTask",
-				"stage": "Running",
+				"error_message": "worker for task task7 not found",
+				"unit": "",
+				"stage": "",
 				"result": null,
-				"status": {
+				"status": null
+			}
+		}
+	},
+	"finished_unit_status": {
+		"task2": [
+			{
+				"Unit": "DMDumpTask",
+				"Task": "task2",
+				"Stage": "Finished",
+				"CfgModRevision": 3,
+				"Result": null,
+				"Status": {
 					"totalTables": 10,
 					"completedTables": 1,
 					"finishedBytes": 100,
 					"finishedRows": 10,
 					"estimateTotalRows": 1000
 				}
-			}
-		},
-		"task7": {
-			"expected_stage": "Finished",
-			"worker_id": "worker7",
-			"config_outdated": false,
-			"status": {
-				"error_message": "",
-				"unit": "DMLoadTask",
-				"stage": "Finished",
-				"result": {},
-				"status": {
+			},
+			{
+				"Unit": "DMLoadTask",
+				"Task": "task2",
+				"Stage": "Finished",
+				"CfgModRevision": 3,
+				"Result": null,
+				"Status": {
 					"finishedBytes": 4,
 					"totalBytes": 100,
 					"progress": "4%",
@@ -284,19 +345,48 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlogGTID": "1-2-3"
 				}
 			}
-		}
+		],
+		"task7": [
+			{
+				"Unit": "DMDumpTask",
+				"Task": "task7",
+				"Stage": "Finished",
+				"CfgModRevision": 4,
+				"Result": null,
+				"Status": {
+					"totalTables": 10,
+					"completedTables": 1,
+					"finishedBytes": 100,
+					"finishedRows": 10,
+					"estimateTotalRows": 1000
+				}
+			},
+			{
+				"Unit": "DMLoadTask",
+				"Task": "task7",
+				"Stage": "Finished",
+				"CfgModRevision": 4,
+				"Result": null,
+				"Status": {
+					"finishedBytes": 4,
+					"totalBytes": 100,
+					"progress": "4%",
+					"metaBinlog": "mysql-bin.000002, 8",
+					"metaBinlogGTID": "1-2-3"
+				}
+			}
+		]
 	}
 }`
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
-	require.NoError(t, err)
-	require.Equal(t, sortString(expectedStatus), sortString(string(status)))
+	require.Equal(t, expectedStatus, string(status))
 }
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
 		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
 	}
-	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupported op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
 }
 
@@ -356,21 +446,14 @@ func TestUpdateJobCfg(t *testing.T) {
 	}
 	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "state not found")
 
-	jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil)
+	err := jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil)
+	require.NoError(t, err)
 	verDB = conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
-	jm.finishedStatus.Store("key", "val")
-	mockCheckpointAgent.On("Update").Return(nil)
-	require.NoError(t, jm.UpdateJobCfg(context.Background(), jobCfg))
-	// finished status should be reset.
-	jm.finishedStatus.Range(func(k, v interface{}) bool {
-		require.FailNow(t, "finished status should be reset")
-		return true
-	})
 }
 
 func TestBinlog(t *testing.T) {
@@ -384,8 +467,8 @@ func TestBinlog(t *testing.T) {
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, resp)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
-	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
 	job := metadata.NewJob(&config.JobCfg{Upstreams: []*config.UpstreamCfg{
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task1"}},
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task2"}},
@@ -408,8 +491,8 @@ func TestBinlogSchema(t *testing.T) {
 	resp := jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{})
 	require.Equal(t, "must specify at least one source", resp.ErrorMsg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
-	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
 	resp = jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{Sources: []string{"task1", "task2"}})
 	require.Equal(t, "", resp.ErrorMsg)
 	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
