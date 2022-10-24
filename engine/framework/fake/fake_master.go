@@ -365,10 +365,9 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 		if m.canceling.Load() {
 			m.setState(frameModel.WorkerStateStopped)
 			return m.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("fake master is canceled"))
-		} else {
-			m.setState(frameModel.WorkerStateFinished)
-			return m.Exit(ctx, framework.ExitReasonFinished, nil, []byte("all workers have been finished"))
 		}
+		m.setState(frameModel.WorkerStateFinished)
+		return m.Exit(ctx, framework.ExitReasonFinished, nil, []byte("all workers have been finished"))
 	}
 
 	return nil
