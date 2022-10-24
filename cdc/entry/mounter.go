@@ -149,19 +149,27 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	row, err := func() (*model.RowChangedEvent, error) {
-		if snap.IsIneligibleTableID(physicalTableID) {
-			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+	if snap.IsIneligibleTableID(physicalTableID) {
+		log.Debug("skip the DML of ineligible table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", physicalTableID),
+			zap.Uint64("ts", raw.CRTs))
+		return nil, nil
+	}
+	tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
+	if !exist {
+		if snap.IsTruncateTableID(physicalTableID) {
+			log.Debug("skip the DML of truncated table",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", physicalTableID),
+				zap.Uint64("ts", raw.CRTs))
 			return nil, nil
 		}
-		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
-		if !exist {
-			if snap.IsTruncateTableID(physicalTableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
-				return nil, nil
-			}
-			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
-		}
+		return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
+	}
+	row, err := func() (*model.RowChangedEvent, error) {
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
