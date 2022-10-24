@@ -68,12 +68,12 @@ type Mounter interface {
 }
 
 type mounter struct {
-	schemaStorage                SchemaStorage
-	tz                           *time.Location
-	enableOldValue               bool
-	changefeedID                 model.ChangeFeedID
-	filter                       pfilter.Filter
-	metricMountDuration          prometheus.Observer
+	schemaStorage  SchemaStorage
+	tz             *time.Location
+	enableOldValue bool
+	changefeedID   model.ChangeFeedID
+	filter         pfilter.Filter
+
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
 }
@@ -90,8 +90,6 @@ func NewMounter(schemaStorage SchemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
 		filter:         filter,
-		metricMountDuration: mountDuration.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
@@ -108,7 +106,7 @@ func (m *mounter) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEven
 	if pEvent.IsResolved() {
 		return true, nil
 	}
-	start := time.Now()
+
 	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -121,10 +119,7 @@ func (m *mounter) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEven
 	pEvent.Row = row
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
-	duration := time.Since(start)
-	if duration > time.Second {
-		m.metricMountDuration.Observe(duration.Seconds())
-	}
+
 	return false, nil
 }
 
