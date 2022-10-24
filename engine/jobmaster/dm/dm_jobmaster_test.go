@@ -108,6 +108,8 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 	mockServerMasterClient := client.NewMockServerMasterClient(gomock.NewController(t.T()))
 	mockExecutorGroup := client.NewMockExecutorGroup()
+	broker := broker.NewBrokerForTesting("test-executor-id")
+	defer broker.Close()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
@@ -115,7 +117,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ExecutorGroup:         mockExecutorGroup,
 		ServerMasterClient:    mockServerMasterClient,
-		ResourceBroker:        nil,
+		ResourceBroker:        broker,
 	}
 
 	RegisterWorker()
@@ -452,6 +454,10 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Error(0)
+}
+
+func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
+	return false
 }
 
 type MockCheckpointAgent struct {

@@ -143,8 +143,10 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	brk, cli, _ := newBroker(t)
 	defer brk.Close()
+	require.False(t, brk.IsS3StorageEnabled())
 	mockS3FileManager, _ := s3.NewFileManagerForUT(t.TempDir(), brk.executorID)
 	brk.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager
+	require.True(t, brk.IsS3StorageEnabled())
 
 	openStorageWithClean := func(resID resModel.ResourceID) {
 		// resource metadata exists

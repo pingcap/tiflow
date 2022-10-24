@@ -35,7 +35,7 @@ func TestExecutorManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
-	mgr := NewExecutorManagerImpl(metaClient, heartbeatTTL, checkInterval, nil)
+	mgr := NewExecutorManagerImpl(metaClient, heartbeatTTL, checkInterval)
 
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
@@ -108,7 +108,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	heartbeatTTL := time.Millisecond * 400
 	checkInterval := time.Millisecond * 50
 	ctx, cancel := context.WithCancel(context.Background())
-	mgr := NewExecutorManagerImpl(metaClient, heartbeatTTL, checkInterval, nil)
+	mgr := NewExecutorManagerImpl(metaClient, heartbeatTTL, checkInterval)
 
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"

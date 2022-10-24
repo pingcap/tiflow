@@ -105,15 +105,15 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
-// AllTableNames returns the table names of all tables that are being replicated.
-func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
-	names := make([]model.TableName, 0, len(s.allPhysicalTablesCache))
+// AllTableNames returns table info of all tables that are being replicated.
+func (s *schemaWrap4Owner) AllTables() []*model.TableInfo {
+	tables := make([]*model.TableInfo, 0, len(s.allPhysicalTablesCache))
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if !s.shouldIgnoreTable(tblInfo) {
-			names = append(names, tblInfo.TableName)
+			tables = append(tables, tblInfo)
 		}
 	})
-	return names
+	return tables
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
