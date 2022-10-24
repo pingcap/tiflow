@@ -106,7 +106,6 @@ func (m *mounter) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEven
 	if pEvent.IsResolved() {
 		return true, nil
 	}
-
 	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -177,36 +176,38 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
-	row, err := func() (*model.RowChangedEvent, error) {
-		rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Value, raw.OldValue, baseInfo)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if rowKV == nil {
-			return nil, nil
-		}
-		row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
-		if err != nil {
-			return nil, err
-		}
-		// We need to filter a row here because we need its tableInfo.
-		ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
-		if err != nil {
-			return nil, err
-		}
-		// TODO(dongmen): try to find better way to indicate this row has been filtered.
-		// Return a nil RowChangedEvent if this row should be ignored.
-		if ignore {
-			m.metricIgnoredDMLEventCounter.Inc()
-			return nil, nil
-		}
-		return row, nil
-	}()
+	row, err := m.buildRowChangedEvent(raw, tableInfo, baseInfo)
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
+}
+
+func (m *mounter) buildRowChangedEvent(raw *model.RawKVEntry, tableInfo *model.TableInfo, base baseKVEntry) (*model.RowChangedEvent, error) {
+	rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Value, raw.OldValue, base)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if rowKV == nil {
+		return nil, nil
+	}
+	row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+	if err != nil {
+		return nil, err
+	}
+	// We need to filter a row here because we need its tableInfo.
+	ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(dongmen): try to find better way to indicate this row has been filtered.
+	// Return a nil RowChangedEvent if this row should be ignored.
+	if ignore {
+		m.metricIgnoredDMLEventCounter.Inc()
+		return nil, nil
+	}
+	return row, nil
 }
 
 func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
