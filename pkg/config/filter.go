@@ -22,8 +22,9 @@ import (
 type FilterConfig struct {
 	Rules []string `toml:"rules" json:"rules"`
 	*filter.MySQLReplicationRules
-	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
-	EventFilters     []*EventFilterRule `toml:"event-filters" json:"event-filters"`
+	IgnoreTxnStartTs         []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
+	EventFilters             []*EventFilterRule `toml:"event-filters" json:"event-filters"`
+	IgnoreRowsWrittenByTiCDC bool               `toml:"ignore-rows-written-by-ticdc" json:"ignore-rows-written-by-ticdc"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
@@ -37,5 +38,4 @@ type EventFilterRule struct {
 	IgnoreUpdateNewValueExpr string `toml:"ignore-update-new-value-expr" json:"ignore-update-new-value-expr"`
 	IgnoreUpdateOldValueExpr string `toml:"ignore-update-old-value-expr" json:"ignore-update-old-value-expr"`
 	IgnoreDeleteValueExpr    string `toml:"ignore-delete-value-expr" json:"ignore-delete-value-expr"`
-	IgnoreRowsWrittenByTiCDC bool   `toml:"ignore-rows-written-by-ticdc" json:"ignore-rows-written-by-ticdc"`
 }

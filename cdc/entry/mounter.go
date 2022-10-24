@@ -188,12 +188,16 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 
 		// check if this row is written by another TiCDC and
 		// whether we should ignore it.
-		if ok, err := m.isWrittenByTiCDC(raw); err != nil {
-			return nil, errors.Trace(err)
-		} else if ok {
-			if m.filter.ShouldIgnoreReplicationEvent(
-				tableInfo.TableName.Schema,
-				tableInfo.TableName.Table) {
+		if m.filter.ShouldIgnoreReplicationEvent() {
+			ok, err := m.isWrittenByTiCDC(raw)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if ok {
+				// TODO(dongmen): remove this log after fully tested.
+				log.Warn("ignore the DML written by another TiCDC",
+					zap.Uint64("ts", raw.CRTs),
+					zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
 		}

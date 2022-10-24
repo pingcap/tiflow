@@ -68,7 +68,7 @@ type Filter interface {
 
 	// ShouldIgnoreReplicationEvent return true if an event should be ignored since it's
 	// written into the upstream TiDB by another changefeed.
-	ShouldIgnoreReplicationEvent(shcema, table string) bool
+	ShouldIgnoreReplicationEvent() bool
 
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
@@ -83,14 +83,13 @@ type Filter interface {
 
 // filter implements Filter.
 type filter struct {
+	cfg *config.FilterConfig
 	// tableFilter is used to filter in dml/ddl event by table name.
 	tableFilter tfilter.Filter
 	// dmlExprFilter is used to filter out dml event by its columns value.
 	dmlExprFilter *dmlExprFilter
 	// sqlEventFilter is used to filter out dml/ddl event by its type or query.
 	sqlEventFilter *sqlEventFilter
-	// replicationFilter is used to filter out dml event written by another cdc.
-	replicationFilter *replicationFilter
 	// ignoreTxnStartTs is used to filter out dml/ddl event by its starsTs.
 	ignoreTxnStartTs []uint64
 }
@@ -114,16 +113,15 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	replicationFilter, err := newReplicationFilter(cfg.Filter)
 	if err != nil {
 		return nil, err
 	}
 	return &filter{
-		tableFilter:       f,
-		dmlExprFilter:     dmlExprFilter,
-		sqlEventFilter:    sqlEventFilter,
-		replicationFilter: replicationFilter,
-		ignoreTxnStartTs:  cfg.Filter.IgnoreTxnStartTs,
+		cfg:              cfg.Filter,
+		tableFilter:      f,
+		dmlExprFilter:    dmlExprFilter,
+		sqlEventFilter:   sqlEventFilter,
+		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 	}, nil
 }
 
@@ -231,6 +229,6 @@ func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
 	return false
 }
 
-func (f *filter) ShouldIgnoreReplicationEvent(shcema, table string) bool {
-	return f.replicationFilter.shouldIgnoreReplicationEvent(shcema, table)
+func (f *filter) ShouldIgnoreReplicationEvent() bool {
+	return f.cfg.IgnoreRowsWrittenByTiCDC
 }
