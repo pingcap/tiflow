@@ -86,7 +86,7 @@ func newMqSink(
 
 	encoder := encoderBuilder.Build()
 	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeMQ)
-	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
+	flushWorker := newFlushWorker(encoder, mqProducer, statistics, encoderConfig.Protocol, changefeedID)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,

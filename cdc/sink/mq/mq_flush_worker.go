@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
@@ -65,6 +66,9 @@ type flushWorker struct {
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
 	statistics *metrics.Statistics
+
+	changefeed model.ChangeFeedID
+	protocol   config.Protocol
 }
 
 // newFlushWorker creates a new flush worker.
@@ -72,6 +76,8 @@ func newFlushWorker(
 	encoder codec.EventBatchEncoder,
 	producer producer.Producer,
 	statistics *metrics.Statistics,
+	protocol config.Protocol,
+	changefeed model.ChangeFeedID,
 ) *flushWorker {
 	w := &flushWorker{
 		msgChan:    chann.New[mqEvent](),
@@ -79,6 +85,8 @@ func newFlushWorker(
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,
+		protocol:   protocol,
+		changefeed: changefeed,
 	}
 	return w
 }
@@ -204,6 +212,13 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		// TODO: log changefeed ID here
 		log.Info("flushWorker exited", zap.Error(retErr))
 	}()
+	if w.protocol.IsBatchEncode() {
+		return w.batchEncodeRun(ctx)
+	}
+	return w.nonBatchEncodeRun(ctx)
+}
+
+func (w *flushWorker) batchEncodeRun(ctx context.Context) error {
 	eventsBuf := make([]mqEvent, FlushBatchSize)
 	for {
 		endIndex, err := w.batch(ctx, eventsBuf)
@@ -226,6 +241,44 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		err = w.asyncSend(ctx, partitionedRows)
 		if err != nil {
 			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// Directly send the message to the producer.
+func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
+	log.Info("MQ sink non batch worker started",
+		zap.String("namespace", w.changefeed.Namespace),
+		zap.String("changefeed", w.changefeed.ID),
+		zap.String("protocol", w.protocol.String()),
+	)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case event, ok := <-w.msgChan.Out():
+			if !ok {
+				log.Warn("MQ sink flush worker channel closed")
+				return nil
+			}
+			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic, event.row, nil)
+			if err != nil {
+				return err
+			}
+			w.statistics.ObserveRows(event.row)
+			for _, message := range w.encoder.Build() {
+				err := w.statistics.RecordBatchExecution(func() (int, error) {
+					err := w.producer.AsyncSendMessage(ctx, event.key.Topic, event.key.Partition, message)
+					if err != nil {
+						return 0, err
+					}
+					return message.GetRowsCount(), nil
+				})
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
