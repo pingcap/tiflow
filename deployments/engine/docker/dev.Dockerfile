@@ -1,4 +1,4 @@
-FROM alpine:3.16 as builder
+FROM gcr.io/pingcap-public/pingcap/alpine:alpine-3.14.6 as builder
 
 RUN apk add --no-cache curl dumb-init
 

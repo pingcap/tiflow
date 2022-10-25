@@ -21,6 +21,7 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -135,6 +136,45 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	local.AssertLocalFileExists(t, dir, "worker-2", resName, "1.txt")
+}
+
+func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
+	t.Parallel()
+	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
+	brk, cli, _ := newBroker(t)
+	defer brk.Close()
+	require.False(t, brk.IsS3StorageEnabled())
+	mockS3FileManager, _ := s3.NewFileManagerForUT(t.TempDir(), brk.executorID)
+	brk.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager
+	require.True(t, brk.IsS3StorageEnabled())
+
+	openStorageWithClean := func(resID resModel.ResourceID) {
+		// resource metadata exists
+		cli.On("QueryResource", mock.Anything,
+			&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: resID}}, mock.Anything).
+			Return(&pb.QueryResourceResponse{
+				CreatorExecutor: "executor-1",
+				JobId:           "job-1",
+				CreatorWorkerId: "worker-2",
+			}, nil)
+		hdl, err := brk.OpenStorage(
+			context.Background(),
+			fakeProjectInfo,
+			"worker-2",
+			"job-1",
+			resID, WithCleanBeforeOpen())
+		require.NoError(t, err)
+		require.Equal(t, resID, hdl.ID())
+		require.True(t, hdl.(*ResourceHandle).isPersisted.Load())
+	}
+
+	resIDs := []resModel.ResourceID{"/local/test-option", "/s3/test-option"}
+	for _, resID := range resIDs {
+		// resource does not exist, metadata exists
+		openStorageWithClean(resID)
+		// open again, resource exists, metadata exists
+		openStorageWithClean(resID)
+	}
 }
 
 func TestBrokerRemoveResource(t *testing.T) {

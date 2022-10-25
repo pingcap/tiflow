@@ -22,13 +22,13 @@ import (
 // NOTE: All interfaces are thread-safe.
 type EventSortEngine interface {
 	// IsTableBased tells whether the sort engine is based on table or not.
-	// If it's based on table, fetching events by table is prefered.
+	// If it's based on table, fetching events by table is preferred.
 	IsTableBased() bool
 
 	// AddTable adds the table into the engine.
 	AddTable(tableID model.TableID)
 
-	// Remove removes the table from the engine.
+	// RemoveTable removes the table from the engine.
 	RemoveTable(tableID model.TableID)
 
 	// Add adds the given events into the sort engine.

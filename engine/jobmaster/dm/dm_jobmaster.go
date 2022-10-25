@@ -16,7 +16,6 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -49,10 +48,6 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
-	// taskID -> FinishedTaskStatus
-	// worker exists after finished, so we need record the finished status for QueryJobStatus
-	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
-	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -113,7 +108,8 @@ func (jm *JobMaster) initComponents() error {
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(),
+		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err
 }
 
@@ -181,7 +177,6 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 		return err
 	}
 
-	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
@@ -215,7 +210,26 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	taskStatus := finishedTaskStatus.TaskStatus
-	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
+
+	finishedStateStore := jm.metadata.FinishedStateStore()
+	err := finishedStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.FinishedState) error {
+		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
+			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
+			if status.Unit == taskStatus.Unit {
+				state.FinishedUnitStatus[taskStatus.Task][i] = &finishedTaskStatus
+				state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:i+1]
+				return nil
+			}
+		}
+		state.FinishedUnitStatus[taskStatus.Task] = append(
+			state.FinishedUnitStatus[taskStatus.Task], &finishedTaskStatus,
+		)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
@@ -340,6 +354,18 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 		return err
 	}
 
+	if cfg.TaskMode == dmconfig.ModeIncrement {
+		for _, inst := range cfg.Upstreams {
+			if inst.Meta == nil {
+				meta, err2 := master.GetLatestMeta(ctx, inst.Flavor, inst.DBCfg)
+				if err2 != nil {
+					return err2
+				}
+				inst.Meta = meta
+			}
+		}
+	}
+
 	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
@@ -425,7 +451,7 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if err != nil {
 		// put cluster info for new job
 		// TODO: better error handling by error code.
-		if err.Error() == "state not found" {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
 			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
 			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
 		}

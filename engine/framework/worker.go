@@ -126,6 +126,9 @@ type BaseWorker interface {
 		ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
 	) (broker.Handle, error)
 
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
+
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) error
@@ -513,6 +516,11 @@ func (w *DefaultBaseWorker) OpenStorage(
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath, opts...)
+}
+
+// IsS3StorageEnabled implements BaseWorker.IsS3StorageEnabled
+func (w *DefaultBaseWorker) IsS3StorageEnabled() bool {
+	return w.resourceBroker.IsS3StorageEnabled()
 }
 
 // Exit implements BaseWorker.Exit
