@@ -49,8 +49,11 @@ func (c *Config) S3Enabled() bool {
 	if c.S3.Bucket == "" {
 		return false
 	}
-	return c.S3.RoleARN != "" || (c.S3.Endpoint != "" &&
-		c.S3.AccessKey != "" && c.S3.SecretAccessKey != "")
+	if c.S3.Endpoint == "" {
+		// s3 will be accessed through environment variables
+		return true
+	}
+	return c.S3.AccessKey != "" && c.S3.SecretAccessKey != ""
 }
 
 // ValidateAndAdjust validates and adjusts the configuration
