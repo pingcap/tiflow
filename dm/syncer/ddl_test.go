@@ -18,12 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -696,12 +698,13 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 	}
 }
 
-func (s *testDDLSuite) TestAdjustCollation(c *C) {
+func TestAdjustCollation(t *testing.T) {
 	sqls := []string{
 		"create table `test`.`t1` (id int) CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
 		"create table `test`.`t1` (id int) CHARSET=utf8mb4",
 		"create table `test`.`t1` (id int) COLLATE=utf8mb4_general_ci",
 		"create table `test`.`t1` (id int)",
+		"create table `test`.`t1` (name varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin)",
 		"create table `test`.`t1` (id int, name varchar(20) CHARACTER SET utf8mb4, work varchar(20))",
 		"create table `test`.`t1` (id int, name varchar(20), work varchar(20))",
 		"create table `test`.`t1` (id int, name varchar(20) COLLATE utf8mb4_general_ci, work varchar(20))",
@@ -723,6 +726,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
 		"CREATE TABLE `test`.`t` (`id` INT) DEFAULT COLLATE = UTF8MB4_GENERAL_CI",
 		"CREATE TABLE `test`.`t` (`id` INT)",
+		"CREATE TABLE `test`.`t` (`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_bin)",
 		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) CHARACTER SET UTF8MB4 COLLATE utf8mb4_general_ci,`work` VARCHAR(20))",
 		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20),`work` VARCHAR(20))",
 		"CREATE TABLE `test`.`t` (`id` INT,`name` VARCHAR(20) COLLATE utf8mb4_general_ci,`work` VARCHAR(20))",
@@ -758,13 +762,13 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 			targetTables: []*filter.Table{tab},
 		}
 		stmt, err := p.ParseOneStmt(sql, "", "")
-		c.Assert(err, IsNil)
-		c.Assert(stmt, NotNil)
+		require.NoError(t, err)
+		require.NotNil(t, stmt)
 		ddlInfo.originStmt = stmt
 		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
-		c.Assert(err, IsNil)
-		c.Assert(routedDDL, Equals, expectedSQLs[i])
+		require.NoError(t, err)
+		require.Equal(t, expectedSQLs[i], routedDDL)
 	}
 }
 

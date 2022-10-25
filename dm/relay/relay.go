@@ -427,8 +427,10 @@ type recoverResult struct {
 // doRecovering tries to recover the current binlog file.
 // 1. read events from the file
 // 2.
-//    a. update the position with the event's position if the transaction finished
-//    b. update the GTID set with the event's GTID if the transaction finished
+//
+//	a. update the position with the event's position if the transaction finished
+//	b. update the GTID set with the event's GTID if the transaction finished
+//
 // 3. truncate any incomplete events/transactions
 // now, we think a transaction finished if we received a XIDEvent or DDL in QueryEvent
 // NOTE: handle cases when file size > 4GB.
@@ -544,10 +546,10 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 }
 
 // handleEvents handles binlog events, including:
-//   1. read events from upstream
-//   2. transform events
-//   3. write events into relay log files
-//   4. update metadata if needed.
+//  1. read events from upstream
+//  2. transform events
+//  3. write events into relay log files
+//  4. update metadata if needed.
 func (r *Relay) handleEvents(
 	ctx context.Context,
 	reader2 Reader,
@@ -1129,13 +1131,13 @@ func (r *Relay) setSyncConfig() error {
 		if loadErr := r.cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
-			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes, r.cfg.From.Security.CertAllowedCN)
+		tlsConfig, err = util.NewTLSConfig(
+			util.WithCAContent(r.cfg.From.Security.SSLCABytes),
+			util.WithCertAndKeyContent(r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes),
+			util.WithVerifyCommonName(r.cfg.From.Security.CertAllowedCN),
+		)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
-		}
-		if tlsConfig != nil {
-			tlsConfig.InsecureSkipVerify = true
 		}
 	}
 
