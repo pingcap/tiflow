@@ -268,19 +268,19 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 	s1 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(1, 1, 1),
 	}, 1)
-	s1.initialized = true
+	s1.initialized.Store(true)
 	s1.lastResolvedTs = 9
 
 	s2 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(2, 2, 2),
 	}, 2)
-	s2.initialized = true
+	s2.initialized.Store(true)
 	s2.lastResolvedTs = 11
 
 	s3 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(3, 3, 3),
 	}, 3)
-	s3.initialized = false
+	s3.initialized.Store(false)
 	s3.lastResolvedTs = 8
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 10,
