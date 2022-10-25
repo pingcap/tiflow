@@ -50,9 +50,10 @@ func (c *Config) S3Enabled() bool {
 		return false
 	}
 	if c.S3.Endpoint == "" {
-		// s3 will be accessed through environment variables
+		// If endpoint is empty, s3 will be accessed through environment variables
 		return true
 	}
+	// If endpoint is not empty, s3 will be accessed through AccessKey and SecretAccessKey
 	return c.S3.AccessKey != "" && c.S3.SecretAccessKey != ""
 }
 
