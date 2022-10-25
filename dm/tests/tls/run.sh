@@ -391,7 +391,7 @@ function prepare_test1() {
 	rm -rf $WORK_DIR
 	mkdir $WORK_DIR
 
-	#	kill the old tidb
+	# kill the old tidb
 	pkill -hup tidb-server 2>/dev/null || true
 	wait_process_exit tidb-server
 
