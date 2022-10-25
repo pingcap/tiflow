@@ -302,8 +302,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 			retErr = frameErrors.FailFast(retErr)
 		}
 	}()
-	// TODO refine this part
-	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	// poolCtx will be hold in background goroutines, and it won't be canceled
+	// until DefaultBaseWorker.Close is called.
+	poolCtx, cancelPool := context.WithCancel(context.Background())
 	w.cancelMu.Lock()
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
