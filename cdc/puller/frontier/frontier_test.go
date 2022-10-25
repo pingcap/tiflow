@@ -340,13 +340,12 @@ func checkFrontier(t *testing.T, f Frontier) {
 	sf := f.(*spanFrontier)
 	var tsInList, tsInHeap []uint64
 	sf.spanList.Entries(func(n *skipListNode) bool {
-		tsInList = append(tsInList, n.Value().key)
+		tsInList = append(tsInList, n.Value().Value)
 		return true
 	})
-	sf.minTsHeap.Entries(func(n *fibonacciHeapNode) bool {
-		tsInHeap = append(tsInHeap, n.key)
-		return true
-	})
+	for e := sf.regionList.Front(); e != nil; e = e.Next() {
+		tsInHeap = append(tsInHeap, e.Value)
+	}
 	require.Equal(t, len(tsInHeap), len(tsInList))
 	sort.Slice(tsInList, func(i, j int) bool { return tsInList[i] < tsInList[j] })
 	sort.Slice(tsInHeap, func(i, j int) bool { return tsInHeap[i] < tsInHeap[j] })

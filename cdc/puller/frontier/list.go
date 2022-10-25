@@ -29,7 +29,7 @@ const (
 
 type skipListNode struct {
 	key   []byte
-	value *fibonacciHeapNode
+	value *Element
 
 	end      []byte
 	regionID uint64
@@ -47,7 +47,7 @@ func (s *skipListNode) End() []byte {
 }
 
 // Value is the value of the node
-func (s *skipListNode) Value() *fibonacciHeapNode {
+func (s *skipListNode) Value() *Element {
 	return s.value
 }
 
@@ -130,7 +130,7 @@ LevelLoop:
 }
 
 // InsertNextToNode insert the specified node after the seek seekTempResult
-func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
+func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *Element) {
 	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
 		log.Panic("the InsertNextToNode function can only append node to the seek result.")
 	}
@@ -156,7 +156,7 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 }
 
 // Insert inserts the specified node
-func (l *skipList) Insert(key []byte, value *fibonacciHeapNode) {
+func (l *skipList) Insert(key []byte, value *Element) {
 	seekR := l.Seek(key, make(seekResult, maxHeight))
 	l.InsertNextToNode(seekR, key, value)
 }

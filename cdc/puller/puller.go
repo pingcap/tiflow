@@ -195,6 +195,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 		start := time.Now()
 		initialized := false
+		outputResolvedTsInterval := 50 * time.Millisecond
+		lastCheckTime := time.Now()
 		for {
 			var e model.RegionFeedEvent
 			select {
@@ -232,6 +234,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// Forward is called in a single thread
 					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
 				}
+				if time.Since(lastCheckTime) < outputResolvedTsInterval {
+					continue
+				}
 				resolvedTs := p.tsTracker.Frontier()
 				if resolvedTs > 0 && !initialized {
 					initialized = true
@@ -252,6 +257,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if !initialized || resolvedTs == lastResolvedTs {
 					continue
 				}
+				lastCheckTime = time.Now()
 				lastResolvedTs = resolvedTs
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {

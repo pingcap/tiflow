@@ -36,13 +36,14 @@ type Frontier interface {
 
 // spanFrontier tracks the minimum timestamp of a set of spans.
 type spanFrontier struct {
-	spanList  skipList
-	minTsHeap fibonacciHeap
+	spanList skipList
 
 	seekTempResult []*skipListNode
 
 	cachedRegions                     map[uint64]*skipListNode
 	metricResolvedRegionMissedCounter prometheus.Counter
+
+	regionList *List
 }
 
 // NewFrontier creates Frontier from the given spans.
@@ -59,12 +60,13 @@ func NewFrontier(checkpointTs uint64,
 		cachedRegions:  map[uint64]*skipListNode{},
 
 		metricResolvedRegionMissedCounter: metricResolvedRegionMissedCounter,
+		regionList:                        New(),
 	}
 	firstSpan := true
 	for _, span := range spans {
 		if firstSpan {
-			s.spanList.Insert(span.Start, s.minTsHeap.Insert(checkpointTs))
-			s.spanList.Insert(span.End, s.minTsHeap.Insert(math.MaxUint64))
+			s.spanList.Insert(span.Start, s.regionList.PushBack(checkpointTs))
+			s.spanList.Insert(span.End, s.regionList.PushBack(math.MaxUint64))
 			firstSpan = false
 			continue
 		}
@@ -76,7 +78,14 @@ func NewFrontier(checkpointTs uint64,
 
 // Frontier return the minimum timestamp.
 func (s *spanFrontier) Frontier() uint64 {
-	return s.minTsHeap.GetMinKey()
+	l := s.regionList
+	var ts uint64 = math.MaxUint64
+	for e := l.Front(); e != nil; e = e.Next() {
+		if ts > e.Value {
+			ts = e.Value
+		}
+	}
+	return ts
 }
 
 // Forward advances the timestamp for a span.
@@ -85,7 +94,8 @@ func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, 
 	// if not we can update the minTsHeap with use new ts directly
 	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
 		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
-			s.minTsHeap.UpdateKey(n.Value(), ts)
+			n.Value().Value = ts
+			// s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
 		}
 	}
@@ -104,7 +114,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	next := seekRes.Node().Next()
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
-			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
+			seekRes.Node().Value().Value = ts
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
@@ -120,7 +130,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	lastNodeTs := uint64(math.MaxUint64)
 	shouldInsertStartNode := true
 	if node.Value() != nil {
-		lastNodeTs = node.Value().key
+		lastNodeTs = node.Value().Value
 	}
 	for ; node != nil; node = node.Next() {
 		delete(s.cachedRegions, node.regionID)
@@ -131,26 +141,27 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 		if bytes.Compare(node.Key(), span.End) > 0 {
 			break
 		}
-		lastNodeTs = node.Value().key
+		lastNodeTs = node.Value().Value
 		if cmpStart == 0 {
-			s.minTsHeap.UpdateKey(node.Value(), ts)
+			// s.minTsHeap.UpdateKey(node.Value(), ts)
+			node.Value().Value = ts
 			shouldInsertStartNode = false
 		} else {
 			s.spanList.Remove(seekRes, node)
-			s.minTsHeap.Remove(node.Value())
+			s.regionList.remove(node.Value())
 		}
 	}
 	if shouldInsertStartNode {
-		s.spanList.InsertNextToNode(seekRes, span.Start, s.minTsHeap.Insert(ts))
+		s.spanList.InsertNextToNode(seekRes, span.Start, s.regionList.PushBack(ts))
 		seekRes.Next()
 	}
-	s.spanList.InsertNextToNode(seekRes, span.End, s.minTsHeap.Insert(lastNodeTs))
+	s.spanList.InsertNextToNode(seekRes, span.End, s.regionList.PushBack(lastNodeTs))
 }
 
 // Entries visit all traced spans.
 func (s *spanFrontier) Entries(fn func(key []byte, ts uint64)) {
 	s.spanList.Entries(func(n *skipListNode) bool {
-		fn(n.Key(), n.Value().key)
+		fn(n.Key(), n.Value().Value)
 		return true
 	})
 }
