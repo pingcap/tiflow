@@ -15,11 +15,14 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -39,6 +42,39 @@ func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 		cli)
 	require.NoError(t, err)
 	return broker, cli, tmpDir
+}
+
+func TestNewBroker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := client.NewMockServerMasterClient(gomock.NewController(t))
+
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		nil, status.Error(codes.NotFound, "not found")).Times(1)
+	brk, err := NewBroker(ctx, "executor-1", c)
+	require.Nil(t, brk)
+	require.ErrorContains(t, err, "query storage config failed")
+
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		&pb.QueryStorageConfigResponse{
+			Config: "",
+			Err:    &pb.Error{Code: pb.ErrorCode_StorageConfigSerializeFail, Message: "serialize fail"},
+		}, nil).Times(1)
+	brk, err = NewBroker(ctx, "executor-1", c)
+	require.Nil(t, brk)
+	require.ErrorContains(t, err, "query storage config failed")
+
+	cfg, err := json.Marshal(resModel.DefaultConfig)
+	require.NoError(t, err)
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		&pb.QueryStorageConfigResponse{
+			Config: string(cfg),
+			Err:    nil,
+		}, nil).Times(1)
+	brk, err = NewBroker(ctx, "executor-1", c)
+	require.NoError(t, err)
+	brk.Close()
 }
 
 func TestBrokerOpenNewStorage(t *testing.T) {

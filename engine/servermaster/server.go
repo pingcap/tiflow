@@ -415,8 +415,8 @@ func (s *Server) QueryStorageConfig(
 	if err != nil {
 		return &pb.QueryStorageConfigResponse{
 			Err: &pb.Error{
-				Code:    pb.ErrorCode_MetaStoreSerializeFail,
-				Message: fmt.Sprintf("raw storage config params: %v", s.cfg.Storage),
+				Code:    pb.ErrorCode_StorageConfigSerializeFail,
+				Message: fmt.Sprintf("raw storage config: %v", s.cfg.Storage),
 			},
 		}, nil
 	}
