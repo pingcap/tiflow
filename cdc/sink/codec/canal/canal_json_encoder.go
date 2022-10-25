@@ -225,12 +225,12 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err := json.Marshal(c.messageHolder)
-	if err != nil {
-		log.Panic("JSONBatchEncoder", zap.Error(err))
-		return nil
-	}
-
+	//value, err := json.Marshal(c.messageHolder)
+	//if err != nil {
+	//	log.Panic("JSONBatchEncoder", zap.Error(err))
+	//	return nil
+	//}
+	var value []byte
 	c.messages[0].Value = value
 	c.messages[0].Ts = e.CommitTs
 	c.messages[0].Schema = c.messageHolder.getSchema()
