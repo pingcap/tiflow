@@ -113,6 +113,7 @@ func (p Position) Next() Position {
 	}
 }
 
+// Compare compares 2 Position, just like strcmp in C.
 func (p Position) Compare(q Position) int {
 	if p.CommitTs < q.CommitTs {
 		return -1
