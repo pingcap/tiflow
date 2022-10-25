@@ -241,6 +241,8 @@ const (
 	LoadModeSQL LoadMode = "sql"
 	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
 	LoadModeLoader = "loader"
+	// LoadModeSST means import data by sst files, uses tidb-lightning local backend to load data.
+	LoadModeSST = "sst"
 )
 
 // DuplicateResolveType defines the duplication resolution when meet duplicate rows.
@@ -292,7 +294,7 @@ func (m *LoaderConfig) adjust() error {
 		m.ImportMode = LoadModeSQL
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
-	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
+	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader && m.ImportMode != LoadModeSST {
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 

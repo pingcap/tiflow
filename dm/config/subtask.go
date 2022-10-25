@@ -583,5 +583,5 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 
 // NeedUseLightning returns whether need to use lightning loader.
 func (c *SubTaskConfig) NeedUseLightning() bool {
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode == LoadModeSQL
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode != LoadModeLoader
 }
