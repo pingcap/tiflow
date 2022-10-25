@@ -23,7 +23,7 @@ type SlotNode[T any] interface {
 	// NodeID tells the node's ID.
 	NodeID() int64
 	// Construct a dependency on `others`.
-	DependOn(others map[int64]T)
+	DependOn(unresolvedDeps map[int64]T, resolvedDeps int)
 	// Remove the node itself and notify all dependers.
 	Remove()
 	// Free the node itself and remove it from the graph.
@@ -55,7 +55,9 @@ func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
 // Note that onConflict can be called multiple times with the same
 // dependee.
 func (s *Slots[E]) Add(elem E, keys []uint64) {
-	dependOnList := make(map[int64]E, len(keys))
+	unresolvedDeps := make(map[int64]E, len(keys))
+	resolvedDeps := 0
+
 	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
 		slotIdx := getSlot(key, s.numSlots)
@@ -65,11 +67,13 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 		}
 		if tail, ok := s.slots[slotIdx].nodes[key]; ok {
 			prevID := tail.NodeID()
-			dependOnList[prevID] = tail
+			unresolvedDeps[prevID] = tail
+		} else {
+			resolvedDeps += 1
 		}
 		s.slots[slotIdx].nodes[key] = elem
 	}
-	elem.DependOn(dependOnList)
+	elem.DependOn(unresolvedDeps, resolvedDeps)
 
 	// Lock those slots one by one and then unlock them one by one, so that
 	// we can avoid 2 transactions get executed interleaved.
