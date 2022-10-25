@@ -68,6 +68,6 @@ func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, com
 func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
-	args := m.Called()
+	args := m.Called(ctx, clientID, command, req)
 	return args.Get(0), args.Error(1)
 }
