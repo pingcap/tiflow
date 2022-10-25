@@ -11,17 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package cloudstorage
 
 import (
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// NewDMResourceID returns a ResourceID in DM's style. Currently only support s3 resource.
-func NewDMResourceID(taskName, sourceName string, isS3Enabled bool) resModel.ResourceID {
-	resType := resModel.ResourceTypeLocalFile
-	if isS3Enabled {
-		resType = resModel.ResourceTypeS3
-	}
-	return "/" + string(resType) + "/" + taskName + "-" + sourceName
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

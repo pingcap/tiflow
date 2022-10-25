@@ -264,7 +264,7 @@ func (c *Case) diffDataLoop(ctx context.Context) error {
 }
 
 // randDML generates DML (INSERT, UPDATE or DELETE).
-func (c *Case) randDML(source int, table string) (string, error) {
+func (c *Case) randDML(source int, table string, deleteKeys map[string][]string) (string, error) {
 	generator := c.generators[source][table]
 	mcp := c.mcps[source][table]
 	t := rand.Intn(3)
@@ -300,7 +300,7 @@ func (c *Case) randDML(source int, table string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		delete(c.keySet[table], key.GetValueHash())
+		deleteKeys[table] = append(deleteKeys[table], key.GetValueHash())
 		err = mcp.DeleteUK(key)
 		return sql, err
 	}
@@ -308,6 +308,14 @@ func (c *Case) randDML(source int, table string) (string, error) {
 
 func (c *Case) genIncrData(ctx context.Context) error {
 	log.L().Info("start generate incremental data", zap.String("name", c.name), zap.String("job_id", c.jobID))
+	deleteKeys := make(map[string][]string)
+	defer func() {
+		for tb, keys := range deleteKeys {
+			for _, k := range keys {
+				delete(c.keySet[tb], k)
+			}
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -319,7 +327,7 @@ func (c *Case) genIncrData(ctx context.Context) error {
 
 		sqls := make([]string, 0, batch)
 		for i := 0; i < batch; i++ {
-			sql, err := c.randDML(source, tableName)
+			sql, err := c.randDML(source, tableName, deleteKeys)
 			if err != nil {
 				return err
 			}

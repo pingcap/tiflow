@@ -112,16 +112,16 @@ func newBalanceMoveTables(
 	maxTaskLimit int,
 	changefeedID model.ChangeFeedID,
 ) []replication.MoveTable {
-	tablesPerCapture := make(map[model.CaptureID]*tableSet)
+	tablesPerCapture := make(map[model.CaptureID]*model.TableSet)
 	for captureID := range captures {
-		tablesPerCapture[captureID] = newTableSet()
+		tablesPerCapture[captureID] = model.NewTableSet()
 	}
 
 	for tableID, rep := range replications {
 		if rep.State != replication.ReplicationSetStateReplicating {
 			continue
 		}
-		tablesPerCapture[rep.Primary].add(tableID)
+		tablesPerCapture[rep.Primary].Add(tableID)
 	}
 
 	// findVictim return tables which need to be moved
@@ -129,7 +129,7 @@ func newBalanceMoveTables(
 
 	victims := make([]model.TableID, 0)
 	for _, ts := range tablesPerCapture {
-		tables := ts.keys()
+		tables := ts.Keys()
 		if random != nil {
 			// Complexity note: Shuffle has O(n), where `n` is the number of tables.
 			// Also, during a single call of `Schedule`, Shuffle can be called at most
@@ -158,7 +158,7 @@ func newBalanceMoveTables(
 				break
 			}
 			victims = append(victims, table)
-			ts.remove(table)
+			ts.Remove(table)
 			tableNum2Remove--
 		}
 	}
@@ -168,7 +168,7 @@ func newBalanceMoveTables(
 
 	captureWorkload := make(map[model.CaptureID]int)
 	for captureID, ts := range tablesPerCapture {
-		captureWorkload[captureID] = randomizeWorkload(random, ts.size())
+		captureWorkload[captureID] = randomizeWorkload(random, ts.Size())
 	}
 	// for each victim table, find the target for it
 	moveTables := make([]replication.MoveTable, 0, len(victims))
@@ -198,8 +198,8 @@ func newBalanceMoveTables(
 			TableID:     tableID,
 			DestCapture: target,
 		})
-		tablesPerCapture[target].add(tableID)
-		captureWorkload[target] = randomizeWorkload(random, tablesPerCapture[target].size())
+		tablesPerCapture[target].Add(tableID)
+		captureWorkload[target] = randomizeWorkload(random, tablesPerCapture[target].Size())
 	}
 
 	return moveTables
@@ -224,39 +224,4 @@ func randomizeWorkload(random *rand.Rand, input int) int {
 	// randomPart is a small random value that only affects the
 	// result of comparison of workloads when two workloads are equal.
 	return (input << randomPartBitSize) | randomPart
-}
-
-type tableSet struct {
-	memo map[model.TableID]struct{}
-}
-
-func newTableSet() *tableSet {
-	return &tableSet{
-		memo: make(map[model.TableID]struct{}),
-	}
-}
-
-func (s *tableSet) add(tableID model.TableID) {
-	s.memo[tableID] = struct{}{}
-}
-
-func (s *tableSet) remove(tableID model.TableID) {
-	delete(s.memo, tableID)
-}
-
-func (s *tableSet) keys() []model.TableID {
-	result := make([]model.TableID, 0, len(s.memo))
-	for k := range s.memo {
-		result = append(result, k)
-	}
-	return result
-}
-
-func (s *tableSet) contain(tableID model.TableID) bool {
-	_, ok := s.memo[tableID]
-	return ok
-}
-
-func (s *tableSet) size() int {
-	return len(s.memo)
 }
