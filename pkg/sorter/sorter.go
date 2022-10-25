@@ -37,6 +37,9 @@ type EventSortEngine interface {
 	// events are available for fetching, OnResolve is what you want.
 	Add(tableID model.TableID, events ...*model.PolymorphicEvent) error
 
+	// GetResolvedTs gets resolved timestamp of the given table.
+	GetResolvedTs(tableID model.TableID) model.Ts
+
 	// OnResolve pushes action into EventSortEngine's hook list, which
 	// will be called after any events are resolved.
 	OnResolve(action func(model.TableID, model.Ts))
@@ -107,5 +110,21 @@ func (p Position) Next() Position {
 	return Position{
 		CommitTs: p.CommitTs,
 		StartTs:  p.StartTs + 1, // it will never overflow.
+	}
+}
+
+func (p Position) Compare(q Position) int {
+	if p.CommitTs < q.CommitTs {
+		return -1
+	} else if p.CommitTs == q.CommitTs {
+		if p.StartTs < q.StartTs {
+			return -1
+		} else if p.StartTs == q.StartTs {
+			return 0
+		} else {
+			return 1
+		}
+	} else {
+		return 1
 	}
 }
