@@ -191,8 +191,9 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
-	// Don't cancel this context until it meets first error.
-	ctx, _ = d.errCenter.WithCancelOnFirstError(ctx)
+	// Note this context must not be hold in any resident goroutine.
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)

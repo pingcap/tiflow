@@ -251,8 +251,9 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
-	// Don't cancel this context until it meets first error.
-	ctx, _ = w.errCenter.WithCancelOnFirstError(ctx)
+	// Note this context must not be hold in any resident goroutine.
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
@@ -338,7 +339,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(ctx, topic, msg)
+			return w.Impl.OnMasterMessage(poolCtx, topic, msg)
 		},
 	)
 
