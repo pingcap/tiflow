@@ -18,7 +18,6 @@ import (
 	"time"
 
 	json "github.com/bytedance/sonic"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -221,9 +220,9 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	if err := c.newJSONMessageForDML(e); err != nil {
-		return errors.Trace(err)
-	}
+	//if err := c.newJSONMessageForDML(e); err != nil {
+	//	return errors.Trace(err)
+	//}
 
 	//value, err := json.Marshal(c.messageHolder)
 	//if err != nil {
