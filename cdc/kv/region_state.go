@@ -54,7 +54,7 @@ type regionFeedState struct {
 	requestID uint64
 	stopped   int32
 
-	initialized    bool
+	initialized    atomic.Bool
 	matcher        *matcher
 	startFeedTime  time.Time
 	lastResolvedTs uint64
@@ -83,11 +83,11 @@ func (s *regionFeedState) isStopped() bool {
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.initialized
+	return s.initialized.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.initialized = true
+	s.initialized.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
