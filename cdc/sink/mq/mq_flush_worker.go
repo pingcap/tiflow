@@ -243,7 +243,6 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-	return nil
 }
 
 // Directly send the message to the producer.
