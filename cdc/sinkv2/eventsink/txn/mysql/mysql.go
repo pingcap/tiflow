@@ -439,36 +439,26 @@ func setSystemVariable(ctx context.Context, db *sql.DB, cfg *config.ReplicaConfi
 		// downstream is not TiDB, wo nothing
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
 		// means downstream is not TiDB
-		ok && mysqlErr.Number == mysql.ErrNoDB {
+			ok && mysqlErr.Number == mysql.ErrNoDB {
 			return nil
 		}
 		return err
 	}
 
 	// downstream is TiDB, set system variable: tidb_write_by_ticdc = true
-	// We should always try to set this variable.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
 	_, err = db.ExecContext(ctx, "SET SESSION tidb_write_by_ticdc = true")
-	if err == nil {
-		return nil
-	}
-
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
+			ok && mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			log.Info("This version of TiDB does not "+
+				"support system variable: tidb_write_by_ticdc",
+				zap.String("version", tidbVer))
+			return nil
+		}
 		return err
 	}
 
-	if mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-		// If IgnoreRowsWrittenByTiCDC is true, we need throw this error
-		// immediately.
-		if cfg.Filter.IgnoreRowsWrittenByTiCDC {
-			errMessage := fmt.Sprintf("This version of TiDB "+
-				"does not support system variable: tidb_write_by_ticdc, "+
-				"version: %s", tidbVer)
-			return cerror.ErrChangefeedUnretryable.
-				GenWithStackByArgs(errMessage)
-		}
-		return nil
-	}
-
-	return err
+	return nil
 }
