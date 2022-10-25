@@ -101,8 +101,8 @@ var defaultServerConfig = &ServerConfig{
 	// default capture session ttl to 10s to increase robust to PD jitter,
 	// however it will decrease RTO when single TiCDC node error happens.
 	CaptureSessionTTL:      10,
-	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
-	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
+	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
+	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
