@@ -14,7 +14,6 @@
 package internal
 
 import (
-	"math"
 	"sync"
 	stdatomic "sync/atomic"
 
@@ -28,6 +27,7 @@ type (
 
 const (
 	unassigned    = workerID(-2)
+	assignedToAny = workerID(-1)
 	invalidNodeID = int64(-1)
 )
 
@@ -84,7 +84,7 @@ type Node struct {
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
-		ret.id = nextNodeID.Add(1)
+		ret.id = genNextNodeID()
 		ret.OnResolved = nil
 		ret.RandWorkerID = nil
 		ret.totalDependees = 0
@@ -105,10 +105,21 @@ func (n *Node) NodeID() int64 {
 }
 
 // DependOn implements interface internal.SlotNode.
-func (n *Node) DependOn(others map[int64]*Node) {
+func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
 	resolvedDependees, removedDependees := int32(0), int32(0)
 
 	depend := func(target *Node) {
+		if target == nil {
+			// For a given Node, every dependency corresponds to a target.
+			// If target is nil it means the dependency doesn't conflict
+			// with any other nodes. However it's still necessary to track
+			// it because it makes effect on Node.tryResolve.
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], assignedToAny)
+			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
+			return
+		}
+
 		if target.id == n.id {
 			panic("you cannot depend on yourself")
 		}
@@ -132,17 +143,20 @@ func (n *Node) DependOn(others map[int64]*Node) {
 
 	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
 	// pending in slots after it's created.
-	n.id = nextNodeID.Add(1)
+	n.id = genNextNodeID()
 
 	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
-	n.totalDependees = int32(len(others))
+	n.totalDependees = int32(len(unresolvedDeps) + resolvedDeps)
 	n.resolvedList = make([]int64, 0, n.totalDependees)
 	for i := 0; i < int(n.totalDependees); i++ {
 		n.resolvedList = append(n.resolvedList, unassigned)
 	}
 
-	for _, target := range others {
+	for _, target := range unresolvedDeps {
 		depend(target)
+	}
+	for i := 0; i < resolvedDeps; i++ {
+		depend(nil)
 	}
 
 	n.maybeResolve(resolvedDependees, removedDependees)
@@ -231,38 +245,39 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 // returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
 func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, bool) {
+	assignedTo, resolved := n.doResolve(resolvedDependees, removedDependees)
+	if resolved && assignedTo == assignedToAny {
+		assignedTo = n.RandWorkerID()
+	}
+	return assignedTo, resolved
+}
+
+func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool) {
 	if n.totalDependees == 0 {
 		// No conflicts, can select any workers.
-		return n.RandWorkerID(), true
+		return assignedToAny, true
 	}
 
 	if resolvedDependees == n.totalDependees {
-		// The node only depends on 1 other node, and the target has be assigned.
-		// So assign the node to the same worker directly.
-		if n.totalDependees == 1 {
-			return stdatomic.LoadInt64(&n.resolvedList[0]), true
-		}
-
-		// If all dependees are assigned to one same worker, we can assign
-		// this node to the same worker directly.
-		minDep, maxDep := int64(math.MaxInt64), int64(0)
-		for i := 0; i < int(n.totalDependees); i++ {
+		firstDep := stdatomic.LoadInt64(&n.resolvedList[0])
+		hasDiffDep := false
+		for i := 1; i < int(n.totalDependees); i++ {
 			curr := stdatomic.LoadInt64(&n.resolvedList[i])
-			if curr < minDep {
-				minDep = curr
-			}
-			if curr > maxDep {
-				maxDep = curr
+			if firstDep != curr {
+				hasDiffDep = true
+				break
 			}
 		}
-		if minDep == maxDep {
-			return minDep, true
+		if !hasDiffDep {
+			// If all dependees are assigned to one same worker, we can assign
+			// this node to the same worker directly.
+			return firstDep, true
 		}
 	}
 
 	// All dependees are removed, so assign the node to any worker is fine.
 	if removedDependees == n.totalDependees {
-		return n.RandWorkerID(), true
+		return assignedToAny, true
 	}
 
 	return unassigned, false
@@ -296,4 +311,8 @@ func (n *Node) assignedWorkerID() workerID {
 	defer n.mu.Unlock()
 
 	return n.assignedTo
+}
+
+func genNextNodeID() int64 {
+	return nextNodeID.Add(1)
 }
