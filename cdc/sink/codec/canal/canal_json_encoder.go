@@ -230,8 +230,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	//	log.Panic("JSONBatchEncoder", zap.Error(err))
 	//	return nil
 	//}
-	var value []byte
-	c.messages[0].Value = value
+	c.messages[0].Value = []byte("abc")
 	c.messages[0].Ts = e.CommitTs
 	c.messages[0].Schema = c.messageHolder.getSchema()
 	c.messages[0].Table = c.messageHolder.getTable()
