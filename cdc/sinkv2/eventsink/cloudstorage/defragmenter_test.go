@@ -22,18 +22,16 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDeframenter(t *testing.T) {
 	defrag := newDefragmenter()
-	defer defrag.close()
 	uri := "file:///tmp/test"
+	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCanalJSON,
@@ -44,63 +42,61 @@ func TestDeframenter(t *testing.T) {
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	require.Nil(t, err)
 
-	for i := 0; i < 50; i++ {
-		go func(seq uint64) {
-			encoder := encoderBuilder.Build()
-			frag := eventFragment{
-				tableName: model.TableName{
+	var seqNumbers []uint64
+	for i := 0; i < txnCnt; i++ {
+		seqNumbers = append(seqNumbers, uint64(i+1))
+	}
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(seqNumbers), func(i, j int) {
+		seqNumbers[i], seqNumbers[j] = seqNumbers[j], seqNumbers[i]
+	})
+
+	for i := 0; i < txnCnt; i++ {
+		encoder := encoderBuilder.Build()
+		seq := seqNumbers[i]
+		frag := eventFragment{
+			tableName: model.TableName{
+				Schema:  "test",
+				Table:   "table1",
+				TableID: 100,
+			},
+			seqNumber: seq,
+			event: &eventsink.TxnCallbackableEvent{
+				Event: &model.SingleTableTxn{},
+			},
+		}
+
+		rand.Seed(time.Now().UnixNano())
+		n := 1 + rand.Intn(1000)
+		for j := 0; j < n; j++ {
+			row := &model.RowChangedEvent{
+				Table: &model.TableName{
 					Schema:  "test",
 					Table:   "table1",
 					TableID: 100,
 				},
-				seqNumber: seq,
-				event: &eventsink.TxnCallbackableEvent{
-					Event: &model.SingleTableTxn{},
+				Columns: []*model.Column{
+					{Name: "c1", Value: j + 1},
+					{Name: "c2", Value: "hello world"},
 				},
 			}
-
-			rand.Seed(time.Now().UnixNano())
-			n := 1 + rand.Intn(1000)
-			for j := 0; j < n; j++ {
-				row := &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
-					Columns: []*model.Column{
-						{Name: "c1", Value: j + 1},
-						{Name: "c2", Value: "hello world"},
-					},
-				}
-				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-				encoder.AppendRowChangedEvent(ctx, "", row, nil)
-			}
-			frag.encodedMsgs = encoder.Build()
-
-			for _, msg := range frag.encodedMsgs {
-				msg.Key = []byte(strconv.Itoa(int(seq)))
-			}
-			defrag.register(frag)
-		}(uint64(i + 1))
-	}
-	defrag.register(eventFragment{seqNumber: 50})
-
-	dstCh := chann.New[*common.Message]()
-	_, err = defrag.writeMsgs(ctx, dstCh)
-	require.Nil(t, err)
-	prevSeq := 0
-	for msg := range dstCh.Out() {
-		if msg == nil {
-			break
+			frag.event.Event.Rows = append(frag.event.Event.Rows, row)
+			encoder.AppendRowChangedEvent(ctx, "", row, nil)
 		}
+		frag.encodedMsgs = encoder.Build()
+
+		for _, msg := range frag.encodedMsgs {
+			msg.Key = []byte(strconv.Itoa(int(seq)))
+		}
+		defrag.registerFrag(frag)
+	}
+
+	msgs := defrag.reassmebleFrag()
+	prevSeq := 0
+	for _, msg := range msgs {
 		curSeq, err := strconv.Atoi(string(msg.Key))
 		require.Nil(t, err)
 		require.GreaterOrEqual(t, curSeq, prevSeq)
 		prevSeq = curSeq
-	}
-	dstCh.Close()
-	for range dstCh.Out() {
-		// drain dstCh
 	}
 }

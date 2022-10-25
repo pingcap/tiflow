@@ -64,11 +64,12 @@ func newDMLWriter(ctx context.Context,
 
 func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	tableName := frag.tableName
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 	workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
+	d.mu.Unlock()
+
 	d.workerChannels[workerID].In() <- frag
 }
 

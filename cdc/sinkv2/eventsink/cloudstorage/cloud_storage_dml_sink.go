@@ -61,6 +61,10 @@ type eventFragment struct {
 	encodedMsgs []*common.Message
 }
 
+func eventFragmentLess(e1, e2 eventFragment) bool {
+	return e1.seqNumber < e2.seqNumber
+}
+
 // sink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type sink struct {
@@ -152,13 +156,6 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		}
 	}
 
-	// emit an eventFragment with nil TxnCallbackableEvent and with current sequence number of the table.
-	// this special eventFragment is used to mark the end of several TxnCallbackableEvent.
-	s.msgChan.In() <- eventFragment{
-		tableName:    tbl.TableName,
-		tableVersion: tbl.TableVersion,
-		seqNumber:    s.tableSeqMap[tbl],
-	}
 	return nil
 }
 
