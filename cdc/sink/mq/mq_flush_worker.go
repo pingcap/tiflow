@@ -261,6 +261,11 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 				log.Warn("MQ sink flush worker channel closed")
 				return nil
 			}
+
+			if event.row == nil {
+				continue
+			}
+
 			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic, event.row, nil)
 			if err != nil {
 				return err
