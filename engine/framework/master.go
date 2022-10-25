@@ -722,7 +722,7 @@ func (m *DefaultBaseMaster) CreateWorkerV2(
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
 	m.Logger().Info("CreateWorker",
-		zap.Int64("worker-type", int64(workerType)),
+		zap.Stringer("worker-type", workerType),
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 

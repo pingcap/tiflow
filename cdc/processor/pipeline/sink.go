@@ -272,23 +272,19 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 		return false
 	}
 
-	handleKeyCount := 0
-	equivalentHandleKeyCount := 0
 	for i := range updateEvent.Row.Columns {
 		col := updateEvent.Row.Columns[i]
 		preCol := updateEvent.Row.PreColumns[i]
 		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
-			handleKeyCount++
 			colValueString := model.ColumnValueString(col.Value)
 			preColValueString := model.ColumnValueString(preCol.Value)
-			if colValueString == preColValueString {
-				equivalentHandleKeyCount++
+			// If one handle key columns is updated, we need to split the event row.
+			if colValueString != preColValueString {
+				return true
 			}
 		}
 	}
-
-	// If the handle key columns are not updated, so we do **not** need to split the event row.
-	return !(handleKeyCount == equivalentHandleKeyCount)
+	return false
 }
 
 // splitUpdateEvent splits an update event into a delete and an insert event.
