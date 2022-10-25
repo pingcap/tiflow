@@ -77,15 +77,17 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
 
-		name := "dm" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
-		err = mysql.RegisterTLSConfig(name, tlsConfig)
-		if err != nil {
-			return nil, terror.ErrConnRegistryTLSConfig.Delegate(err)
-		}
-		dsn += "&tls=" + name
+		if tlsConfig != nil {
+			name := "dm" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
+			err = mysql.RegisterTLSConfig(name, tlsConfig)
+			if err != nil {
+				return nil, terror.ErrConnRegistryTLSConfig.Delegate(err)
+			}
+			dsn += "&tls=" + name
 
-		doFuncInClose = func() {
-			mysql.DeregisterTLSConfig(name)
+			doFuncInClose = func() {
+				mysql.DeregisterTLSConfig(name)
+			}
 		}
 	}
 
