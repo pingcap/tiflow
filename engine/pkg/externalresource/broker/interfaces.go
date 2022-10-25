@@ -45,6 +45,8 @@ type Broker interface {
 		jobID resModel.JobID,
 	)
 
+	IsS3StorageEnabled() bool
+
 	Close()
 }
 

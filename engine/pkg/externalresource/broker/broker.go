@@ -77,7 +77,7 @@ func NewBroker(
 ) (*DefaultBroker, error) {
 	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
 	if err != nil || resp.Err != nil {
-		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp.Err))
+		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
 	}
 	var storageConfig resModel.Config
 	err = json.Unmarshal([]byte(resp.Config), &storageConfig)
@@ -416,6 +416,12 @@ func (b *DefaultBroker) Close() {
 			_ = b.s3dummyHandler.Discard(ctx)
 		}
 	}
+}
+
+// IsS3StorageEnabled returns true if s3 storage is enabled.
+func (b *DefaultBroker) IsS3StorageEnabled() bool {
+	_, ok := b.fileManagers[resModel.ResourceTypeS3]
+	return ok
 }
 
 // PreCheckConfig checks the configuration of external storage.

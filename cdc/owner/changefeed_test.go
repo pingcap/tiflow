@@ -82,8 +82,8 @@ type mockDDLSink struct {
 	ddlHistory []string
 	mu         struct {
 		sync.Mutex
-		checkpointTs      model.Ts
-		currentTableNames []model.TableName
+		checkpointTs  model.Ts
+		currentTables []*model.TableInfo
 	}
 	syncPoint    model.Ts
 	syncPointHis []model.Ts
@@ -123,17 +123,17 @@ func (m *mockDDLSink) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 	return nil
 }
 
-func (m *mockDDLSink) emitCheckpointTs(ts uint64, tableNames []model.TableName) {
+func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.checkpointTs = ts
-	m.mu.currentTableNames = tableNames
+	m.mu.currentTables = tables
 }
 
-func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []model.TableName) {
+func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.mu.checkpointTs, m.mu.currentTableNames
+	return m.mu.checkpointTs, m.mu.currentTables
 }
 
 func (m *mockDDLSink) close(ctx context.Context) error {
@@ -390,7 +390,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	mockDDLSink := cf.sink.(*mockDDLSink)
 
-	require.Len(t, cf.schema.AllTableNames(), 1)
+	require.Len(t, cf.schema.AllTables(), 1)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
@@ -405,7 +405,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, cf.schema.AllTableNames(), 0)
+	require.Len(t, cf.schema.AllTables(), 0)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, mockDDLPuller.resolvedTs)
