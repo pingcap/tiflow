@@ -148,7 +148,7 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 
-		useEventSortEngine: sortEngineCreator == nil,
+		useEventSortEngine: sortEngineCreator != nil,
 		sortEngineCreator:  sortEngineCreator,
 		sorterSystem:       sorterSystem,
 

@@ -13,6 +13,6 @@
 
 // Package pebble is an pebble-based EventSortEngine implementation with such properties:
 //  1. all EventSortEngine instances shares several pebble.DB instances;
-//  2. keys are encoded with prefix TableID-CRTs;
+//  2. keys are encoded with prefix TableID-CRTs-StartTs;
 //  3. keys are hashed into different pebble.DB instances based on table prefix.
 package pebble

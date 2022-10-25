@@ -43,7 +43,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,8 +72,6 @@ type processor struct {
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 	redoManager   redo.LogManager
-
-	eventSortEngine sorter.EventSortEngine
 
 	initialized bool
 	errCh       chan error
@@ -623,16 +620,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
-
-	if p.eventSortEngine == nil {
-		engine, err := ctx.GlobalVars().SortEngineCreator.Create(p.changefeed.ID)
-		if err != nil {
-			log.Error("create sort engine fail", zap.Error(err))
-			return err
-		}
-		p.eventSortEngine = engine
-	}
-
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel
@@ -1066,7 +1053,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
-func (p *processor) Close() error {
+func (p *processor) Close(ctx cdcContext.Context) error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -1123,6 +1110,18 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
+
+	sortEngineCreator := ctx.GlobalVars().SortEngineCreator
+	if sortEngineCreator != nil {
+		if err := sortEngineCreator.Drop(p.changefeedID); err != nil {
+			log.Error("drop event sort engine fail",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 

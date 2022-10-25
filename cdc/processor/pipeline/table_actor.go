@@ -74,16 +74,17 @@ type tableActor struct {
 	state tablepb.TableState
 
 	pullerNode *pullerNode
-	sortNode   *sorterNode
+	sinkNode   *sinkNode
 	// contains all nodes except pullerNode
 	nodes []*ActorNode
 
-	// NOTE: eventSortEngine and sortNode coexist temporarily.
-	// sortNode will be removed after unified sorter is transformed
-	// into the new interface.
+	// If useEventSortEngine is true eventSortEngine will be used, otherwise
+	// sortNode will be used.
+	//
+	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
 	useEventSortEngine bool
 	eventSortEngine    sorter.EventSortEngine
-	sinkNode           *sinkNode
+	sortNode           *sorterNode
 
 	// states of table actor
 	started     bool
@@ -137,6 +138,10 @@ func NewTableActor(
 	// All sub-goroutines should be spawn in this wait group.
 	wg, cctx := errgroup.WithContext(ctx)
 
+	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
+	debugConfig := serverConfig.GetGlobalServerConfig().Debug
+	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
+
 	table := &tableActor{
 		// all errors in table actor will be reported to processor
 		reportErr: cdcCtx.Throw,
@@ -158,7 +163,7 @@ func NewTableActor(
 		targetTs:      targetTs,
 		started:       false,
 
-		useEventSortEngine: serverConfig.GetGlobalServerConfig().Debug.EnableDBSorter,
+		useEventSortEngine: useEventSortEngine,
 		eventSortEngine:    nil,
 		sortNode:           nil,
 
@@ -314,6 +319,16 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 			t.upstream.PDClient,
 		)
 		t.sortNode = sorterNode
+	} else {
+		engine, err := t.globalVars.SortEngineCreator.Create(t.changefeedVars.ID)
+		if err != nil {
+			log.Error("create sort engine fail",
+				zap.String("namespace", t.changefeedID.Namespace),
+				zap.String("changefeed", t.changefeedID.ID),
+				zap.Error(err))
+			return err
+		}
+		t.eventSortEngine = engine
 	}
 
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
@@ -382,10 +397,15 @@ func (t *tableActor) stop() {
 		return
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
-	if t.sortNode != nil {
+
+	if !t.useEventSortEngine && t.sortNode != nil {
 		// releaseResource will send a message to sorter router
 		t.sortNode.releaseResource()
 	}
+	if t.useEventSortEngine && t.eventSortEngine != nil {
+		t.eventSortEngine.RemoveTable(t.tableID)
+	}
+
 	t.cancel()
 	if t.sinkNode != nil && !t.sinkStopped.Load() {
 		if err := t.sinkNode.stop(t.tablePipelineCtx); err != nil {
@@ -597,6 +617,7 @@ var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		}
 		return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
 	} else {
+		t.eventSortEngine.AddTable(t.tableID)
 		return nil
 	}
 }

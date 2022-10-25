@@ -37,10 +37,10 @@ type GlobalVars struct {
 	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
 
-	// SortEngineCreator is introduced to replace SorterSystem.
-	// The former is pull based and the latter is push-based.
-	// TODO(qupeng): remove SorterSystem after unified sorter has been transformed
-	// into pull based module.
+	// SortEngineCreator is introduced for pull-based sinks.
+	//
+	// TODO(qupeng): remove SorterSystem after all sorters are transformed
+	// to adapt pull-based sinks.
 	SorterSystem      *ssystem.System
 	SortEngineCreator *sortfactory.EventSortEngineFactory
 

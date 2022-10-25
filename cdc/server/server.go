@@ -89,7 +89,6 @@ type server struct {
 
 	// If useEventSortEngine is true sortEngineCreator will be used.
 	// Otherwise sorterSystem will be used.
-	// TODO(qupeng): remove it after unified sorter is transformed into EventSortEngine.
 	useEventSortEngine bool
 	sortEngineCreator  *sortfactory.EventSortEngineFactory
 	sorterSystem       *ssystem.System
@@ -117,11 +116,16 @@ func New(pdEndpoints []string) (*server, error) {
 		return nil, errors.Trace(err)
 	}
 
+	// TODO(qupeng): adjust it after unified sorter is transformed into EventSortEngine.
+	debugConfig := config.GetGlobalServerConfig().Debug
+	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
+
 	s := &server{
-		pdEndpoints:        pdEndpoints,
-		grpcService:        p2p.NewServerWrapper(),
-		tcpServer:          tcpServer,
-		useEventSortEngine: config.GetGlobalServerConfig().Debug.EnableDBSorter,
+		pdEndpoints: pdEndpoints,
+		grpcService: p2p.NewServerWrapper(),
+		tcpServer:   tcpServer,
+
+		useEventSortEngine: useEventSortEngine,
 	}
 
 	log.Info("CDC server created",
@@ -232,7 +236,6 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		}
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		memInBytes := uint64(float64(totalMemory) * memPercentage)
-
 		s.sortEngineCreator = sortfactory.NewPebbleFactory(sortDir, memInBytes, conf.Debug.DB)
 	} else {
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
