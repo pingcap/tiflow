@@ -310,6 +310,9 @@ func (n *sorterNode) start(
 				// sorter output channel closed
 				return nil
 			}
+			if index == 0 {
+				continue
+			}
 			events = events[:index]
 			for i := 0; i < index; i++ {
 				e := events[i]
