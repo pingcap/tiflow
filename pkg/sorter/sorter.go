@@ -53,7 +53,7 @@ type EventSortEngine interface {
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
-	// NOTE: It's only available if IsTableBased returns true.
+	// NOTE: It's only available if IsTableBased returns false.
 	FetchAllTables(lowerBound Position) EventIterator
 
 	// CleanByTable tells the engine events of the given table in the given range
