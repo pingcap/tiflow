@@ -209,7 +209,13 @@ func (c *TablesChecker) checkTable(ctx context.Context) error {
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				opt := &incompatibilityOption{
+					state:      StateWarning,
+					tableID:    dbutil.TableName(table.Schema, table.Name),
+					errMessage: err.Error(),
+				}
+				c.optCh <- opt
+				return nil
 			}
 			opts := c.checkAST(ctStmt)
 			for _, opt := range opts {
@@ -376,7 +382,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	c.firstCreateTableStmtNode, err = getCreateTableStmt(p, statement)
 	if err != nil {
-		markCheckError(r, err)
+		markCheckErrorFromParser(r, err)
 		return r
 	}
 
@@ -438,7 +444,10 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				c.reMu.Lock()
+				markCheckErrorFromParser(r, err)
+				c.reMu.Unlock()
+				continue
 			}
 
 			if has := hasAutoIncrementKey(ctStmt); has {
@@ -668,7 +677,10 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				return err
+				c.reMu.Lock()
+				markCheckErrorFromParser(r, err)
+				c.reMu.Unlock()
+				continue
 			}
 
 			if has := hasAutoIncrementKey(ctStmt); has {

@@ -261,8 +261,8 @@ func getTopicDispatcher(
 	topicExpr := topic.Expression(ruleConfig.TopicRule)
 
 	if protocol != "" {
-		var p config.Protocol
-		if err := p.FromString(protocol); err != nil {
+		p, err := config.ParseSinkProtocolFromString(protocol)
+		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 

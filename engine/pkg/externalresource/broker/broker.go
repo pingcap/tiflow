@@ -15,6 +15,7 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -68,8 +69,32 @@ type DefaultBroker struct {
 	cancel         context.CancelFunc
 }
 
-// NewBroker creates a new Impl instance
+// NewBroker creates a new Impl instance.
 func NewBroker(
+	ctx context.Context,
+	executorID resModel.ExecutorID,
+	client client.ServerMasterClient,
+) (*DefaultBroker, error) {
+	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
+	if err != nil || resp.Err != nil {
+		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
+	}
+	var storageConfig resModel.Config
+	err = json.Unmarshal([]byte(resp.Config), &storageConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// validate and check config
+	storageConfig.ValidateAndAdjust(executorID)
+	if err := PreCheckConfig(storageConfig); err != nil {
+		return nil, err
+	}
+	return NewBrokerWithConfig(&storageConfig, executorID, client)
+}
+
+// NewBrokerWithConfig creates a new Impl instance based on the given config.
+func NewBrokerWithConfig(
 	config *resModel.Config,
 	executorID resModel.ExecutorID,
 	client client.ResourceManagerClient,
@@ -116,6 +141,7 @@ func (b *DefaultBroker) OpenStorage(
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resID resModel.ResourceID,
+	opts ...OpenStorageOption,
 ) (Handle, error) {
 	// Note the semantics of PasreResourceID:
 	// If resourceID is `/local/my-resource`, then tp == resModel.ResourceTypeLocalFile
@@ -130,6 +156,11 @@ func (b *DefaultBroker) OpenStorage(
 		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
+	options := &openStorageOptions{}
+	for _, o := range opts {
+		o(options)
+	}
+
 	record, exists, err := b.checkForExistingResource(ctx,
 		resModel.ResourceKey{JobID: jobID, ID: resID})
 	if err != nil {
@@ -140,7 +171,7 @@ func (b *DefaultBroker) OpenStorage(
 	if !exists {
 		desc, err = b.createResource(ctx, fm, projectInfo, workerID, resName)
 	} else {
-		desc, err = b.getPersistResource(ctx, fm, record, resName)
+		desc, err = b.getPersistResource(ctx, fm, record, resName, options)
 	}
 	if err != nil {
 		return nil, err
@@ -299,6 +330,7 @@ func (b *DefaultBroker) getPersistResource(
 	ctx context.Context, fm internal.FileManager,
 	record *resModel.ResourceMeta,
 	resName resModel.ResourceName,
+	options *openStorageOptions,
 ) (internal.ResourceDescriptor, error) {
 	ident := internal.ResourceIdent{
 		Name: resName,
@@ -308,7 +340,27 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	return fm.GetPersistedResource(ctx, ident)
+	var desc internal.ResourceDescriptor
+
+	if options.cleanBeforeOpen {
+		err := fm.RemoveResource(ctx, ident)
+		// LocalFileManager may return ErrResourceDoesNotExist, which can be
+		// ignored because the resource no longer exists.
+		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
+			return nil, err
+		}
+		desc, err = fm.CreateResource(ctx, ident)
+		if err != nil {
+			return nil, err
+		}
+		return desc, nil
+	}
+
+	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
+	}
+	return desc, nil
 }
 
 func (b *DefaultBroker) createDummyS3Resource() error {
@@ -364,6 +416,12 @@ func (b *DefaultBroker) Close() {
 			_ = b.s3dummyHandler.Discard(ctx)
 		}
 	}
+}
+
+// IsS3StorageEnabled returns true if s3 storage is enabled.
+func (b *DefaultBroker) IsS3StorageEnabled() bool {
+	_, ok := b.fileManagers[resModel.ResourceTypeS3]
+	return ok
 }
 
 // PreCheckConfig checks the configuration of external storage.

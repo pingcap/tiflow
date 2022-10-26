@@ -86,8 +86,9 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -124,9 +125,11 @@ func TestKafkaSink(t *testing.T) {
 	require.Equal(t, uint64(120), checkpoint.Ts)
 
 	// mock kafka broker processes 1 checkpoint ts event
-	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
-		Schema: "test",
-		Table:  "t1",
+	err = sink.EmitCheckpointTs(ctx, uint64(120), []*model.TableInfo{{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
 	}})
 	require.Nil(t, err)
 	defer func() {
@@ -187,7 +190,9 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	}()
 
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
 	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row changed event

@@ -411,6 +411,14 @@ var (
 		"date separator in cloud storage sink is invalid",
 		errors.RFCCodeText("CDC:ErrStorageSinkInvalidDateSeparator"),
 	)
+	ErrCSVEncodeFailed = errors.Normalize(
+		"csv encode failed",
+		errors.RFCCodeText("CDC:ErrCSVEncodeFailed"),
+	)
+	ErrCSVDecodeFailed = errors.Normalize(
+		"csv decode failed",
+		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
+	)
 
 	// utilities related errors
 	ErrToTLSConfigFailed = errors.Normalize(

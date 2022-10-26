@@ -6,7 +6,6 @@ join = ["127.0.0.1:10240"]          # Corresponding command line:  --join
 
 keepalive-ttl = "20s"
 keepalive-interval = "500ms"
-session-ttl = 20
 
 [log] 
 level = "info"              # Corresponding command line:  --log-level
