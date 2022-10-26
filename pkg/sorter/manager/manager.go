@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sorter"
-	ngpebble "github.com/pingcap/tiflow/pkg/sorter/pebble"
 	"go.uber.org/multierr"
 )
 
@@ -59,13 +58,8 @@ func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.Ev
 		if engine, exists = f.engines[ID]; exists {
 			return engine, nil
 		}
-		if len(f.dbs) == 0 {
-			f.dbs, err = ngpebble.OpenDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
-			if err != nil {
-				return
-			}
-		}
-		engine = ngpebble.New(ID, f.dbs)
+		// TODO(qupeng): implement pebble engine.
+		engine = nil
 		f.engines[ID] = engine
 		return
 	default:
