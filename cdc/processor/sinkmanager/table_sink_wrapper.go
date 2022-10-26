@@ -94,7 +94,7 @@ func (t *tableSinkWrapper) close(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("sinkV2 is closed",
+	log.Info("sink is closed",
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
