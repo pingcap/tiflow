@@ -113,7 +113,7 @@ func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
 			// For a given Node, every dependency corresponds to a target.
 			// If target is nil it means the dependency doesn't conflict
 			// with any other nodes. However it's still necessary to track
-			// it because it makes effect on Node.tryResolve.
+			// it because Node.tryResolve needs to know it.
 			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
 			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], assignedToAny)
 			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
