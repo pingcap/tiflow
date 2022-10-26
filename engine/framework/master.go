@@ -394,7 +394,7 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	// Note this context must not be hold in any resident goroutine.
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
