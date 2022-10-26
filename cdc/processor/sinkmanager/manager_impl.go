@@ -140,6 +140,10 @@ func (m *ManagerImpl) UpdateTableResolvedTs(tableID model.TableID, ts model.Ts) 
 
 // UpdateBarrierTs updates the barrier ts of all tables in the sink manager.
 func (m *ManagerImpl) UpdateBarrierTs(ts model.Ts) {
+	// It is safe to do not use compare and swap here.
+	// Only the processor will update the barrier ts.
+	// Other goroutines will only read the barrier ts.
+	// So it is safe to do not use compare and swap here, just Load and Store.
 	if ts <= m.lastBarrierTs.Load() {
 		return
 	}
