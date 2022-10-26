@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
+	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -98,8 +98,8 @@ type captureImpl struct {
 	useEventSortEngine bool
 	// sorterSystem
 	sorterSystem *ssystem.System
-	// sortEngineCreator is used to create pkg/sorter.EventSortEngine instances.
-	sortEngineCreator *sortfactory.EventSortEngineFactory
+	// sortEngineManager is used to create pkg/sorter.EventSortEngine instances.
+	sortEngineManager *sortmgr.EventSortEngineManager
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -132,7 +132,7 @@ func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 	tableActorSystem *system.System,
-	sortEngineCreator *sortfactory.EventSortEngineFactory,
+	sortEngineManager *sortmgr.EventSortEngineManager,
 	sorterSystem *ssystem.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
@@ -148,8 +148,8 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 
-		useEventSortEngine: sortEngineCreator != nil,
-		sortEngineCreator:  sortEngineCreator,
+		useEventSortEngine: sortEngineManager != nil,
+		sortEngineManager:  sortEngineManager,
 		sorterSystem:       sorterSystem,
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
@@ -320,7 +320,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageRouter:    c.MessageRouter,
 
 		SorterSystem:      c.sorterSystem,
-		SortEngineCreator: c.sortEngineCreator,
+		SortEngineManager: c.sortEngineManager,
 	})
 
 	g.Go(func() error {

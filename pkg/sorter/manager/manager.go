@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package factory
+package manager
 
 import (
 	"sync"
@@ -31,8 +31,8 @@ const (
 	pebbleEngine sortEngineType = iota + 1
 )
 
-// EventSortEngineFactory is a factory to create EventSortEngine.
-type EventSortEngineFactory struct {
+// EventSortEngineManager is a manager to create or drop EventSortEngine.
+type EventSortEngineManager struct {
 	// Read-only fields.
 	engineType      sortEngineType
 	dir             string
@@ -49,7 +49,7 @@ type EventSortEngineFactory struct {
 
 // Create creates an EventSortEngine. If an engine with same ID already exists,
 // it will be returned directly.
-func (f *EventSortEngineFactory) Create(ID model.ChangeFeedID) (engine sorter.EventSortEngine, err error) {
+func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.EventSortEngine, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -74,7 +74,7 @@ func (f *EventSortEngineFactory) Create(ID model.ChangeFeedID) (engine sorter.Ev
 }
 
 // Drop cleans the given event sort engine.
-func (f *EventSortEngineFactory) Drop(ID model.ChangeFeedID) (err error) {
+func (f *EventSortEngineManager) Drop(ID model.ChangeFeedID) (err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -88,7 +88,7 @@ func (f *EventSortEngineFactory) Drop(ID model.ChangeFeedID) (err error) {
 }
 
 // Close will close all created engines and release all resources.
-func (f *EventSortEngineFactory) Close() (err error) {
+func (f *EventSortEngineManager) Close() (err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, engine := range f.engines {
@@ -100,9 +100,9 @@ func (f *EventSortEngineFactory) Close() (err error) {
 	return
 }
 
-// NewPebbleFactory will create a EventSortEngineFactory.
-func NewPebbleFactory(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *EventSortEngineFactory {
-	return &EventSortEngineFactory{
+// NewForPebble will create a EventSortEngineManager for the pebble implementation.
+func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *EventSortEngineManager {
+	return &EventSortEngineManager{
 		engineType:      pebbleEngine,
 		memQuotaInBytes: memQuotaInBytes,
 		pebbleConfig:    cfg,

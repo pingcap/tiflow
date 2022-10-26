@@ -320,7 +320,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		)
 		t.sortNode = sorterNode
 	} else {
-		engine, err := t.globalVars.SortEngineCreator.Create(t.changefeedVars.ID)
+		engine, err := t.globalVars.SortEngineManager.Create(t.changefeedVars.ID)
 		if err != nil {
 			log.Error("create sort engine fail",
 				zap.String("namespace", t.changefeedID.Namespace),

@@ -39,7 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	sortfactory "github.com/pingcap/tiflow/pkg/sorter/factory"
+	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
@@ -87,10 +87,10 @@ type server struct {
 
 	tableActorSystem *system.System
 
-	// If useEventSortEngine is true sortEngineCreator will be used.
+	// If useEventSortEngine is true sortEngineManager will be used.
 	// Otherwise sorterSystem will be used.
 	useEventSortEngine bool
-	sortEngineCreator  *sortfactory.EventSortEngineFactory
+	sortEngineManager  *sortmgr.EventSortEngineManager
 	sorterSystem       *ssystem.System
 }
 
@@ -198,7 +198,7 @@ func (s *server) prepare(ctx context.Context) error {
 
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, cdcEtcdClient, s.grpcService,
-		s.tableActorSystem, s.sortEngineCreator, s.sorterSystem)
+		s.tableActorSystem, s.sortEngineManager, s.sorterSystem)
 
 	return nil
 }
@@ -215,11 +215,11 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		return nil
 	}
 
-	if s.useEventSortEngine && s.sortEngineCreator != nil {
-		if err := s.sortEngineCreator.Close(); err != nil {
-			log.Error("fails to close sort engine factory", zap.Error(err))
+	if s.useEventSortEngine && s.sortEngineManager != nil {
+		if err := s.sortEngineManager.Close(); err != nil {
+			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
-		s.sortEngineCreator = nil
+		s.sortEngineManager = nil
 	}
 	if !s.useEventSortEngine && s.sorterSystem != nil {
 		s.sorterSystem.Stop()
@@ -236,7 +236,11 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		}
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		memInBytes := uint64(float64(totalMemory) * memPercentage)
-		s.sortEngineCreator = sortfactory.NewPebbleFactory(sortDir, memInBytes, conf.Debug.DB)
+		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
+			s.sortEngineManager = sortmgr.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
+		} else {
+			panic("only pebble is transformed to EventSortEngine")
+		}
 	} else {
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
@@ -427,11 +431,11 @@ func (s *server) stopActorSystems() {
 	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
 
 	start = time.Now()
-	if s.useEventSortEngine && s.sortEngineCreator != nil {
-		if err := s.sortEngineCreator.Close(); err != nil {
-			log.Error("fails to close sort engine factory", zap.Error(err))
+	if s.useEventSortEngine && s.sortEngineManager != nil {
+		if err := s.sortEngineManager.Close(); err != nil {
+			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
-		log.Info("sort engine factory closed", zap.Duration("duration", time.Since(start)))
+		log.Info("sort engine manager closed", zap.Duration("duration", time.Since(start)))
 	}
 	if !s.useEventSortEngine && s.sorterSystem != nil {
 		s.sorterSystem.Stop()
