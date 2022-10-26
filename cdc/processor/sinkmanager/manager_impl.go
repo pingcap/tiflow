@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -132,7 +133,7 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 func (m *ManagerImpl) UpdateTableResolvedTs(tableID model.TableID, ts model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
-		panic("table sink not found")
+		log.Panic("table sink not found")
 	}
 	tableSink.(*tableSinkWrapper).updateCurrentSorterResolvedTs(ts)
 }
@@ -161,7 +162,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 func (m *ManagerImpl) GetTableStats(tableID model.TableID) pipeline.Stats {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
-		panic("table sink not found")
+		log.Panic("table sink not found")
 	}
 	checkpointTs := tableSink.(*tableSinkWrapper).getTableSinkCheckpointTs()
 	m.memQuota.Release(tableID, checkpointTs)
