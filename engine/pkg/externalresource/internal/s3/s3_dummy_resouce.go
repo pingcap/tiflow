@@ -15,6 +15,7 @@ package s3
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
@@ -22,25 +23,31 @@ import (
 )
 
 const (
-	// dummyJobID is a dummy job ID used for the s3 storage.
-	dummyJobID = "dummy-job-%s"
 	// DummyWorkerID is a dummy worker ID used for the s3 storage.
 	DummyWorkerID = "keep-alive-worker"
 	// DummyResourceID is a dummy resource ID used for the s3 storage.
 	DummyResourceID = "/s3/dummy"
-	// DummyResourceName is a dummy resource name used for the s3 storage.
-	DummyResourceName = "dummy"
+)
+
+var (
+	dummyJobID        = "dummy-job-%s"
+	dummyResourceName = resModel.EncodeResourceName("dummy")
 )
 
 // GetDummyIdent returns a dummy resource ident for testing.
 func GetDummyIdent(executorID model.ExecutorID) internal.ResourceIdent {
 	return internal.ResourceIdent{
-		Name: DummyResourceName,
+		Name: GetDummyResourceName(),
 		ResourceScope: internal.ResourceScope{
 			Executor: executorID,
 			WorkerID: DummyWorkerID,
 		},
 	}
+}
+
+// GetDummyResourceName returns a dummy resource name for s3 storage.
+func GetDummyResourceName() string {
+	return dummyResourceName
 }
 
 // GetDummyResourceKey returns a dummy resource key for s3 storage.
@@ -54,4 +61,9 @@ func GetDummyResourceKey(executorID model.ExecutorID) resModel.ResourceKey {
 // GetDummyJobID returns a dummy job ID for s3 storage.
 func GetDummyJobID(executorID model.ExecutorID) model.JobID {
 	return fmt.Sprintf(dummyJobID, executorID)
+}
+
+// GetDummyResPath returns a file path located in dummy resource for s3 storage.
+func GetDummyResPath(filename string) string {
+	return path.Join(DummyWorkerID, dummyResourceName, filename)
 }

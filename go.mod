@@ -30,6 +30,7 @@ require (
 	github.com/go-mysql-org/go-mysql v1.6.1-0.20220718092400-c855c26b37bd
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/goccy/go-json v0.9.11
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
@@ -56,9 +57,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20220929075948-06e08d5ed64c
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20221014081352-61eed5c36204
-	github.com/pingcap/tidb-tools v6.3.0+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20221014081352-61eed5c36204
+	github.com/pingcap/tidb v1.1.0-beta.0.20221013075951-a5c7c039c6c3
+	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20221013075951-a5c7c039c6c3
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0

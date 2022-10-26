@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chaos-minio-create-bucket-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: chaos-test-case
+          image: minio/mc
+          imagePullPolicy: IfNotPresent
+          command: ['/bin/sh', '-c', '/usr/bin/mc alias set myminio http://chaos-minio:9000 engine engineSecret || exit 1; /usr/bin/mc mb myminio/engine-it || exit 1;']
+      restartPolicy: Never
+  backoffLimit: 0 # fail immediately

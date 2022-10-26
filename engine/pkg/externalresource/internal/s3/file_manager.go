@@ -164,7 +164,7 @@ func (m *FileManager) removeTemporaryFilesForExecutor(
 	ctx context.Context, scope internal.ResourceScope,
 ) error {
 	// Get all persisted files which is created by current executor.
-	persistedResSet := make(map[resModel.ResourceName]struct{})
+	persistedResSet := make(map[string]struct{})
 
 	m.mu.RLock()
 	for workerID, resources := range m.persistedResMap {
@@ -183,7 +183,7 @@ func (m *FileManager) removeTemporaryFilesForExecutor(
 func (m *FileManager) removeAllTemporaryFilesByMeta(
 	ctx context.Context,
 	scope internal.ResourceScope,
-	persistedResSet map[resModel.ResourceName]struct{},
+	persistedResSet map[string]struct{},
 ) error {
 	log.Info("Removing temporary resources for executor", zap.Any("scope", scope))
 
@@ -310,6 +310,7 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 // PreCheckConfig does a preflight check on the executor's storage configurations.
 func PreCheckConfig(config resModel.S3Config) error {
 	// TODO: use customized retry policy.
+	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
 	factory := NewExternalStorageFactory(config.Bucket,
 		config.Prefix, &config.S3BackendOptions)
 	_, err := factory.newS3ExternalStorageForScope(context.Background(), internal.ResourceScope{})
