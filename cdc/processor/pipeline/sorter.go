@@ -94,6 +94,7 @@ type sorterNode struct {
 	changefeed     model.ChangeFeedID
 	// remainEvents record the amount of event remain in sorter engine
 	remainEvents int64
+	startTs      model.Ts
 }
 
 func newSorterNode(
@@ -183,6 +184,25 @@ func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, r
 			if !ok {
 				return idx, false
 			}
+			if event == nil || event.RawKV == nil {
+				log.Panic("unexpected empty event",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.Int64("tableID", n.tableID),
+					zap.String("tableName", n.tableName),
+					zap.Any("event", event))
+			}
+			if event.CRTs < n.startTs {
+				// Ignore messages are less than initial checkpoint ts.
+				log.Debug("sorterNode: ignore sorter output event",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.Int64("tableID", n.tableID),
+					zap.String("tableName", n.tableName),
+					zap.Uint64("CRTs", event.CRTs),
+					zap.Uint64("startTs", n.startTs))
+				continue
+			}
 			result[idx] = event
 			idx++
 			if idx == defaultBatchReadSize {
@@ -192,6 +212,7 @@ func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, r
 			return idx, true
 		}
 	}
+
 }
 
 func (n *sorterNode) start(
@@ -271,13 +292,13 @@ func (n *sorterNode) start(
 				zap.String("tableName", n.tableName),
 				zap.Uint64("replicateTs", replicateTs),
 				zap.Duration("duration", time.Since(start)))
+			n.startTs = startTs
 		}
 
 		n.state.Store(tablepb.TableStateReplicating)
 		eventSorter.EmitStartTs(stdCtx, startTs)
 
 		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
-
 		for {
 			select {
 			case <-stdCtx.Done():
@@ -292,26 +313,6 @@ func (n *sorterNode) start(
 			events = events[:index]
 			for i := 0; i < index; i++ {
 				e := events[i]
-				if e == nil || e.RawKV == nil {
-					log.Panic("unexpected empty event",
-						zap.String("namespace", n.changefeed.Namespace),
-						zap.String("changefeed", n.changefeed.ID),
-						zap.Int64("tableID", n.tableID),
-						zap.String("tableName", n.tableName),
-						zap.Any("event", e))
-				}
-				if e.CRTs < startTs {
-					// Ignore messages are less than initial checkpoint ts.
-					log.Debug("sorterNode: ignore sorter output event",
-						zap.String("namespace", n.changefeed.Namespace),
-						zap.String("changefeed", n.changefeed.ID),
-						zap.Int64("tableID", n.tableID),
-						zap.String("tableName", n.tableName),
-						zap.Uint64("CRTs", e.CRTs),
-						zap.Uint64("startTs", startTs))
-					events[i] = nil
-					continue
-				}
 				e.SetUpFinishedCh()
 				if err := n.mg.AddEvent(stdCtx, e); err != nil {
 					return errors.Trace(err)
