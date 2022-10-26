@@ -92,14 +92,12 @@ type captureImpl struct {
 	EtcdClient       etcd.CDCEtcdClient
 	tableActorSystem *system.System
 
-	// useEventSortEngine indicates whether uses the new pull based sorter engine or
-	// use push based sorter system. sorterSystem will be removed after unified sorter
-	// has been transformed into pull based model.
+	// useEventSortEngine indicates whether to use the new pull based sort engine or
+	// the old push based sorter system. the latter will be removed after all sorter
+	// have been transformed into pull based sort engine.
 	useEventSortEngine bool
-	// sorterSystem
-	sorterSystem *ssystem.System
-	// sortEngineManager is used to create pkg/sorter.EventSortEngine instances.
-	sortEngineManager *sortmgr.EventSortEngineManager
+	sorterSystem       *ssystem.System
+	sortEngineManager  *sortmgr.EventSortEngineManager
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.

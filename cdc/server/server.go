@@ -87,8 +87,7 @@ type server struct {
 
 	tableActorSystem *system.System
 
-	// If useEventSortEngine is true sortEngineManager will be used.
-	// Otherwise sorterSystem will be used.
+	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
 	useEventSortEngine bool
 	sortEngineManager  *sortmgr.EventSortEngineManager
 	sorterSystem       *ssystem.System
@@ -116,7 +115,7 @@ func New(pdEndpoints []string) (*server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// TODO(qupeng): adjust it after unified sorter is transformed into EventSortEngine.
+	// TODO(qupeng): adjust it after all sorters are transformed into EventSortEngine.
 	debugConfig := config.GetGlobalServerConfig().Debug
 	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
 

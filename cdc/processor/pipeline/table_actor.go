@@ -78,8 +78,7 @@ type tableActor struct {
 	// contains all nodes except pullerNode
 	nodes []*ActorNode
 
-	// If useEventSortEngine is true eventSortEngine will be used, otherwise
-	// sortNode will be used.
+	// If useEventSortEngine is true eventSortEngine will be used, otherwise sortNode will be used.
 	//
 	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
 	useEventSortEngine bool
@@ -575,7 +574,7 @@ func (t *tableActor) MemoryConsumption() uint64 {
 	if !t.useEventSortEngine {
 		return t.sortNode.flowController.GetConsumption()
 	} else {
-		// FIXME: sink manager should handle this.
+		// TODO(qupeng): sink manager should handle this.
 		return 0
 	}
 }
@@ -595,7 +594,7 @@ func (t *tableActor) RemainEvents() int64 {
 	if !t.useEventSortEngine {
 		return t.sortNode.remainEvent()
 	} else {
-		// FIXME: how to get it?
+		// TODO(qupeng): record it in sort engine and sinkmanager.
 		return 0
 	}
 }
