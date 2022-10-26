@@ -130,7 +130,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 	// upstream instance index -> targetTable -> sourceTables
-	tableMapPerUpstream := make([]map[string][]*filter.Table, len(c.instances))
+	tableMapPerUpstream := make([]map[filter.Table][]filter.Table, len(c.instances))
 	for idx := range c.instances {
 		i := idx
 		eg.Go(func() error {
@@ -150,9 +150,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// from multiple upstream...
 
 	// targetTable -> sourceID -> sourceTables
-	tablesPerTargetTable := make(map[string]map[string][]*filter.Table)
+	tablesPerTargetTable := make(map[filter.Table]map[string][]filter.Table)
 	// sharding table number of a target table
-	shardNumPerTargetTable := make(map[string]int)
+	shardNumPerTargetTable := make(map[filter.Table]int)
 
 	for i, inst := range c.instances {
 		mapping := tableMapPerUpstream[i]
@@ -165,7 +165,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		for targetTable, sourceTables := range mapping {
 			tablesPerSource, ok := tablesPerTargetTable[targetTable]
 			if !ok {
-				tablesPerSource = make(map[string][]*filter.Table)
+				tablesPerSource = make(map[string][]filter.Table)
 				tablesPerTargetTable[targetTable] = tablesPerSource
 			}
 			tablesPerSource[sourceID] = append(tablesPerSource[sourceID], sourceTables...)
@@ -175,7 +175,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	// calculate allow-list tables and databases they belongs to per upstream
 	// sourceID -> tables
-	allowTablesPerUpstream := make(map[string][]*filter.Table, len(c.instances))
+	allowTablesPerUpstream := make(map[string][]filter.Table, len(c.instances))
 	relatedDBPerUpstream := make([]map[string]struct{}, len(c.instances))
 	for i, inst := range c.instances {
 		sourceID := inst.cfg.SourceID
@@ -289,14 +289,25 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 		if isFresh {
-			for targetTableID, shardingSet := range tablesPerTargetTable {
-				if shardNumPerTargetTable[targetTableID] <= 1 {
+			for targetTable, shardingSet := range tablesPerTargetTable {
+				if shardNumPerTargetTable[targetTable] <= 1 {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
-					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, checkingShardID, dumpThreads))
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(
+						targetTable.String(),
+						dbs,
+						shardingSet,
+						checkingShardID,
+						dumpThreads,
+					))
 				} else {
-					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
+					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(
+						targetTable.String(),
+						dbs,
+						shardingSet,
+						dumpThreads,
+					))
 				}
 			}
 		}
@@ -306,7 +317,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	return nil
 }
 
-func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstance) (map[string][]*filter.Table, error) {
+func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstance) (map[filter.Table][]filter.Table, error) {
 	bAList, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
 	if err != nil {
 		return nil, terror.ErrTaskCheckGenBAList.Delegate(err)
@@ -591,11 +602,12 @@ func (c *Checker) Error() interface{} {
 	return &pb.CheckError{}
 }
 
-func sameTableNameDetection(tables map[string][]*filter.Table) error {
+func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 	tableNameSets := make(map[string]string)
 	var messages []string
 
-	for name := range tables {
+	for tbl := range tables {
+		name := tbl.String()
 		nameL := strings.ToLower(name)
 		if nameO, ok := tableNameSets[nameL]; !ok {
 			tableNameSets[nameL] = name
