@@ -30,12 +30,12 @@ type progress struct {
 var _ heap.Interface = (*progressHeap)(nil)
 
 type progressHeap struct {
-	heap []progress
+	heap []*progress
 }
 
 func newProgressHeap() *progressHeap {
 	return &progressHeap{
-		heap: make([]progress, 0),
+		heap: make([]*progress, 0),
 	}
 }
 
@@ -52,7 +52,7 @@ func (p *progressHeap) Swap(i, j int) {
 }
 
 func (p *progressHeap) Push(x any) {
-	p.heap = append(p.heap, x.(progress))
+	p.heap = append(p.heap, x.(*progress))
 }
 
 func (p *progressHeap) Pop() any {
@@ -62,28 +62,33 @@ func (p *progressHeap) Pop() any {
 	return x
 }
 
-type tablesFetchProgress struct {
+type tableProgresses struct {
 	mu   sync.Mutex
 	heap *progressHeap
 }
 
-//nolint:deadcode
-func newTableFetchProgress() *tablesFetchProgress {
+func newTableProgresses() *tableProgresses {
 	ph := newProgressHeap()
 	heap.Init(ph)
-	return &tablesFetchProgress{
+	return &tableProgresses{
 		heap: ph,
 	}
 }
 
-func (p *tablesFetchProgress) push(progress2 progress) {
+func (p *tableProgresses) push(progress *progress) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	heap.Push(p.heap, progress2)
+	heap.Push(p.heap, progress)
 }
 
-func (p *tablesFetchProgress) pop() progress {
+func (p *tableProgresses) pop() *progress {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return heap.Pop(p.heap).(progress)
+	return heap.Pop(p.heap).(*progress)
+}
+
+func (p *tableProgresses) len() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.heap.Len()
 }

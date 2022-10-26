@@ -43,7 +43,6 @@ type tableSinkWrapper struct {
 	receivedSorterResolvedTs atomic.Uint64
 }
 
-//nolint:deadcode
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
