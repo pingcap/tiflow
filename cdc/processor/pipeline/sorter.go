@@ -289,6 +289,7 @@ func (n *sorterNode) start(
 				// sorter output channel closed
 				return nil
 			}
+			events = events[:index]
 			for i := 0; i < index; i++ {
 				e := events[i]
 				if e == nil || e.RawKV == nil {
@@ -396,7 +397,6 @@ func (n *sorterNode) start(
 				lastCRTs = e.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 			}
-			events = events[:0]
 		}
 	})
 	n.sorter = eventSorter
