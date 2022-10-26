@@ -319,12 +319,6 @@ func (n *sorterNode) start(
 
 			for i := 0; i < index; i++ {
 				e := events[i]
-				if err := e.WaitFinished(ctx); err != nil {
-					if errors.Cause(err) != context.Canceled {
-						ctx.Throw(err)
-					}
-					return errors.Trace(err)
-				}
 				if e.RawKV.OpType == model.OpTypeResolved {
 					if e.CRTs < lastSentResolvedTs {
 						continue
@@ -337,6 +331,12 @@ func (n *sorterNode) start(
 					continue
 				}
 
+				if err := e.WaitFinished(ctx); err != nil {
+					if errors.Cause(err) != context.Canceled {
+						ctx.Throw(err)
+					}
+					return errors.Trace(err)
+				}
 				if e.Row == nil {
 					log.Debug("message's row changed event is nil, it should be ignored",
 						zap.String("namespace", n.changefeed.Namespace),
