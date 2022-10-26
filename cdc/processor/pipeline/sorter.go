@@ -273,7 +273,7 @@ func (n *sorterNode) start(
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					atomic.AddInt64(&n.remainEvents, -1)
-					ignored, err := n.mounter.DecodeEvent(ctx, msg)
+					err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						log.Error("got an error from mounter, sorter will stop.",
 							zap.String("namespace", n.changefeed.Namespace),
@@ -284,9 +284,16 @@ func (n *sorterNode) start(
 						ctx.Throw(err)
 						return errors.Trace(err)
 					}
-					if ignored {
+					if msg.Row == nil {
+						log.Debug("message's row changed event is nil, it should be ignored",
+							zap.String("namespace", n.changefeed.Namespace),
+							zap.String("changefeed", n.changefeed.ID),
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName),
+							zap.Uint64("startTs", msg.StartTs))
 						continue
 					}
+
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {

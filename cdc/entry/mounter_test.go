@@ -1056,7 +1056,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			pEvent := model.NewPolymorphicEvent(rawKV)
-			ignored, err := mounter.DecodeEvent(ctx, pEvent)
+			err := mounter.DecodeEvent(ctx, pEvent)
 			require.Nil(t, err)
 			if ignored {
 				return

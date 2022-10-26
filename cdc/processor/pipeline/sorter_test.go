@@ -136,8 +136,8 @@ type mockMounter struct {
 	entry.Mounter
 }
 
-func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error) {
-	return false, nil
+func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	return nil
 }
 
 func TestSorterReplicateTs(t *testing.T) {
