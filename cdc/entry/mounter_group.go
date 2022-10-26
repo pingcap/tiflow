@@ -18,7 +18,7 @@ type MounterGroup interface {
 
 type mounterGroup struct {
 	schemaStorage  SchemaStorage
-	rawCh          []chan *model.PolymorphicEvent
+	inputCh        []chan *model.PolymorphicEvent
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
@@ -32,7 +32,7 @@ type mounterGroup struct {
 
 const (
 	defaultMounterWorkerNum = 32
-	defaultOutputChanSize   = 128000
+	defaultOutputChanSize   = 128
 )
 
 func NewMounterGroup(
@@ -47,13 +47,13 @@ func NewMounterGroup(
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
-	chs := make([]chan *model.PolymorphicEvent, workerNum)
+	inputCh := make([]chan *model.PolymorphicEvent, workerNum)
 	for i := 0; i < workerNum; i++ {
-		chs[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
+		inputCh[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
 	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,
-		rawCh:          chs,
+		inputCh:        inputCh,
 		enableOldValue: enableOldValue,
 		filter:         filter,
 		tz:             tz,
@@ -68,8 +68,9 @@ func NewMounterGroup(
 func (m *mounterGroup) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < m.workerNum; i++ {
+		idx := i
 		g.Go(func() error {
-			return m.runWorker(ctx, i)
+			return m.runWorker(ctx, idx)
 		})
 	}
 	return g.Wait()
@@ -77,12 +78,13 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 
 func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
+	rawCh := m.inputCh[index]
 	for {
 		var pEvent *model.PolymorphicEvent
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case pEvent = <-m.rawCh[index]:
+		case pEvent = <-rawCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
 			pEvent.MarkFinished()
@@ -101,7 +103,7 @@ func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEve
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.rawCh[index] <- event:
+	case m.inputCh[index] <- event:
 		return nil
 	}
 }
