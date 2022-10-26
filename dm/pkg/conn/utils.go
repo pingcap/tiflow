@@ -149,33 +149,37 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
-		binlogName = rowsResult[0][0]
 		var posInt int
-		posInt, err = strconv.Atoi(rowsResult[0][1])
-		if err != nil {
-			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		if len(rowsResult) != 0 {
+			binlogName = rowsResult[0][0]
+			posInt, err = strconv.Atoi(rowsResult[0][1])
+			if err != nil {
+				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+			}
+			pos = uint32(posInt)
+			binlogDoDB = rowsResult[0][2]
+			binlogIgnoreDB = rowsResult[0][3]
+			gtidStr = rowsResult[0][4]
 		}
-		pos = uint32(posInt)
-		binlogDoDB = rowsResult[0][2]
-		binlogIgnoreDB = rowsResult[0][3]
-		gtidStr = rowsResult[0][4]
 	} else {
 		rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB")
 		if err != nil {
 			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
-		binlogName = rowsResult[0][0]
 		var posInt int
-		posInt, err = strconv.Atoi(rowsResult[0][1])
-		if err != nil {
-			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		if len(rowsResult) != 0 {
+			binlogName = rowsResult[0][0]
+			posInt, err = strconv.Atoi(rowsResult[0][1])
+			if err != nil {
+				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+			}
+			pos = uint32(posInt)
+			binlogDoDB = rowsResult[0][2]
+			binlogIgnoreDB = rowsResult[0][3]
 		}
-		pos = uint32(posInt)
-		binlogDoDB = rowsResult[0][2]
-		binlogIgnoreDB = rowsResult[0][3]
 	}
 
 	if flavor == gmysql.MariaDBFlavor {

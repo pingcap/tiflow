@@ -61,7 +61,7 @@ func TestGetBinlogDB(t *testing.T) {
 	require.Nil(t, mock.ExpectationsWereMet())
 }
 
-func TestGetSlaveServerID(t *testing.T) {
+func TestGetMasterStatus(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 
