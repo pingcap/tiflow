@@ -57,9 +57,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20220929075948-06e08d5ed64c
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20221013075951-a5c7c039c6c3
+	github.com/pingcap/tidb v1.1.0-beta.0.20221021062555-f65f4bab99ba
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20221013075951-a5c7c039c6c3
+	github.com/pingcap/tidb/parser v0.0.0-20221021062555-f65f4bab99ba
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -212,7 +212,7 @@ require (
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4 // indirect
-	github.com/pingcap/tipb v0.0.0-20220824081009-0714a57aff1d // indirect
+	github.com/pingcap/tipb v0.0.0-20221020071514-cd933387bcb5 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
