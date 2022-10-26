@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
 
+const maxUpdateIntervalSize = 256 * 1024 * 1024
+
 // Assert that workerImpl implements worker.
 var _ worker = (*workerImpl)(nil)
 
@@ -44,6 +46,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 			availableMem := defaultMemoryUsage
 			events := make([]*model.PolymorphicEvent, 0, 1024)
 			var lastPos sorter.Position
+			lastTotalSize := uint64(0)
 			batchCount := 0
 			currentBarrierTs := t.lastBarrierTs.Load()
 			upperBound := sorter.Position{
@@ -74,22 +77,43 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					}
 					// Always emit the events to the sink.
 					// Whatever splitTxn is true or false, we should emit the events to the sink as soon as possible.
-					err := w.emitEventsToTableSink(events, t, e.CRTs, currentBarrierTs)
+					size, err := w.emitEventsToTableSink(t, events)
 					if err != nil {
 						return err
 					}
+					lastTotalSize += size
 					events = events[:0]
+					if lastTotalSize >= maxUpdateIntervalSize {
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						if err != nil {
+							return err
+						}
+						lastTotalSize = 0
+					}
 					// If we exceed the whole memory quota, we should stop the task.
 					// And just wait for the next round.
 					if w.memQuota.IsExceed() {
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						if err != nil {
+							return err
+						}
+						lastTotalSize = 0
 						break
 					}
 				}
 				// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
 				if w.splitTxn && uint64(batchCount) >= w.batchSize {
-					err := w.emitEventsToTableSink(events, t, e.CRTs, currentBarrierTs)
+					size, err := w.emitEventsToTableSink(t, events)
 					if err != nil {
 						return err
+					}
+					lastTotalSize += size
+					if lastTotalSize >= maxUpdateIntervalSize {
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						if err != nil {
+							return err
+						}
+						lastTotalSize = 0
 					}
 					events = events[:0]
 				}
@@ -105,17 +129,23 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 	}
 }
 
-func (w *workerImpl) emitEventsToTableSink(events []*model.PolymorphicEvent, t *tableSinkTask, commitTs model.Ts, barrierTs model.Ts) error {
+func (w *workerImpl) emitEventsToTableSink(t *tableSinkTask, events []*model.PolymorphicEvent) (uint64, error) {
 	rowChangeEvents := make([]*model.RowChangedEvent, 0, len(events))
 	size := 0
 	for _, e := range events {
 		size += e.Row.ApproximateBytes()
 		rows, err := t.tableSink.verifyAndTrySplitEvent(e)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		rowChangeEvents = append(rowChangeEvents, rows...)
 	}
+
+	t.tableSink.emitRowChangedEvent(rowChangeEvents...)
+	return uint64(size), nil
+}
+
+func (w *workerImpl) updateTableSinkResolvedTs(t *tableSinkTask, commitTs model.Ts, barrierTs model.Ts, size uint64) error {
 	tableSinkResolvedTs := commitTs
 	if barrierTs < tableSinkResolvedTs {
 		tableSinkResolvedTs = barrierTs
@@ -126,13 +156,12 @@ func (w *workerImpl) emitEventsToTableSink(events []*model.PolymorphicEvent, t *
 			tableSinkResolvedTs = redoFlushed
 		}
 	}
-	t.tableSink.emitRowChangedEvent(rowChangeEvents...)
 	resolvedTs := model.NewResolvedTs(tableSinkResolvedTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = w.memQuota.AllocateBatchID(t.tableID)
 	}
-	w.memQuota.Record(t.tableID, resolvedTs, uint64(size))
+	w.memQuota.Record(t.tableID, resolvedTs, size)
 	return t.tableSink.updateTableSinkResolvedTs(resolvedTs)
 }
 
