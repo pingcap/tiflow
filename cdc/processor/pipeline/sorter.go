@@ -167,7 +167,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 const (
-	defaultBatchReadSize = 128
+	defaultBatchReadSize = 2048
 )
 
 func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, result []*model.PolymorphicEvent) (int, bool) {
