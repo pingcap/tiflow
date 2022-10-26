@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -99,4 +100,53 @@ func (t *tableSinkWrapper) close(ctx context.Context) error {
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
 	return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+}
+
+func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, error) {
+	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
+	for _, e := range events {
+		if e == nil || e.Row == nil {
+			log.Warn("skip emit nil event",
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Int64("tableID", tableID),
+				zap.Any("event", e))
+			continue
+		}
+
+		colLen := len(e.Row.Columns)
+		preColLen := len(e.Row.PreColumns)
+		// Some transactions could generate empty row change event, such as
+		// begin; insert into t (id) values (1); delete from t where id=1; commit;
+		// Just ignore these row changed events.
+		if colLen == 0 && preColLen == 0 {
+			log.Warn("skip emit empty row event",
+				zap.Int64("tableID", tableID),
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Any("event", e))
+			continue
+		}
+
+		// This indicates that it is an update event,
+		// and after enable old value internally by default(but disable in the configuration).
+		// We need to handle the update event to be compatible with the old format.
+		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+			if pipeline.ShouldSplitUpdateEvent(e) {
+				deleteEvent, insertEvent, err := pipeline.SplitUpdateEvent(e)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
+			} else {
+				// If the handle key columns are not updated, PreColumns is directly ignored.
+				e.Row.PreColumns = nil
+				rowChangedEvents = append(rowChangedEvents, e.Row)
+			}
+		} else {
+			rowChangedEvents = append(rowChangedEvents, e.Row)
+		}
+	}
+	return rowChangedEvents, nil
 }
