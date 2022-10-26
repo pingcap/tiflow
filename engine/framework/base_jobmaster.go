@@ -90,6 +90,9 @@ type BaseJobMaster interface {
 	// IsBaseJobMaster is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsBaseJobMaster()
+
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
 }
 
 // BaseJobMasterExt extends BaseJobMaster with some extra methods.
@@ -189,6 +192,7 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -354,6 +358,11 @@ func (d *DefaultBaseJobMaster) CurrentEpoch() frameModel.Epoch {
 
 // IsBaseJobMaster implements BaseJobMaster.IsBaseJobMaster
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
+}
+
+// IsS3StorageEnabled implements BaseJobMaster.IsS3StorageEnabled
+func (d *DefaultBaseJobMaster) IsS3StorageEnabled() bool {
+	return d.worker.IsS3StorageEnabled()
 }
 
 // SendMessage delegates the SendMessage or inner worker

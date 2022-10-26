@@ -310,7 +310,7 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 // PreCheckConfig does a preflight check on the executor's storage configurations.
 func PreCheckConfig(config resModel.S3Config) error {
 	// TODO: use customized retry policy.
-	log.Debug("pre-checking broker config", zap.Any("config", config))
+	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
 	factory := NewExternalStorageFactory(config.Bucket,
 		config.Prefix, &config.S3BackendOptions)
 	_, err := factory.newS3ExternalStorageForScope(context.Background(), internal.ResourceScope{})

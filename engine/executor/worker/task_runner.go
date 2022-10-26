@@ -203,6 +203,10 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 
 		var err error
 		defer func() {
+			if r2 := recover(); r2 != nil {
+				err2 := errors.Trace(errors.Errorf("panic: %v", r2))
+				log.Error("Task panicked", zap.String("id", entry.ID()), zap.Error(err2))
+			}
 			log.Info("Task Closed",
 				zap.String("id", entry.ID()),
 				zap.Error(err),
