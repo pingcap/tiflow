@@ -14,6 +14,8 @@
 package sinkmanager
 
 import (
+	"sync/atomic"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
@@ -21,12 +23,11 @@ import (
 type writeSuccessCallback func(lastWrittenPos sorter.Position)
 
 type tableSinkTask struct {
-	tableID          model.TableID
-	lowerBound       sorter.Position
-	upperBound       sorter.Position
-	currentBarrierTs model.Ts
-	tableSink        *tableSinkWrapper
-	callback         writeSuccessCallback
+	tableID       model.TableID
+	lowerBound    sorter.Position
+	lastBarrierTs *atomic.Uint64
+	tableSink     *tableSinkWrapper
+	callback      writeSuccessCallback
 }
 
 type worker interface {

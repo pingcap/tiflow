@@ -45,7 +45,12 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 			events := make([]*model.PolymorphicEvent, 0, 1024)
 			var lastPos sorter.Position
 			batchCount := 0
-			iter := w.sortEngine.FetchByTable(t.tableID, t.lowerBound, t.upperBound)
+			currentBarrierTs := t.lastBarrierTs.Load()
+			upperBound := sorter.Position{
+				CommitTs: currentBarrierTs - 1,
+				StartTs:  currentBarrierTs,
+			}
+			iter := w.sortEngine.FetchByTable(t.tableID, t.lowerBound, upperBound)
 			for {
 				e, pos, err := iter.Next()
 				if err != nil {
@@ -69,7 +74,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					}
 					// Always emit the events to the sink.
 					// Whatever splitTxn is true or false, we should emit the events to the sink as soon as possible.
-					err := w.emitEventsToTableSink(events, t, e.CRTs)
+					err := w.emitEventsToTableSink(events, t, e.CRTs, currentBarrierTs)
 					if err != nil {
 						return err
 					}
@@ -82,7 +87,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 				}
 				// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
 				if w.splitTxn && uint64(batchCount) >= w.batchSize {
-					err := w.emitEventsToTableSink(events, t, e.CRTs)
+					err := w.emitEventsToTableSink(events, t, e.CRTs, currentBarrierTs)
 					if err != nil {
 						return err
 					}
@@ -100,7 +105,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 	}
 }
 
-func (w *workerImpl) emitEventsToTableSink(events []*model.PolymorphicEvent, t *tableSinkTask, commitTs model.Ts) error {
+func (w *workerImpl) emitEventsToTableSink(events []*model.PolymorphicEvent, t *tableSinkTask, commitTs model.Ts, barrierTs model.Ts) error {
 	rowChangeEvents := make([]*model.RowChangedEvent, 0, len(events))
 	size := 0
 	for _, e := range events {
@@ -112,12 +117,12 @@ func (w *workerImpl) emitEventsToTableSink(events []*model.PolymorphicEvent, t *
 		rowChangeEvents = append(rowChangeEvents, rows...)
 	}
 	tableSinkResolvedTs := commitTs
-	if t.currentBarrierTs < tableSinkResolvedTs {
-		tableSinkResolvedTs = t.currentBarrierTs
+	if barrierTs < tableSinkResolvedTs {
+		tableSinkResolvedTs = barrierTs
 	}
 	if w.redoManager != nil {
 		redoFlushed := w.redoManager.GetResolvedTs(t.tableID)
-		if redoFlushed < t.currentBarrierTs {
+		if redoFlushed < tableSinkResolvedTs {
 			tableSinkResolvedTs = redoFlushed
 		}
 	}

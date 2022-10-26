@@ -44,7 +44,7 @@ func (p *progressHeap) Len() int {
 }
 
 func (p *progressHeap) Less(i, j int) bool {
-	return p.heap[i].nextLowerBoundPos.Less(p.heap[j].nextLowerBoundPos)
+	return p.heap[i].nextLowerBoundPos.Compare(p.heap[j].nextLowerBoundPos) == -1
 }
 
 func (p *progressHeap) Swap(i, j int) {

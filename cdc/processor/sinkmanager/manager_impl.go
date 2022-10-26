@@ -97,7 +97,8 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 				StartTs:  barrierTs - 1,
 				CommitTs: barrierTs,
 			}
-			canBeAdvance := slowestTableProgress.nextLowerBoundPos.Less(upperBoundPos)
+			canBeAdvance := slowestTableProgress.nextLowerBoundPos.Compare(upperBoundPos) == -1 ||
+				slowestTableProgress.nextLowerBoundPos.Compare(upperBoundPos) == 0
 			if !canBeAdvance || !m.memQuota.TryAcquire() {
 				m.progressHeap.push(slowestTableProgress)
 				continue
@@ -112,12 +113,11 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 			}
 
 			t := &tableSinkTask{
-				tableID:          tableID,
-				lowerBound:       slowestTableProgress.nextLowerBoundPos,
-				upperBound:       upperBoundPos,
-				currentBarrierTs: m.lastBarrierTs.Load(),
-				tableSink:        tableSink.(*tableSinkWrapper),
-				callback:         callback,
+				tableID:       tableID,
+				lowerBound:    slowestTableProgress.nextLowerBoundPos,
+				lastBarrierTs: &m.lastBarrierTs,
+				tableSink:     tableSink.(*tableSinkWrapper),
+				callback:      callback,
 			}
 			select {
 			case <-m.closedChan:
