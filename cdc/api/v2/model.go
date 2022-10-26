@@ -150,7 +150,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			MySQLReplicationRules:    mySQLReplicationRules,
 			IgnoreTxnStartTs:         c.Filter.IgnoreTxnStartTs,
 			EventFilters:             efs,
-			IgnoreRowsWrittenByTiCDC: c.IgnoreIneligibleTable,
+			IgnoreRowsWrittenByTiCDC: c.Filter.IgnoreRowsWrittenByTiCDC,
 		}
 	}
 	if c.Consistent != nil {
@@ -335,7 +335,7 @@ type FilterConfig struct {
 	Rules                    []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs         []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters             []EventFilterRule `json:"event_filters"`
-	IgnoreRowsWrittenByTiCDC bool              `json:"ignore-rows-written-by-ticdc"`
+	IgnoreRowsWrittenByTiCDC bool              `json:"ignore_rows_written_by_ticdc"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter

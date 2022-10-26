@@ -129,25 +129,27 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 }
 
 func (m *mounterImpl) isWrittenByTiCDC(raw *model.RawKVEntry) (bool, error) {
-	var rowMeta types.Datum
+	var colMap map[int64]types.Datum
+	var err error
 	// If it is an update event, check the new value is enough.
 	if len(raw.Value) != 0 {
-		rowMeta, err := decodeRowMeta(raw.Value, m.tz)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-		return !rowMeta.IsNull(), nil
+		colMap, err = decodeRowMeta(raw.Value, m.tz)
+	} else {
+		colMap, err = decodeRowMeta(raw.OldValue, m.tz)
 	}
 
-	rowMeta, err := decodeRowMeta(raw.OldValue, m.tz)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	if rowMeta.IsNull() {
+
+	rowMeta, ok := colMap[metaColID]
+	if !ok || rowMeta.IsNull() {
 		return false, nil
 	}
+
 	compare := rowMeta.GetBinaryLiteral4Cmp().
 		Compare(types.NewBinaryLiteralFromUint(1, 1))
+	
 	return compare == 0, nil
 }
 
@@ -589,9 +591,4 @@ func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	}
 	defaultDatum := types.NewDatum(defaultValue)
 	return defaultDatum.GetValue()
-}
-
-// checkMetaColumn return true if the meta column tidb_write_by_ticdc=1.
-func checkMetaColumn() bool {
-	return false
 }

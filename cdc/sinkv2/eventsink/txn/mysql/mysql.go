@@ -91,7 +91,7 @@ func NewMySQLBackends(
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
-	err = setSystemVariable(ctx, db, replicaConfig)
+	err = setSystemVariable(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -430,16 +430,18 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
 }
 
-func setSystemVariable(ctx context.Context, db *sql.DB, cfg *config.ReplicaConfig) error {
+func setSystemVariable(ctx context.Context, db *sql.DB) error {
 	var tidbVer string
 	// check if downstream is TiDB
 	row := db.QueryRowContext(ctx, "select tidb_version()")
 	err := row.Scan(&tidbVer)
 	if err != nil {
+		log.Error("err", zap.Error(err))
 		// downstream is not TiDB, wo nothing
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
 		// means downstream is not TiDB
-			ok && mysqlErr.Number == mysql.ErrNoDB {
+		ok && mysqlErr.Number == mysql.ErrNoDB ||
+			mysqlErr.Number == mysql.ErrSpDoesNotExist {
 			return nil
 		}
 		return err
@@ -450,8 +452,7 @@ func setSystemVariable(ctx context.Context, db *sql.DB, cfg *config.ReplicaConfi
 	// downstream does not support this variable, it is by design.
 	_, err = db.ExecContext(ctx, "SET SESSION tidb_write_by_ticdc = true")
 	if err != nil {
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
-			ok && mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && mysqlErr.Number == mysql.ErrUnknownSystemVariable {
 			log.Info("This version of TiDB does not "+
 				"support system variable: tidb_write_by_ticdc",
 				zap.String("version", tidbVer))

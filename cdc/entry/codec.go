@@ -310,10 +310,12 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 	return datum, nil
 }
 
-func decodeRowMeta(rowByte []byte, tz *time.Location) (types.Datum, error) {
-	datums, err := tablecodec.DecodeRowToDatumMap(rowByte, rowMetaMap, tz)
+func decodeRowMeta(rowByte []byte, tz *time.Location) (map[int64]types.Datum, error) {
+	// We do this since the meta column len set by tidb is 1, we should do the same.
+	rowMetaMap[metaColID].SetFlen(1)
+	colMap, err := tablecodec.DecodeRowToDatumMap(rowByte, rowMetaMap, tz)
 	if err != nil {
-		return types.Datum{}, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+		return nil, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
 	}
-	return datums[metaColID], nil
+	return colMap, nil
 }

@@ -15,6 +15,7 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -240,7 +241,9 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify sink
 	conf := config.GetGlobalServerConfig()
 	if conf.Debug.EnableNewSink {
-		s, err := factory.New(ctx, cfg.SinkURI, replicaCfg)
+		fmt.Println("fizz use new sink")
+		errCh := make(chan error, 1)
+		s, err := factory.New(ctx, cfg.SinkURI, replicaCfg, errCh)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 		}
@@ -350,7 +353,8 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newInfo.SinkURI = cfg.SinkURI
 		conf := config.GetGlobalServerConfig()
 		if conf.Debug.EnableNewSink {
-			s, err := factory.New(ctx, newInfo.SinkURI, newInfo.Config)
+			errCh := make(chan error, 1)
+			s, err := factory.New(ctx, newInfo.SinkURI, newInfo.Config, errCh)
 			if err != nil {
 				return nil, nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 			}

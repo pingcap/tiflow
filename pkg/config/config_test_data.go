@@ -152,6 +152,7 @@ const (
     "rules": [
       "1.1"
     ],
+	"ignore-rows-written-by-ticdc":false,
     "ignore-txn-start-ts": null,
     "event-filters": null
   },
@@ -203,6 +204,7 @@ const (
     "rules": [
       "1.1"
     ],
+	"ignore-rows-written-by-ticdc":false,
     "ignore-txn-start-ts": null
   },
   "mounter": {

@@ -165,8 +165,13 @@ func TestAdjustSQLMode(t *testing.T) {
 		}
 
 		// normal db
+		log.Info("fizz walk here")
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectClose()
 		return db, nil
 	}
@@ -259,6 +264,10 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
@@ -382,6 +391,10 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
@@ -454,6 +467,10 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
@@ -526,6 +543,10 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		for i := 0; i < 2; i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
@@ -590,6 +611,10 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?)").
 			WithArgs(1).
@@ -641,6 +666,10 @@ func TestNewMySQLBackend(t *testing.T) {
 
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectClose()
 		require.Nil(t, err)
 		return db, nil
@@ -677,6 +706,10 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectClose()
 		require.Nil(t, err)
 		return db, nil
@@ -709,6 +742,10 @@ func TestGBKSupported(t *testing.T) {
 
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectClose()
 		require.Nil(t, err)
 		return db, nil
@@ -771,6 +808,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
