@@ -260,7 +260,43 @@ func (c *Case) diffDataLoop(ctx context.Context) error {
 	for _, s := range c.sources {
 		sourceDBs = append(sourceDBs, s.db.DB)
 	}
-	return syncDiffInspector(ctx, c.name, c.tables, c.target.db.DB, sourceDBs...)
+	err := syncDiffInspector(ctx, c.name, c.tables, c.target.db.DB, sourceDBs...)
+	if err != nil {
+		c.logKeys()
+	}
+	return err
+}
+
+func (c *Case) logKeys() {
+	for _, table := range c.tables {
+		if err := c.logDBKeys(c.target.db.DB, table, "target"); err != nil {
+			return
+		}
+		for i, source := range c.sources {
+			if err := c.logDBKeys(source.db.DB, table, fmt.Sprintf("source%d", i+1)); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (c *Case) logDBKeys(db *sql.DB, table string, source string) error {
+	rows, err := db.QueryContext(context.Background(), fmt.Sprintf("SELECT id FROM %s", dbutil.TableName(c.target.currDB, table)))
+	if err != nil {
+		log.L().Error("query keys failed", zap.String("source", source), zap.String("table", table), zap.Error(err))
+		return err
+	}
+	defer rows.Close()
+	var id int
+	for rows.Next() {
+		err = rows.Scan(&id)
+		if err != nil {
+			log.L().Error("scan keys failed", zap.String("source", source), zap.String("table", table), zap.Error(err))
+			return err
+		}
+		log.L().Info("key", zap.String("source", source), zap.String("table", table), zap.Int("id", id))
+	}
+	return nil
 }
 
 // randDML generates DML (INSERT, UPDATE or DELETE).
