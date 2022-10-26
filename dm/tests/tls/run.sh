@@ -384,7 +384,7 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }
 
-function prepare_test1() {
+function prepare_test_no_tls() {
 	cleanup_process
 
 	# clean test dir
@@ -405,7 +405,7 @@ function prepare_test1() {
 }
 
 function test_master_when_empty_tlsconfig() {
-	prepare_test1
+	prepare_test_no_tls
 
 	cp $cur/conf/dm-master-no-tls.toml $WORK_DIR/
 	cp $cur/conf/dm-worker3.toml $WORK_DIR/
@@ -437,6 +437,8 @@ function test_master_when_empty_tlsconfig() {
 		"query-status test" \
 		"\"result\": true" 2 \
 		"\"unit\": \"Sync\"" 1
+
+	run_sql 'INSERT INTO tls.t VALUES (99,9999999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
