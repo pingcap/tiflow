@@ -150,7 +150,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 		var posInt int
-		if len(rowsResult) != 0 {
+		if len(rowsResult) != 0 && len(rowsResult[0]) != 0 {
 			binlogName = rowsResult[0][0]
 			posInt, err = strconv.Atoi(rowsResult[0][1])
 			if err != nil {
@@ -169,7 +169,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 		var posInt int
-		if len(rowsResult) != 0 {
+		if len(rowsResult) != 0 && len(rowsResult[0]) != 0 {
 			binlogName = rowsResult[0][0]
 			posInt, err = strconv.Atoi(rowsResult[0][1])
 			if err != nil {
