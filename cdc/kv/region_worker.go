@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"reflect"
 	"runtime"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -270,25 +271,28 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					zap.String("changefeed", w.session.client.changefeed.ID))
 				continue
 			}
-			expired := make([]*regionTsInfo, 0)
-			for w.rtsManager.Len() > 0 {
-				item := w.rtsManager.Pop()
-				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
+			expired := make([]*regionTsInfo, 0, len(w.rtsManager.m))
+			for _, item := range w.rtsManager.m {
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.resolvedTs))
 				// region does not reach resolve lock boundary, put it back
 				if sinceLastResolvedTs < resolveLockInterval {
-					w.rtsManager.Insert(item)
-					break
+					continue
 				}
 				expired = append(expired, item)
-				if len(expired) >= maxResolvedLockPerLoop {
-					break
-				}
 			}
 			if len(expired) == 0 {
 				continue
 			}
+			var r regionTsHeap = expired
+			sort.Sort(r)
 			maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+			processed := 0
 			for _, rts := range expired {
+				if processed >= maxResolvedLockPerLoop {
+					break
+				}
+				processed++
+				w.rtsManager.Remove(rts.regionID)
 				state, ok := w.getRegionState(rts.regionID)
 				if !ok || state.isStopped() {
 					// state is already deleted or stopped, just continue,
@@ -299,7 +303,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				lastResolvedTs := state.getLastResolvedTs()
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval {
-					sinceLastEvent := time.Since(rts.ts.eventTime)
+					sinceLastEvent := time.Since(rts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
 						log.Warn("kv client reconnect triggered",
 							zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -310,11 +314,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					}
 					// Only resolve lock if the resolved-ts keeps unchanged for
 					// more than resolveLockPenalty times.
-					if rts.ts.penalty < resolveLockPenalty {
-						if lastResolvedTs > rts.ts.resolvedTs {
-							rts.ts.resolvedTs = lastResolvedTs
-							rts.ts.eventTime = time.Now()
-							rts.ts.penalty = 0
+					if rts.penalty < resolveLockPenalty {
+						if lastResolvedTs > rts.resolvedTs {
+							rts.resolvedTs = lastResolvedTs
+							rts.eventTime = time.Now()
+							rts.penalty = 0
 						}
 						w.rtsManager.Insert(rts)
 						continue
@@ -340,9 +344,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Error(err))
 						continue
 					}
-					rts.ts.penalty = 0
+					rts.penalty = 0
 				}
-				rts.ts.resolvedTs = lastResolvedTs
+				rts.resolvedTs = lastResolvedTs
 				w.rtsManager.Insert(rts)
 			}
 		}

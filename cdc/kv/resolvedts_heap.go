@@ -14,25 +14,15 @@
 package kv
 
 import (
-	"container/heap"
 	"time"
 )
 
-type tsItem struct {
+// regionTsInfo contains region resolvedTs information
+type regionTsInfo struct {
+	regionID   uint64
 	resolvedTs uint64
 	eventTime  time.Time
 	penalty    int
-}
-
-func newResolvedTsItem(ts uint64) tsItem {
-	return tsItem{resolvedTs: ts, eventTime: time.Now()}
-}
-
-// regionTsInfo contains region resolvedTs information
-type regionTsInfo struct {
-	regionID uint64
-	index    int
-	ts       tsItem
 }
 
 type regionTsHeap []*regionTsInfo
@@ -40,29 +30,11 @@ type regionTsHeap []*regionTsInfo
 func (rh regionTsHeap) Len() int { return len(rh) }
 
 func (rh regionTsHeap) Less(i, j int) bool {
-	return rh[i].ts.resolvedTs < rh[j].ts.resolvedTs
+	return rh[i].resolvedTs < rh[j].resolvedTs
 }
 
 func (rh regionTsHeap) Swap(i, j int) {
 	rh[i], rh[j] = rh[j], rh[i]
-	rh[i].index = i
-	rh[j].index = j
-}
-
-func (rh *regionTsHeap) Push(x interface{}) {
-	n := len(*rh)
-	item := x.(*regionTsInfo)
-	item.index = n
-	*rh = append(*rh, item)
-}
-
-func (rh *regionTsHeap) Pop() interface{} {
-	old := *rh
-	n := len(old)
-	item := old[n-1]
-	item.index = -1 // for safety
-	*rh = old[0 : n-1]
-	return item
 }
 
 // regionTsManager is a used to maintain resolved ts information for N regions.
@@ -70,13 +42,11 @@ func (rh *regionTsHeap) Pop() interface{} {
 type regionTsManager struct {
 	// mapping from regionID to regionTsInfo object
 	m map[uint64]*regionTsInfo
-	h regionTsHeap
 }
 
 func newRegionTsManager() *regionTsManager {
 	return &regionTsManager{
 		m: make(map[uint64]*regionTsInfo),
-		h: make(regionTsHeap, 0),
 	}
 }
 
@@ -87,19 +57,20 @@ func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Ti
 	if old, ok := rm.m[regionID]; ok {
 		// in a single resolved ts manager, we should not expect a fallback resolved event
 		// but, it's ok that we use fallback resolved event to increase penalty
-		if resolvedTs <= old.ts.resolvedTs && eventTime.After(old.ts.eventTime) {
-			old.ts.penalty++
-			old.ts.eventTime = eventTime
-		} else if resolvedTs > old.ts.resolvedTs {
-			old.ts.resolvedTs = resolvedTs
-			old.ts.eventTime = eventTime
-			old.ts.penalty = 0
-			heap.Fix(&rm.h, old.index)
+		if resolvedTs <= old.resolvedTs && eventTime.After(old.eventTime) {
+			old.penalty++
+			old.eventTime = eventTime
+		} else if resolvedTs > old.resolvedTs {
+			old.resolvedTs = resolvedTs
+			old.eventTime = eventTime
+			old.penalty = 0
 		}
 	} else {
 		item := &regionTsInfo{
-			regionID: regionID,
-			ts:       tsItem{resolvedTs: resolvedTs, eventTime: eventTime, penalty: 0},
+			regionID:   regionID,
+			resolvedTs: resolvedTs,
+			eventTime:  eventTime,
+			penalty:    0,
 		}
 		rm.Insert(item)
 	}
@@ -107,30 +78,13 @@ func (rm *regionTsManager) Upsert(regionID, resolvedTs uint64, eventTime time.Ti
 
 // Insert inserts a regionTsInfo to rts heap
 func (rm *regionTsManager) Insert(item *regionTsInfo) {
-	heap.Push(&rm.h, item)
 	rm.m[item.regionID] = item
-}
-
-// Pop pops a regionTsInfo from rts heap, delete it from region rts map
-func (rm *regionTsManager) Pop() *regionTsInfo {
-	if rm.Len() == 0 {
-		return nil
-	}
-	item := heap.Pop(&rm.h).(*regionTsInfo)
-	delete(rm.m, item.regionID)
-	return item
 }
 
 // Remove removes item from regionTsManager
 func (rm *regionTsManager) Remove(regionID uint64) *regionTsInfo {
 	if item, ok := rm.m[regionID]; ok {
 		delete(rm.m, item.regionID)
-		return heap.Remove(&rm.h, item.index).(*regionTsInfo)
 	}
 	return nil
-}
-
-// Len returns the item count in regionTsManager
-func (rm *regionTsManager) Len() int {
-	return len(rm.m)
 }
