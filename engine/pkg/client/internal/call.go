@@ -17,10 +17,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )
@@ -94,7 +92,6 @@ func (c *Call[ReqT, RespT, F]) callOnce(ctx context.Context) (RespT, error) {
 }
 
 func (c *Call[ReqT, RespT, F]) isRetryable(errIn error) bool {
-	log.Error("call rpc returns error", zap.Any("request", c.request), zap.Error(errIn))
 	if rpcerror.IsManagedError(errIn) {
 		return rpcerror.IsRetryable(errIn)
 	}
