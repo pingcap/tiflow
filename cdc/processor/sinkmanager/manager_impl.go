@@ -100,7 +100,7 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 			}
 			canBeAdvance := slowestTableProgress.nextLowerBoundPos.Compare(upperBoundPos) == -1 ||
 				slowestTableProgress.nextLowerBoundPos.Compare(upperBoundPos) == 0
-			if !canBeAdvance || !m.memQuota.TryAcquire() {
+			if !canBeAdvance || !m.memQuota.TryAcquire(defaultMemoryUsage) {
 				m.progressHeap.push(slowestTableProgress)
 				continue
 			}

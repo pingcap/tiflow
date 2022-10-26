@@ -20,14 +20,14 @@ const defaultMemoryUsage = 10 * 1024 * 1024 // 10MB
 
 type memQuota interface {
 	// TryAcquire try to acquire n bytes of memory.
-	TryAcquire() bool
+	TryAcquire(nBytes uint64) bool
 	// ForceAcquire force to acquire n bytes of memory.
 	// It will exceed the total memory limit.
-	ForceAcquire()
+	ForceAcquire(nBytes uint64)
 	// Release releases memory by resolved ts.
 	Release(tableID model.TableID, resolved model.ResolvedTs) bool
 	// Refund refunds unused memory.
-	Refund(n uint64)
+	Refund(nBytes uint64)
 	// Record the memory usage.
 	Record(tableID model.TableID, resolved model.ResolvedTs, size uint64)
 	// IsExceed returns true if the memory quota is exceeded.

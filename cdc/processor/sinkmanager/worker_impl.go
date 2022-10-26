@@ -61,7 +61,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
-					w.memQuota.ForceAcquire()
+					w.memQuota.ForceAcquire(defaultMemoryUsage)
 					availableMem += defaultMemoryUsage
 				}
 				availableMem -= e.Row.ApproximateBytes()
