@@ -447,9 +447,8 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	}
 	if t.useEventSortEngine {
 		return t.eventSortEngine.GetResolvedTs(t.tableID)
-	} else {
-		return t.sortNode.ResolvedTs()
 	}
+	return t.sortNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
@@ -573,10 +572,9 @@ func (t *tableActor) Wait() {
 func (t *tableActor) MemoryConsumption() uint64 {
 	if !t.useEventSortEngine {
 		return t.sortNode.flowController.GetConsumption()
-	} else {
-		// TODO(qupeng): sink manager should handle this.
-		return 0
 	}
+	// TODO(qupeng): sink manager should handle this.
+	return 0
 }
 
 func (t *tableActor) Start(ts model.Ts) {
@@ -593,10 +591,9 @@ func (t *tableActor) Start(ts model.Ts) {
 func (t *tableActor) RemainEvents() int64 {
 	if !t.useEventSortEngine {
 		return t.sortNode.remainEvent()
-	} else {
-		// TODO(qupeng): record it in sort engine and sinkmanager.
-		return 0
 	}
+	// TODO(qupeng): record it in sort engine and sinkmanager.
+	return 0
 }
 
 // for ut
