@@ -251,6 +251,7 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -301,8 +302,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 			retErr = frameErrors.FailFast(retErr)
 		}
 	}()
-	// TODO refine this part
-	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	// poolCtx will be held in background goroutines, and it won't be canceled
+	// until DefaultBaseWorker.Close is called.
+	poolCtx, cancelPool := context.WithCancel(context.Background())
 	w.cancelMu.Lock()
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
@@ -338,7 +340,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(ctx, topic, msg)
+			return w.Impl.OnMasterMessage(poolCtx, topic, msg)
 		},
 	)
 
