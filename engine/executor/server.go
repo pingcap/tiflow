@@ -392,7 +392,7 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
-	if s.cfg.ExclusivelyDeployed {
+	if s.cfg.EnableGCTuning {
 		limit, err := memory.MemTotal()
 		if err != nil {
 			log.Warn("get memory failed", zap.Error(err))

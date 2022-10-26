@@ -407,7 +407,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 		select {
 		case <-ctx.Done():
 			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
+			return ctx.Err()
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
 				jm.Logger().Info("all worker are offline, will exit")

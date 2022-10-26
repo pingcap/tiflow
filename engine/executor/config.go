@@ -50,9 +50,11 @@ type Config struct {
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	Labels map[string]string `toml:"labels" json:"labels"`
-	// ExclusivelyDeployed means only one executor is deployed in the container/machine,
-	// which means it can consume almost all the resources of the container/machine.
-	ExclusivelyDeployed bool `toml:"exclusively-deployed" json:"exclusively-deployed"`
+	// EnableGCTuning enables a GC tuning mechanism that adjusts the GC frequency
+	// according to the used memory with reference to the total memory. It can be
+	// enabled when the executor can consume almost all the memory of the
+	// container/machine.
+	EnableGCTuning bool `toml:"enable-gc-tuning" json:"enable-gc-tuning"`
 
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -147,7 +149,7 @@ func GetDefaultExecutorConfig() *Config {
 		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
-		ExclusivelyDeployed:  true, // currently 1 container 1 executor
+		EnableGCTuning:       true, // currently 1 container 1 executor
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,

@@ -128,6 +128,7 @@ type JobMasterImpl interface {
 	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
+	// TODO: when it returns error, framework should close this jobmaster.
 	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
 	// instance, the business logic should only register the OpenAPI handler in it.
