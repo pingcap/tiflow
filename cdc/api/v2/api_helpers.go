@@ -15,7 +15,6 @@ package v2
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -241,7 +240,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify sink
 	conf := config.GetGlobalServerConfig()
 	if conf.Debug.EnableNewSink {
-		fmt.Println("fizz use new sink")
 		errCh := make(chan error, 1)
 		s, err := factory.New(ctx, cfg.SinkURI, replicaCfg, errCh)
 		if err != nil {

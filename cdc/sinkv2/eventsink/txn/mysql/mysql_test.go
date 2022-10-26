@@ -165,7 +165,6 @@ func TestAdjustSQLMode(t *testing.T) {
 		}
 
 		// normal db
-		log.Info("fizz walk here")
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
