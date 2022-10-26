@@ -103,7 +103,7 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	}
 
 	for _, cfg := range cfgs {
-		// we have verify it in SubTaskConfig.Adjust
+		// we have verified it in SubTaskConfig.Adjust
 		replica, _ := cfg.DecryptPassword()
 		c.instances = append(c.instances, &mysqlInstance{
 			cfg: replica,
@@ -126,11 +126,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
 
-	// prepare source target do dbs concurrently
+	// 1. get allow-list of tables and routed table name from upstream and downstream
+
 	eg, ctx2 := errgroup.WithContext(ctx)
-	// sourceID => source targetDB mapping, only writing need used mu to avoid concurrent write map
-	var mu sync.Mutex
-	sourceTargetM := make(map[string]map[string][]*filter.Table)
+	// upstream instance index -> targetTable -> sourceTables
+	tableMapPerUpstream := make([]map[string][]*filter.Table, len(c.instances))
 	for idx := range c.instances {
 		i := idx
 		eg.Go(func() error {
@@ -138,16 +138,59 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			if fetchErr != nil {
 				return fetchErr
 			}
-			mu.Lock()
-			sourceTargetM[c.instances[i].cfg.SourceID] = mapping
-			mu.Unlock()
+			tableMapPerUpstream[i] = mapping
 			return nil
 		})
 	}
 	if egErr := eg.Wait(); egErr != nil {
 		return egErr
 	}
-	// check connections
+
+	// 2. calculate needed data structure, like sharding tables of a target table
+	// from multiple upstream...
+
+	// targetTable -> sourceID -> sourceTables
+	tablesPerTargetTable := make(map[string]map[string][]*filter.Table)
+	// sharding table number of a target table
+	shardNumPerTargetTable := make(map[string]int)
+
+	for i, inst := range c.instances {
+		mapping := tableMapPerUpstream[i]
+		err = sameTableNameDetection(mapping)
+		if err != nil {
+			return err
+		}
+
+		sourceID := inst.cfg.SourceID
+		for targetTable, sourceTables := range mapping {
+			tablesPerSource, ok := tablesPerTargetTable[targetTable]
+			if !ok {
+				tablesPerSource = make(map[string][]*filter.Table)
+				tablesPerTargetTable[targetTable] = tablesPerSource
+			}
+			tablesPerSource[sourceID] = append(tablesPerSource[sourceID], sourceTables...)
+			shardNumPerTargetTable[targetTable] += len(sourceTables)
+		}
+	}
+
+	// calculate allow-list tables and databases they belongs to per upstream
+	// sourceID -> tables
+	allowTablesPerUpstream := make(map[string][]*filter.Table, len(c.instances))
+	relatedDBPerUpstream := make([]map[string]struct{}, len(c.instances))
+	for i, inst := range c.instances {
+		sourceID := inst.cfg.SourceID
+		relatedDBPerUpstream[i] = make(map[string]struct{})
+		mapping := tableMapPerUpstream[i]
+		for _, tables := range mapping {
+			allowTablesPerUpstream[sourceID] = append(allowTablesPerUpstream[sourceID], tables...)
+			for _, table := range tables {
+				relatedDBPerUpstream[i][table.Schema] = struct{}{}
+			}
+		}
+	}
+
+	// 3. create checkers
+
 	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
 		if len(c.stCfgs) > 0 {
 			// only check the first subtask's config
@@ -169,13 +212,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 	}
-	// targetTableID => source => [tables]
-	sharding := make(map[string]map[string][]*filter.Table)
-	shardingCounter := make(map[string]int)
-	// sourceID => []table
-	checkTablesMap := make(map[string][]*filter.Table)
+
+	// sourceID -> DB
 	dbs := make(map[string]*sql.DB)
-	for _, instance := range c.instances {
+	for i, instance := range c.instances {
+		sourceID := instance.cfg.SourceID
 		// init online ddl for checker
 		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
 			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg, nil)
@@ -187,28 +228,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.VersionChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		mapping := sourceTargetM[instance.cfg.SourceID]
-		err = sameTableNameDetection(mapping)
-		if err != nil {
-			return err
-		}
-		var checkTables []*filter.Table
-		checkSchemas := make(map[string]struct{}, len(mapping))
-		for targetTableID, tables := range mapping {
-			checkTables = append(checkTables, tables...)
-			if _, ok := sharding[targetTableID]; !ok {
-				sharding[targetTableID] = make(map[string][]*filter.Table)
-			}
-			sharding[targetTableID][instance.cfg.SourceID] = append(sharding[targetTableID][instance.cfg.SourceID], tables...)
-			shardingCounter[targetTableID] += len(tables)
-			for _, table := range tables {
-				if _, ok := checkSchemas[table.Schema]; !ok {
-					checkSchemas[table.Schema] = struct{}{}
-				}
-			}
-		}
-		checkTablesMap[instance.cfg.SourceID] = checkTables
-		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
+
+		dbs[sourceID] = instance.sourceDB.DB
 		if instance.cfg.Mode != config.ModeIncrement {
 			// increment mode needn't check dump privilege
 			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
@@ -220,7 +241,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
-					checkTables,
+					allowTablesPerUpstream[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
 				))
@@ -244,17 +265,17 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
-				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.baList))
+				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, relatedDBPerUpstream[i], c.onlineDDL, instance.baList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
+				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, relatedDBPerUpstream[i], instance.cfg.CaseSensitive))
 			}
 		}
 	}
 
 	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
-		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
+		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, allowTablesPerUpstream, dumpThreads))
 	}
 
 	instance := c.instances[0]
@@ -268,8 +289,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 		if isFresh {
-			for targetTableID, shardingSet := range sharding {
-				if shardingCounter[targetTableID] <= 1 {
+			for targetTableID, shardingSet := range tablesPerTargetTable {
+				if shardNumPerTargetTable[targetTableID] <= 1 {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
