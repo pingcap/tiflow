@@ -2,7 +2,7 @@ package entry
 
 import (
 	"context"
-	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -13,7 +13,7 @@ import (
 
 type MounterGroup interface {
 	Run(ctx context.Context) error
-	Input() chan<- *model.PolymorphicEvent
+	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounterGroup struct {
@@ -26,6 +26,7 @@ type mounterGroup struct {
 	changefeedID model.ChangeFeedID
 	captureID    model.CaptureID
 
+	index     uint64
 	workerNum int
 }
 
@@ -39,6 +40,7 @@ func NewMounterGroup(
 	workerNum int,
 	enableOldValue bool,
 	filter filter.Filter,
+	tz *time.Location,
 	changefeedID model.ChangeFeedID,
 	captureID model.CaptureID,
 ) MounterGroup {
@@ -54,7 +56,9 @@ func NewMounterGroup(
 		rawCh:          chs,
 		enableOldValue: enableOldValue,
 		filter:         filter,
-		workerNum:      workerNum,
+		tz:             tz,
+
+		workerNum: workerNum,
 
 		changefeedID: changefeedID,
 		captureID:    captureID,
@@ -92,6 +96,12 @@ func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	}
 }
 
-func (m *mounterGroup) Input() chan<- *model.PolymorphicEvent {
-	return m.rawCh[rand.Intn(m.workerNum)]
+func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	index := atomic.AddUint64(&m.index, 1) % uint64(m.workerNum)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.rawCh[index] <- event:
+		return nil
+	}
 }
