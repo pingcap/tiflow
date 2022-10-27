@@ -1,0 +1,6 @@
+[filter]
+rules = ["bidirectional_replication.*"]
+ignore-rows-written-by-ticdc = true
+[[filter.event-filters]]
+matcher = ["bidirectional_replication.*"] # matcher 是一个白名单，表示该过滤规则只应用于 test 库中的 worker 表
+ignore-event = ["all ddl"]
