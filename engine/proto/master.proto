@@ -276,6 +276,5 @@ message QueryStorageConfigRequest {
 }
 
 message QueryStorageConfigResponse {
-    Error err = 1;
     string config = 2;
 }

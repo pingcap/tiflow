@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -388,12 +387,7 @@ func (s *Server) QueryStorageConfig(
 ) (*pb.QueryStorageConfigResponse, error) {
 	b, err := json.Marshal(s.cfg.Storage)
 	if err != nil {
-		return &pb.QueryStorageConfigResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_StorageConfigSerializeFail,
-				Message: fmt.Sprintf("raw storage config: %v", s.cfg.Storage),
-			},
-		}, nil
+		return nil, errors.Trace(err)
 	}
 	return &pb.QueryStorageConfigResponse{
 		Config: string(b),

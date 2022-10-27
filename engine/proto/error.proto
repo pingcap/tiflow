@@ -37,16 +37,7 @@ enum ErrorCode {
     UnknownError = 10001;
 }
 
-message NotLeader {
-    // The requested server address
-    string request = 1;
-    // leader address
-    string leader = 2;
-}
-
 message Error {
     ErrorCode code = 1;
     string message = 2;
-
-    NotLeader not_leader = 3;
 }

@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -643,12 +644,21 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			}
 			_, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				log.L().Error("heartbeat rpc meet error", zap.Error(err))
+				if rpcutil.ErrMasterNotReady.Is(err) {
+					s.lastHearbeatTime = t
+					if rl.Allow() {
+						log.L().Info("heartbeat success with MasterNotReady")
+					}
+					continue
+				}
+
+				log.Warn("heartbeat rpc meet error", zap.Error(err))
 				// TODO: move all errors into one package, so that executor
 				// server no longer needs to depend on servermaster package.
 				if servermaster.ErrTombstoneExecutorError.Is(err) {
 					return errors.ErrHeartbeat.GenWithStack("logic error: %v", err)
 				}
+
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
 					return errors.WrapError(errors.ErrHeartbeat, err, "timeout")
 				}

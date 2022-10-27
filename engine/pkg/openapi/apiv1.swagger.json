@@ -434,9 +434,6 @@
         },
         "message": {
           "type": "string"
-        },
-        "not_leader": {
-          "$ref": "#/definitions/enginepbNotLeader"
         }
       }
     },
@@ -635,19 +632,6 @@
         }
       }
     },
-    "enginepbNotLeader": {
-      "type": "object",
-      "properties": {
-        "request": {
-          "type": "string",
-          "title": "The requested server address"
-        },
-        "leader": {
-          "type": "string",
-          "title": "leader address"
-        }
-      }
-    },
     "enginepbPreDispatchTaskResponse": {
       "type": "object"
     },
@@ -687,9 +671,6 @@
     "enginepbQueryStorageConfigResponse": {
       "type": "object",
       "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
         "config": {
           "type": "string"
         }
