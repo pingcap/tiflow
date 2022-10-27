@@ -19,7 +19,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 

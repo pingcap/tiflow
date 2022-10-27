@@ -74,6 +74,57 @@ var (
 			Name:      "slow_table_replication_state",
 			Help:      "The replication state of the slowest table",
 		}, []string{"namespace", "changefeed"})
+	slowestTableStageCheckpointTsGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_checkpoint_ts",
+			Help:      "Checkpoint ts of each stage of the slowest table",
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableStageResolvedTsGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_resolved_ts",
+			Help:      "Resolved ts of each stage of the slowest table",
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableStageCheckpointTsLagGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_checkpoint_ts_lag",
+			Help:      "Checkpoint ts lag of each stage of the slowest table",
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableStageResolvedTsLagGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_resolved_ts_lag",
+			Help:      "Resolved ts lag of each stage of the slowest table",
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableStageCheckpointTsLagHistogramVec = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_checkpoint_ts_lag_histogram",
+			Help:      "Histogram of the slowest table checkpoint ts lag of each stage",
+			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableStageResolvedTsLagHistogramVec = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_stage_resolved_ts_lag_histogram",
+			Help:      "Histogram of the slowest table resolved ts lag of each stage",
+			Buckets:   prometheus.LinearBuckets(0.5, 0.5, 36),
+		}, []string{"namespace", "changefeed", "stage"})
+	slowestTableRegionGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_region_count",
+			Help:      "The number of regions captured by the slowest table",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics used in scheduler
@@ -86,4 +137,11 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(slowestTableCheckpointTsGauge)
 	registry.MustRegister(slowestTableResolvedTsGauge)
 	registry.MustRegister(slowestTableStateGauge)
+	registry.MustRegister(slowestTableStageCheckpointTsGaugeVec)
+	registry.MustRegister(slowestTableStageResolvedTsGaugeVec)
+	registry.MustRegister(slowestTableStageCheckpointTsLagGaugeVec)
+	registry.MustRegister(slowestTableStageResolvedTsLagGaugeVec)
+	registry.MustRegister(slowestTableStageCheckpointTsLagHistogramVec)
+	registry.MustRegister(slowestTableStageResolvedTsLagHistogramVec)
+	registry.MustRegister(slowestTableRegionGaugeVec)
 }

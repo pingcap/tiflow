@@ -16,57 +16,152 @@ package metadata
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"reflect"
 	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
-
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// State represents the state which need to be stored in metadata.
-type State interface{}
+// state represents the state which need to be stored in metadata.
+type state interface{}
 
-// Store manages a type of state.
-// Store provides the factory, some utility functions and persistence of State.
+// stateFactory creates a type of state.
+type stateFactory interface {
+	createState() state
+	key() string
+}
+
+// Store holds one state instance.
 type Store interface {
-	CreateState() State
-	Key() string
+	Put(ctx context.Context, state state) error
+	Delete(ctx context.Context) error
+	Get(ctx context.Context) (state, error)
 }
 
-// TomlStore implements some default methods of Store. It uses TOML serialization.
-type TomlStore struct {
-	Store
+// ErrStateNotFound is returned when the state is not found in metadata.
+var ErrStateNotFound = errors.New("state not found")
 
-	state    State
-	kvClient metaModel.KVClient
+// frameworkMetaStore implements Store interface. It persists a state instance in
+// framework metadata with given encode/decode function, and will cache the latest
+// state. It's thread-safe.
+type frameworkMetaStore struct {
+	stateFactory
 
-	mu sync.RWMutex
+	mu         sync.RWMutex
+	stateCache state
+	kvClient   metaModel.KVClient
+	encodeFn   func(state) ([]byte, error)
+	decodeFn   func([]byte, state) error
 }
 
-// NewTomlStore returns a new TomlStore instance
-func NewTomlStore(kvClient metaModel.KVClient) *TomlStore {
-	return &TomlStore{
-		kvClient: kvClient,
+func (f *frameworkMetaStore) Put(ctx context.Context, state state) error {
+	if !checkAllFieldsIsPublic(state) {
+		return errors.New("fields of state should all be public")
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	putOp, err := f.putOp(state)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if _, err = f.kvClient.Txn(ctx).Do(putOp).Commit(); err != nil {
+		return errors.Trace(err)
+	}
+
+	f.stateCache = state
+	return nil
 }
 
-func (ds *TomlStore) putOp(state State) (metaModel.Op, error) {
-	var b bytes.Buffer
-	err := toml.NewEncoder(&b).Encode(state)
+func (f *frameworkMetaStore) putOp(state state) (metaModel.Op, error) {
+	value, err := f.encodeFn(state)
 	if err != nil {
 		return metaModel.Op{}, errors.Trace(err)
 	}
-	return metaModel.OpPut(ds.Key(), b.String()), nil
+	return metaModel.OpPut(f.key(), string(value)), nil
 }
 
-func (ds *TomlStore) deleteOp() metaModel.Op {
-	return metaModel.OpDelete(ds.Key())
+func (f *frameworkMetaStore) Delete(ctx context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.stateCache == nil {
+		return nil
+	}
+
+	delOp := f.deleteOp()
+	if _, err := f.kvClient.Txn(ctx).Do(delOp).Commit(); err != nil {
+		return errors.Trace(err)
+	}
+
+	f.stateCache = nil
+	return nil
 }
+
+func (f *frameworkMetaStore) deleteOp() metaModel.Op {
+	return metaModel.OpDelete(f.key())
+}
+
+func (f *frameworkMetaStore) Get(ctx context.Context) (state, error) {
+	f.mu.RLock()
+	if f.stateCache != nil {
+		clone, err := f.cloneState()
+		f.mu.RUnlock()
+		return clone, err
+	}
+	f.mu.RUnlock()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// check again with write lock
+	if f.stateCache != nil {
+		return f.cloneState()
+	}
+
+	resp, err := f.kvClient.Get(ctx, f.key())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if len(resp.Kvs) == 0 {
+		return nil, ErrStateNotFound
+	}
+
+	f.stateCache = f.createState()
+
+	if err2 := f.decodeFn(resp.Kvs[0].Value, f.stateCache); err2 != nil {
+		return nil, errors.Trace(err2)
+	}
+
+	return f.cloneState()
+}
+
+func (f *frameworkMetaStore) cloneState() (state, error) {
+	if f.stateCache == nil {
+		return nil, nil
+	}
+
+	s, err := f.encodeFn(f.stateCache)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	clone := f.createState()
+	if err2 := f.decodeFn(s, clone); err2 != nil {
+		return nil, errors.Trace(err2)
+	}
+	return clone, nil
+}
+
+var stateTp = reflect.TypeOf((*state)(nil)).Elem()
 
 // checkAllFieldsIsPublic check all fields of a state is public.
-func checkAllFieldsIsPublic(state State) bool {
+func checkAllFieldsIsPublic(state state) bool {
 	v := reflect.ValueOf(state)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -75,102 +170,52 @@ func checkAllFieldsIsPublic(state State) bool {
 		return false
 	}
 	for i := 0; i < v.NumField(); i++ {
-		if !v.Field(i).CanSet() {
+		field := v.Field(i)
+		if !field.CanSet() {
+			// skip report error for the embedded state field
+			if field.Type() == stateTp {
+				continue
+			}
 			return false
 		}
 	}
 	return true
 }
 
-// Put updates state into metastore
-func (ds *TomlStore) Put(ctx context.Context, state State) error {
-	if !checkAllFieldsIsPublic(state) {
-		return errors.New("fields of state should all be public")
-	}
-
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	putOp, err := ds.putOp(state)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if _, err = ds.kvClient.Txn(ctx).Do(putOp).Commit(); err != nil {
-		return errors.Trace(err)
-	}
-
-	ds.state = state
-	return nil
-}
-
-// Delete deletes the state from metastore
-func (ds *TomlStore) Delete(ctx context.Context) error {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	if ds.state == nil {
-		return nil
-	}
-
-	delOp := ds.deleteOp()
-	if _, err := ds.kvClient.Txn(ctx).Do(delOp).Commit(); err != nil {
-		return errors.Trace(err)
-	}
-
-	ds.state = nil
-	return nil
-}
-
-// Get queries State from metastore, it always return clone of a state.
-func (ds *TomlStore) Get(ctx context.Context) (State, error) {
-	ds.mu.RLock()
-	if ds.state != nil {
-		clone, err := ds.cloneState()
-		ds.mu.RUnlock()
-		return clone, err
-	}
-	ds.mu.RUnlock()
-
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	// check again with write lock
-	if ds.state != nil {
-		return ds.cloneState()
-	}
-
-	resp, err := ds.kvClient.Get(ctx, ds.Key())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if len(resp.Kvs) == 0 {
-		return nil, errors.New("state not found")
-	}
-
-	ds.state = ds.CreateState()
-	if _, err := toml.Decode(string(resp.Kvs[0].Value), ds.state); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return ds.cloneState()
-}
-
-func (ds *TomlStore) cloneState() (State, error) {
-	if ds.state == nil {
-		return nil, nil
-	}
-
-	clone := ds.CreateState()
+func tomlEncodeFn(state state) ([]byte, error) {
 	var b bytes.Buffer
-	err := toml.NewEncoder(&b).Encode(ds.state)
+	err := toml.NewEncoder(&b).Encode(state)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if _, err = toml.Decode(b.String(), clone); err != nil {
-		return nil, err
-	}
+	return b.Bytes(), nil
+}
 
-	return clone, errors.Trace(err)
+func tomlDecodeFn(b []byte, state state) error {
+	_, err := toml.Decode(string(b), state)
+	return err
+}
+
+func newTOMLFrameworkMetaStore(kvClient metaModel.KVClient) *frameworkMetaStore {
+	return &frameworkMetaStore{
+		kvClient: kvClient,
+		encodeFn: tomlEncodeFn,
+		decodeFn: tomlDecodeFn,
+	}
+}
+
+func jsonEncodeFn(state state) ([]byte, error) {
+	return json.Marshal(state)
+}
+
+func jsonDecodeFn(b []byte, state state) error {
+	return json.Unmarshal(b, state)
+}
+
+func newJSONFrameworkMetaStore(kvClient metaModel.KVClient) *frameworkMetaStore {
+	return &frameworkMetaStore{
+		kvClient: kvClient,
+		encodeFn: jsonEncodeFn,
+		decodeFn: jsonDecodeFn,
+	}
 }

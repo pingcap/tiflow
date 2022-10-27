@@ -23,19 +23,18 @@ import (
 	"github.com/BurntSushi/toml"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"go.uber.org/zap"
 )
 
 const (
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
-	defaultRPCTimeout        = "3s"
 	defaultMetricInterval    = 15 * time.Second
 	defaultMasterAddr        = "127.0.0.1:10240"
 
@@ -71,11 +70,11 @@ type Config struct {
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
-	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
-	RPCTimeout        time.Duration `toml:"-" json:"-"`
+
+	Storage resModel.Config `toml:"storage" json:"storage"`
 
 	Security *security.Credential `toml:"security" json:"security"`
 
@@ -137,11 +136,6 @@ func (c *Config) AdjustAndValidate() (err error) {
 		return err
 	}
 
-	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
-	if err != nil {
-		return err
-	}
-
 	return validation.ValidateStruct(c,
 		validation.Field(&c.FrameworkMeta),
 		validation.Field(&c.BusinessMeta),
@@ -170,8 +164,8 @@ func GetDefaultMasterConfig() *Config {
 		BusinessMeta:         NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
-		RPCTimeoutStr:        defaultRPCTimeout,
 		JobBackoff:           jobop.NewDefaultBackoffConfig(),
+		Storage:              resModel.DefaultConfig,
 	}
 }
 

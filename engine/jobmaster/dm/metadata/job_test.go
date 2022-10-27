@@ -21,11 +21,10 @@ import (
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -53,7 +52,7 @@ func TestJobStore(t *testing.T) {
 	t.Parallel()
 
 	jobStore := NewJobStore(mock.NewMetaMock(), log.L())
-	key := jobStore.Key()
+	key := jobStore.key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
@@ -63,7 +62,7 @@ func TestJobStore(t *testing.T) {
 	require.Error(t, jobStore.UpdateConfig(context.Background(), nil))
 	require.Error(t, jobStore.MarkDeleting(context.Background()))
 
-	state := jobStore.CreateState()
+	state := jobStore.createState()
 	require.IsType(t, &Job{}, state)
 
 	jobCfg := &config.JobCfg{}

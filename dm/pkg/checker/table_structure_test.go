@@ -16,17 +16,16 @@ package checker
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 )
 
-func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
+func TestShardingTablesChecker(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, tc.IsNil)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	// 1. test a success check
@@ -47,8 +46,8 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 		false,
 		1)
 	result := checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateSuccess)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	require.Equal(t, StateSuccess, result.State)
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// 2. check different column number
 	checker = NewShardingTablesChecker("test-name",
@@ -69,9 +68,9 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 1)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	require.Equal(t, StateFailure, result.State)
+	require.Len(t, result.Errors, 1)
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// 3. check different column def
 	checker = NewShardingTablesChecker("test-name",
@@ -91,9 +90,9 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 1)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	require.Equal(t, StateFailure, result.State)
+	require.Len(t, result.Errors, 1)
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// 4. test tiflow#5759
 	checker = NewShardingTablesChecker("test-name",
@@ -131,13 +130,13 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 
 	// in tiflow#5759, this function will enter deadlock
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 3)
+	require.Equal(t, StateFailure, result.State)
+	require.Len(t, result.Errors, 3)
 }
 
-func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
+func TestTablesChecker(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, tc.IsNil)
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	// 1. test a success check
@@ -161,8 +160,8 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result := checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateSuccess)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	require.Equal(t, StateSuccess, result.State)
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// 2. check many errors
 	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -185,34 +184,9 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-
-	// 3. unsupported charset
-	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", "2")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=ucs2`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-
-	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
-			{Schema: "test-db", Name: "test-table-1"},
-		}},
-		1)
-	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 1)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 2)
+	require.NoError(t, mock.ExpectationsWereMet())
 
 	// test #5759
 	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -246,19 +220,14 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 3)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 3)
 }
 
-func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
+func TestOptimisticShardingTablesChecker(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, tc.IsNil)
+	require.NoError(t, err)
 	ctx := context.Background()
-
-	printJSON := func(r *Result) {
-		rawResult, _ := json.MarshalIndent(r, "", "\t")
-		fmt.Println("\n" + string(rawResult))
-	}
 
 	cases := []struct {
 		createTable1SQL string
@@ -364,11 +333,150 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 			}},
 			0)
 		result := checker.Check(ctx)
-		printJSON(result)
-		c.Assert(result.State, tc.Equals, cs.expectState)
-		c.Assert(len(result.Errors), tc.Equals, cs.errLen)
-		c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+		require.Equal(t, cs.expectState, result.State)
+		require.Len(t, result.Errors, cs.errLen)
+		require.NoError(t, mock.ExpectationsWereMet())
 	}
+}
+
+func TestUnknownCharsetCollation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// 1. test TablesChecker
+
+	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  PRIMARY KEY ("c")
+		) ENGINE=InnoDB DEFAULT CHARSET=utf32`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+
+	checker := NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
+	result := checker.Check(ctx)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 1)
+	require.Contains(t, result.Errors[0].ShortErr, "Unknown character set: 'utf32'")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// 2. test ShardingTablesChecker
+	// 2.1 the first table has unknown charset
+
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+"c" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=utf16`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		false,
+		1)
+	result = checker.Check(ctx)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 1)
+	require.Contains(t, result.Errors[0].ShortErr, "Unknown character set: 'utf16'")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// 2.2 not the first table has unknown charset
+
+	mock = initShardingMock(mock)
+	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
+  "c" int(11) NOT NULL,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=utf16`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		false,
+		1)
+	result = checker.Check(ctx)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 1)
+	require.Contains(t, result.Errors[0].ShortErr, "Unknown character set: 'utf16'")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// 2.3 not the first table has unknown collation
+
+	mock = initShardingMock(mock)
+	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
+  "c" int(11) NOT NULL,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		false,
+		1)
+	result = checker.Check(ctx)
+	// unknown collation will not raise error during parsing
+	require.Equal(t, StateSuccess, result.State)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// 3. test OptimisticShardingTablesChecker
+
+	maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("test-table-1", `
+CREATE TABLE "test-table-1" (
+  "c" int(11) NOT NULL,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=utf16`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("test-table-2", `
+CREATE TABLE "test-table-2" (
+  "c" int(11) NOT NULL,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=utf16`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+	checker = NewOptimisticShardingTablesChecker(
+		"test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			&filter.Table{Schema: "test-db", Name: "test-table-1"},
+			&filter.Table{Schema: "test-db", Name: "test-table-2"},
+		}},
+		0)
+	result = checker.Check(ctx)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 2)
+	require.Contains(t, result.Errors[0].ShortErr, "Unknown character set: 'utf16'")
+	require.Contains(t, result.Errors[1].ShortErr, "Unknown character set: 'utf16'")
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {

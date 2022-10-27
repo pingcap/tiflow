@@ -19,11 +19,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 const defaultDialRetry = 3
@@ -142,6 +141,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 	}
 }
 
+// Endpoints returns a slice of all client endpoints
 func (c *FailoverRPCClients[T]) Endpoints() []string {
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
@@ -152,6 +152,7 @@ func (c *FailoverRPCClients[T]) Endpoints() []string {
 	return ret
 }
 
+// Close closes connection underlying
 func (c *FailoverRPCClients[T]) Close() (err error) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()

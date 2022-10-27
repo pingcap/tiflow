@@ -21,10 +21,11 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/stretchr/testify/require"
-
+	"github.com/go-sql-driver/mysql"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsNotFoundError(t *testing.T) {
@@ -106,10 +107,10 @@ func TestInitialize(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
-			"`project_id` varchar(128) not null,`id` varchar(128) not null,"+
-			"`job_id` varchar(128) not null,`worker_id` varchar(128) not null,"+
-			"`executor_id` varchar(128) not null,`gc_pending` BOOLEAN,"+
-			"`deleted` BOOLEAN,PRIMARY KEY (`seq_id`),") +
+			"`project_id` varchar(128) not null,`tenant_id` varchar(128) not null,"+
+			"`id` varchar(128) not null,`job_id` varchar(128) not null,"+
+			"`worker_id` varchar(128) not null,`executor_id` varchar(128) not null,"+
+			"`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`),") +
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -189,4 +190,32 @@ func TestInitEpochModel(t *testing.T) {
 
 	err = InitEpochModel(ctx, conn)
 	require.NoError(t, err)
+}
+
+func TestIsDuplicateEntryError(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			nil, false,
+		},
+		{
+			errors.New("invalid connection"), false,
+		},
+		{
+			&mysql.MySQLError{
+				Number:  tmysql.ErrDupEntry,
+				Message: "Duplicate entry '123456' for key 'index'",
+			}, true,
+		},
+		{
+			errors.New("constraint failed: UNIQUE constraint failed: master_meta.id (2067)"),
+			true,
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.expected, IsDuplicateEntryError(tc.err))
+	}
 }

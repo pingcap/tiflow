@@ -173,7 +173,7 @@ func doRandomTest[T comparable](t *testing.T, getVal func() T) {
 			slice = append(slice, val)
 		case opPushMany:
 			n := rand.Intn(1024) + 1
-			vals := make([]T, n, n)
+			vals := make([]T, n)
 			for j := 0; j < n; j++ {
 				vals = append(vals, getVal())
 			}

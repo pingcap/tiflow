@@ -76,8 +76,8 @@ const (
   "gc-ttl": 86400,
   "tz": "System",
   "capture-session-ttl": 10,
-  "owner-flush-interval": 200000000,
-  "processor-flush-interval": 100000000,
+  "owner-flush-interval": 50000000,
+  "processor-flush-interval": 50000000,
   "sorter": {
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
@@ -173,6 +173,14 @@ const (
       }
     ],
     "schema-registry": "",
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "terminator": "",
+      "null": "\\N",
+      "date-separator": "month",
+      "include-commit-ts": true
+    },
     "transaction-atomicity": ""
   },
   "consistent": {
@@ -213,7 +221,15 @@ const (
           "b"
         ]
       }
-    ]
+    ],
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "terminator": "",
+      "null": "\\N",
+      "date-separator": "month",
+      "include-commit-ts": true
+    }
   },
   "consistent": {
     "level": "none",

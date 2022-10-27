@@ -62,7 +62,7 @@ func TestStartTCPSrv(t *testing.T) {
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg.Addr = addr
-	s := NewServer(cfg, nil)
+	s := NewServer(cfg)
 
 	s.grpcSrv = grpc.NewServer()
 	wg, ctx := errgroup.WithContext(context.Background())
@@ -127,7 +127,7 @@ func TestCollectMetric(t *testing.T) {
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg.Addr = addr
-	s := NewServer(cfg, nil)
+	s := NewServer(cfg)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	s.grpcSrv = grpc.NewServer()
@@ -194,7 +194,7 @@ func TestSelfRegister(t *testing.T) {
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg.AdvertiseAddr = addr
-	s := NewServer(cfg, nil)
+	s := NewServer(cfg)
 	mockMasterClient := newMockRegisterMasterClient(10)
 	s.masterClient = mockMasterClient
 

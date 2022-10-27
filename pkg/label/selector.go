@@ -36,15 +36,8 @@ const (
 	OpRegex = Op("regex")
 )
 
-type noCopy struct{}
-
-func (*noCopy) Lock()   {}
-func (*noCopy) Unlock() {}
-
 // Selector is one selector on a label Set.
 type Selector struct {
-	noCopy noCopy // makes linters complain copying
-
 	// Key is the key of the label that could potentially match the selector.
 	Key Key `json:"label"`
 	// Target is the argument to the operator. In the case of the

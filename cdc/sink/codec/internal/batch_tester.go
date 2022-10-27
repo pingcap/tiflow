@@ -145,29 +145,37 @@ var (
 	// CodecDDLCases defines test cases for DDLEvent.
 	CodecDDLCases = [][]*model.DDLEvent{{{
 		CommitTs: 424316555979653121,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table a",
 		Type:  1,
 	}}, {{
 		CommitTs: 424316583965360129,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table a",
 		Type:  1,
 	}, {
 		CommitTs: 424316586087940097,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table b",
 		Type:  2,
 	}, {
 		CommitTs: 424316588736118785,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table c",
 		Type:  3,

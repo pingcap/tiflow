@@ -29,17 +29,6 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -48,6 +37,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/election"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -61,13 +51,22 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // TODO: make it configurable in the future.
@@ -121,8 +120,6 @@ type Server struct {
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
 
-	testCtx *test.Context
-
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
 	frameworkClientConn metaModel.ClientConn
@@ -155,7 +152,7 @@ func newServerMasterMetric() *serverMasterMetric {
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+func NewServer(cfg *Config) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
 	id := generateNodeID(cfg.Name)
@@ -166,7 +163,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		id:                id,
 		cfg:               cfg,
 		leaderInitialized: *atomic.NewBool(false),
-		testCtx:           ctx,
 		leader:            atomic.Value{},
 		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:        msgService,
@@ -411,6 +407,24 @@ func (s *Server) QueryMetaStore(
 	}
 }
 
+// QueryStorageConfig implements gRPC interface
+func (s *Server) QueryStorageConfig(
+	ctx context.Context, req *pb.QueryStorageConfigRequest,
+) (*pb.QueryStorageConfigResponse, error) {
+	b, err := json.Marshal(s.cfg.Storage)
+	if err != nil {
+		return &pb.QueryStorageConfigResponse{
+			Err: &pb.Error{
+				Code:    pb.ErrorCode_StorageConfigSerializeFail,
+				Message: fmt.Sprintf("raw storage config: %v", s.cfg.Storage),
+			},
+		}, nil
+	}
+	return &pb.QueryStorageConfigResponse{
+		Config: string(b),
+	}, nil
+}
+
 // GetLeader implements DiscoveryServer.GetLeader.
 func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLeaderResponse, error) {
 	leaderAddr, ok := s.LeaderAddr()
@@ -442,20 +456,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-func (s *Server) startForTest() (err error) {
-	// TODO: implement mock-etcd and leader election
-
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
-	if err != nil {
-		return err
-	}
-
-	// TODO: start job manager
-	s.leader.Store(&rpcutil.Member{Name: s.name(), IsLeader: true})
-	s.leaderInitialized.Store(true)
-	return
-}
-
 // Stop and clean resources.
 // TODO: implement stop gracefully.
 func (s *Server) Stop() {
@@ -482,10 +482,6 @@ func (s *Server) Stop() {
 
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
-	if test.GetGlobalTestFlag() {
-		return s.startForTest()
-	}
-
 	err := s.registerMetaStore(ctx)
 	if err != nil {
 		return err
@@ -496,12 +492,16 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
+	}
+
 	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
 	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval, s.testCtx)
+	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
 
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.
@@ -591,11 +591,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	s.resourceManagerService = externRescManager.NewService(
-		s.frameMetaClient,
-		s.executorManager,
-		s.masterRPCHook,
-	)
+	s.resourceManagerService = externRescManager.NewService(s.frameMetaClient, s.masterRPCHook)
 }
 
 func (s *Server) initElector() error {
@@ -873,7 +869,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("job manager exited")
 	}()
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients)
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	// TODO refactor this method to make it more readable and maintainable.

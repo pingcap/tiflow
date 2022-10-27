@@ -16,11 +16,10 @@ package filter
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
-
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -320,7 +319,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}, "")
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			tableInfo := &model.SimpleTableInfo{Schema: tc.schema, Table: tc.table}
+			tableInfo := &model.TableInfo{TableName: model.TableName{Schema: tc.schema, Table: tc.table}}
 			ddl := &model.DDLEvent{StartTs: tc.startTs, TableInfo: tableInfo, Query: tc.query}
 			ignore, err := filter.ShouldIgnoreDDLEvent(ddl)
 			require.Nil(t, err, "%#v", tc)

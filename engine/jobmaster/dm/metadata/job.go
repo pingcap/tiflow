@@ -20,12 +20,11 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"go.uber.org/zap"
 )
 
 // TaskStage represents internal stage of a task
@@ -96,7 +95,7 @@ func (ts *TaskStage) UnmarshalJSON(b []byte) error {
 
 // Job represents the state of a job.
 type Job struct {
-	State
+	state
 
 	// taskID -> task
 	Tasks map[string]*Task
@@ -135,7 +134,7 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 
 // JobStore manages the state of a job.
 type JobStore struct {
-	*TomlStore
+	*frameworkMetaStore
 	*bootstrap.DefaultUpgrader
 
 	mu     sync.Mutex
@@ -146,22 +145,22 @@ type JobStore struct {
 func NewJobStore(kvClient metaModel.KVClient, pLogger *zap.Logger) *JobStore {
 	logger := pLogger.With(zap.String("component", "job_store"))
 	jobStore := &JobStore{
-		TomlStore:       NewTomlStore(kvClient),
-		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
-		logger:          logger,
+		frameworkMetaStore: newTOMLFrameworkMetaStore(kvClient),
+		DefaultUpgrader:    bootstrap.NewDefaultUpgrader(logger),
+		logger:             logger,
 	}
-	jobStore.TomlStore.Store = jobStore
+	jobStore.frameworkMetaStore.stateFactory = jobStore
 	jobStore.DefaultUpgrader.Upgrader = jobStore
 	return jobStore
 }
 
 // CreateState returns an empty Job object
-func (jobStore *JobStore) CreateState() State {
+func (jobStore *JobStore) createState() state {
 	return &Job{}
 }
 
 // Key returns encoded key for job store
-func (jobStore *JobStore) Key() string {
+func (jobStore *JobStore) key() string {
 	return adapter.DMJobKeyAdapter.Encode()
 }
 

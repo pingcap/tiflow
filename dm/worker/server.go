@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -32,9 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
-
-	"github.com/pingcap/errors"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/soheilhy/cmux"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -825,13 +824,15 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
-	w.RLock()
-	sourceID := w.cfg.SourceID
-	w.RUnlock()
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
-	} else if req.Source != sourceID {
+	}
+	w.RLock()
+	// nolint:ifshort
+	sourceID := w.cfg.SourceID
+	w.RUnlock()
+	if req.Source != sourceID {
 		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", sourceID))
 		return makeCommonWorkerResponse(terror.ErrWorkerSourceNotMatch.Generate()), nil
 	}

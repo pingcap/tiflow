@@ -22,9 +22,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
-
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJobAPIServer(t *testing.T) {

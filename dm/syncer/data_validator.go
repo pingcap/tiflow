@@ -27,9 +27,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -46,6 +43,8 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -725,10 +724,10 @@ func (v *DataValidator) Stop() {
 
 func (v *DataValidator) stopInner() {
 	v.Lock()
-	defer v.Unlock()
 	v.L.Info("stopping")
 	if v.Stage() != pb.Stage_Running {
 		v.L.Warn("not started")
+		v.Unlock()
 		return
 	}
 
@@ -737,8 +736,13 @@ func (v *DataValidator) stopInner() {
 	v.fromDB.Close()
 	v.toDB.Close()
 
+	// release the lock so that the error routine can process errors
+	// wait until all errors are recorded
+	v.Unlock()
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
+	v.Lock()         // lock and modify the stage
+	defer v.Unlock()
 
 	v.setStage(pb.Stage_Stopped)
 	v.L.Info("stopped")

@@ -66,7 +66,7 @@ func main() {
 
 	rand.Seed(time.Now().UnixNano())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration)
 	defer cancel()
 
 	sc := make(chan os.Signal, 1)

@@ -14,28 +14,15 @@
 package runtime
 
 import (
-	"encoding/json"
-
-	"github.com/pingcap/tiflow/dm/pb"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 )
 
 // TaskStatus defines the running task status.
-type TaskStatus struct {
-	Unit           frameModel.WorkerType
-	Task           string
-	Stage          metadata.TaskStage
-	CfgModRevision uint64
-}
+type TaskStatus = metadata.TaskStatus
 
 // FinishedTaskStatus wraps the TaskStatus with FinishedStatus.
 // It only used when a task is finished.
-type FinishedTaskStatus struct {
-	TaskStatus
-	Result *pb.ProcessResult
-	Status json.RawMessage
-}
+type FinishedTaskStatus = metadata.FinishedTaskStatus
 
 // NewOfflineStatus is used when jobmaster receives a worker offline.
 func NewOfflineStatus(task string) TaskStatus {

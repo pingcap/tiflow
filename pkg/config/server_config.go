@@ -33,10 +33,10 @@ import (
 const (
 	// clusterIDMaxLen is the max length of cdc server cluster id
 	clusterIDMaxLen = 128
-	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	// DefaultSortDir is the default value of sort-dir, it will be a subordinate directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 
-	// DefaultRedoDir is the sub directory path of data-dir.
+	// DefaultRedoDir is a subordinate directory path of data-dir.
 	DefaultRedoDir = "/tmp/redo"
 
 	// DebugConfigurationItem is the name of debug configurations
@@ -101,8 +101,8 @@ var defaultServerConfig = &ServerConfig{
 	// default capture session ttl to 10s to increase robust to PD jitter,
 	// however it will decrease RTO when single TiCDC node error happens.
 	CaptureSessionTTL:      10,
-	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
-	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
+	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
+	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB

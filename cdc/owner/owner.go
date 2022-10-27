@@ -361,7 +361,6 @@ func (o *ownerImpl) updateMetrics() {
 			continue
 		}
 	}
-	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
@@ -712,6 +711,9 @@ func (o *ownerImpl) updateGCSafepoint(
 }
 
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
+// Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
+// to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
+// GcSafepoint is the minimum checkpointTs of all changefeeds that replicating a same upstream TiDB cluster.
 func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {

@@ -28,9 +28,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -42,7 +39,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/stretchr/testify/require"
 )
 
 func genEventGenerator(t *testing.T) *event.Generator {
@@ -196,6 +195,42 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 		return validator.Stage() == pb.Stage_Stopped
 	}))
 	require.Len(t, validator.result.Errors, 1)
+}
+
+func TestValidatorDeadLock(t *testing.T) {
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	_, _, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.persistHelper.schemaInitialized.Store(true)
+	validator.Start(pb.Stage_Running)
+	require.Equal(t, pb.Stage_Running, validator.Stage())
+	validator.wg.Add(1)
+	go func() {
+		defer func() {
+			// ignore panic when try to insert error to a closed channel,
+			// which will happen after the validator is successfully stopped.
+			// The panic is expected.
+			validator.wg.Done()
+			// nolint:errcheck
+			recover()
+		}()
+		for i := 0; i < 100; i++ {
+			validator.sendError(context.Canceled) // prevent from stopping the validator
+		}
+	}()
+	// stuck if the validator doesn't unlock before waiting wg
+	validator.Stop()
+	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 }
 
 type mockedCheckPointForValidator struct {

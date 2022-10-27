@@ -20,9 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -46,6 +43,8 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // Worker defines an interface that provides all methods that will be used in
@@ -123,7 +122,12 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error)
+	OpenStorage(
+		ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+	) (broker.Handle, error)
+
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -247,6 +251,7 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -297,8 +302,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 			retErr = frameErrors.FailFast(retErr)
 		}
 	}()
-	// TODO refine this part
-	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	// poolCtx will be held in background goroutines, and it won't be canceled
+	// until DefaultBaseWorker.Close is called.
+	poolCtx, cancelPool := context.WithCancel(context.Background())
 	w.cancelMu.Lock()
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
@@ -334,7 +340,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(ctx, topic, msg)
+			return w.Impl.OnMasterMessage(poolCtx, topic, msg)
 		},
 	)
 
@@ -395,10 +401,8 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doClose() {
 	if w.resourceBroker != nil {
-		// Closing the resource broker here will
-		// release all temporary file resources created by the worker.
-		// Since we only support local files for now, deletion is fast,
-		// so this method will block until it finishes.
+		// Closing the resource broker here will release all temporary file
+		// resources created by the worker.
 		w.resourceBroker.OnWorkerClosed(context.Background(), w.id, w.masterID)
 	}
 
@@ -508,10 +512,17 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resModel.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(
+	ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
-	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
+	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath, opts...)
+}
+
+// IsS3StorageEnabled implements BaseWorker.IsS3StorageEnabled
+func (w *DefaultBaseWorker) IsS3StorageEnabled() bool {
+	return w.resourceBroker.IsS3StorageEnabled()
 }
 
 // Exit implements BaseWorker.Exit

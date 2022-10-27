@@ -34,6 +34,7 @@ type DiscoveryClient interface {
 	// QueryMetaStore queries metastore manager and returns
 	// the information of a matching metastore
 	QueryMetaStore(ctx context.Context, in *QueryMetaStoreRequest, opts ...grpc.CallOption) (*QueryMetaStoreResponse, error)
+	QueryStorageConfig(ctx context.Context, in *QueryStorageConfigRequest, opts ...grpc.CallOption) (*QueryStorageConfigResponse, error)
 	GetLeader(ctx context.Context, in *GetLeaderRequest, opts ...grpc.CallOption) (*GetLeaderResponse, error)
 	ResignLeader(ctx context.Context, in *ResignLeaderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -100,6 +101,15 @@ func (c *discoveryClient) QueryMetaStore(ctx context.Context, in *QueryMetaStore
 	return out, nil
 }
 
+func (c *discoveryClient) QueryStorageConfig(ctx context.Context, in *QueryStorageConfigRequest, opts ...grpc.CallOption) (*QueryStorageConfigResponse, error) {
+	out := new(QueryStorageConfigResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/QueryStorageConfig", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *discoveryClient) GetLeader(ctx context.Context, in *GetLeaderRequest, opts ...grpc.CallOption) (*GetLeaderResponse, error) {
 	out := new(GetLeaderResponse)
 	err := c.cc.Invoke(ctx, "/enginepb.Discovery/GetLeader", in, out, opts...)
@@ -137,6 +147,7 @@ type DiscoveryServer interface {
 	// QueryMetaStore queries metastore manager and returns
 	// the information of a matching metastore
 	QueryMetaStore(context.Context, *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error)
+	QueryStorageConfig(context.Context, *QueryStorageConfigRequest) (*QueryStorageConfigResponse, error)
 	GetLeader(context.Context, *GetLeaderRequest) (*GetLeaderResponse, error)
 	ResignLeader(context.Context, *ResignLeaderRequest) (*emptypb.Empty, error)
 }
@@ -162,6 +173,9 @@ func (UnimplementedDiscoveryServer) RegisterMetaStore(context.Context, *Register
 }
 func (UnimplementedDiscoveryServer) QueryMetaStore(context.Context, *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMetaStore not implemented")
+}
+func (UnimplementedDiscoveryServer) QueryStorageConfig(context.Context, *QueryStorageConfigRequest) (*QueryStorageConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryStorageConfig not implemented")
 }
 func (UnimplementedDiscoveryServer) GetLeader(context.Context, *GetLeaderRequest) (*GetLeaderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLeader not implemented")
@@ -289,6 +303,24 @@ func _Discovery_QueryMetaStore_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Discovery_QueryStorageConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStorageConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DiscoveryServer).QueryStorageConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.Discovery/QueryStorageConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DiscoveryServer).QueryStorageConfig(ctx, req.(*QueryStorageConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Discovery_GetLeader_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetLeaderRequest)
 	if err := dec(in); err != nil {
@@ -355,6 +387,10 @@ var Discovery_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryMetaStore",
 			Handler:    _Discovery_QueryMetaStore_Handler,
+		},
+		{
+			MethodName: "QueryStorageConfig",
+			Handler:    _Discovery_QueryStorageConfig_Handler,
 		},
 		{
 			MethodName: "GetLeader",

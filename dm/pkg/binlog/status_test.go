@@ -19,10 +19,9 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetBinaryLogs(t *testing.T) {

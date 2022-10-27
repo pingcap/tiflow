@@ -19,7 +19,6 @@ import (
 	"reflect"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"

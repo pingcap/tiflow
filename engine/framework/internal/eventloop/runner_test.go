@@ -19,13 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 type toyTaskStatus = int32

@@ -23,12 +23,11 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Member stores server member information

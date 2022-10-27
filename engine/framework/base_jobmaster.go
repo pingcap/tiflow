@@ -21,8 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -35,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"go.uber.org/zap"
 )
 
 // BaseJobMaster defines an interface that can work as a job master, it embeds
@@ -91,6 +90,9 @@ type BaseJobMaster interface {
 	// IsBaseJobMaster is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsBaseJobMaster()
+
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
 }
 
 // BaseJobMasterExt extends BaseJobMaster with some extra methods.
@@ -129,6 +131,7 @@ type JobMasterImpl interface {
 	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
+	// TODO: when it returns error, framework should close this jobmaster.
 	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
 	// instance, the business logic should only register the OpenAPI handler in it.
@@ -189,6 +192,7 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -354,6 +358,11 @@ func (d *DefaultBaseJobMaster) CurrentEpoch() frameModel.Epoch {
 
 // IsBaseJobMaster implements BaseJobMaster.IsBaseJobMaster
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
+}
+
+// IsS3StorageEnabled implements BaseJobMaster.IsS3StorageEnabled
+func (d *DefaultBaseJobMaster) IsS3StorageEnabled() bool {
+	return d.worker.IsS3StorageEnabled()
 }
 
 // SendMessage delegates the SendMessage or inner worker

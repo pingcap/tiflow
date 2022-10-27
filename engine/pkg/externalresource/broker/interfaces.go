@@ -33,6 +33,7 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
+		opts ...OpenStorageOption,
 	) (Handle, error)
 
 	// OnWorkerClosed is called when a worker is closing.
@@ -43,4 +44,22 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 	)
+
+	IsS3StorageEnabled() bool
+
+	Close()
+}
+
+type openStorageOptions struct {
+	cleanBeforeOpen bool
+}
+
+// OpenStorageOption is an option for OpenStorage.
+type OpenStorageOption func(*openStorageOptions)
+
+// WithCleanBeforeOpen indicates that the storage should be cleaned before open.
+func WithCleanBeforeOpen() OpenStorageOption {
+	return func(opts *openStorageOptions) {
+		opts.cleanBeforeOpen = true
+	}
 }

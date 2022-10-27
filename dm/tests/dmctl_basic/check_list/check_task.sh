@@ -16,8 +16,8 @@ function check_task_pass() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
-		"\"passed\": true" 1 \
 		"\"result\": true" 1
+	# "\"passed\": true" 1 delete this because sometimes precheck will only return 'pre-check is passed. '
 }
 
 function check_task_not_pass() {
@@ -120,7 +120,7 @@ function check_task_wrong_no_source_meta() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
-		"must set meta for task-mode incremental" 1
+		"must specify \`binlog-name\` without GTID enabled for the source or specify \`binlog-gtid\` with GTID enabled for the source" 1
 }
 
 function check_task_no_source_meta_but_start_time() {

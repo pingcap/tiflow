@@ -14,13 +14,11 @@
 package loader
 
 import (
+	. "github.com/pingcap/check"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
-
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-
-	. "github.com/pingcap/check"
 )
 
 var _ = Suite(&testConvertDataSuite{})

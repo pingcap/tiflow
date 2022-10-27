@@ -16,8 +16,14 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// TODO: remove this after fixing leak goroutine in s3 filemanager.
+	opts := []goleak.Option{
+		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
+	}
+	leakutil.SetUpLeakTest(m, opts...)
 }

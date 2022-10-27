@@ -26,9 +26,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = Suite(&testDBSuite{})
@@ -194,6 +193,9 @@ func (t *testDBSuite) TestMySQLError(c *C) {
 
 	err = newMysqlErr(tmysql.ErrMasterFatalErrorReadingBinlog, "binlog purged error")
 	c.Assert(IsErrBinlogPurged(err), Equals, true)
+
+	err = newMysqlErr(tmysql.ErrDupEntry, "Duplicate entry '123456' for key 'index'")
+	c.Assert(IsErrDuplicateEntry(err), Equals, true)
 }
 
 func (t *testDBSuite) TestGetAllServerID(c *C) {

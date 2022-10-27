@@ -32,7 +32,7 @@ i=0
 while ! eval $cmd; do
 	i=$((i + 1))
 	if [ "$i" -gt "$count" ]; then
-		echo "failed to execute cmd: $cmd"
+		echo -e "\nfailed to execute cmd for $count times: $cmd\n"
 		exit 2
 	fi
 	sleep $interval_sec

@@ -63,9 +63,13 @@ type TableInfo struct {
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
 func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *model.TableInfo) *TableInfo {
 	ti := &TableInfo{
-		TableInfo:        info,
-		SchemaID:         schemaID,
-		TableName:        TableName{Schema: schemaName, Table: info.Name.O},
+		TableInfo: info,
+		SchemaID:  schemaID,
+		TableName: TableName{
+			Schema:  schemaName,
+			Table:   info.Name.O,
+			TableID: info.ID,
+		},
 		TableInfoVersion: version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),

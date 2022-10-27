@@ -25,14 +25,13 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	brstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/spf13/pflag"
-
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/spf13/pflag"
 )
 
 // DefaultTableFilter is the default table filter for dumpling.

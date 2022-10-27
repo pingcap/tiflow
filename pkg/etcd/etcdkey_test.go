@@ -48,7 +48,7 @@ func TestEtcdKey(t *testing.T) {
 			ClusterID: DefaultCDCClusterID,
 		},
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/changefeed/info/test-_@#$%changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
@@ -57,7 +57,7 @@ func TestEtcdKey(t *testing.T) {
 			Namespace:    model.DefaultNamespace,
 		},
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/changefeed/info/test/changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
@@ -66,7 +66,7 @@ func TestEtcdKey(t *testing.T) {
 			Namespace:    model.DefaultNamespace,
 		},
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/changefeed/status/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangeFeedStatus,
@@ -88,7 +88,7 @@ func TestEtcdKey(t *testing.T) {
 			Namespace: "name",
 		},
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test/changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskPosition,
@@ -126,15 +126,15 @@ func TestEtcdKeyParseError(t *testing.T) {
 		key   string
 		error bool
 	}{{
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test/changefeed",
 		error: false,
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/",
 		error: false,
 	}, {
-		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
+		key: DefaultClusterAndNamespacePrefix +
 			"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		error: true,
 	}, {

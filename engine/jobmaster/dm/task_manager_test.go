@@ -20,10 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -31,6 +27,9 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -221,10 +220,10 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	require.True(t.T(), ok)
 	require.Equal(t.T(), syncStatus1, taskStatus)
 
-	taskManager.onJobDel(context.Background())
+	taskManager.onJobDel()
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
-	taskManager.onJobDel(context.Background())
+	taskManager.onJobDel()
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 

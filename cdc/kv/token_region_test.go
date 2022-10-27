@@ -32,14 +32,14 @@ func TestRouter(t *testing.T) {
 	limit := 10
 	r := NewSizedRegionRouter(context.Background(), limit)
 	for i := 0; i < limit; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(singleRegionInfo{resolvedTs: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 	regions := make([]singleRegionInfo, 0, limit)
 	// limit is less than regionScanLimitPerTable
 	for i := 0; i < limit; i++ {
 		select {
 		case sri := <-r.Chan():
-			require.Equal(t, uint64(i), sri.ts)
+			require.Equal(t, uint64(i), sri.resolvedTs)
 			r.Acquire(store)
 			regions = append(regions, sri)
 		default:
@@ -71,7 +71,7 @@ func testRouterWithConsumer(t *testing.T, funcDoSth func()) {
 	limit := 20
 	r := NewSizedRegionRouter(context.Background(), limit)
 	for i := 0; i < limit*2; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(singleRegionInfo{resolvedTs: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 	received := uint64(0)
 	for i := 0; i < regionRouterChanSize; i++ {
@@ -110,7 +110,7 @@ func testRouterWithConsumer(t *testing.T, funcDoSth func()) {
 	})
 
 	for i := 0; i < limit*2; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(singleRegionInfo{resolvedTs: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 
 	err := wg.Wait()
@@ -133,7 +133,7 @@ func TestRouterWithMultiStores(t *testing.T) {
 
 	for _, store := range stores {
 		for j := 0; j < limit*2; j++ {
-			r.AddRegion(singleRegionInfo{ts: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
+			r.AddRegion(singleRegionInfo{resolvedTs: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
 	received := uint64(0)
@@ -163,7 +163,7 @@ func TestRouterWithMultiStores(t *testing.T) {
 
 	for _, store := range stores {
 		for i := 0; i < limit*2; i++ {
-			r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+			r.AddRegion(singleRegionInfo{resolvedTs: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
 

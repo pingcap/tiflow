@@ -19,8 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -32,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -273,23 +272,19 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 		return false
 	}
 
-	handleKeyCount := 0
-	equivalentHandleKeyCount := 0
 	for i := range updateEvent.Row.Columns {
 		col := updateEvent.Row.Columns[i]
 		preCol := updateEvent.Row.PreColumns[i]
 		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
-			handleKeyCount++
 			colValueString := model.ColumnValueString(col.Value)
 			preColValueString := model.ColumnValueString(preCol.Value)
-			if colValueString == preColValueString {
-				equivalentHandleKeyCount++
+			// If one handle key columns is updated, we need to split the event row.
+			if colValueString != preColValueString {
+				return true
 			}
 		}
 	}
-
-	// If the handle key columns are not updated, so we do **not** need to split the event row.
-	return !(handleKeyCount == equivalentHandleKeyCount)
+	return false
 }
 
 // splitUpdateEvent splits an update event into a delete and an insert event.
@@ -430,4 +425,19 @@ func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
 		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
 	}
 	return nil
+}
+
+func (n *sinkNode) Stats() Stats {
+	return Stats{
+		CheckpointTs: n.CheckpointTs(),
+		ResolvedTs:   n.getResolvedTs().Ts,
+		BarrierTs:    n.BarrierTs(),
+	}
+}
+
+// Stats of a sink.
+type Stats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
 }

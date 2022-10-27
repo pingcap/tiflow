@@ -14,12 +14,11 @@
 package framework
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"go.uber.org/zap"
 )
 
 type (

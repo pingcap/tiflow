@@ -20,11 +20,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 var _ framework.Worker = &exampleWorker{}
