@@ -14,6 +14,7 @@
 package model
 
 import (
+	"context"
 	"math"
 
 	"github.com/pingcap/log"
@@ -28,6 +29,8 @@ type PolymorphicEvent struct {
 
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
+
+	finished chan struct{}
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
@@ -69,6 +72,29 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 // only be called when `RawKV != nil`.
 func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
+}
+
+func (e *PolymorphicEvent) SetUpFinishedCh() {
+	if e.finished == nil {
+		e.finished = make(chan struct{})
+	}
+}
+
+func (e *PolymorphicEvent) MarkFinished() {
+	if e.finished != nil {
+		close(e.finished)
+	}
+}
+
+func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
+	if e.finished != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-e.finished:
+		}
+	}
+	return nil
 }
 
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
