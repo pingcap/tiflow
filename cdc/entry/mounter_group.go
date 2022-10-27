@@ -92,16 +92,16 @@ func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 		case <-ticker.C:
 			metrics.Set(float64(len(rawCh)))
 		case pEvent = <-rawCh:
-		}
-		if pEvent.RawKV.OpType == model.OpTypeResolved {
+			if pEvent.RawKV.OpType == model.OpTypeResolved {
+				pEvent.MarkFinished()
+				continue
+			}
+			err := mounter.DecodeEvent(ctx, pEvent)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			pEvent.MarkFinished()
-			continue
 		}
-		err := mounter.DecodeEvent(ctx, pEvent)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		pEvent.MarkFinished()
 	}
 }
 
