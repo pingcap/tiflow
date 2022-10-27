@@ -22,6 +22,8 @@ import (
 
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -392,6 +394,20 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
+	if s.cfg.EnableGCTuning {
+		limit, err := memory.MemTotal()
+		if err != nil {
+			log.Warn("get memory failed", zap.Error(err))
+			limit = 0
+		}
+		threshold := limit * 7 / 10
+		log.Info("set memory threshold to GC tuner",
+			zap.Uint64("memory limit", limit),
+			zap.Uint64("threshold", threshold))
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(threshold)
+	}
+
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
