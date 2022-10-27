@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
-	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
@@ -271,8 +270,6 @@ func (n *sorterNode) start(
 					if e.CRTs < lastSentResolvedTs {
 						continue
 					}
-					tickMsg := message.ValueMessage(pmessage.TickMessage())
-					_ = tableActorRouter.Send(tableActorID, tickMsg)
 					lastSentResolvedTs = e.CRTs
 					lastSendResolvedTsTime = time.Now()
 					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
