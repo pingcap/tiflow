@@ -27,6 +27,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// tableSinkWrapper is a wrapper of TableSink, it is used in SinkManager to manage TableSink.
+// Because in the SinkManager, we write data to TableSink and RedoManager concurrently,
+// so current sink node can not be reused.
 type tableSinkWrapper struct {
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
@@ -101,6 +104,8 @@ func (t *tableSinkWrapper) close(ctx context.Context) error {
 	return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 }
 
+// convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
+// It will deal with the old value compatibility.
 func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, error) {
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {

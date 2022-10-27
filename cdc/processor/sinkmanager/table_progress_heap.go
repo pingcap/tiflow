@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
 
+// progress is the fetch progress of a table.
 type progress struct {
 	tableID           model.TableID
 	nextLowerBoundPos sorter.Position
@@ -62,6 +63,8 @@ func (p *progressHeap) Pop() any {
 	return x
 }
 
+// tableProgresses used to manage the progress of all tables.
+// SinkManager will use this to determine when and how to fetch data from the sorter.
 type tableProgresses struct {
 	mu   sync.Mutex
 	heap *progressHeap
