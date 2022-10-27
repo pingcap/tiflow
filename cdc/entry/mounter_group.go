@@ -31,7 +31,7 @@ type mounterGroup struct {
 }
 
 const (
-	defaultMounterWorkerNum = 32
+	defaultMounterWorkerNum = 16
 	defaultOutputChanSize   = 128
 )
 

@@ -663,7 +663,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mg = entry.NewMounterGroup(p.schemaStorage,
-		32,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue,
 		p.filter,
 		tz,
