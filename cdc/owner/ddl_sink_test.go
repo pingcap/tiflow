@@ -36,7 +36,7 @@ type mockSink struct {
 	ddlError     error
 }
 
-func (m *mockSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.TableName) error {
+func (m *mockSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []*model.TableInfo) error {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 	return nil
 }

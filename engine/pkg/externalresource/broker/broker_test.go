@@ -15,12 +15,16 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -38,6 +42,39 @@ func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 		cli)
 	require.NoError(t, err)
 	return broker, cli, tmpDir
+}
+
+func TestNewBroker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := client.NewMockServerMasterClient(gomock.NewController(t))
+
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		nil, status.Error(codes.NotFound, "not found")).Times(1)
+	brk, err := NewBroker(ctx, "executor-1", c)
+	require.Nil(t, brk)
+	require.ErrorContains(t, err, "query storage config failed")
+
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		&pb.QueryStorageConfigResponse{
+			Config: "",
+			Err:    &pb.Error{Code: pb.ErrorCode_StorageConfigSerializeFail, Message: "serialize fail"},
+		}, nil).Times(1)
+	brk, err = NewBroker(ctx, "executor-1", c)
+	require.Nil(t, brk)
+	require.ErrorContains(t, err, "query storage config failed")
+
+	cfg, err := json.Marshal(resModel.DefaultConfig)
+	require.NoError(t, err)
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
+		&pb.QueryStorageConfigResponse{
+			Config: string(cfg),
+			Err:    nil,
+		}, nil).Times(1)
+	brk, err = NewBroker(ctx, "executor-1", c)
+	require.NoError(t, err)
+	brk.Close()
 }
 
 func TestBrokerOpenNewStorage(t *testing.T) {
@@ -135,6 +172,45 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	local.AssertLocalFileExists(t, dir, "worker-2", resName, "1.txt")
+}
+
+func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
+	t.Parallel()
+	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
+	brk, cli, _ := newBroker(t)
+	defer brk.Close()
+	require.False(t, brk.IsS3StorageEnabled())
+	mockS3FileManager, _ := s3.NewFileManagerForUT(t.TempDir(), brk.executorID)
+	brk.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager
+	require.True(t, brk.IsS3StorageEnabled())
+
+	openStorageWithClean := func(resID resModel.ResourceID) {
+		// resource metadata exists
+		cli.On("QueryResource", mock.Anything,
+			&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: resID}}, mock.Anything).
+			Return(&pb.QueryResourceResponse{
+				CreatorExecutor: "executor-1",
+				JobId:           "job-1",
+				CreatorWorkerId: "worker-2",
+			}, nil)
+		hdl, err := brk.OpenStorage(
+			context.Background(),
+			fakeProjectInfo,
+			"worker-2",
+			"job-1",
+			resID, WithCleanBeforeOpen())
+		require.NoError(t, err)
+		require.Equal(t, resID, hdl.ID())
+		require.True(t, hdl.(*ResourceHandle).isPersisted.Load())
+	}
+
+	resIDs := []resModel.ResourceID{"/local/test-option", "/s3/test-option"}
+	for _, resID := range resIDs {
+		// resource does not exist, metadata exists
+		openStorageWithClean(resID)
+		// open again, resource exists, metadata exists
+		openStorageWithClean(resID)
+	}
 }
 
 func TestBrokerRemoveResource(t *testing.T) {

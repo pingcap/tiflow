@@ -20,7 +20,6 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
-	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // DiscoveryClient is a client to the Discovery service on the server master.
@@ -80,24 +79,18 @@ func (c *discoveryClient) RegisterExecutor(
 	request *pb.RegisterExecutorRequest,
 ) (model.ExecutorID, error) {
 	var ret model.ExecutorID
-	err := retry.Do(ctx, func() error {
-		call := internal.NewCall(
-			c.cli.RegisterExecutor,
-			request,
-			// RegisterExecutor is not idempotent in general
-			// TODO review idempotency
-			// internal.WithForceNoRetry()
-		)
-		executor, err := call.Do(ctx)
-		if err != nil {
-			return err
-		}
-		ret = model.ExecutorID(executor.Id)
-		return nil
-	})
+	call := internal.NewCall(
+		c.cli.RegisterExecutor,
+		request,
+		// RegisterExecutor is not idempotent in general
+		// TODO review idempotency
+		// internal.WithForceNoRetry()
+	)
+	executor, err := call.Do(ctx)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
+	ret = model.ExecutorID(executor.Id)
 	return ret, nil
 }
 

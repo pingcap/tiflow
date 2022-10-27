@@ -30,7 +30,6 @@ import (
 
 var (
 	defaultJoinAddr          = "127.0.0.1:10240"
-	defaultSessionTTL        = 20
 	defaultKeepAliveTTL      = "20s"
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
@@ -51,8 +50,11 @@ type Config struct {
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	Labels map[string]string `toml:"labels" json:"labels"`
-
-	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
+	// EnableGCTuning enables a GC tuning mechanism that adjusts the GC frequency
+	// according to the used memory with reference to the total memory. It can be
+	// enabled when the executor can consume almost all the memory of the
+	// container/machine.
+	EnableGCTuning bool `toml:"enable-gc-tuning" json:"enable-gc-tuning"`
 
 	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -147,7 +149,7 @@ func GetDefaultExecutorConfig() *Config {
 		Join:                 defaultJoinAddr,
 		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
-		SessionTTL:           defaultSessionTTL,
+		EnableGCTuning:       true, // currently 1 container 1 executor
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,

@@ -316,7 +316,7 @@ function run() {
 	# start no source meta task with start time
 	start_task_no_source_meta_but_start_time $cur/conf/dm-task7.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task $cur/conf/dm-task7.yaml" \
+		"stop-task test_incremental_no_source_meta" \
 		"\"result\": true" 3
 	run_sql_tidb "DROP DATABASE if exists dmctl;"
 	# start task

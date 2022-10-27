@@ -456,9 +456,10 @@
         "MetaStoreNotExists",
         "MetaStoreSerializeFail",
         "UnexpectedJobStatus",
+        "StorageConfigSerializeFail",
         "UnknownError"
       ],
-      "description": " - MasterNotLeader: This master is not leader right now.\n - UnknownExecutor: Executor has been removed so it can't be recognized.\n - NotEnoughResource: no enough resource can be used.\n - SubJobSubmitFailed: submit subjob failed\n - TombstoneExecutor: TombstoneExecutor\n - BuildGrpcConnFailed: create gRPC connection failed\n - InvalidMetaStoreType: unknown or upsupported metastore type\n - MasterNotReady: MasterNotReady means the master is staring up, and not ready to serve\n - MetaStoreNotExists: metastore not exists\n - MetaStoreSerializeFail: metastore serialize fail\n - UnexpectedJobStatus: job status is not expected for the operation."
+      "title": "- MasterNotLeader: This master is not leader right now.\n - UnknownExecutor: Executor has been removed so it can't be recognized.\n - NotEnoughResource: no enough resource can be used.\n - SubJobSubmitFailed: submit subjob failed\n - TombstoneExecutor: TombstoneExecutor\n - BuildGrpcConnFailed: create gRPC connection failed\n - InvalidMetaStoreType: unknown or upsupported metastore type\n - MasterNotReady: MasterNotReady means the master is staring up, and not ready to serve\n - MetaStoreNotExists: metastore not exists\n - MetaStoreSerializeFail: metastore serialize fail\n - UnexpectedJobStatus: job status is not expected for the operation.\n - StorageConfigSerializeFail: storage config serialize fail"
     },
     "enginepbExecWorkload": {
       "type": "object",
