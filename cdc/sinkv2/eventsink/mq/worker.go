@@ -76,12 +76,13 @@ func newWorker(
 	protocol config.Protocol,
 	encoder codec.EventBatchEncoder,
 	producer dmlproducer.DMLProducer,
+	inputChan *chann.Chann[mqEvent],
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID:                id,
 		protocol:                    protocol,
-		msgChan:                     chann.New[mqEvent](),
+		msgChan:                     inputChan,
 		ticker:                      time.NewTicker(flushInterval),
 		encoder:                     encoder,
 		producer:                    producer,
@@ -290,11 +291,11 @@ func (w *worker) asyncSend(
 }
 
 func (w *worker) close() {
-	w.msgChan.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range w.msgChan.Out() {
-		// Do nothing. We do not care about the data.
-	}
-	w.producer.Close()
+	//w.msgChan.Close()
+	//// We must finish consuming the data here,
+	//// otherwise it will cause the channel to not close properly.
+	//for range w.msgChan.Out() {
+	//	// Do nothing. We do not care about the data.
+	//}
+	//w.producer.Close()
 }
