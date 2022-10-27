@@ -149,7 +149,7 @@ func (m *mounterImpl) isWrittenByTiCDC(raw *model.RawKVEntry) (bool, error) {
 
 	compare := rowMeta.GetBinaryLiteral4Cmp().
 		Compare(types.NewBinaryLiteralFromUint(1, 1))
-	
+
 	return compare == 0, nil
 }
 

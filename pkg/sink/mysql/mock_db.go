@@ -15,6 +15,7 @@ package mysql
 
 import (
 	"database/sql"
+
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
