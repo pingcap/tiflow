@@ -34,18 +34,18 @@ function run() {
 	# make suer table t1 is deleted in upstream and exists in downstream
   check_table_not_exists "event_filter.t1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
   check_table_exists "event_filter.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
+  sleep 600
   # check those rows that are not filtered are synced to downstream
-  run_sql "select count(*) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 2"
-  run_sql "select count(*) from event_filter.t1 where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 1"
-  run_sql "select count(*) from event_filter.t1 where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 0"
-  run_sql "select count(*) from event_filter.t1 where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 0"
-  run_sql "select count(*) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 1"
+  run_sql "select count(1) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_contains "count(1): 2"
+  run_sql "select count(2) from event_filter.t1 where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_contains "count(2): 1"
+  run_sql "select count(3) from event_filter.t1 where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_contains "count(3): 0"
+  run_sql "select count(4) from event_filter.t1 where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_contains "count(4): 0"
+  run_sql "select count(5) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_contains "count(5): 1"
 
   check_table_exists "event_filter.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
   # check table t2 is replicated
