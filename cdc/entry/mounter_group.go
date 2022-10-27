@@ -32,7 +32,7 @@ type mounterGroup struct {
 
 const (
 	defaultMounterWorkerNum = 16
-	defaultOutputChanSize   = 128
+	defaultOutputChanSize   = 16
 	defaultMetricInterval   = 15 * time.Second
 )
 
