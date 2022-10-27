@@ -53,7 +53,7 @@ func newDMLWriter(ctx context.Context,
 	}
 
 	for i := 0; i < config.WorkerCount; i++ {
-		d := newDMLWorker(i+1, changefeedID, storage, w.config.FlushInterval, extension, errCh)
+		d := newDMLWorker(i+1, changefeedID, storage, w.config, extension, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)

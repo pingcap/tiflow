@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -26,18 +27,26 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
 
 func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
-	uri := fmt.Sprintf("file:///%s", dir)
+	uri := fmt.Sprintf("file:///%s?flush-interval=2s", dir)
 	bs, err := storage.ParseBackend(uri, &storage.BackendOptions{})
 	require.Nil(t, err)
 	storage, err := storage.New(ctx, bs, nil)
 	require.Nil(t, err)
 	errCh := make(chan error, 1)
+	sinkURI, err := url.Parse(uri)
+	require.Nil(t, err)
+	cfg := cloudstorage.NewConfig()
+	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	require.Nil(t, err)
+
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		2*time.Second, ".json", errCh)
+		cfg, ".json", errCh)
 	return d
 }
 
@@ -114,11 +123,6 @@ func TestDMLWorkerRun(t *testing.T) {
 		}
 		fragCh.In() <- frag
 	}
-	fragCh.In() <- eventFragment{
-		seqNumber:    5,
-		tableName:    table1,
-		tableVersion: 99,
-	}
 
 	table2 := model.TableName{
 		Schema:  "test",
@@ -162,11 +166,6 @@ func TestDMLWorkerRun(t *testing.T) {
 			},
 		}
 		fragCh.In() <- frag
-	}
-	fragCh.In() <- eventFragment{
-		seqNumber:    3,
-		tableName:    table2,
-		tableVersion: 199,
 	}
 
 	time.Sleep(4 * time.Second)

@@ -15,20 +15,21 @@ package cloudstorage
 import (
 	"context"
 	"net/url"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
-
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
 const (
@@ -77,6 +78,7 @@ type sink struct {
 	writer *dmlWriter
 	// tableSeqMap maintains a <versionTable, sequenceNumber> mapping.
 	tableSeqMap map[versionedTable]uint64
+	mu          sync.Mutex
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -88,19 +90,22 @@ func NewCloudStorageSink(ctx context.Context,
 	s := &sink{}
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
-	err := cfg.Apply(ctx, sinkURI)
+	err := cfg.Apply(ctx, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	// parse backend storage from sinkURI.
-	bs, err := storage.ParseBackend(sinkURI.String(), &storage.BackendOptions{})
+	bs, err := storage.ParseBackend(sinkURI.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// create an external storage.
-	storage, err := storage.New(ctx, bs, nil)
+	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
+		SendCredentials: false,
+		S3Retryer:       rcommon.DefaultS3Retryer(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -141,15 +146,21 @@ func NewCloudStorageSink(ctx context.Context,
 // WriteEvents write events to cloud storage sink.
 func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
+	var seq uint64
+
 	for _, txn := range txns {
 		tbl = versionedTable{
 			TableName:    *txn.Event.Table,
 			TableVersion: txn.Event.TableVersion,
 		}
+
+		s.mu.Lock()
 		s.tableSeqMap[tbl]++
+		seq = s.tableSeqMap[tbl]
+		s.mu.Unlock()
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.msgChan.In() <- eventFragment{
-			seqNumber:    s.tableSeqMap[tbl],
+			seqNumber:    seq,
 			tableName:    tbl.TableName,
 			tableVersion: tbl.TableVersion,
 			event:        txn,

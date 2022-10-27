@@ -22,26 +22,37 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
 const (
-	// defaultWorkerCount is the default number of workers.
+	// defaultWorkerCount is the default value of worker-count.
 	defaultWorkerCount = 16
-	// the upper limit of max worker counts.
+	// the upper limit of worker-count.
 	maxWorkerCount = 512
-	// defaultFlushInterval is the default flush interval for cloud storage sink.
+	// defaultFlushInterval is the default value of flush-interval.
 	defaultFlushInterval = 5 * time.Second
-	// the upper limit of flush interval.
+	// the lower limit of flush-interval.
+	minFlushInterval = 2 * time.Second
+	// the upper limit of flush-interval.
 	maxFlushInterval = 10 * time.Minute
+	// defaultFileSize is the default value of file-sze.
+	defaultFileSize = 64 * 1024 * 1024
+	// the lower limit of file size
+	minFileSize = 1024 * 1024
+	// the upper limit of file size
+	maxFileSize = 512 * 1024 * 1024
 )
 
 // Config is the configuration for cloud storage sink.
 type Config struct {
 	WorkerCount   int
 	FlushInterval time.Duration
+	FileSize      int
+	DateSeparator string
 }
 
 // NewConfig returns the default cloud storage sink config.
@@ -49,6 +60,7 @@ func NewConfig() *Config {
 	return &Config{
 		WorkerCount:   defaultWorkerCount,
 		FlushInterval: defaultFlushInterval,
+		FileSize:      defaultFileSize,
 	}
 }
 
@@ -56,6 +68,7 @@ func NewConfig() *Config {
 func (c *Config) Apply(
 	ctx context.Context,
 	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
 		return cerror.ErrCloudStorageInvalidConfig.GenWithStack("failed to open cloud storage sink, empty SinkURI")
@@ -70,8 +83,17 @@ func (c *Config) Apply(
 		return err
 	}
 	err = getFlushInterval(query, &c.FlushInterval)
+	if err != nil {
+		return err
+	}
+	err = getFileSize(query, &c.FileSize)
+	if err != nil {
+		return err
+	}
 
-	return err
+	c.DateSeparator = replicaConfig.Sink.CSVConfig.DateSeparator
+
+	return nil
 }
 
 func getWorkerCount(values url.Values, workerCount *int) error {
@@ -108,16 +130,42 @@ func getFlushInterval(values url.Values, flushInterval *time.Duration) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
 	}
-	if d <= 0 {
-		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig,
-			fmt.Errorf("invalid flush-interval %s, it must be greater than 0", d))
-	}
+
 	if d > maxFlushInterval {
 		log.Warn("flush-interval is too large", zap.Duration("original", d),
 			zap.Duration("override", maxFlushInterval))
 		d = maxFlushInterval
 	}
+	if d < minFlushInterval {
+		log.Warn("flush-interval is too small", zap.Duration("original", d),
+			zap.Duration("override", minFlushInterval))
+		d = minFlushInterval
+	}
 
 	*flushInterval = d
+	return nil
+}
+
+func getFileSize(values url.Values, fileSize *int) error {
+	s := values.Get("file-size")
+	if len(s) == 0 {
+		return nil
+	}
+
+	sz, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+	}
+	if sz > maxFileSize {
+		log.Warn("file-size is too large",
+			zap.Int("original", sz), zap.Int("override", maxFileSize))
+		sz = maxFileSize
+	}
+	if sz < minFileSize {
+		log.Warn("file-size is too small",
+			zap.Int("original", sz), zap.Int("override", minFileSize))
+		sz = minFileSize
+	}
+	*fileSize = sz
 	return nil
 }

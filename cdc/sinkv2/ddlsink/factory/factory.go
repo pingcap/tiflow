@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/blackhole"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql"
@@ -48,6 +49,8 @@ func New(
 		return blackhole.New(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		return mysql.NewMySQLDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
+	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.AzblobScheme:
+		return cloudstorage.NewCloudStorageDDLSink(ctx, sinkURI)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)

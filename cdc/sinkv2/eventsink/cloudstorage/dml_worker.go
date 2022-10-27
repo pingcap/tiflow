@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,22 +25,26 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"go.uber.org/zap"
 )
 
 // dmlWorker denotes a worker responsible for writing messages to cloud storage.
 type dmlWorker struct {
 	// worker id
-	id            int
-	changeFeedID  model.ChangeFeedID
-	storage       storage.ExternalStorage
-	flushInterval time.Duration
+	id           int
+	changeFeedID model.ChangeFeedID
+	storage      storage.ExternalStorage
+	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
 	// defragmenters maintains a mapping of <table, defragmenter>.
 	defragmenters sync.Map
 	// fileIndex maintains a mapping of <table, index number>.
 	fileIndex map[versionedTable]uint64
+	// fileSize maintains a mapping of <table, file size>.
+	fileSize  map[versionedTable]uint64
 	wg        sync.WaitGroup
 	isClosed  uint64
 	errCh     chan<- error
@@ -48,14 +53,14 @@ type dmlWorker struct {
 
 // flushTask defines a task containing the tables to be flushed.
 type flushTask struct {
-	activeTables map[versionedTable]struct{}
+	targetTables []versionedTable
 }
 
 func newDMLWorker(
 	id int,
 	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
-	flushInterval time.Duration,
+	config *cloudstorage.Config,
 	extension string,
 	errCh chan<- error,
 ) *dmlWorker {
@@ -63,9 +68,10 @@ func newDMLWorker(
 		id:            id,
 		changeFeedID:  changefeedID,
 		storage:       storage,
-		flushInterval: flushInterval,
+		config:        config,
 		flushNotifyCh: make(chan flushTask, 1),
 		fileIndex:     make(map[versionedTable]uint64),
+		fileSize:      make(map[versionedTable]uint64),
 		extension:     extension,
 		errCh:         errCh,
 	}
@@ -95,7 +101,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				for table := range task.activeTables {
+				for _, table := range task.targetTables {
 					buf.Reset()
 					var callbacks []func()
 					v, ok := d.defragmenters.Load(table)
@@ -110,6 +116,9 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					}
 					defrag := v.(*defragmenter)
 					msgs := defrag.reassmebleFrag()
+					if len(msgs) == 0 {
+						continue
+					}
 
 					for _, msg := range msgs {
 						buf.Write(msg.Value)
@@ -144,8 +153,8 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 // backgroundDispatchMsgs dispatch eventFragment to each table's defragmenter,
 // and it periodically emits flush tasks.
 func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
-	readyTables := make(map[versionedTable]struct{})
-	ticker := time.NewTicker(d.flushInterval)
+	tableSet := make(map[versionedTable]struct{})
+	ticker := time.NewTicker(d.config.FlushInterval)
 
 	d.wg.Add(1)
 	go func() {
@@ -161,17 +170,26 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
+				var readyTables []versionedTable
+				for tbl := range tableSet {
+					readyTables = append(readyTables, tbl)
+				}
 				if len(readyTables) == 0 {
 					continue
 				}
 				task := flushTask{
-					activeTables: readyTables,
+					targetTables: readyTables,
 				}
 				select {
 				case <-ctx.Done():
 					return
 				case d.flushNotifyCh <- task:
-					readyTables = nil
+					log.Debug("flush task is emitted successfully when flush interval exceeds",
+						zap.Any("tables", task.targetTables))
+					for tbl := range tableSet {
+						d.fileSize[tbl] = 0
+					}
+					tableSet = make(map[versionedTable]struct{})
 				default:
 				}
 			case frag := <-ch.Out():
@@ -188,17 +206,56 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				}
 				v, _ := d.defragmenters.Load(table)
 				defrag := v.(*defragmenter)
-				readyTables[table] = struct{}{}
+				tableSet[table] = struct{}{}
 				defrag.registerFrag(frag)
+				for _, msg := range frag.encodedMsgs {
+					if msg.Value != nil {
+						d.fileSize[table] += uint64(len(msg.Value))
+					}
+				}
+				// if the file size exceeds the upper limit, emit the flush task containing the table
+				// as soon as possible.
+				if d.fileSize[table] > uint64(d.config.FileSize) {
+					task := flushTask{
+						targetTables: []versionedTable{table},
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case d.flushNotifyCh <- task:
+						log.Debug("flush task is emitted successfully when file size exceeds",
+							zap.Any("tables", table))
+						d.fileSize[table] = 0
+					default:
+					}
+				}
 			}
 		}
 	}()
 }
 
 func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
+	var elems []string
+
 	d.fileIndex[tbl]++
-	return fmt.Sprintf("%s/%s/%d/CDC%06d%s", tbl.Schema, tbl.Table, tbl.TableVersion,
-		d.fileIndex[tbl], d.extension)
+	elems = append(elems, tbl.Schema)
+	elems = append(elems, tbl.Table)
+	elems = append(elems, fmt.Sprintf("%d", tbl.TableVersion))
+	if tbl.TableName.IsPartition {
+		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
+	}
+	currTime := time.Now()
+	switch d.config.DateSeparator {
+	case config.DateSeparatorYear.String():
+		elems = append(elems, currTime.Format("2006"))
+	case config.DateSeparatorMonth.String():
+		elems = append(elems, currTime.Format("2006-01"))
+	case config.DateSeparatorDay.String():
+		elems = append(elems, currTime.Format("2006-01-02"))
+	}
+	elems = append(elems, fmt.Sprintf("CDC%06d%s", d.fileIndex[tbl], d.extension))
+
+	return strings.Join(elems, "/")
 }
 
 func (d *dmlWorker) close() {

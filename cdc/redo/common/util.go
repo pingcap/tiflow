@@ -64,7 +64,7 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
-		S3Retryer:       defaultS3Retryer(),
+		S3Retryer:       DefaultS3Retryer(),
 	})
 	if err != nil {
 		return nil, cerror.WrapChangefeedUnretryableErr(cerror.ErrS3StorageInitialize, err)
@@ -152,7 +152,9 @@ func (rl retryerWithLog) RetryRules(r *request.Request) time.Duration {
 	return backoffTime
 }
 
-func defaultS3Retryer() request.Retryer {
+// DefaultS3Retryer is the default s3 retryer, maybe this function
+// should be extracted to another place.
+func DefaultS3Retryer() request.Retryer {
 	return retryerWithLog{
 		DefaultRetryer: client.DefaultRetryer{
 			NumMaxRetries:    3,

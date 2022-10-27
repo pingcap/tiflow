@@ -57,6 +57,8 @@ func GetFileExtension(protocol config.Protocol) string {
 		return ".craft"
 	case config.ProtocolCanal:
 		return ".canal"
+	case config.ProtocolCsv:
+		return ".csv"
 	default:
 		return ".unknown"
 	}
