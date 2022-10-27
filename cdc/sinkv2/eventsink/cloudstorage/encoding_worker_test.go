@@ -142,10 +142,6 @@ func TestEncodingWorkerRun(t *testing.T) {
 		}
 		msgCh.In() <- frag
 	}
-	msgCh.In() <- eventFragment{
-		seqNumber: 3,
-		tableName: table,
-	}
 	cancel()
 	worker.close()
 	worker.writer.close()

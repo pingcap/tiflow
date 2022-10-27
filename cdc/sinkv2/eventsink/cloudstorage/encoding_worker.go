@@ -67,10 +67,6 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 				if atomic.LoadUint64(&w.isClosed) == 1 {
 					return
 				}
-				if frag.event == nil {
-					w.writer.dispatchFragToDMLWorker(frag)
-					continue
-				}
 				err := w.encodeEvents(ctx, frag)
 				if err != nil {
 					w.errCh <- err
