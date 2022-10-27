@@ -61,7 +61,7 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 	return spans
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext,
+func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
 ) error {
@@ -108,7 +108,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	return nil
 }
 
-func (n *pullerNode) start1(ctx pipeline.NodeContext,
+func (n *pullerNode) startWithEventSortEngine(ctx pipeline.NodeContext,
 	up *upstream.Upstream, wg *errgroup.Group,
 	eventSortEngine sorter.EventSortEngine,
 ) error {

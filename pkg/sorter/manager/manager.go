@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sorter"
@@ -61,24 +62,23 @@ func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.Ev
 		// TODO(qupeng): implement pebble engine.
 		engine = nil
 		f.engines[ID] = engine
-		return
 	default:
-		panic("not implemented")
+		log.Panic("not implemented")
 	}
+	return
 }
 
 // Drop cleans the given event sort engine.
-func (f *EventSortEngineManager) Drop(ID model.ChangeFeedID) (err error) {
+func (f *EventSortEngineManager) Drop(ID model.ChangeFeedID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	engine, exists := f.engines[ID]
 	if !exists {
-		return
+		return nil
 	}
 	delete(f.engines, ID)
-	err = engine.Close()
-	return
+	return engine.Close()
 }
 
 // Close will close all created engines and release all resources.
