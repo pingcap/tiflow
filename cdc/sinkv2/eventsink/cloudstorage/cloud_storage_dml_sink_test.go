@@ -36,9 +36,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink = &config.SinkConfig{
-		Protocol: config.ProtocolOpen.String(),
-	}
+	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
 
 	errCh := make(chan error, 5)
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
