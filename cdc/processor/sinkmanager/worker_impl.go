@@ -84,7 +84,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					lastTotalSize += size
 					events = events[:0]
 					if lastTotalSize >= maxUpdateIntervalSize {
-						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, lastTotalSize)
 						if err != nil {
 							return err
 						}
@@ -93,7 +93,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					// If we exceed the whole memory quota, we should stop the task.
 					// And just wait for the next round.
 					if w.memQuota.IsExceed() {
-						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, lastTotalSize)
 						if err != nil {
 							return err
 						}
@@ -109,7 +109,7 @@ func (w *workerImpl) run(taskChan <-chan *tableSinkTask) error {
 					}
 					lastTotalSize += size
 					if lastTotalSize >= maxUpdateIntervalSize {
-						err := w.updateTableSinkResolvedTs(t, e.CRTs, currentBarrierTs, lastTotalSize)
+						err := w.updateTableSinkResolvedTs(t, e.CRTs, lastTotalSize)
 						if err != nil {
 							return err
 						}
@@ -145,18 +145,8 @@ func (w *workerImpl) emitEventsToTableSink(t *tableSinkTask, events []*model.Pol
 	return uint64(size), nil
 }
 
-func (w *workerImpl) updateTableSinkResolvedTs(t *tableSinkTask, commitTs model.Ts, barrierTs model.Ts, size uint64) error {
-	tableSinkResolvedTs := commitTs
-	if barrierTs < tableSinkResolvedTs {
-		tableSinkResolvedTs = barrierTs
-	}
-	if w.redoManager != nil {
-		redoFlushed := w.redoManager.GetResolvedTs(t.tableID)
-		if redoFlushed < tableSinkResolvedTs {
-			tableSinkResolvedTs = redoFlushed
-		}
-	}
-	resolvedTs := model.NewResolvedTs(tableSinkResolvedTs)
+func (w *workerImpl) updateTableSinkResolvedTs(t *tableSinkTask, commitTs model.Ts, size uint64) error {
+	resolvedTs := model.NewResolvedTs(commitTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = w.memQuota.AllocateBatchID(t.tableID)
