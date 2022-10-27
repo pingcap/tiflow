@@ -31,6 +31,8 @@ enum ErrorCode {
     MetaStoreSerializeFail = 12;
     // job status is not expected for the operation.
     UnexpectedJobStatus = 13;
+    // storage config serialize fail
+    StorageConfigSerializeFail = 14;
     
     UnknownError = 10001;
 }

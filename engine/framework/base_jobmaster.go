@@ -131,6 +131,7 @@ type JobMasterImpl interface {
 	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
+	// TODO: when it returns error, framework should close this jobmaster.
 	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
 	// instance, the business logic should only register the OpenAPI handler in it.
@@ -191,6 +192,7 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
