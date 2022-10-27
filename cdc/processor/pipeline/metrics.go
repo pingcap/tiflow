@@ -22,7 +22,7 @@ var (
 			Subsystem: "processor",
 			Name:      "sorter_batch_read",
 			Help:      "Bucketed histogram of sorter batch read event counts",
-			Buckets:   prometheus.ExponentialBuckets(16, 2, 8),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 6),
 		}, []string{"namespace", "changefeed"})
 )
 

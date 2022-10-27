@@ -167,6 +167,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 const (
+	// the default value is determined by metrics measurement
 	defaultBatchReadSize = 256
 )
 
