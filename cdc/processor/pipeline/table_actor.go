@@ -600,9 +600,8 @@ func (t *tableActor) RemainEvents() int64 {
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 	if !t.useEventSortEngine {
 		return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
-	} else {
-		return t.pullerNode.start1(ctx, t.upstream, t.wg, t.eventSortEngine)
 	}
+	return t.pullerNode.start1(ctx, t.upstream, t.wg, t.eventSortEngine)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
@@ -612,8 +611,7 @@ var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 			return errors.Trace(err)
 		}
 		return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
-	} else {
-		t.eventSortEngine.AddTable(t.tableID)
-		return nil
 	}
+	t.eventSortEngine.AddTable(t.tableID)
+	return nil
 }
