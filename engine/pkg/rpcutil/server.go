@@ -197,11 +197,10 @@ func (h preRPCHookImpl[T]) PreRPC(
 		return
 	}
 
-	if h.initialized.Load() {
-		return false, nil
-	} else {
+	if !h.initialized.Load() {
 		return true, ErrMasterNotReady.GenWithStack(&MasterNotReadyError{})
 	}
+	return false, nil
 }
 
 func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
