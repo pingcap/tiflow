@@ -2,6 +2,7 @@ package entry
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +34,7 @@ type mounterGroup struct {
 const (
 	defaultMounterWorkerNum = 16
 	defaultOutputChanSize   = 128
+	metricsTicker           = 15 * time.Second
 )
 
 func NewMounterGroup(
@@ -66,6 +68,9 @@ func NewMounterGroup(
 }
 
 func (m *mounterGroup) Run(ctx context.Context) error {
+	defer func() {
+		mounterGroupInputChanSizeGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	}()
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < m.workerNum; i++ {
 		idx := i
@@ -79,11 +84,16 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
 	rawCh := m.inputCh[index]
+	metrics := mounterGroupInputChanSizeGauge.
+		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))
+	ticker := time.NewTicker(15 * time.Second)
 	for {
 		var pEvent *model.PolymorphicEvent
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			metrics.Set(float64(len(rawCh)))
 		case pEvent = <-rawCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
