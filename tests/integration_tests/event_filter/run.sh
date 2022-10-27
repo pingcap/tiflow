@@ -22,7 +22,7 @@ function run() {
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 
-  # create changefeed
+	# create changefeed
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --server="127.0.0.1:8300" --config=$CUR/conf/cf.toml
 
 	if [ "$SINK_TYPE" == "kafka" ]; then
@@ -32,23 +32,23 @@ function run() {
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# make suer table t1 is deleted in upstream and exists in downstream
-  check_table_not_exists "event_filter.t1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-  check_table_exists "event_filter.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_not_exists "event_filter.t1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_table_exists "event_filter.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-  # check those rows that are not filtered are synced to downstream
-  run_sql "select count(*) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 2"
-  run_sql "select count(*) from event_filter.t1 where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 1"
-  run_sql "select count(*) from event_filter.t1 where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 0"
-  run_sql "select count(*) from event_filter.t1 where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 0"
-  run_sql "select count(*) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_contains "count(*): 1"
+	# check those rows that are not filtered are synced to downstream
+	run_sql "select count(*) from event_filter.t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(*): 2"
+	run_sql "select count(*) from event_filter.t1 where id=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(*): 1"
+	run_sql "select count(*) from event_filter.t1 where id=2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(*): 0"
+	run_sql "select count(*) from event_filter.t1 where id=3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(*): 0"
+	run_sql "select count(*) from event_filter.t1 where id=4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "count(*): 1"
 
-  check_table_exists "event_filter.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  # check table t2 is replicated
+	check_table_exists "event_filter.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	# check table t2 is replicated
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
