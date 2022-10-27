@@ -24,17 +24,16 @@ type mounterGroup struct {
 	filter         filter.Filter
 	enableOldValue bool
 
-	changefeedID model.ChangeFeedID
-	captureID    model.CaptureID
-
-	index     uint64
 	workerNum int
+	index     uint64
+
+	changefeedID model.ChangeFeedID
 }
 
 const (
 	defaultMounterWorkerNum = 16
 	defaultOutputChanSize   = 128
-	metricsTicker           = 15 * time.Second
+	defaultMetricInterval   = 15 * time.Second
 )
 
 func NewMounterGroup(
@@ -44,7 +43,6 @@ func NewMounterGroup(
 	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
-	captureID model.CaptureID,
 ) MounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
@@ -63,7 +61,6 @@ func NewMounterGroup(
 		workerNum: workerNum,
 
 		changefeedID: changefeedID,
-		captureID:    captureID,
 	}
 }
 
@@ -86,7 +83,7 @@ func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	rawCh := m.inputCh[index]
 	metrics := mounterGroupInputChanSizeGauge.
 		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(defaultMetricInterval)
 	for {
 		var pEvent *model.PolymorphicEvent
 		select {

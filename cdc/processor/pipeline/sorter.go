@@ -172,6 +172,12 @@ const (
 
 func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, result []*model.PolymorphicEvent) (int, bool) {
 	idx := 0
+	defer func() {
+		if idx > 0 {
+			sorterBatchReadHistogram.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
+		}
+	}()
 	for {
 		// We must call `sorter.Output` before receiving resolved events.
 		// Skip calling `sorter.Output` and caching output channel may fail
