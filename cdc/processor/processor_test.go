@@ -348,7 +348,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, table1.CheckpointTs(), checkpointTs)
 
-	err = p.Close()
+	err = p.Close(ctx)
 	require.Nil(t, err)
 	require.Nil(t, p.agent)
 }
@@ -528,7 +528,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, model.Ts(75), checkpointTs)
 
-	err = p.Close()
+	err = p.Close(ctx)
 	require.NoError(t, err)
 	require.Nil(t, p.agent)
 }
@@ -635,7 +635,7 @@ func TestProcessorClose(t *testing.T) {
 	require.EqualValues(t, p.resolvedTs, 90)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
-	require.Nil(t, p.Close())
+	require.Nil(t, p.Close(ctx))
 	tester.MustApplyPatches()
 	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
 	require.True(t, p.tables[2].(*mockTablePipeline).canceled)
@@ -663,7 +663,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Error(t, err)
 	tester.MustApplyPatches()
 
-	require.Nil(t, p.Close())
+	require.Nil(t, p.Close(ctx))
 	tester.MustApplyPatches()
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
