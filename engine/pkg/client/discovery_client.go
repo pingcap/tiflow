@@ -135,14 +135,8 @@ func (c *discoveryClient) RegisterMetaStore(
 	call := internal.NewCall(
 		c.cli.RegisterMetaStore,
 		request)
-	resp, err := call.Do(ctx)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
-		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Message)
-	}
-	return nil
+	_, err := call.Do(ctx)
+	return err
 }
 
 func (c *discoveryClient) QueryMetaStore(

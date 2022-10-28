@@ -45,15 +45,3 @@ message RemoveResourceRequest {
 }
 
 message RemoveResourceResponse {}
-
-message ResourceError {
-  ResourceErrorCode error_code = 1;
-  string stack_trace = 2;
-}
-
-enum ResourceErrorCode {
-  ResourceIDConflict = 0;
-  ResourceTypeUnrecognized = 1;
-  ResourceManagerInternalError = 2;
-  ResourceNotFound = 3;
-}
