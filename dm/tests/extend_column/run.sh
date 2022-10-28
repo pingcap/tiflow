@@ -96,7 +96,7 @@ function run_case() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1>1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 0"
 
-  cleanup_process $*
+	cleanup_process $*
 }
 
 function run() {
