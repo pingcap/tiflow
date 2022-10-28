@@ -24,8 +24,17 @@ var (
 			Help:      "Bucketed histogram of sorter batch read event counts",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 6),
 		}, []string{"namespace", "changefeed"})
+	sorterBatchReadDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "sorter_batch_read_duration",
+			Help:      "Bucketed histogram of sorter batch read duration",
+			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 12),
+		}, []string{"namespace", "changefeed"})
 )
 
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterBatchReadHistogram)
+	registry.MustRegister(sorterBatchReadDuration)
 }

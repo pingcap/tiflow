@@ -169,11 +169,16 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicEvent) (int, bool) {
-	idx := 0
+	var (
+		idx   = 0
+		start = time.Now()
+	)
 	defer func() {
 		if idx > 0 {
 			sorterBatchReadHistogram.
 				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
+			sorterBatchReadDuration.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(time.Since(start).Seconds())
 		}
 	}()
 	// receive at least one event indicate that there are have many more event
@@ -198,12 +203,8 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 			result[idx] = event
 			idx++
 		}
-
-		// if the first received event is resolved ts, there is a high chance that
+		// TODO (3AceShowHand): if the first received event is resolved ts, there is a high chance that
 		// no data events can be consumed from the sorter, so just skip the batch read.
-		// if event.RawKV.OpType == model.OpTypeResolved {
-		// 	return idx, true
-		// }
 	}
 
 	for {
@@ -237,7 +238,6 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 			return idx, true
 		}
 	}
-
 }
 
 func (n *sorterNode) start(
