@@ -1058,7 +1058,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			err := mounter.DecodeEvent(ctx, pEvent)
 			require.Nil(t, err)
-			if ignored {
+			if pEvent.Row == nil {
 				return
 			}
 			row := pEvent.Row
