@@ -77,9 +77,8 @@ func TestExecutorManager(t *testing.T) {
 	}
 
 	// test executor heartbeat
-	resp, err := mgr.HandleHeartbeat(newHeartbeatReq())
-	require.Nil(t, err)
-	require.Nil(t, resp.Err)
+	_, err = mgr.HandleHeartbeat(newHeartbeatReq())
+	require.NoError(t, err)
 
 	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*execModel.Executor{}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
@@ -91,10 +90,9 @@ func TestExecutorManager(t *testing.T) {
 	}, time.Second*2, time.Millisecond*50)
 
 	// test late heartbeat request after executor is offline
-	resp, err = mgr.HandleHeartbeat(newHeartbeatReq())
-	require.Nil(t, err)
-	require.NotNil(t, resp.Err)
-	require.Equal(t, pb.ErrorCode_UnknownExecutor, resp.Err.GetCode())
+	_, err = mgr.HandleHeartbeat(newHeartbeatReq())
+	require.Error(t, err)
+	require.True(t, ErrUnknownExecutor.Is(err))
 
 	cancel()
 	mgr.Stop()
@@ -177,9 +175,8 @@ func TestExecutorManagerWatch(t *testing.T) {
 	) context.CancelFunc {
 		// send a synchronous heartbeat first in order to ensure the online
 		// count of this executor takes effect immediately.
-		resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
+		_, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
 		require.NoError(t, err)
-		require.Nil(t, resp.Err)
 
 		ctxIn, cancelIn := context.WithCancel(ctx)
 		wg.Add(1)
@@ -192,9 +189,8 @@ func TestExecutorManagerWatch(t *testing.T) {
 				case <-ctxIn.Done():
 					return
 				case <-ticker.C:
-					resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
+					_, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
 					require.NoError(t, err)
-					require.Nil(t, resp.Err)
 				}
 			}
 		}()

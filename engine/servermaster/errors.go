@@ -55,3 +55,33 @@ type JobNotRunningError struct {
 
 	JobID string
 }
+
+// ErrMetaStoreNotExists indicates the requested metastore does not exist.
+var ErrMetaStoreNotExists = rpcerror.Normalize[MetaStoreNotExistsError]()
+
+// MetaStoreNotExistsError provides details of an ErrMetaStoreNotExists.
+type MetaStoreNotExistsError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
+
+	StoreID string
+}
+
+// ErrUnknownExecutor indicates that executor is unknown in the executor manager.
+var ErrUnknownExecutor = rpcerror.Normalize[UnknownExecutorError]()
+
+// UnknownExecutorError provides details of an ErrUnknownExecutor.
+type UnknownExecutorError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.FailedPrecondition]
+
+	ExecutorID string
+}
+
+// ErrTombstoneExecutorError indicates that the executor is in tombstone state.
+var ErrTombstoneExecutorError = rpcerror.Normalize[TombstoneExecutorError]()
+
+// TombstoneExecutorError provides details of an ErrTombstoneExecutorError.
+type TombstoneExecutorError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.FailedPrecondition]
+
+	ExecutorID string
+}
