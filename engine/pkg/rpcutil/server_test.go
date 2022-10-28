@@ -200,11 +200,10 @@ func TestCheckInitialized(t *testing.T) {
 
 	s.hook.initialized.Store(false)
 	_, err := s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterNotInitialized.Equal(err))
+	require.True(t, ErrMasterNotReady.Is(err))
 
-	resp, err := s.MockRPCWithErrField(ctx, req)
-	require.NoError(t, err)
-	require.Equal(t, pb.ErrorCode_MasterNotReady, resp.Err.Code)
+	_, err = s.MockRPCWithErrField(ctx, req)
+	require.True(t, ErrMasterNotReady.Is(err))
 }
 
 func TestRPCLimiter(t *testing.T) {
