@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
@@ -182,9 +183,13 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
+	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
+	if err != nil {
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+	}
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
-		concurrency.WithTTL(c.config.CaptureSessionTTL))
+		concurrency.WithLease(lease.ID))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
@@ -543,7 +548,10 @@ func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(ctx, c.info.ID))
+	// When send SIGSTOP to pd leader, campaign will block here, even if `cancel` is called.
+	// For detail, see https://github.com/etcd-io/etcd/issues/8980
+	nctx := clientv3.WithRequireLeader(ctx)
+	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(nctx, c.info.ID))
 }
 
 // resign lets an owner start a new election.
