@@ -95,6 +95,8 @@ function run_case() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=4 and c_table='1' and c_schema='extend_column1' and c_source='replica01';" "count(1): 0"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1>1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 0"
+
+  cleanup_process $*
 }
 
 function run() {
@@ -107,6 +109,5 @@ function run() {
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
-cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
