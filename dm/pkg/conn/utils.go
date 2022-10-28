@@ -155,8 +155,8 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		} else if len(rowsResult[0]) != 0 {
 			binlogName = rowsResult[0][0]
-			var posInt int
-			posInt, err = strconv.Atoi(rowsResult[0][1])
+			var posInt int64
+			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
 			if err != nil {
 				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
