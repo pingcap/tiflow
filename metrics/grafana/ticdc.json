@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1666590532028,
+  "iteration": 1666941434488,
   "links": [],
   "panels": [
     {
@@ -14109,6 +14109,202 @@
             "align": false,
             "alignLevel": null
           }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "batch read events from the sorter, record each batch size ",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 74
+          },
+          "hiddenSeries": false,
+          "id": 705,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_sorter_batch_read_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (le,instance,changefeed))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-p999",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "batch read sorter size percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "batch read events from the sorter, record each batch size ",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 74
+          },
+          "hiddenSeries": false,
+          "id": 706,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_sorter_batch_read_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (le,instance,changefeed))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-p999",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "batch read sorter size percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         }
       ],
       "title": "KVClient",
@@ -15662,7 +15858,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 114
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 60,
@@ -15798,7 +15994,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 114
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 74,
@@ -15916,7 +16112,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 121
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 147,
@@ -16025,7 +16221,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 121
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 194,
@@ -16199,7 +16395,7 @@
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 128
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 152,
@@ -16249,10 +16445,12 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "scalar(max(pd_cluster_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-min-resolved-lag",
               "refId": "A",
@@ -16340,7 +16538,7 @@
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 128
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 153,
@@ -16377,9 +16575,11 @@
           "steppedLine": false,
           "targets": [
             {
+              "exemplar": true,
               "expr": "avg(tikv_cdc_min_resolved_ts_region{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
+              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-min-resolved-region",
               "refId": "A",
@@ -16446,7 +16646,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 128
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 70,
@@ -16557,7 +16757,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 135
+            "y": 35
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -16634,7 +16834,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 135
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 72,
@@ -16739,7 +16939,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 135
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 140,
@@ -16861,7 +17061,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 142
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 78,
@@ -16979,7 +17179,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 142
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 76,
@@ -17090,7 +17290,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 142
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 139,
@@ -17198,7 +17398,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 149
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 143,
@@ -17335,7 +17535,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 149
+            "y": 49
           },
           "hiddenSeries": false,
           "id": 145,
@@ -17466,7 +17666,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 156
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 141,
@@ -17580,7 +17780,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 156
+            "y": 56
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -17656,7 +17856,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 156
+            "y": 56
           },
           "hiddenSeries": false,
           "id": 142,
@@ -22692,8 +22892,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
@@ -22878,8 +23078,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [],
@@ -22985,8 +23185,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
@@ -23107,8 +23307,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
@@ -23206,7 +23406,7 @@
       "type": "row"
     }
   ],
-  "refresh": "1m",
+  "refresh": "5s",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -23489,6 +23689,6 @@
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1",
-  "version": 47
+  "uid": "YiGL8hBZ1x",
+  "version": 56
 }
