@@ -16,7 +16,7 @@ package pipeline
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	sorterBatchReadHistogram = prometheus.NewHistogramVec(
+	SorterBatchReadSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
@@ -24,7 +24,7 @@ var (
 			Help:      "Bucketed histogram of sorter batch read event counts",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 6),
 		}, []string{"namespace", "changefeed"})
-	sorterBatchReadDuration = prometheus.NewHistogramVec(
+	SorterBatchReadDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
@@ -35,6 +35,6 @@ var (
 )
 
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(sorterBatchReadHistogram)
-	registry.MustRegister(sorterBatchReadDuration)
+	registry.MustRegister(SorterBatchReadSize)
+	registry.MustRegister(SorterBatchReadDuration)
 }

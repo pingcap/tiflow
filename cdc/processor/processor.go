@@ -1146,6 +1146,9 @@ func (p *processor) cleanupMetrics() {
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
 		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer

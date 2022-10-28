@@ -175,9 +175,9 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 	)
 	defer func() {
 		if idx > 0 {
-			sorterBatchReadHistogram.
+			SorterBatchReadSize.
 				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
-			sorterBatchReadDuration.
+			SorterBatchReadDuration.
 				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(time.Since(start).Seconds())
 		}
 	}()
