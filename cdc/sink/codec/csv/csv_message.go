@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -295,7 +296,13 @@ func rowChangedEvent2CSVMsg(csvConfig *config.CSVConfig, e *model.RowChangedEven
 	return csvMsg, nil
 }
 
-func csvMsg2RowChangedEvent(csvMsg *csvMessage) *model.RowChangedEvent {
+func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.RowChangedEvent, error) {
+	if len(csvMsg.columns) != len(ticols) {
+		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
+			fmt.Errorf("the column length of csv message %d doesn't equal to that of tableInfo %d",
+				len(csvMsg.columns), len(ticols)))
+	}
+
 	e := new(model.RowChangedEvent)
 	e.CommitTs = csvMsg.commitTs
 	e.Table = &model.TableName{
@@ -303,12 +310,12 @@ func csvMsg2RowChangedEvent(csvMsg *csvMessage) *model.RowChangedEvent {
 		Table:  csvMsg.tableName,
 	}
 	if csvMsg.opType == operationDelete {
-		e.PreColumns = csvColumns2RowChangeColumns(csvMsg.columns)
+		e.PreColumns = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
 	} else {
-		e.Columns = csvColumns2RowChangeColumns(csvMsg.columns)
+		e.Columns = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
 	}
 
-	return e
+	return e, nil
 }
 
 func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColInfo) ([]any, error) {
@@ -330,16 +337,17 @@ func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColIn
 	return csvColumns, nil
 }
 
-func csvColumns2RowChangeColumns(csvCols []any) []*model.Column {
+func csvColumns2RowChangeColumns(csvCols []any, ticols []*timodel.ColumnInfo) []*model.Column {
 	cols := make([]*model.Column, 0, len(csvCols))
-	for _, csvCol := range csvCols {
+	for idx, csvCol := range csvCols {
 		col := new(model.Column)
 		col.Charset = mysql.DefaultCharset
 		col.Value = csvCol
 
-		tp := new(types.FieldType)
-		types.DefaultTypeForValue(csvCol, tp, mysql.DefaultCharset, mysql.DefaultCollationName)
-		col.Type = tp.GetType()
+		ticol := ticols[idx]
+		col.Type = ticol.GetType()
+		col.Name = ticol.Name.O
+
 		cols = append(cols, col)
 	}
 

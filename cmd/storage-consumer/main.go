@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/url"
@@ -39,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	psink "github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 
 	"go.uber.org/zap"
 )
@@ -71,7 +73,6 @@ func init() {
 		os.Exit(1)
 	}
 
-	fmt.Println(upstreamURIStr)
 	uri, err := url.Parse(upstreamURIStr)
 	if err != nil {
 		log.Error("invalid upstream-uri", zap.Error(err))
@@ -90,10 +91,43 @@ func init() {
 	}
 }
 
-type dmlPathKey struct {
+type schemaPathKey struct {
 	schema       string
 	table        string
-	tableVersion uint64
+	tableVersion int64
+}
+
+func (s schemaPathKey) generagteSchemaFilePath() string {
+	return fmt.Sprintf("%s/%s/%d", s.schema, s.table, s.tableVersion)
+}
+
+func (s *schemaPathKey) parseSchemaFilePath(path string) error {
+	str := `(\w+)\/(\w+)\/(\d+)\/schema.json`
+	pathRE, err := regexp.Compile(str)
+	if err != nil {
+		return err
+	}
+
+	matches := pathRE.FindStringSubmatch(path)
+	if len(matches) != 4 {
+		return fmt.Errorf("cannot match schema path pattern for %s", path)
+	}
+
+	version, err := strconv.ParseUint(matches[3], 10, 64)
+	if err != nil {
+		return err
+	}
+
+	*s = schemaPathKey{
+		schema:       matches[1],
+		table:        matches[2],
+		tableVersion: int64(version),
+	}
+	return nil
+}
+
+type dmlPathKey struct {
+	schemaPathKey
 	partitionNum int64
 	date         string
 }
@@ -142,7 +176,7 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 		return 0, fmt.Errorf("cannot match dml path pattern for %s", path)
 	}
 
-	version, err := strconv.ParseUint(matches[3], 10, 64)
+	version, err := strconv.ParseInt(matches[3], 10, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -159,9 +193,11 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 	}
 
 	*d = dmlPathKey{
-		schema:       matches[1],
-		table:        matches[2],
-		tableVersion: version,
+		schemaPathKey: schemaPathKey{
+			schema:       matches[1],
+			table:        matches[2],
+			tableVersion: version,
+		},
 		partitionNum: partitionNum,
 		date:         matches[5],
 	}
@@ -263,21 +299,44 @@ func (c *Consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		origTableMap[k] = v
 	}
 
+	schemaSet := make(map[schemaPathKey]struct{})
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
-		var key dmlPathKey
-		fileIdx, err := key.parseDMLFilePath(c.replicationCfg.Sink.CSVConfig.DateSeparator, path)
+		var dmlkey dmlPathKey
+		var schemaKey schemaPathKey
+
+		if strings.Contains(path, "schema.json") {
+			err := schemaKey.parseSchemaFilePath(path)
+			if err != nil {
+				log.Error("failed to parse schema file path", zap.Error(err))
+			} else {
+				schemaSet[schemaKey] = struct{}{}
+			}
+
+			return nil
+		}
+
+		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.CSVConfig.DateSeparator, path)
 		if err != nil {
 			log.Error("failed to parse dml file path", zap.Error(err))
 			// skip handling this file
 			return nil
 		}
 
-		if _, ok := c.tableIdxMap[key]; !ok || fileIdx >= c.tableIdxMap[key] {
-			c.tableIdxMap[key] = fileIdx
+		if _, ok := c.tableIdxMap[dmlkey]; !ok || fileIdx >= c.tableIdxMap[dmlkey] {
+			c.tableIdxMap[dmlkey] = fileIdx
 		}
 
 		return nil
 	})
+
+	// filter out those files whose "schema.json" file has not been generated yet.
+	for key := range c.tableIdxMap {
+		schemaKey := key.schemaPathKey
+		// cannot find the scheme file, filter out the item.
+		if _, ok := schemaSet[schemaKey]; !ok {
+			delete(c.tableIdxMap, key)
+		}
+	}
 
 	if err != nil {
 		return m, err
@@ -289,8 +348,24 @@ func (c *Consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 
 func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
 	var events []*model.RowChangedEvent
+	var tableDetail *cloudstorage.TableDetail
 
-	decoder, err := csv.NewBatchDecoder(ctx, c.replicationCfg.Sink.CSVConfig, content)
+	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
+	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = json.Unmarshal(schemaContent, tableDetail)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableInfo, err := tableDetail.ToTableInfo()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	decoder, err := csv.NewBatchDecoder(ctx, c.replicationCfg.Sink.CSVConfig, tableInfo, content)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -325,7 +400,6 @@ func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dm
 				continue
 			}
 			row.Table.TableID = tableID
-			fmt.Printf("columns cnt:%d\n", len(row.Columns))
 			for _, col := range row.Columns {
 				fmt.Printf("%+v\n", col)
 			}
