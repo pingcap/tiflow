@@ -71,7 +71,7 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
-	//mounter entry.Mounter
+	// mounter entry.Mounter
 	mg entry.MounterGroup
 
 	eg     *errgroup.Group
