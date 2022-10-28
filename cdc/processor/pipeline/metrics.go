@@ -30,7 +30,7 @@ var (
 			Subsystem: "processor",
 			Name:      "sorter_batch_read_duration",
 			Help:      "Bucketed histogram of sorter batch read duration",
-			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 12),
+			Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1 ms */, 2, 18),
 		}, []string{"namespace", "changefeed"})
 )
 
