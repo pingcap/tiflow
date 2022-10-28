@@ -20,6 +20,7 @@ import (
 	"golang.org/x/time/rate"
 	"math"
 	"math/rand"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -38,7 +39,7 @@ var (
 	thread          int
 
 	dbHost     string
-	dbPort     int
+	dbPort     string
 	dbUser     string
 	dbPassword string
 	dbName     string
@@ -68,7 +69,7 @@ func init() {
 	flag.StringVar(&dbUser, "database-user", "root", "database user")
 	flag.StringVar(&dbPassword, "database-password", "", "database password")
 	flag.StringVar(&dbName, "database-db-name", "test", "database db name")
-	flag.IntVar(&dbPort, "database-port", 4000, "database port")
+	flag.StringVar(&dbPort, "database-port", "4000", "database port")
 	flag.Parse()
 }
 
@@ -79,7 +80,9 @@ func main() {
 	wg := &sync.WaitGroup{}
 	wg.Add(threadCount)
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbHost, dbPort, dbName))
+	host := net.JoinHostPort(dbHost, dbPort)
+	db, err := sql.Open("mysql",
+		fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, host, dbName))
 	if err != nil {
 		panic(err)
 	}
