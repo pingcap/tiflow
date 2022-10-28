@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -674,4 +675,50 @@ func TestSplitTxn(t *testing.T) {
 	})
 	_, err = sNode.HandleMessage(ctx, msg)
 	require.Regexp(t, ".*batch mode resolved ts is not supported.*", err)
+}
+
+func TestSinkStatsRace(t *testing.T) {
+	t.Parallel()
+
+	state := tablepb.TableStatePreparing
+	flowController := &flushFlowController{}
+	sink := mocksink.NewMockFlushSink()
+	// sNode is a sinkNode
+	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		// Update barrier ts
+		defer wg.Done()
+		barrierTs := uint64(0)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			barrierTs++
+			_ = sNode.updateBarrierTs(ctx, barrierTs)
+		}
+	}()
+
+	go func() {
+		// Read barrier ts
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			_ = sNode.Stats()
+		}
+	}()
+
+	time.Sleep(time.Second)
+	cancel()
+	wg.Wait()
 }

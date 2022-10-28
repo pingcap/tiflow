@@ -566,12 +566,11 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	p.pushResolvedTs2Table()
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-
 	p.handlePosition(oracle.GetPhysical(pdTime))
-	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage()
 

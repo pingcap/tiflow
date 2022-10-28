@@ -90,7 +90,7 @@ func (t *tableSink) FlushRowChangedEvents(
 	return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 }
 
-func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// the table sink doesn't receive the checkpoint event
 	return nil
 }

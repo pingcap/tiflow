@@ -583,7 +583,7 @@ func TestFormatWithEscape(t *testing.T) {
 func TestCSVMessageEncode(t *testing.T) {
 	type fields struct {
 		csvConfig  *config.CSVConfig
-		opType     string
+		opType     operation
 		tableName  string
 		schemaName string
 		commitTs   uint64
@@ -604,7 +604,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 				},
-				opType:     insertOperation,
+				opType:     operationInsert,
 				tableName:  "table1",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -622,7 +622,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 				},
-				opType:     updateOperation,
+				opType:     operationUpdate,
 				tableName:  "table2",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -640,7 +640,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 				},
-				opType:     updateOperation,
+				opType:     operationUpdate,
 				tableName:  "table3",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -658,7 +658,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: false,
 				},
-				opType:     deleteOperation,
+				opType:     operationDelete,
 				tableName:  "table4",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -676,7 +676,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: false,
 				},
-				opType:     insertOperation,
+				opType:     operationInsert,
 				tableName:  "table5",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -694,7 +694,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 				},
-				opType:     updateOperation,
+				opType:     operationUpdate,
 				tableName:  "table6",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -712,7 +712,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: false,
 				},
-				opType:     insertOperation,
+				opType:     operationInsert,
 				tableName:  "table7",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -730,7 +730,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 				},
-				opType:     deleteOperation,
+				opType:     operationDelete,
 				tableName:  "table8",
 				schemaName: "test",
 				commitTs:   435661838416609281,
@@ -765,7 +765,7 @@ func TestConvertToCSVType(t *testing.T) {
 	}
 }
 
-func TestBuildRowData(t *testing.T) {
+func TestRowChangeEventConversion(t *testing.T) {
 	for idx, group := range csvTestColumnsGroup {
 		row := &model.RowChangedEvent{}
 		var cols []*model.Column = make([]*model.Column, 0)
@@ -788,14 +788,98 @@ func TestBuildRowData(t *testing.T) {
 			row.PreColumns = cols
 			row.Columns = cols
 		}
-		data, err := buildRowData(&config.CSVConfig{
+		csvMsg, err := rowChangedEvent2CSVMsg(&config.CSVConfig{
 			Delimiter:       "\t",
 			Quote:           "\"",
 			Terminator:      "\n",
 			NullString:      "\\N",
 			IncludeCommitTs: true,
 		}, row)
-		require.NotNil(t, data)
+		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
+
+		row2 := csvMsg2RowChangedEvent(csvMsg)
+		require.NotNil(t, row2)
+	}
+}
+
+func TestCSVMessageDecode(t *testing.T) {
+	// datums := make([][]types.Datum, 0, 4)
+	testCases := []struct {
+		row              []types.Datum
+		expectedCommitTs uint64
+		expectedColsCnt  int
+		expectedErr      string
+	}{
+		{
+			row: []types.Datum{
+				types.NewStringDatum("I"),
+				types.NewStringDatum("employee"),
+				types.NewStringDatum("hr"),
+				types.NewStringDatum("433305438660591626"),
+				types.NewStringDatum("101"),
+				types.NewStringDatum("Smith"),
+				types.NewStringDatum("Bob"),
+				types.NewStringDatum("2014-06-04"),
+				types.NewDatum(nil),
+			},
+			expectedCommitTs: 433305438660591626,
+			expectedColsCnt:  5,
+			expectedErr:      "",
+		},
+		{
+			row: []types.Datum{
+				types.NewStringDatum("U"),
+				types.NewStringDatum("employee"),
+				types.NewStringDatum("hr"),
+				types.NewStringDatum("433305438660591627"),
+				types.NewStringDatum("101"),
+				types.NewStringDatum("Smith"),
+				types.NewStringDatum("Bob"),
+				types.NewStringDatum("2015-10-08"),
+				types.NewStringDatum("Los Angeles"),
+			},
+			expectedCommitTs: 433305438660591627,
+			expectedColsCnt:  5,
+			expectedErr:      "",
+		},
+		{
+			row: []types.Datum{
+				types.NewStringDatum("D"),
+				types.NewStringDatum("employee"),
+				types.NewStringDatum("hr"),
+			},
+			expectedCommitTs: 0,
+			expectedColsCnt:  0,
+			expectedErr:      "the csv row should have at least four columns",
+		},
+		{
+			row: []types.Datum{
+				types.NewStringDatum("D"),
+				types.NewStringDatum("employee"),
+				types.NewStringDatum("hr"),
+				types.NewStringDatum("hello world"),
+			},
+			expectedCommitTs: 0,
+			expectedColsCnt:  0,
+			expectedErr:      "the 4th column(hello world) of csv row should be a valid commit-ts",
+		},
+	}
+	for _, tc := range testCases {
+		csvMsg := newCSVMessage(&config.CSVConfig{
+			Delimiter:       ",",
+			Quote:           "\"",
+			Terminator:      "\n",
+			NullString:      "\\N",
+			IncludeCommitTs: true,
+		})
+		err := csvMsg.decode(tc.row)
+		if tc.expectedErr != "" {
+			require.Contains(t, err.Error(), tc.expectedErr)
+		} else {
+			require.Nil(t, err)
+			require.Equal(t, tc.expectedCommitTs, csvMsg.commitTs)
+			require.Equal(t, tc.expectedColsCnt, len(csvMsg.columns))
+		}
 	}
 }

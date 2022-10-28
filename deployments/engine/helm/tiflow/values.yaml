@@ -43,13 +43,6 @@ executor:
   config: |
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
-    session-ttl = 20
-
-    [storage.s3]
-    bucket = "engine-it"
-    endpoint = "http://chaos-minio:9000/"
-    access-key = "engine"
-    secret-access-key = "engineSecret"
 
 metastore:
   frameworkStorage: 5Gi

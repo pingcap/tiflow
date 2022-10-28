@@ -345,9 +345,8 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 			require.NotNil(t, res)
 		}
 	}
-	// TODO: fix bug, should use passed in executors
-	checkOffline := func(ctx context.Context, _ ...model.ExecutorID) {
-		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, "executor-1", "executor-2")
+	checkOffline := func(ctx context.Context, executors ...model.ExecutorID) {
+		metas, err := helper.Meta.QueryResourcesByExecutorIDs(ctx, executors...)
 		require.NoError(t, err)
 		for _, meta := range metas {
 			tp, resName, err := resModel.ParseResourceID(meta.ID)
@@ -389,7 +388,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	checkOffline(ctx, "executor-1", "executor-2")
 	checkAlive(ctx, "executor-3", "executor-never-offline")
 
-	helper.Runner.GCExecutors(ctx, "executor-2")
+	helper.Runner.GCExecutors(ctx, "executor-3")
 	checkOffline(ctx, "executor-3")
 	checkAlive(ctx, "executor-never-offline")
 }
