@@ -99,7 +99,7 @@ func NewManager(
 func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
-	if err := m.handleCommand(); err != nil {
+	if err := m.handleCommand(ctx); err != nil {
 		return state, err
 	}
 
@@ -107,7 +107,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active(m.captureInfo.ID) {
 			inactiveChangefeedCount++
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(changefeedID, ctx)
 			continue
 		}
 		p, exist := m.processors[changefeedID]
@@ -128,14 +128,14 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		if err := p.Tick(ctx); err != nil {
 			// processor have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(changefeedID, ctx)
 		}
 	}
 	// check if the processors in memory is leaked
 	if len(globalState.Changefeeds)-inactiveChangefeedCount != len(m.processors) {
 		for changefeedID := range m.processors {
 			if _, exist := globalState.Changefeeds[changefeedID]; !exist {
-				m.closeProcessor(changefeedID)
+				m.closeProcessor(changefeedID, ctx)
 			}
 		}
 	}
@@ -147,10 +147,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 	return state, nil
 }
 
-func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
+func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID, ctx cdcContext.Context) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		startTime := time.Now()
-		err := processor.Close()
+		err := processor.Close(ctx)
 		costTime := time.Since(startTime)
 		if costTime > processorLogsWarnDuration {
 			log.Warn("processor close took too long",
@@ -218,7 +218,7 @@ func (m *managerImpl) sendCommand(
 	return nil
 }
 
-func (m *managerImpl) handleCommand() error {
+func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 	var cmd *command
 	select {
 	case cmd = <-m.commandQueue:
@@ -229,7 +229,7 @@ func (m *managerImpl) handleCommand() error {
 	switch cmd.tp {
 	case commandTpClose:
 		for changefeedID := range m.processors {
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(changefeedID, ctx)
 		}
 		// FIXME: we should drain command queue and signal callers an error.
 		return cerrors.ErrReactorFinished

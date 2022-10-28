@@ -16,6 +16,7 @@ package broker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,21 +57,18 @@ func TestNewBroker(t *testing.T) {
 	require.Nil(t, brk)
 	require.ErrorContains(t, err, "query storage config failed")
 
-	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
-		&pb.QueryStorageConfigResponse{
-			Config: "",
-			Err:    &pb.Error{Code: pb.ErrorCode_StorageConfigSerializeFail, Message: "serialize fail"},
-		}, nil).Times(1)
+	errNotFound := errors.New("not found")
+	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).
+		Return(nil, errNotFound).Times(1)
 	brk, err = NewBroker(ctx, "executor-1", c)
 	require.Nil(t, brk)
-	require.ErrorContains(t, err, "query storage config failed")
+	require.ErrorContains(t, err, errNotFound.Error())
 
 	cfg, err := json.Marshal(resModel.DefaultConfig)
 	require.NoError(t, err)
 	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
 		&pb.QueryStorageConfigResponse{
 			Config: string(cfg),
-			Err:    nil,
 		}, nil).Times(1)
 	brk, err = NewBroker(ctx, "executor-1", c)
 	require.NoError(t, err)
