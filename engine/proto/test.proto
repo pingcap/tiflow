@@ -1,8 +1,6 @@
 syntax = "proto3";
 package enginepb;
 
-import "engine/proto/error.proto";
-
 option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
 message Record {
@@ -17,8 +15,6 @@ message Record {
     int32 pk = 5;
     // for record time
     repeated int64 time_tracer = 6;
-    // error
-    Error err = 7;
 }
 
 message TestBinlogRequest {
