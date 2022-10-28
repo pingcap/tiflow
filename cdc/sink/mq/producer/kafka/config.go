@@ -50,9 +50,10 @@ type Config struct {
 	AutoCreate bool
 
 	// Timeout for sarama `config.Net` configurations, default to `10s`
-	DialTimeout  time.Duration
-	WriteTimeout time.Duration
-	ReadTimeout  time.Duration
+	DialTimeout        time.Duration
+	WriteTimeout       time.Duration
+	ReadTimeout        time.Duration
+	MaxInflightRequest int
 }
 
 // NewConfig returns a default Kafka configuration
@@ -60,15 +61,16 @@ func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
-		Credential:        &security.Credential{},
-		SASL:              &security.SASL{},
-		AutoCreate:        true,
-		DialTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadTimeout:       10 * time.Second,
+		MaxMessageBytes:    config.DefaultMaxMessageBytes,
+		ReplicationFactor:  1,
+		Compression:        "none",
+		Credential:         &security.Credential{},
+		SASL:               &security.SASL{},
+		AutoCreate:         true,
+		DialTimeout:        10 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		ReadTimeout:        10 * time.Second,
+		MaxInflightRequest: 5,
 	}
 }
 
@@ -181,6 +183,15 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 			return err
 		}
 		c.ReadTimeout = a
+	}
+
+	s = params.Get("max-inflight-request")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		c.MaxInflightRequest = a
 	}
 
 	err := c.applySASL(params)
@@ -387,6 +398,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Net.DialTimeout = c.DialTimeout
 	config.Net.WriteTimeout = c.WriteTimeout
 	config.Net.ReadTimeout = c.ReadTimeout
+	config.Net.MaxOpenRequests = c.MaxInflightRequest
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
