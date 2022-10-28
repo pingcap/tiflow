@@ -16445,12 +16445,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "exemplar": true,
               "expr": "scalar(max(pd_cluster_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
-              "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-min-resolved-lag",
               "refId": "A",
@@ -22892,8 +22890,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.7.117:8300",
-              "value": "10.2.7.117:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -23078,8 +23076,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.7.117:8300",
-              "value": "10.2.7.117:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [],
@@ -23185,8 +23183,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.7.117:8300",
-              "value": "10.2.7.117:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -23307,8 +23305,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.7.117:8300",
-              "value": "10.2.7.117:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -23406,7 +23404,7 @@
       "type": "row"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -23689,6 +23687,6 @@
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1x",
-  "version": 56
+  "uid": "YiGL8hBZ1",
+  "version": 48
 }
