@@ -198,6 +198,12 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 			result[idx] = event
 			idx++
 		}
+
+		// if the first received event is resolved ts, there is a high chance that
+		// no data events can be consumed from the sorter, so just skip the batch read.
+		// if event.RawKV.OpType == model.OpTypeResolved {
+		// 	return idx, true
+		// }
 	}
 
 	for {
