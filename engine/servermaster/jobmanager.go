@@ -114,7 +114,7 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 		return nil, err
 	}
 
-	pbJob, err := buildPBJob(meta)
+	pbJob, err := buildPBJob(meta, false /* includeConfig */)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 		setDetailToMasterMeta(masterMeta, detail, err)
 	}
 
-	return buildPBJob(masterMeta)
+	return buildPBJob(masterMeta, req.IncludeConfig)
 }
 
 // CreateJob implements JobManagerServer.CreateJob.
@@ -322,7 +322,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	}
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
 
-	return buildPBJob(meta)
+	return buildPBJob(meta, false /* includeConfig */)
 }
 
 func validateCreateJobRequest(req *pb.CreateJobRequest) error {
@@ -388,7 +388,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 			setDetailToMasterMeta(masterMetas[i], detail, errJob)
 		}
 
-		job, err = buildPBJob(masterMetas[i])
+		job, err = buildPBJob(masterMetas[i], req.IncludeConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -420,7 +420,7 @@ func setDetailToMasterMeta(masterMeta *frameModel.MasterMeta, detail []byte, err
 	}
 }
 
-func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
+func buildPBJob(masterMeta *frameModel.MasterMeta, includeConfig bool) (*pb.Job, error) {
 	var jobType pb.Job_Type
 	switch tp := framework.MustConvertWorkerType2JobType(masterMeta.Type); tp {
 	case engineModel.JobTypeCVSDemo:
@@ -435,20 +435,20 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.Type)
 	}
 
-	var jobStatus pb.Job_State
+	var jobState pb.Job_State
 	switch masterMeta.State {
 	case frameModel.MasterStateUninit:
-		jobStatus = pb.Job_Created
+		jobState = pb.Job_Created
 	case frameModel.MasterStateInit:
-		jobStatus = pb.Job_Running
+		jobState = pb.Job_Running
 	case frameModel.MasterStateFinished:
-		jobStatus = pb.Job_Finished
+		jobState = pb.Job_Finished
 	case frameModel.MasterStateStopped:
-		jobStatus = pb.Job_Canceled
+		jobState = pb.Job_Canceled
 	case frameModel.MasterStateFailed:
-		jobStatus = pb.Job_Failed
+		jobState = pb.Job_Failed
 	default:
-		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
+		return nil, errors.Errorf("job %s has unknown state %v", masterMeta.ID, masterMeta.State)
 	}
 
 	var selectors []*pb.Selector
@@ -459,17 +459,20 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		}
 		selectors = append(selectors, pbSel)
 	}
-	return &pb.Job{
+	job := &pb.Job{
 		Id:     masterMeta.ID,
 		Type:   jobType,
-		State:  jobStatus,
-		Config: masterMeta.Config,
+		State:  jobState,
 		Detail: masterMeta.Detail,
 		Error: &pb.Error{
 			Message: masterMeta.ErrorMsg,
 		},
 		Selectors: selectors,
-	}, nil
+	}
+	if includeConfig {
+		job.Config = masterMeta.Config
+	}
+	return job, nil
 }
 
 // GetJobMasterForwardAddress implements JobManager.GetJobMasterForwardAddress.
