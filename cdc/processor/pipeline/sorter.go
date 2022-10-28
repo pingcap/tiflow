@@ -44,6 +44,8 @@ const (
 	// TODO determine a reasonable default value
 	// This is part of sink performance optimization
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
+	// the default value is determined by metrics measurement
+	defaultBatchReadSize = 256
 )
 
 // TODO find a better name or avoid using an interface
@@ -166,12 +168,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	}
 }
 
-const (
-	// the default value is determined by metrics measurement
-	defaultBatchReadSize = 256
-)
-
-func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, result []*model.PolymorphicEvent) (int, bool) {
+func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicEvent) (int, bool) {
 	idx := 0
 	defer func() {
 		if idx > 0 {
@@ -183,7 +180,7 @@ func (n *sorterNode) batchRead(ctx context.Context, source sorter.EventSorter, r
 		// We must call `sorter.Output` before receiving resolved events.
 		// Skip calling `sorter.Output` and caching output channel may fail
 		// to receive any events.
-		output := source.Output()
+		output := n.sorter.Output()
 		select {
 		case <-ctx.Done():
 			return idx, false
@@ -227,6 +224,8 @@ func (n *sorterNode) start(
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 	eventSorter sorter.EventSorter,
 ) error {
+	n.sorter = eventSorter
+
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -235,7 +234,7 @@ func (n *sorterNode) start(
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(n.sorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -303,7 +302,7 @@ func (n *sorterNode) start(
 		}
 
 		n.state.Store(tablepb.TableStateReplicating)
-		eventSorter.EmitStartTs(stdCtx, startTs)
+		n.sorter.EmitStartTs(stdCtx, startTs)
 
 		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
 		for {
@@ -312,7 +311,7 @@ func (n *sorterNode) start(
 				return nil
 			default:
 			}
-			index, ok := n.batchRead(stdCtx, eventSorter, events)
+			index, ok := n.batchRead(stdCtx, events)
 			if !ok {
 				// sorter output channel closed
 				return nil
@@ -406,7 +405,6 @@ func (n *sorterNode) start(
 			}
 		}
 	})
-	n.sorter = eventSorter
 	return nil
 }
 
