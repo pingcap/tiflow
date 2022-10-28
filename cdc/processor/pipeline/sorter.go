@@ -176,6 +176,30 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
 		}
 	}()
+	// receive at least one event indicate that there are have many more event
+	// in the sorter wait to be consumed.
+	output := n.sorter.Output()
+	select {
+	case <-ctx.Done():
+		return idx, false
+	case event, ok := <-output:
+		if !ok {
+			return idx, false
+		}
+		if event == nil || event.RawKV == nil {
+			log.Panic("unexpected empty event",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Any("event", event))
+		}
+		if event.CRTs >= n.startTs {
+			result[idx] = event
+			idx++
+		}
+	}
+
 	for {
 		// We must call `sorter.Output` before receiving resolved events.
 		// Skip calling `sorter.Output` and caching output channel may fail
@@ -196,19 +220,10 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 					zap.String("tableName", n.tableName),
 					zap.Any("event", event))
 			}
-			if event.CRTs < n.startTs {
-				// Ignore messages are less than initial checkpoint ts.
-				log.Debug("sorterNode: ignore sorter output event",
-					zap.String("namespace", n.changefeed.Namespace),
-					zap.String("changefeed", n.changefeed.ID),
-					zap.Int64("tableID", n.tableID),
-					zap.String("tableName", n.tableName),
-					zap.Uint64("CRTs", event.CRTs),
-					zap.Uint64("startTs", n.startTs))
-				continue
+			if event.CRTs >= n.startTs {
+				result[idx] = event
+				idx++
 			}
-			result[idx] = event
-			idx++
 			if idx == defaultBatchReadSize {
 				return idx, true
 			}
