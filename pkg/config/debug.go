@@ -19,6 +19,15 @@ import "github.com/pingcap/errors"
 type DebugConfig struct {
 	TableActor *TableActorConfig `toml:"table-actor" json:"table-actor"`
 
+	// EnablePullBasedSink enables pull-based sink, false by default.
+	//
+	// NOTE: currently it can only be enabled with EnableDBSorter, because unified
+	// sorter hasn't been transformed into the new interface.
+	//
+	// TODO(qupeng): we need to transform unified sorter into EventSortEngine to remove
+	// the above limit.
+	EnablePullBasedSink bool `toml:"enable-pull-based-sink" json:"enable-pull-based-sink"`
+
 	// EnableDBSorter enables db sorter.
 	//
 	// The default value is true.

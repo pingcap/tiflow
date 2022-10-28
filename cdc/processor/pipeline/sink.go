@@ -247,8 +247,8 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
 	if !n.enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-		if shouldSplitUpdateEvent(event) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(event)
+		if ShouldSplitUpdateEvent(event) {
+			deleteEvent, insertEvent, err := SplitUpdateEvent(event)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -262,11 +262,11 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	return emitRows(event.Row)
 }
 
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// ShouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column has been modified.
 // If the handle key column is modified,
-// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
+// we need to use SplitUpdateEvent to split the update event into a delete and an insert event.
+func ShouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
 		return false
@@ -287,8 +287,8 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	return false
 }
 
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
+// SplitUpdateEvent splits an update event into a delete and an insert event.
+func SplitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
 	if updateEvent == nil {
 		return nil, nil, errors.New("nil event cannot be split")
 	}
