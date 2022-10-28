@@ -98,7 +98,7 @@ type schemaPathKey struct {
 }
 
 func (s schemaPathKey) generagteSchemaFilePath() string {
-	return fmt.Sprintf("%s/%s/%d", s.schema, s.table, s.tableVersion)
+	return fmt.Sprintf("%s/%s/%d/schema.json", s.schema, s.table, s.tableVersion)
 }
 
 func (s *schemaPathKey) parseSchemaFilePath(path string) error {
@@ -348,7 +348,7 @@ func (c *Consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 
 func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
 	var events []*model.RowChangedEvent
-	var tableDetail *cloudstorage.TableDetail
+	var tableDetail cloudstorage.TableDetail
 
 	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
 	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
@@ -356,7 +356,7 @@ func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dm
 		return errors.Trace(err)
 	}
 
-	err = json.Unmarshal(schemaContent, tableDetail)
+	err = json.Unmarshal(schemaContent, &tableDetail)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -400,10 +400,6 @@ func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dm
 				continue
 			}
 			row.Table.TableID = tableID
-			for _, col := range row.Columns {
-				fmt.Printf("%+v\n", col)
-			}
-			fmt.Println()
 			events = append(events, row)
 		}
 	}
@@ -508,8 +504,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := consumer.Run(ctx); err != nil {
+	if err := consumer.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("error occurred while running consumer", zap.Error(err))
 		os.Exit(1)
 	}
+	os.Exit(0)
 }

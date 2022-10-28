@@ -27,7 +27,6 @@ import (
 type TableCol struct {
 	Name      string `json:"ColumnName" `
 	Tp        string `json:"ColumnType"`
-	Length    string `json:"ColumnLength,omitempty"`
 	Precision string `json:"ColumnPrecision,omitempty"`
 	Scale     string `json:"ColumnScale,omitempty"`
 	Nullable  string `json:"ColumnNullable,omitempty"`
@@ -87,6 +86,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 
+	col.Name = timodel.NewCIStr(t.Name)
 	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(t.Tp, " UNSIGNED")))
 	col.FieldType = *types.NewFieldType(tp)
 	if strings.Contains(t.Tp, "UNSIGNED") {
