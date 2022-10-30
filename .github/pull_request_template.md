@@ -33,7 +33,7 @@ Issue Number: close #xxx
 
 ##### Do you need to update user documentation, design documentation or monitoring documentation?
 
-### Release note <!-- bugfixes or new feature need a release note -->
+### Release note <!-- bugfixes or new features need a release note -->
 
 ```release-note
 Please refer to [Release Notes Language Style Guide](https://pingcap.github.io/tidb-dev-guide/contribute-to-tidb/release-notes-style-guide.html) to write a quality release note.
