@@ -560,7 +560,7 @@ func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(nctx, c.info.ID))
+	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(ctx, c.info.ID))
 }
 
 // resign lets an owner start a new election.
