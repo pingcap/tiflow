@@ -560,6 +560,14 @@ func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
+	// TODO: `Campaign` will get stuck when send SIGSTOP to pd leader.
+	// For campaign, when send SIGSTOP to pd leader, cdc maybe call `cancel`
+	// (cause by `processor routine` exited). And inside `Campaign, the routine
+	// return from `waitDeletes`(https://github.com/etcd-io/etcd/blob/main/client/v3/concurrency/election.go#L93),
+	// then call `Resign`(used `client.Ctx`) to etcd server. But the etcd server
+	// (the client connects to) has entered the STOP state, which means that
+	// the server cannot process the request, but will still maintain the GRPC
+	// connection. So `routine` will block 'Resign'.
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(ctx, c.info.ID))
 }
 
