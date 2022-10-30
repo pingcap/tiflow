@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
 
@@ -39,7 +40,7 @@ type workerImpl struct {
 	changefeedID model.ChangeFeedID
 	sortEngine   sorter.EventSortEngine
 	redoManager  redo.LogManager
-	memQuota     memQuota
+	memQuota     *changefeedMemQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -55,7 +56,7 @@ func newWorker(
 	changefeedID model.ChangeFeedID,
 	sortEngine sorter.EventSortEngine,
 	redoManager redo.LogManager,
-	quota memQuota,
+	quota *changefeedMemQuota,
 	splitTxn bool,
 	enableOldValue bool,
 	maxBatchGroupSize uint64,
@@ -135,8 +136,19 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
-					w.memQuota.ForceAcquire(defaultRequestMemSize)
-					availableMem += defaultRequestMemSize
+					if err := retry.Do(ctx, func() error {
+						if w.memQuota.tryAcquire(defaultRequestMemSize) {
+							availableMem += defaultRequestMemSize
+							return nil
+						}
+						return errors.New("failed to acquire memory quota")
+					},
+						retry.WithBackoffBaseDelay(1000 /* 1s */),
+						retry.WithBackoffMaxDelay(3000 /* 3s */),
+						retry.WithMaxTries(3 /* fail after 10s*/),
+					); err != nil {
+						return errors.Trace(err)
+					}
 				}
 				availableMem -= e.Row.ApproximateBytes()
 				events = append(events, e)
@@ -162,9 +174,9 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 							return errors.Trace(err)
 						}
 					}
-					// If we exceed the whole memory quota, we should stop the task.
-					// And just wait for the next round.
-					if w.memQuota.IsExceed() {
+					// If no more available memory, we should put the table
+					// back to the SinkManager and wait for the next round.
+					if !w.memQuota.hasAvailable(defaultRequestMemSize) {
 						break
 					}
 				} else {
@@ -187,7 +199,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				}
 			}
 			// Do not forget to refund the useless memory quota.
-			w.memQuota.Refund(uint64(availableMem))
+			w.memQuota.refund(uint64(availableMem))
 			// Add table back.
 			task.callback(lastPos)
 			if err := iter.Close(); err != nil {
@@ -212,6 +224,6 @@ func (w *workerImpl) advanceTableSink(t *tableSinkTask, commitTs model.Ts, size 
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = batchID
 	}
-	w.memQuota.Record(t.tableID, resolvedTs, size)
+	w.memQuota.record(t.tableID, resolvedTs, size)
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }

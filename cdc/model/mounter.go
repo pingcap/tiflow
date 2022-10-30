@@ -165,3 +165,11 @@ func (r ResolvedTs) EqualOrGreater(r1 ResolvedTs) bool {
 func (r ResolvedTs) Less(r1 ResolvedTs) bool {
 	return !r.EqualOrGreater(r1)
 }
+
+// Greater judge whether the resolved ts is greater than the given ts.
+func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
+	if r.Ts == r1.Ts {
+		return r.BatchID > r1.BatchID
+	}
+	return r.Ts > r1.Ts
+}
