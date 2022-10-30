@@ -17,10 +17,12 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sorter"
+	"go.uber.org/zap"
 )
 
 const (
@@ -147,6 +149,11 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 						retry.WithBackoffMaxDelay(3000 /* 3s */),
 						retry.WithMaxTries(3 /* fail after 10s*/),
 					); err != nil {
+						log.Error("Failed to acquire memory quota, please consider increasing the quota for the changefeed.",
+							zap.String("namespace", w.changefeedID.Namespace),
+							zap.String("changefeed", w.changefeedID.ID),
+							zap.Int64("table", task.tableID),
+						)
 						return errors.Trace(err)
 					}
 				}

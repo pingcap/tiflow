@@ -17,7 +17,9 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 type memConsumeRecord struct {
@@ -85,7 +87,11 @@ func (m *changefeedMemQuota) release(tableID model.TableID, resolved model.Resol
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
-		// TODO log error
+		// This can happen when the table has no data and never been recorded.
+		log.Warn("Table consumed memory records not found.",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("table", tableID))
 		return
 	}
 	records := m.tableMemory[tableID]
