@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
@@ -561,9 +560,6 @@ func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	// When send SIGSTOP to pd leader, campaign will block here, even if `cancel` is called.
-	// For detail, see https://github.com/etcd-io/etcd/issues/8980
-	nctx := clientv3.WithRequireLeader(ctx)
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(nctx, c.info.ID))
 }
 
