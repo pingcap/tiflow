@@ -383,6 +383,17 @@
     }
   },
   "definitions": {
+    "JobError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "JobState": {
       "type": "string",
       "enum": [
@@ -425,38 +436,6 @@
     },
     "enginepbCreateResourceResponse": {
       "type": "object"
-    },
-    "enginepbError": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "$ref": "#/definitions/enginepbErrorCode"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "enginepbErrorCode": {
-      "type": "string",
-      "enum": [
-        "MasterNotLeader",
-        "UnknownExecutor",
-        "NotEnoughResource",
-        "SubJobSubmitFailed",
-        "TombstoneExecutor",
-        "SubJobBuildFailed",
-        "BuildGrpcConnFailed",
-        "InvalidMetaStoreType",
-        "MasterNotReady",
-        "UnKnownJob",
-        "MetaStoreNotExists",
-        "MetaStoreSerializeFail",
-        "UnexpectedJobStatus",
-        "StorageConfigSerializeFail",
-        "UnknownError"
-      ],
-      "title": "- MasterNotLeader: This master is not leader right now.\n - UnknownExecutor: Executor has been removed so it can't be recognized.\n - NotEnoughResource: no enough resource can be used.\n - SubJobSubmitFailed: submit subjob failed\n - TombstoneExecutor: TombstoneExecutor\n - BuildGrpcConnFailed: create gRPC connection failed\n - InvalidMetaStoreType: unknown or upsupported metastore type\n - MasterNotReady: MasterNotReady means the master is staring up, and not ready to serve\n - MetaStoreNotExists: metastore not exists\n - MetaStoreSerializeFail: metastore serialize fail\n - UnexpectedJobStatus: job status is not expected for the operation.\n - StorageConfigSerializeFail: storage config serialize fail"
     },
     "enginepbExecWorkload": {
       "type": "object",
@@ -549,7 +528,7 @@
           "readOnly": true
         },
         "error": {
-          "$ref": "#/definitions/enginepbError"
+          "$ref": "#/definitions/JobError"
         },
         "selectors": {
           "type": "array",
@@ -724,10 +703,6 @@
             "format": "int64"
           },
           "title": "for record time"
-        },
-        "err": {
-          "$ref": "#/definitions/enginepbError",
-          "title": "error"
         }
       }
     },
