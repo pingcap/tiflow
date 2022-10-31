@@ -197,7 +197,6 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 					return
 				}
 				table := frag.versionedTable
-
 				if _, ok := d.defragmenters.Load(table); !ok {
 					d.defragmenters.Store(table, newDefragmenter())
 				}

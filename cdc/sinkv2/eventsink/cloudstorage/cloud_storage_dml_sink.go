@@ -166,12 +166,9 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		s.mu.Unlock()
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.msgChan.In() <- eventFragment{
-			seqNumber: seq,
-			versionedTable: versionedTable{
-				TableName: tbl.TableName,
-				version:   tbl.version,
-			},
-			event: txn,
+			seqNumber:      seq,
+			versionedTable: tbl,
+			event:          txn,
 		}
 	}
 
