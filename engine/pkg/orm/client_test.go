@@ -1622,6 +1622,96 @@ func TestJobOp(t *testing.T) {
 	}
 }
 
+func TestExecutorClient(t *testing.T) {
+	t.Parallel()
+
+	sqlDB, mock := mockGetDBConn(t)
+	defer sqlDB.Close()
+	defer mock.ExpectClose()
+	cli, err := newClient(sqlDB, defaultTestStoreType)
+	require.Nil(t, err)
+	require.NotNil(t, cli)
+
+	tm := time.Now()
+	createdAt := tm.Add(time.Duration(1))
+	updatedAt := tm.Add(time.Duration(1))
+
+	executor := &model.Executor{
+		Model: model.Model{
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		},
+		ID:         "executor-0-1234",
+		Name:       "executor-0",
+		Address:    "127.0.0.1:1234",
+		Capability: 20,
+		Labels: map[label.Key]label.Value{
+			"key1": "val1",
+			"key2": "val2",
+		},
+	}
+
+	testCases := []tCase{
+		{
+			fn: "CreateExecutor",
+			inputs: []interface{}{
+				executor,
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `executors` (`created_at`,`updated_at`,`id`,`name`,`address`,`capability`,`labels`) VALUES (?,?,?,?,?,?,?)")).
+					WithArgs(createdAt, updatedAt, executor.ID, executor.Name, executor.Address, executor.Capability, "{\"key1\":\"val1\",\"key2\":\"val2\"}").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			fn: "UpdateExecutor",
+			inputs: []interface{}{
+				executor,
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta("UPDATE `executors` SET `address`=?,`capability`=?,`id`=?,`labels`=?,`name`=?,`updated_at`=? WHERE id = ?")).
+					WithArgs(executor.Address, executor.Capability, executor.ID, "{\"key1\":\"val1\",\"key2\":\"val2\"}", executor.Name, sqlmock.AnyArg(), executor.ID).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			fn: "DeleteExecutor",
+			inputs: []interface{}{
+				executor.ID,
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `executors` WHERE id = ?")).
+					WithArgs(executor.ID).WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		{
+			fn:     "QueryExecutors",
+			inputs: []interface{}{},
+			output: []*model.Executor{executor},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `executors`")).
+					WillReturnRows(sqlmock.NewRows([]string{
+						"seq_id", "created_at", "updated_at", "id", "name", "address", "capability", "labels",
+					}).AddRow(1, createdAt, updatedAt, executor.ID, executor.Name,
+						executor.Address, executor.Capability, "{\"key1\":\"val1\",\"key2\":\"val2\"}"))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		testInner(t, mock, cli, tc)
+	}
+}
+
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
 	// set the mock expectation
 	c.mockExpectResFn(m)
