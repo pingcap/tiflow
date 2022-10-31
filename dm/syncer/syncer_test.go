@@ -1757,6 +1757,7 @@ func TestDownstreamTableHasAutoRandom(t *testing.T) {
 
 		require.NoError(t, syncer.schemaTracker.DropTable(table))
 		stmt, err := parseSQL(c.expected)
+		require.NoError(t, err)
 		require.NoError(t, syncer.schemaTracker.Exec(ctx, schemaName, stmt))
 		ti2, err := syncer.getTableInfo(tctx, table, table)
 		require.NoError(t, err)
