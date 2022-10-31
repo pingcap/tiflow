@@ -52,10 +52,4 @@ rm engine/pkg/client/client_mock.go || true
 	>engine/pkg/client/client_mock.go_temp
 mv engine/pkg/client/client_mock.go_temp engine/pkg/client/client_mock.go
 
-rm -f engine/servermaster/executormeta/client_mock.go || true
-"$MOCKGEN" -package executormeta -self_package github.com/pingcap/tiflow/engine/servermaster/executormeta \
-	github.com/pingcap/tiflow/engine/servermaster/executormeta Client \
-	>engine/servermaster/executormeta/client_mock.go_temp
-mv engine/servermaster/executormeta/client_mock.go_temp engine/servermaster/executormeta/client_mock.go
-
 echo "generate dataflow engine mock code successfully"
