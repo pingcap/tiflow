@@ -83,6 +83,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	}
 }
 
+// ToTiColumnInfo converts from TableCol to TiDB ColumnInfo.
 func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 
@@ -167,6 +168,7 @@ func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
 	}
 }
 
+// ToTableInfo converts from TableDetail to TableInfo.
 func (t *TableDetail) ToTableInfo() (*model.TableInfo, error) {
 	info := &model.TableInfo{
 		TableName: model.TableName{
