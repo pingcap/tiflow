@@ -14,6 +14,7 @@
 package processor
 
 import (
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -140,4 +141,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableMemoryHistogram)
 	registry.MustRegister(processorMemoryGauge)
 	registry.MustRegister(remainKVEventsGauge)
+	pipeline.InitMetrics(registry)
 }
