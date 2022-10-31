@@ -188,8 +188,8 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 
 	ctx := context.Background()
 	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
-	fm1 := newFileManagerForUTFromSharedStorageFactory("executor-1", factory)
-	fm2 := newFileManagerForUTFromSharedStorageFactory("executor-2", factory)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
+	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
 
 	ident := internal.ResourceIdent{
 		ResourceScope: internal.ResourceScope{
