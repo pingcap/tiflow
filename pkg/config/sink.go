@@ -287,7 +287,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	}
 
 	// validate that protocol is compatible with the scheme
-	if sink.IsMQScheme(sinkURI.Scheme) {
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
 		_, err := ParseSinkProtocolFromString(s.Protocol)
 		if err != nil {
 			return err

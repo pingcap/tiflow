@@ -35,29 +35,43 @@ func (t Type) String() string {
 }
 
 const (
-	// KafkaSchema indicates the schema is kafka.
-	KafkaSchema = "kafka"
-	// KafkaSSLSchema indicates the schema is kafka+ssl.
-	KafkaSSLSchema = "kafka+ssl"
-	// BlackHoleSchema indicates the schema is blackhole.
-	BlackHoleSchema = "blackhole"
-	// MySQLSchema indicates the schema is MySQL.
-	MySQLSchema = "mysql"
-	// MySQLSSLSchema indicates the schema is MySQL+ssl.
-	MySQLSSLSchema = "mysql+ssl"
-	// TiDBSchema indicates the schema is TiDB.
-	TiDBSchema = "tidb"
-	// TiDBSSLSchema indicates the schema is TiDB+ssl.
-	TiDBSSLSchema = "tidb+ssl"
+	// KafkaScheme indicates the scheme is kafka.
+	KafkaScheme = "kafka"
+	// KafkaSSLScheme indicates the scheme is kafka+ssl.
+	KafkaSSLScheme = "kafka+ssl"
+	// BlackHoleScheme indicates the scheme is blackhole.
+	BlackHoleScheme = "blackhole"
+	// MySQLScheme indicates the scheme is MySQL.
+	MySQLScheme = "mysql"
+	// MySQLSSLScheme indicates the scheme is MySQL+ssl.
+	MySQLSSLScheme = "mysql+ssl"
+	// TiDBScheme indicates the scheme is TiDB.
+	TiDBScheme = "tidb"
+	// TiDBSSLScheme indicates the scheme is TiDB+ssl.
+	TiDBSSLScheme = "tidb+ssl"
+	// S3Scheme indicates the scheme is s3.
+	S3Scheme = "s3"
+	// FileScheme indicates the scheme is local fs or NFS.
+	FileScheme = "file"
+	// GCSScheme indicates the scheme is gcs.
+	GCSScheme = "gcs"
+	// AzblobScheme indicates the scheme is azure blob storage.\
+	AzblobScheme = "azblob"
 )
 
-// IsMQScheme returns true if the scheme belong to mq schema.
+// IsMQScheme returns true if the scheme belong to mq scheme.
 func IsMQScheme(scheme string) bool {
-	return scheme == KafkaSchema || scheme == KafkaSSLSchema
+	return scheme == KafkaScheme || scheme == KafkaSSLScheme
 }
 
 // IsMySQLCompatibleScheme returns true if the scheme is compatible with MySQL.
 func IsMySQLCompatibleScheme(scheme string) bool {
-	return scheme == MySQLSchema || scheme == MySQLSSLSchema ||
-		scheme == TiDBSchema || scheme == TiDBSSLSchema
+	return scheme == MySQLScheme || scheme == MySQLSSLScheme ||
+		scheme == TiDBScheme || scheme == TiDBSSLScheme
+}
+
+// IsStorageScheme returns true if the scheme belong to storage scheme.
+func IsStorageScheme(scheme string) bool {
+	return scheme == FileScheme || scheme == S3Scheme ||
+		scheme == GCSScheme || scheme == AzblobScheme
 }
