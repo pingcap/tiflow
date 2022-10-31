@@ -145,6 +145,7 @@ func (mockMounter) Run(ctx context.Context) error {
 }
 
 func (mockMounter) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
 	return nil
 }
 
