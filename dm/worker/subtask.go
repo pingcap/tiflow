@@ -74,15 +74,8 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 }
 
 func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string) unit.Unit {
-	hasAutoGenColumn := false
-	for _, rule := range cfg.RouteRules {
-		if rule.SchemaExtractor != nil || rule.TableExtractor != nil || rule.SourceExtractor != nil {
-			hasAutoGenColumn = true
-			break
-		}
-	}
 	// tidb-lightning doesn't support column mapping currently
-	if cfg.ImportMode == config.LoadModeLoader || cfg.OnDuplicate == config.OnDuplicateError || hasAutoGenColumn || len(cfg.ColumnMappingRules) > 0 {
+	if cfg.ImportMode == config.LoadModeLoader || cfg.OnDuplicate == config.OnDuplicateError || len(cfg.ColumnMappingRules) > 0 {
 		return loader.NewLoader(cfg, etcdClient, workerName)
 	}
 	return loader.NewLightning(cfg, etcdClient, workerName)

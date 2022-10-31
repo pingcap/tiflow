@@ -68,7 +68,7 @@ type processor struct {
 	lastSchemaTs  model.Ts
 
 	filter        filter.Filter
-	mounter       entry.Mounter
+	mg            entry.MounterGroup
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 	redoManager   redo.LogManager
@@ -646,9 +646,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	tz := contextutil.TimezoneFromCtx(ctx)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
-		util.GetTimeZoneName(contextutil.TimezoneFromCtx(ctx)))
+		util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -661,12 +662,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage,
-		p.changefeedID,
-		contextutil.TimezoneFromCtx(ctx),
-		p.filter,
+	p.mg = entry.NewMounterGroup(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue,
-	)
+		p.filter, tz, p.changefeedID)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.mg.Run(ctx))
+	}()
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
@@ -967,7 +971,7 @@ func (p *processor) createTablePipelineImpl(
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -983,7 +987,7 @@ func (p *processor) createTablePipelineImpl(
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -1154,6 +1158,9 @@ func (p *processor) cleanupMetrics() {
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
 		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer
