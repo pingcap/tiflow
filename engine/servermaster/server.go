@@ -46,7 +46,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
@@ -465,12 +464,8 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
-	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
+	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
+	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
 
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.

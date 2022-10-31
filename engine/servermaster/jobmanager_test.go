@@ -507,7 +507,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Type:   pb.Job_FakeJob,
 		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -530,7 +530,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -553,7 +553,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error test",
 		},
 	}, job))

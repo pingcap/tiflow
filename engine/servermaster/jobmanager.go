@@ -464,7 +464,7 @@ func buildPBJob(masterMeta *frameModel.MasterMeta, includeConfig bool) (*pb.Job,
 		Type:   jobType,
 		State:  jobState,
 		Detail: masterMeta.Detail,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: masterMeta.ErrorMsg,
 		},
 		Selectors: selectors,
