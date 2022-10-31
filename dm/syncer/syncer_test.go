@@ -1650,20 +1650,21 @@ func parseSQL(sql string) (ast.StmtNode, error) {
 	return stmt, nil
 }
 
-func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
+func TestTrackDownstreamTableWontOverwrite(t *testing.T) {
 	syncer := Syncer{}
 	ctx := context.Background()
 	tctx := tcontext.Background()
+	cfg := genDefaultSubTaskConfig4Test()
 
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	dbConn, err := db.Conn(ctx)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
-	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
-	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
-	c.Assert(err, IsNil)
+	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
+	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, syncer.downstreamTrackConn, log.L())
+	require.NoError(t, err)
 	defer syncer.schemaTracker.Close()
 
 	upTable := &filter.Table{
@@ -1676,7 +1677,7 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	}
 	createTableSQL := "CREATE TABLE up (c1 int, c2 int);"
 	createTableStmt, err := parseSQL(createTableSQL)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
@@ -1684,33 +1685,23 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow(downTable.Name, " CREATE TABLE `"+downTable.Name+"` (\n  `c` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 
-	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(upTable.Schema), IsNil)
-	c.Assert(syncer.schemaTracker.Exec(ctx, "test", createTableStmt), IsNil)
+	require.NoError(t, syncer.schemaTracker.CreateSchemaIfNotExists(upTable.Schema))
+	require.NoError(t, syncer.schemaTracker.Exec(ctx, "test", createTableStmt))
 	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(ti.Columns, HasLen, 2)
-	c.Assert(syncer.trackTableInfoFromDownstream(tctx, upTable, downTable), IsNil)
+	require.NoError(t, err)
+	require.Len(t, ti.Columns, 2)
+	require.NoError(t, syncer.trackTableInfoFromDownstream(tctx, upTable, downTable))
 	newTi, err := syncer.getTableInfo(tctx, upTable, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(newTi, DeepEquals, ti)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.NoError(t, err)
+	require.Equal(t, ti, newTi)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
+func TestDownstreamTableHasAutoRandom(t *testing.T) {
 	syncer := Syncer{}
 	ctx := context.Background()
 	tctx := tcontext.Background()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-	dbConn, err := db.Conn(ctx)
-	c.Assert(err, IsNil)
-	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
-	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
-	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
-	c.Assert(err, IsNil)
-
+	cfg := genDefaultSubTaskConfig4Test()
 	schemaName := "test"
 	tableName := "tbl"
 	table := &filter.Table{
@@ -1718,69 +1709,70 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 		Name:   "tbl",
 	}
 
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-	// create table t (c bigint primary key auto_random);
-	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow(tableName, " CREATE TABLE `"+tableName+"` (\n  `c` bigint(20) NOT NULL /*T![auto_rand] AUTO_RANDOM(5) */,\n  PRIMARY KEY (`c`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(schemaName), IsNil)
-	c.Assert(syncer.trackTableInfoFromDownstream(tctx, table, table), IsNil)
-	ti, err := syncer.getTableInfo(tctx, table, table)
-	c.Assert(err, IsNil)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{
+			"CREATE TABLE `" + tableName + "` (\n" +
+				"  `c` bigint(20) NOT NULL /*T![auto_rand] AUTO_RANDOM(5) */,\n" +
+				"  PRIMARY KEY (`c`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"create table tbl (c bigint primary key)",
+		},
+		// test no error, input and expected are same
+		{
+			"CREATE TABLE `" + tableName + "` (\n" +
+				"  `c` bigint(20) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin /*T![placement] PLACEMENT POLICY=`on_ssd` */",
+			"create table tbl (c bigint primary key) /*T![placement] PLACEMENT POLICY=`on_ssd` */",
+		},
+	}
 
-	c.Assert(syncer.schemaTracker.DropTable(table), IsNil)
-	sql := "create table tbl (c bigint primary key);"
-	stmt, err := parseSQL(sql)
-	c.Assert(err, IsNil)
-	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, stmt), IsNil)
-	ti2, err := syncer.getTableInfo(tctx, table, table)
-	c.Assert(err, IsNil)
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	require.NoError(t, err)
+	dbConn, err := db.Conn(ctx)
+	require.NoError(t, err)
+	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
+	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
+	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 
-	ti.ID = ti2.ID
-	ti.UpdateTS = ti2.UpdateTS
+	for _, c := range cases {
+		syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, syncer.downstreamTrackConn, log.L())
+		require.NoError(t, err)
 
-	c.Assert(ti, DeepEquals, ti2)
+		mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+			sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+		// create table t (c bigint primary key auto_random);
+		mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+			sqlmock.NewRows([]string{"Table", "Create Table"}).
+				AddRow(tableName, c.input))
+		require.NoError(t, syncer.schemaTracker.CreateSchemaIfNotExists(schemaName))
+		require.NoError(t, syncer.trackTableInfoFromDownstream(tctx, table, table))
+		ti, err := syncer.getTableInfo(tctx, table, table)
+		require.NoError(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
 
-	syncer.schemaTracker.Close()
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
-	c.Assert(err, IsNil)
-	defer syncer.schemaTracker.Close()
+		require.NoError(t, syncer.schemaTracker.DropTable(table))
+		stmt, err := parseSQL(c.expected)
+		require.NoError(t, syncer.schemaTracker.Exec(ctx, schemaName, stmt))
+		ti2, err := syncer.getTableInfo(tctx, table, table)
+		require.NoError(t, err)
 
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-	// create table t (c bigint primary key auto_random);
-	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow(tableName, " CREATE TABLE `"+tableName+"` (\n  `c` bigint(20) NOT NULL /*T![auto_rand] AUTO_RANDOM(5) */,\n  PRIMARY KEY (`c`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+		ti.ID = ti2.ID
+		ti.UpdateTS = ti2.UpdateTS
 
-	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(schemaName), IsNil)
-	c.Assert(syncer.trackTableInfoFromDownstream(tctx, table, table), IsNil)
-	ti, err = syncer.getTableInfo(tctx, table, table)
-	c.Assert(err, IsNil)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-
-	// check trackTableInfoFromDownstream with AUTO_RANDOM is same as no AUTO_RANDOM
-	c.Assert(syncer.schemaTracker.DropTable(table), IsNil)
-	sql = "create table tbl (c bigint primary key);"
-	stmt, err = parseSQL(sql)
-	c.Assert(err, IsNil)
-	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, stmt), IsNil)
-	ti2, err = syncer.getTableInfo(tctx, table, table)
-	c.Assert(err, IsNil)
-
-	ti.ID = ti2.ID
-	ti.UpdateTS = ti2.UpdateTS
-
-	c.Assert(ti, DeepEquals, ti2)
+		require.Equal(t, ti, ti2)
+	}
 }
 
-func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
+func TestExecuteSQLSWithIgnore(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	dbConn, err := db.Conn(context.Background())
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	conn := dbconn.NewDBConn(&config.SubTaskConfig{
 		Name: "test",
 	}, &conn.BaseConn{
@@ -1798,8 +1790,8 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
 	n, err := conn.ExecuteSQLWithIgnore(tctx, nil, errorutil.IsIgnorableMySQLDDLError, sqls)
-	c.Assert(err, IsNil)
-	c.Assert(n, Equals, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
 
 	// will return error when execute the first sql
 	mock.ExpectBegin()
@@ -1807,10 +1799,10 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectRollback()
 
 	n, err = conn.ExecuteSQL(tctx, nil, sqls)
-	c.Assert(err, ErrorMatches, ".*column a already exists.*")
-	c.Assert(n, Equals, 0)
+	require.ErrorContains(t, err, "column a already exists")
+	require.Equal(t, 0, n)
 
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
