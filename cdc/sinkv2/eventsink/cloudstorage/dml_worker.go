@@ -196,10 +196,7 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				table := versionedTable{
-					TableName:    frag.tableName,
-					TableVersion: frag.tableVersion,
-				}
+				table := frag.versionedTable
 
 				if _, ok := d.defragmenters.Load(table); !ok {
 					d.defragmenters.Store(table, newDefragmenter())
@@ -240,7 +237,7 @@ func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
 	d.fileIndex[tbl]++
 	elems = append(elems, tbl.Schema)
 	elems = append(elems, tbl.Table)
-	elems = append(elems, fmt.Sprintf("%d", tbl.TableVersion))
+	elems = append(elems, fmt.Sprintf("%d", tbl.version))
 	if tbl.TableName.IsPartition {
 		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
 	}

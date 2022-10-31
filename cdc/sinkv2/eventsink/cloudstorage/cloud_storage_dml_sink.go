@@ -14,6 +14,7 @@ package cloudstorage
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"sync"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -32,10 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
-const (
-	defaultEncodingConcurrency = 8
-	defaultMaxMessageBytes     = 1073741824 // 1GB
-)
+const defaultEncodingConcurrency = 8
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -43,7 +42,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 // versionedTable is used to wrap TableName with a version
 type versionedTable struct {
 	model.TableName
-	TableVersion uint64
+	version uint64
 }
 
 // eventFragment is used to attach a sequence number to TxnCallbackableEvent.
@@ -54,10 +53,9 @@ type versionedTable struct {
 // at dmlWorker sequentially.
 type eventFragment struct {
 	// event sequence number
-	seqNumber    uint64
-	tableVersion uint64
-	tableName    model.TableName
-	event        *eventsink.TxnCallbackableEvent
+	seqNumber uint64
+	versionedTable
+	event *eventsink.TxnCallbackableEvent
 	// encodedMsgs denote the encoded messages after the event is handled in encodingWorker.
 	encodedMsgs []*common.Message
 }
@@ -76,7 +74,7 @@ type sink struct {
 	// writer is a dmlWriter which manages a group of dmlWorkers and
 	// sends encoded messages to individual dmlWorkers.
 	writer *dmlWriter
-	// tableSeqMap maintains a <versionTable, sequenceNumber> mapping.
+	// tableSeqMap maintains a <versionedTable, sequenceNumber> mapping.
 	tableSeqMap map[versionedTable]uint64
 	mu          sync.Mutex
 }
@@ -118,7 +116,9 @@ func NewCloudStorageSink(ctx context.Context,
 
 	// get cloud storage file extension according to the specific protocol.
 	ext := util.GetFileExtension(protocol)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, defaultMaxMessageBytes)
+	// the last param maxMsgBytes is mainly to limit the size of a single message for
+	// batch protocols in mq scenario. In cloud storage sink, we just set it to max int.
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, math.MaxInt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -149,21 +149,29 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 	var seq uint64
 
 	for _, txn := range txns {
-		tbl = versionedTable{
-			TableName:    *txn.Event.Table,
-			TableVersion: txn.Event.TableVersion,
+		if txn.GetTableSinkState() != state.TableSinkSinking {
+			// The table where the event comes from is in stopping, so it's safe
+			// to drop the event directly.
+			txn.Callback()
+			continue
 		}
 
+		tbl = versionedTable{
+			TableName: *txn.Event.Table,
+			version:   txn.Event.TableVersion,
+		}
 		s.mu.Lock()
 		s.tableSeqMap[tbl]++
 		seq = s.tableSeqMap[tbl]
 		s.mu.Unlock()
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.msgChan.In() <- eventFragment{
-			seqNumber:    seq,
-			tableName:    tbl.TableName,
-			tableVersion: tbl.TableVersion,
-			event:        txn,
+			seqNumber: seq,
+			versionedTable: versionedTable{
+				TableName: tbl.TableName,
+				version:   tbl.version,
+			},
+			event: txn,
 		}
 	}
 

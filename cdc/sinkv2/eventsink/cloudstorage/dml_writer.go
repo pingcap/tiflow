@@ -53,7 +53,7 @@ func newDMLWriter(ctx context.Context,
 	}
 
 	for i := 0; i < config.WorkerCount; i++ {
-		d := newDMLWorker(i+1, changefeedID, storage, w.config, extension, errCh)
+		d := newDMLWorker(i, changefeedID, storage, w.config, extension, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)
@@ -64,7 +64,7 @@ func newDMLWriter(ctx context.Context,
 
 func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
 	d.mu.Lock()
-	tableName := frag.tableName
+	tableName := frag.TableName
 	d.hasher.Reset()
 	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 	workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)

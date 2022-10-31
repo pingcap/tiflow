@@ -59,7 +59,7 @@ func TestGenerateCloudStoragePath(t *testing.T) {
 			Schema: "test",
 			Table:  "table1",
 		},
-		TableVersion: 5,
+		version: 5,
 	}
 	path := w.generateCloudStoragePath(table)
 	require.Equal(t, "test/table1/5/CDC000001.json", path)
@@ -88,9 +88,11 @@ func TestDMLWorkerRun(t *testing.T) {
 	// assume 5 event fragments of table 1 are arrived in reverse order
 	for i := 5; i > 0; i-- {
 		frag := eventFragment{
-			seqNumber:    uint64(i),
-			tableName:    table1,
-			tableVersion: 99,
+			seqNumber: uint64(i),
+			versionedTable: versionedTable{
+				TableName: table1,
+				version:   99,
+			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
 					Table: &model.TableName{
@@ -132,9 +134,11 @@ func TestDMLWorkerRun(t *testing.T) {
 	// assume 3 event fragments of table 2 are arrived sequentially
 	for i := 1; i <= 3; i++ {
 		frag := eventFragment{
-			seqNumber:    uint64(i),
-			tableName:    table2,
-			tableVersion: 199,
+			seqNumber: uint64(i),
+			versionedTable: versionedTable{
+				TableName: table2,
+				version:   199,
+			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
 					Table: &model.TableName{

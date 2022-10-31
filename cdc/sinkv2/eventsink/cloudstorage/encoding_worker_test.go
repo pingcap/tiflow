@@ -56,10 +56,12 @@ func TestEncodeEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := testEncodingWorker(ctx, t)
 	err := worker.encodeEvents(ctx, eventFragment{
-		tableName: model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 100,
+		versionedTable: versionedTable{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "table1",
+				TableID: 100,
+			},
 		},
 		seqNumber: 1,
 		event: &eventsink.TxnCallbackableEvent{
@@ -134,7 +136,9 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			tableName: table,
+			versionedTable: versionedTable{
+				TableName: table,
+			},
 			seqNumber: uint64(i + 1),
 			event: &eventsink.TxnCallbackableEvent{
 				Event: event,

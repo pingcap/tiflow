@@ -55,10 +55,12 @@ func TestDeframenter(t *testing.T) {
 		encoder := encoderBuilder.Build()
 		seq := seqNumbers[i]
 		frag := eventFragment{
-			tableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 100,
+			versionedTable: versionedTable{
+				TableName: model.TableName{
+					Schema:  "test",
+					Table:   "table1",
+					TableID: 100,
+				},
 			},
 			seqNumber: seq,
 			event: &eventsink.TxnCallbackableEvent{
