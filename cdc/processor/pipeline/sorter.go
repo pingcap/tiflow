@@ -44,7 +44,7 @@ const (
 	// TODO determine a reasonable default value
 	// This is part of sink performance optimization
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
-	// the default value is determined by metrics measurement
+	// defaultBatchReadSize is the default batch size of read from sorter
 	defaultBatchReadSize = 256
 )
 
@@ -71,7 +71,6 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
-	// mounter entry.Mounter
 	mg entry.MounterGroup
 
 	eg     *errgroup.Group

@@ -46,7 +46,7 @@ type mounterGroup struct {
 
 const (
 	defaultMounterWorkerNum = 16
-	defaultOutputChanSize   = 64
+	defaultInputChanSize    = 256
 	defaultMetricInterval   = 15 * time.Second
 )
 
@@ -64,7 +64,7 @@ func NewMounterGroup(
 	}
 	inputCh := make([]chan *model.PolymorphicEvent, workerNum)
 	for i := 0; i < workerNum; i++ {
-		inputCh[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
+		inputCh[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
 	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,

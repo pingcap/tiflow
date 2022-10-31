@@ -86,7 +86,7 @@ func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
 }
 
-// SetUpFinishedCh set up the finished chan, should be called before mount the event.
+// SetUpFinishedCh set up the finished chan, should be called before mounting the event.
 func (e *PolymorphicEvent) SetUpFinishedCh() {
 	if e.finished == nil {
 		e.finished = make(chan struct{})
