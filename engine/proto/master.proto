@@ -230,6 +230,7 @@ message Job {
     string id = 1;
     Type type = 2;
     State state = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // Output will ignore this field by default unless include_config is set to true.
     bytes config = 4;
     bytes detail = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
     Error error = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
@@ -246,6 +247,9 @@ message GetJobRequest {
     string id = 1;
     string tenant_id = 2;
     string project_id = 3;
+    // Whether to return the config of the job.
+    // Config may contain sensitive information, it is not returned by default.
+    bool include_config = 4;
 }
 
 message ListJobsRequest {
@@ -256,6 +260,9 @@ message ListJobsRequest {
     string page_token = 2;
     string tenant_id = 3;
     string project_id = 4;
+    // Whether to return the config of the job.
+    // Config may contain sensitive information, it is not returned by default.
+    bool include_config = 5;
 }
 
 message ListJobsResponse {
