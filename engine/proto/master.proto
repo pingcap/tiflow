@@ -6,7 +6,6 @@ import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/empty.proto";
 
-import "engine/proto/error.proto";
 import "engine/proto/metastore.proto";
 import "engine/proto/resources.proto";
 
@@ -91,8 +90,8 @@ service JobManager {
         };
     };
 
-    // NOTE: for the compability of existing openapi(ticdc) format, 
-    // we use `/cancel` but not `:cancel`(google api suggested) 
+    // NOTE: for the compatibility of existing openapi(ticdc) format,
+    // we use `/cancel` but not `:cancel`(google api suggested)
     // refer to: https://cloud.google.com/apis/design/custom_methods
     rpc CancelJob(CancelJobRequest) returns (Job){
         option (google.api.http) = {
@@ -109,7 +108,7 @@ service JobManager {
 
 message Selector {
     enum Op {
-        TypeUnknown = 0;
+        OpUnknown = 0;
         Eq = 1;
         Neq = 2;
         Regex = 3;
@@ -130,9 +129,6 @@ message HeartbeatRequest {
 }
 
 message HeartbeatResponse {
-    Error err = 1;
-    string leader = 2;
-    repeated string addrs = 3;
 }
 
 message Executor {
@@ -195,7 +191,6 @@ message ExecWorkloadRequest {
 }
 
 message ExecWorkloadResponse {
-    Error err = 1;
 }
 
 message GetLeaderRequest {
@@ -225,6 +220,11 @@ message Job {
         Finished = 4;
         Canceling = 5;
         Canceled = 6;
+    }
+
+    message Error {
+        string code = 1;
+        string message = 2;
     }
 
     string id = 1;
@@ -280,6 +280,5 @@ message QueryStorageConfigRequest {
 }
 
 message QueryStorageConfigResponse {
-    Error err = 1;
     string config = 2;
 }
