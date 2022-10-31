@@ -136,7 +136,12 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 				zap.String("tableName", tableName))
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
+		debugConfig := config.GetGlobalServerConfig().Debug
+		if debugConfig.EnableDBSorter {
+			if debugConfig.EnablePullBasedSink {
+				log.Panic("DB sorter has been switched into a new implementation in pkg/sorter")
+				return nil, nil
+			}
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			ssystem := ctx.GlobalVars().SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))

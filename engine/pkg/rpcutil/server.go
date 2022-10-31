@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -115,6 +115,14 @@ func (rl *rpcLimiter) Allow(methodName string) bool {
 	return rl.limiter.Allow()
 }
 
+// ErrMasterNotReady is returned when master is not ready.
+var ErrMasterNotReady = rpcerror.Normalize[MasterNotReadyError]()
+
+// MasterNotReadyError indicates that the master is not ready.
+type MasterNotReadyError struct {
+	rpcerror.Error[rpcerror.Retryable, rpcerror.Unavailable]
+}
+
 // PreRPCHook provides some common functionality that should be executed before
 // some RPC, like "forward to leader", "checking rate limit". It should be embedded
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
@@ -189,8 +197,10 @@ func (h preRPCHookImpl[T]) PreRPC(
 		return
 	}
 
-	shouldRet, err = h.checkInitialized(respPointer)
-	return
+	if !h.initialized.Load() {
+		return true, ErrMasterNotReady.GenWithStack(&MasterNotReadyError{})
+	}
+	return false, nil
 }
 
 func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
@@ -198,23 +208,6 @@ func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
 	if h.limiter.Allow(methodName) {
 		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
-}
-
-func (h preRPCHookImpl[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
-	if h.initialized.Load() {
-		return false, nil
-	}
-
-	respStruct := reflect.ValueOf(respPointer).Elem().Elem()
-	errField := respStruct.FieldByName("Err")
-	if !errField.IsValid() {
-		return true, errors.ErrMasterNotInitialized.GenWithStackByArgs()
-	}
-
-	errField.Set(reflect.ValueOf(&pb.Error{
-		Code: pb.ErrorCode_MasterNotReady,
-	}))
-	return true, nil
 }
 
 func (h preRPCHookImpl[T]) forwardToLeader(
