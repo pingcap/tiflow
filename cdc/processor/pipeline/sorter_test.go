@@ -146,6 +146,18 @@ type mockMounter struct {
 
 func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	return nil
+<<<<<<< HEAD
+=======
+}
+
+func (mockMounter) Run(ctx context.Context) error {
+	return nil
+}
+
+func (mockMounter) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
+	return nil
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }
 
 func TestSorterReplicateTs(t *testing.T) {

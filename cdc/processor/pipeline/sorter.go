@@ -42,7 +42,15 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	flushMemoryMetricsDuration = time.Second * 5
+=======
+	// TODO determine a reasonable default value
+	// This is part of sink performance optimization
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
+	// defaultBatchReadSize is the default batch size of read from sorter
+	defaultBatchReadSize = 256
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 )
 
 type sorterNode struct {
@@ -56,7 +64,7 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
-	mounter entry.Mounter
+	mg entry.MounterGroup
 
 	eg     *errgroup.Group
 	cancel context.CancelFunc
@@ -69,22 +77,35 @@ type sorterNode struct {
 
 	replConfig *config.ReplicaConfig
 
+<<<<<<< HEAD
 	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
 	isTableActorMode bool
+=======
+	redoLogEnabled bool
+	changefeed     model.ChangeFeedID
+	// remainEvents record the amount of event remain in sorter engine
+	remainEvents int64
+	startTs      model.Ts
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
+<<<<<<< HEAD
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
+=======
+	flowController tableFlowController, mg entry.MounterGroup,
+	state *tablepb.TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
-		mounter:        mounter,
+		mg:             mg,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		replConfig:     replConfig,
@@ -143,12 +164,87 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	}
 }
 
+func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicEvent) (int, bool) {
+	var (
+		idx   = 0
+		start = time.Now()
+	)
+	defer func() {
+		if idx > 0 {
+			SorterBatchReadSize.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
+			SorterBatchReadDuration.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(time.Since(start).Seconds())
+		}
+	}()
+	// receive at least one event indicate that there are have many more event
+	// in the sorter wait to be consumed.
+	output := n.sorter.Output()
+	select {
+	case <-ctx.Done():
+		return idx, false
+	case event, ok := <-output:
+		if !ok {
+			return idx, false
+		}
+		if event == nil || event.RawKV == nil {
+			log.Panic("unexpected empty event",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Any("event", event))
+		}
+		if event.CRTs >= n.startTs {
+			result[idx] = event
+			idx++
+		}
+	}
+
+	for {
+		// We must call `sorter.Output` before receiving resolved events.
+		// Skip calling `sorter.Output` and caching output channel may fail
+		// to receive any events.
+		output := n.sorter.Output()
+		select {
+		case <-ctx.Done():
+			return idx, false
+		case event, ok := <-output:
+			if !ok {
+				return idx, false
+			}
+			if event == nil || event.RawKV == nil {
+				log.Panic("unexpected empty event",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.Int64("tableID", n.tableID),
+					zap.String("tableName", n.tableName),
+					zap.Any("event", event))
+			}
+			if event.CRTs >= n.startTs {
+				result[idx] = event
+				idx++
+			}
+			if idx == defaultBatchReadSize {
+				return idx, true
+			}
+		default:
+			return idx, true
+		}
+	}
+}
+
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 	eventSorter sorter.EventSorter,
 ) error {
+<<<<<<< HEAD
 	n.isTableActorMode = isTableActorMode
+=======
+	n.sorter = eventSorter
+
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -157,7 +253,7 @@ func (n *sorterNode) start(
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(n.sorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -193,6 +289,7 @@ func (n *sorterNode) start(
 			if err != nil {
 				return errors.Trace(err)
 			}
+<<<<<<< HEAD
 			replicateTs = oracle.ComposeTS(phy, logic)
 			return nil
 		}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
@@ -208,15 +305,27 @@ func (n *sorterNode) start(
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", n.changefeed.Namespace),
 			zap.String("changefeed", n.changefeed.ID))
+=======
+			log.Info("table is replicating",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Uint64("replicateTs", replicateTs),
+				zap.Duration("duration", time.Since(start)))
+			n.startTs = startTs
+		}
 
+		n.state.Store(tablepb.TableStateReplicating)
+		n.sorter.EmitStartTs(stdCtx, startTs)
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
+
+		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
 		for {
-			// We must call `sorter.Output` before receiving resolved events.
-			// Skip calling `sorter.Output` and caching output channel may fail
-			// to receive any events.
-			output := eventSorter.Output()
 			select {
 			case <-stdCtx.Done():
 				return nil
+<<<<<<< HEAD
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-output:
@@ -237,8 +346,48 @@ func (n *sorterNode) start(
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
 						resolvedTsInterpolateFunc(commitTs)
-					}
+=======
+			default:
+			}
+			index, ok := n.batchRead(stdCtx, events)
+			if !ok {
+				// sorter output channel closed
+				return nil
+			}
+			for i := 0; i < index; i++ {
+				e := events[i]
+				e.SetUpFinishedCh()
+				if err := n.mg.AddEvent(stdCtx, e); err != nil {
+					return errors.Trace(err)
+				}
+			}
 
+			for i := 0; i < index; i++ {
+				e := events[i]
+				if e.RawKV.OpType == model.OpTypeResolved {
+					if e.CRTs < lastSentResolvedTs {
+						continue
+					}
+					tickMsg := message.ValueMessage(pmessage.TickMessage())
+					_ = tableActorRouter.Send(tableActorID, tickMsg)
+					lastSentResolvedTs = e.CRTs
+					lastSendResolvedTsTime = time.Now()
+					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
+					continue
+				}
+
+				if err := e.WaitFinished(ctx); err != nil {
+					if errors.Cause(err) != context.Canceled {
+						ctx.Throw(err)
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
+					}
+					return errors.Trace(err)
+				}
+				if e.Row == nil {
+					continue
+				}
+
+<<<<<<< HEAD
 					// For all rows, we add table replicate ts, so mysql sink can
 					// determine when to turn off safe-mode.
 					msg.Row.ReplicatingTs = replicateTs
@@ -276,27 +425,68 @@ func (n *sorterNode) start(
 								zap.String("tableName", n.tableName))
 						} else {
 							ctx.Throw(err)
+=======
+				commitTs := e.CRTs
+				// We interpolate a resolved-ts if none has been sent for some time.
+				if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
+					resolvedTsInterpolateFunc(commitTs)
+				}
+
+				// For all rows, we add table replicate ts, so mysql sink can
+				// determine when to turn off safe-mode.
+				e.Row.ReplicatingTs = replicateTs
+				// We calculate memory consumption by RowChangedEvent size.
+				// It's much larger than RawKVEntry.
+				size := uint64(e.Row.ApproximateBytes())
+				// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
+				// means interrupting a transaction. Otherwise, the pipeline would deadlock.
+				err := n.flowController.Consume(e, size, func(batchID uint64) error {
+					if commitTs > lastCRTs {
+						// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
+						// Not sending a Resolved Event here will very likely deadlock the pipeline.
+						resolvedTsInterpolateFunc(commitTs)
+					} else if commitTs == lastCRTs {
+						// send batch resolve event
+						msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+						msg.Resolved = &model.ResolvedTs{
+							Ts:      commitTs,
+							Mode:    model.BatchResolvedMode,
+							BatchID: batchID,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 						}
-						return nil
+						ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+					} else {
+						log.Panic("flow control blocked, report a bug",
+							zap.Uint64("commitTs", commitTs),
+							zap.Uint64("lastCommitTs", lastCRTs),
+							zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
 					}
-					lastCRTs = msg.CRTs
-				} else {
-					// handle OpTypeResolved
-					if msg.CRTs < lastSentResolvedTs {
-						continue
+					return nil
+				})
+				if err != nil {
+					if cerror.ErrFlowControllerAborted.Equal(err) {
+						log.Debug("flow control cancelled for table",
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName))
+					} else {
+						ctx.Throw(err)
 					}
+<<<<<<< HEAD
 					if isTableActorMode {
 						msg := message.ValueMessage(pmessage.TickMessage())
 						_ = tableActorRouter.Send(tableActorID, msg)
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
+=======
+					return nil
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 				}
-				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+				lastCRTs = e.CRTs
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 			}
 		}
 	})
-	n.sorter = eventSorter
 	return nil
 }
 

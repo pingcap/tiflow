@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright 2021 PingCAP, Inc.
+=======
+// Copyright 2022 PingCAP, Inc.
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +17,7 @@
 
 package pipeline
 
+<<<<<<< HEAD
 import (
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -29,4 +34,33 @@ var tableMemoryHistogram = prometheus.NewHistogramVec(
 // InitMetrics registers all metrics used in processor
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableMemoryHistogram)
+=======
+import "github.com/prometheus/client_golang/prometheus"
+
+var (
+	// SorterBatchReadSize record each batch read size
+	SorterBatchReadSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "sorter_batch_read",
+			Help:      "Bucketed histogram of sorter batch read event counts",
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 6),
+		}, []string{"namespace", "changefeed"})
+	// SorterBatchReadDuration record each batch read duration
+	SorterBatchReadDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "sorter_batch_read_duration",
+			Help:      "Bucketed histogram of sorter batch read duration",
+			Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1 ms */, 2, 18),
+		}, []string{"namespace", "changefeed"})
+)
+
+// InitMetrics registers metrics the pipeline.
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(SorterBatchReadSize)
+	registry.MustRegister(SorterBatchReadDuration)
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }

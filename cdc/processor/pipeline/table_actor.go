@@ -55,7 +55,7 @@ type tableActor struct {
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
-	mounter entry.Mounter
+	mg entry.MounterGroup
 	// backend tableSink
 	tableSink   sink.Sink
 	redoManager redo.LogManager
@@ -97,9 +97,16 @@ type tableActor struct {
 }
 
 // NewTableActor creates a table actor and starts it.
+<<<<<<< HEAD
 func NewTableActor(cdcCtx cdcContext.Context,
 	upStream *upstream.Upstream,
 	mounter entry.Mounter,
+=======
+func NewTableActor(
+	cdcCtx cdcContext.Context,
+	up *upstream.Upstream,
+	mg entry.MounterGroup,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -131,8 +138,13 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableName:     tableName,
 		cyclicEnabled: cyclicEnabled,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
+<<<<<<< HEAD
 		upStream:      upStream,
 		mounter:       mounter,
+=======
+		upstream:      up,
+		mg:            mg,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSink:     sink,
@@ -286,11 +298,33 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
 		t.redoManager.Enabled(), splitTxn)
+<<<<<<< HEAD
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig, t.changefeedID, t.upStream.PDClient,
 	)
 	t.sortNode = sorterNode
+=======
+	if !t.useEventSortEngine {
+		sorterNode := newSorterNode(t.tableName, t.tableID,
+			t.replicaInfo.StartTs, flowController,
+			t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
+			t.upstream.PDClient,
+		)
+		t.sortNode = sorterNode
+	} else {
+		engine, err := t.globalVars.SortEngineManager.Create(t.changefeedVars.ID)
+		if err != nil {
+			log.Error("create sort engine fail",
+				zap.String("namespace", t.changefeedID.Namespace),
+				zap.String("changefeed", t.changefeedID.ID),
+				zap.Error(err))
+			return err
+		}
+		t.eventSortEngine = engine
+	}
+
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)

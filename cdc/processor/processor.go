@@ -69,10 +69,18 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
+<<<<<<< HEAD
 	filter      *filter.Filter
 	mounter     entry.Mounter
 	sink        sink.Sink
 	redoManager redo.LogManager
+=======
+	filter        filter.Filter
+	mg            entry.MounterGroup
+	sinkV1        sinkv1.Sink
+	sinkV2Factory *factory.SinkFactory
+	redoManager   redo.LogManager
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 
 	initialized bool
 	errCh       chan error
@@ -459,8 +467,14 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	tz := contextutil.TimezoneFromCtx(ctx)
 	var err error
+<<<<<<< HEAD
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
+=======
+	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
+		util.GetTimeZoneName(tz))
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -473,10 +487,22 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
+<<<<<<< HEAD
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
 		contextutil.TimezoneFromCtx(ctx),
 		p.changefeed.Info.Config.EnableOldValue)
+=======
+	p.mg = entry.NewMounterGroup(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
+		p.changefeed.Info.Config.EnableOldValue,
+		p.filter, tz, p.changefeedID)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.mg.Run(ctx))
+	}()
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
@@ -819,8 +845,13 @@ func (p *processor) createTablePipelineImpl(
 		var err error
 		table, err = tablepipeline.NewTableActor(
 			ctx,
+<<<<<<< HEAD
 			p.upStream,
 			p.mounter,
+=======
+			p.upstream,
+			p.mg,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 			tableID,
 			tableName,
 			replicaInfo,
@@ -833,7 +864,12 @@ func (p *processor) createTablePipelineImpl(
 	} else {
 		table = tablepipeline.NewTablePipeline(
 			ctx,
+<<<<<<< HEAD
 			p.mounter,
+=======
+			p.upstream,
+			p.mg,
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 			tableID,
 			tableName,
 			replicaInfo,
@@ -943,7 +979,20 @@ func (p *processor) Close() error {
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
+<<<<<<< HEAD
 	return nil
+=======
+	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	sinkmetric.TableSinkTotalRowsCountCounter.
+		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+>>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }
 
 // WriteDebugInfo write the debug info to Writer
