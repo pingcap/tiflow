@@ -1053,7 +1053,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
-func (p *processor) Close() error {
+func (p *processor) Close(ctx cdcContext.Context) error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -1110,6 +1110,18 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
+
+	sortEngineManager := ctx.GlobalVars().SortEngineManager
+	if sortEngineManager != nil {
+		if err := sortEngineManager.Drop(p.changefeedID); err != nil {
+			log.Error("drop event sort engine fail",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
