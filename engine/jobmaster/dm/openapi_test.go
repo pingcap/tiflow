@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	tmock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -69,7 +70,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		}
 	)
 	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)
@@ -248,7 +249,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetBinlogOperator() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	t.messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(nil, errors.New("binlog operator not found")).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
@@ -286,7 +287,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "binlog operator set success",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -304,7 +305,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -321,7 +322,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -340,7 +341,7 @@ func (t *testDMOpenAPISuite) TestDMAPIDeleteBinlogOperator() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	t.messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(nil, errors.New("binlog operator not found")).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
@@ -350,7 +351,7 @@ func (t *testDMOpenAPISuite) TestDMAPIDeleteBinlogOperator() {
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{}, nil).Once()
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
@@ -363,7 +364,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "targets",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -375,7 +376,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "targets", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "tables",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -386,7 +387,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "tables", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "table",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -397,7 +398,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "table", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "databases",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -421,7 +422,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	t.messageAgent.On("SendRequest").Return(nil, errors.New("task not paused")).Once()
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(nil, errors.New("task not paused")).Once()
 	from := true
 	req := openapi.SetBinlogSchemaRequest{Database: "db", Table: "tb", FromSource: &from}
 	bs, err := json.Marshal(req)
@@ -436,7 +437,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "task not paused", binlogSchemaResp.Results["task1"].ErrorMsg)
 
-	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
 		Msg: "success",
 	}, nil).Once()
 	req = openapi.SetBinlogSchemaRequest{Database: "db", Table: "tb", FromTarget: &from}

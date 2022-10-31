@@ -68,7 +68,7 @@ type processor struct {
 	lastSchemaTs  model.Ts
 
 	filter        filter.Filter
-	mounter       entry.Mounter
+	mg            entry.MounterGroup
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 	redoManager   redo.LogManager
@@ -566,12 +566,11 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	p.pushResolvedTs2Table()
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-
 	p.handlePosition(oracle.GetPhysical(pdTime))
-	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage()
 
@@ -647,9 +646,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	tz := contextutil.TimezoneFromCtx(ctx)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
-		util.GetTimeZoneName(contextutil.TimezoneFromCtx(ctx)))
+		util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -662,12 +662,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage,
-		p.changefeedID,
-		contextutil.TimezoneFromCtx(ctx),
-		p.filter,
+	p.mg = entry.NewMounterGroup(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue,
-	)
+		p.filter, tz, p.changefeedID)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.mg.Run(ctx))
+	}()
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
@@ -968,7 +971,7 @@ func (p *processor) createTablePipelineImpl(
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -984,7 +987,7 @@ func (p *processor) createTablePipelineImpl(
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -1054,7 +1057,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
-func (p *processor) Close() error {
+func (p *processor) Close(ctx cdcContext.Context) error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -1111,6 +1114,18 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
+
+	sortEngineManager := ctx.GlobalVars().SortEngineManager
+	if sortEngineManager != nil {
+		if err := sortEngineManager.Drop(p.changefeedID); err != nil {
+			log.Error("drop event sort engine fail",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
@@ -1143,6 +1158,9 @@ func (p *processor) cleanupMetrics() {
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
 		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer

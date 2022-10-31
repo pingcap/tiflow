@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -47,11 +46,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
@@ -121,8 +118,6 @@ type Server struct {
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
 
-	testCtx *test.Context
-
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
 	frameworkClientConn metaModel.ClientConn
@@ -155,7 +150,7 @@ func newServerMasterMetric() *serverMasterMetric {
 }
 
 // NewServer creates a new master-server.
-func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+func NewServer(cfg *Config) (*Server, error) {
 	log.Info("creating server master", zap.Stringer("config", cfg))
 
 	id := generateNodeID(cfg.Name)
@@ -166,7 +161,6 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		id:                id,
 		cfg:               cfg,
 		leaderInitialized: *atomic.NewBool(false),
-		testCtx:           ctx,
 		leader:            atomic.Value{},
 		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:        msgService,
@@ -196,17 +190,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		return resp2, err
 	}
 
-	resp, err := s.executorManager.HandleHeartbeat(req)
-	if err == nil && resp.Err == nil {
-		for _, m := range s.elector.GetMembers() {
-			resp.Addrs = append(resp.Addrs, m.Address)
-		}
-		leader, exists := s.masterRPCHook.CheckLeader()
-		if exists {
-			resp.Leader = leader.AdvertiseAddr
-		}
-	}
-	return resp, err
+	return s.executorManager.HandleHeartbeat(req)
 }
 
 // CreateJob delegates request to leader's JobManager.CreateJob.
@@ -371,43 +355,28 @@ func (s *Server) RegisterMetaStore(
 func (s *Server) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest,
 ) (*pb.QueryMetaStoreResponse, error) {
-	getStore := func(storeID string) *pb.QueryMetaStoreResponse {
+	getStore := func(storeID string) (*pb.QueryMetaStoreResponse, error) {
 		store := s.metaStoreManager.GetMetaStore(storeID)
 		if store == nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreNotExists,
-					Message: fmt.Sprintf("store ID: %s", storeID),
-				},
-			}
+			return nil, ErrMetaStoreNotExists.GenWithStack(&MetaStoreNotExistsError{StoreID: storeID})
 		}
 		b, err := json.Marshal(store)
 		if err != nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreSerializeFail,
-					Message: fmt.Sprintf("raw store config params: %v", store),
-				},
-			}
+			return nil, errors.Trace(err)
 		}
 
 		return &pb.QueryMetaStoreResponse{
 			Address: string(b),
-		}
+		}, nil
 	}
 
 	switch req.Tp {
 	case pb.StoreType_SystemMetaStore:
-		return getStore(FrameMetaID), nil
+		return getStore(FrameMetaID)
 	case pb.StoreType_AppMetaStore:
-		return getStore(DefaultBusinessMetaID), nil
+		return getStore(DefaultBusinessMetaID)
 	default:
-		return &pb.QueryMetaStoreResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_InvalidMetaStoreType,
-				Message: fmt.Sprintf("store type: %s", req.Tp),
-			},
-		}, nil
+		return nil, status.Errorf(codes.InvalidArgument, "unknown store type %v", req.Tp)
 	}
 }
 
@@ -417,12 +386,7 @@ func (s *Server) QueryStorageConfig(
 ) (*pb.QueryStorageConfigResponse, error) {
 	b, err := json.Marshal(s.cfg.Storage)
 	if err != nil {
-		return &pb.QueryStorageConfigResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_MetaStoreSerializeFail,
-				Message: fmt.Sprintf("raw storage config params: %v", s.cfg.Storage),
-			},
-		}, nil
+		return nil, errors.Trace(err)
 	}
 	return &pb.QueryStorageConfigResponse{
 		Config: string(b),
@@ -460,20 +424,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-func (s *Server) startForTest() (err error) {
-	// TODO: implement mock-etcd and leader election
-
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
-	if err != nil {
-		return err
-	}
-
-	// TODO: start job manager
-	s.leader.Store(&rpcutil.Member{Name: s.name(), IsLeader: true})
-	s.leaderInitialized.Store(true)
-	return
-}
-
 // Stop and clean resources.
 // TODO: implement stop gracefully.
 func (s *Server) Stop() {
@@ -500,10 +450,6 @@ func (s *Server) Stop() {
 
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
-	if test.GetGlobalTestFlag() {
-		return s.startForTest()
-	}
-
 	err := s.registerMetaStore(ctx)
 	if err != nil {
 		return err
@@ -518,12 +464,8 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
-	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval, s.testCtx)
+	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
+	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
 
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.

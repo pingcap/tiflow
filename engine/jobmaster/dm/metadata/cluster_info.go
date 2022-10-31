@@ -17,13 +17,14 @@ import (
 	"context"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // ClusterInfo represents the cluster info.
 type ClusterInfo struct {
-	State
+	state
 
 	Version semver.Version
 }
@@ -37,25 +38,25 @@ func NewClusterInfo(version semver.Version) *ClusterInfo {
 
 // ClusterInfoStore manages the state of ClusterInfo.
 type ClusterInfoStore struct {
-	*TomlStore
+	*frameworkMetaStore
 }
 
 // NewClusterInfoStore returns a new ClusterInfoStore instance
 func NewClusterInfoStore(kvClient metaModel.KVClient) *ClusterInfoStore {
 	clusterInfoStore := &ClusterInfoStore{
-		TomlStore: NewTomlStore(kvClient),
+		frameworkMetaStore: newTOMLFrameworkMetaStore(kvClient),
 	}
-	clusterInfoStore.TomlStore.Store = clusterInfoStore
+	clusterInfoStore.frameworkMetaStore.stateFactory = clusterInfoStore
 	return clusterInfoStore
 }
 
 // CreateState creates an empty ClusterInfo object
-func (clusterInfoStore *ClusterInfoStore) CreateState() State {
+func (clusterInfoStore *ClusterInfoStore) createState() state {
 	return &ClusterInfo{}
 }
 
 // Key returns encoded key of ClusterInfo state store
-func (clusterInfoStore *ClusterInfoStore) Key() string {
+func (clusterInfoStore *ClusterInfoStore) key() string {
 	return adapter.DMInfoKeyAdapter.Encode()
 }
 
@@ -63,7 +64,7 @@ func (clusterInfoStore *ClusterInfoStore) Key() string {
 func (clusterInfoStore *ClusterInfoStore) UpdateVersion(ctx context.Context, newVer semver.Version) error {
 	state, err := clusterInfoStore.Get(ctx)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	clusterInfo := state.(*ClusterInfo)
 	clusterInfo.Version = newVer
