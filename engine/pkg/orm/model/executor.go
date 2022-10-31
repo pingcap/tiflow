@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/label"
 )
 
@@ -74,7 +73,7 @@ func (s *LabelSet) Scan(rawInput interface{}) error {
 
 // Executor records the information of an executor.
 type Executor struct {
-	ormModel.Model
+	Model
 	ID      engineModel.ExecutorID `json:"id" gorm:"column:id;type:varchar(256) not null;uniqueIndex:uni_id"`
 	Name    string                 `json:"name" gorm:"column:name;type:varchar(256) not null"`
 	Address string                 `json:"address" gorm:"column:address;type:varchar(256) not null"`

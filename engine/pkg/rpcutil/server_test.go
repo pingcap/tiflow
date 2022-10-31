@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -81,13 +80,8 @@ type (
 	}
 )
 
-type mockRPCRespWithErrField struct {
-	Err *pb.Error
-}
-
 type mockRPCClientIface interface {
 	MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error)
-	MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error)
 }
 
 type mockRPCClientImpl struct {
@@ -99,13 +93,6 @@ func (m *mockRPCClientImpl) MockRPC(ctx context.Context, req *mockRPCReq, opts .
 		return nil, gerrors.New("mock failed")
 	}
 	return &mockRPCResp{2}, nil
-}
-
-func (m *mockRPCClientImpl) MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error) {
-	if m.fail {
-		return nil, gerrors.New("mock failed")
-	}
-	return &mockRPCRespWithErrField{}, nil
 }
 
 type mockRPCServer struct {
@@ -120,15 +107,6 @@ func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...gr
 		return resp2, err
 	}
 	return &mockRPCResp{1}, nil
-}
-
-func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error) {
-	resp2 := &mockRPCRespWithErrField{}
-	shouldRet, err := s.hook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return &mockRPCRespWithErrField{}, nil
 }
 
 // newMockRPCServer returns a mockRPCServer that is ready to use.
@@ -200,11 +178,7 @@ func TestCheckInitialized(t *testing.T) {
 
 	s.hook.initialized.Store(false)
 	_, err := s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterNotInitialized.Equal(err))
-
-	resp, err := s.MockRPCWithErrField(ctx, req)
-	require.NoError(t, err)
-	require.Equal(t, pb.ErrorCode_MasterNotReady, resp.Err.Code)
+	require.True(t, ErrMasterNotReady.Is(err))
 }
 
 func TestRPCLimiter(t *testing.T) {

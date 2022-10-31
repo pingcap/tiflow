@@ -51,7 +51,7 @@ MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow/tests|integration|testing_utils|pb|pbmock|tiflow/bin'
 PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/cmd|github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock'
 PACKAGES := $$($(PACKAGE_LIST))
@@ -77,7 +77,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.3.0-master
+	RELEASE_VERSION := v6.4.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
