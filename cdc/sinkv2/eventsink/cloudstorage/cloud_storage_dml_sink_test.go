@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +47,8 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
 	var cnt uint64 = 0
 	batch := 100
+	tableStatus := state.TableSinkSinking
+
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
@@ -56,6 +59,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 			Callback: func() {
 				atomic.AddUint64(&cnt, uint64(batch))
 			},
+			SinkState: &tableStatus,
 		}
 		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
