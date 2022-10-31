@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1666941434488,
+  "iteration": 1667186943297,
   "links": [],
   "panels": [
     {
@@ -14214,7 +14214,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "batch read events from the sorter, record each batch size ",
+          "description": "batch read events from the sorter, record each batch read duration ",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -14269,7 +14269,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "batch read sorter size percentile",
+          "title": "batch read sorter duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -14286,6 +14286,104 @@
           "yaxes": [
             {
               "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 81
+          },
+          "hiddenSeries": false,
+          "id": 707,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "ticdc_mounter_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-{{index}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "mounter group channel size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -22890,8 +22988,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
@@ -23076,8 +23174,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [],
@@ -23183,8 +23281,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
@@ -23305,8 +23403,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.37:48112",
-              "value": "172.16.5.37:48112"
+              "text": "10.2.7.117:8300",
+              "value": "10.2.7.117:8300"
             }
           },
           "seriesOverrides": [
