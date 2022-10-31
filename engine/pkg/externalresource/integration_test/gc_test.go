@@ -33,7 +33,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster := newMockGCCluster(t)
 	cluster.Start(t)
 
 	baseDir := t.TempDir()
@@ -80,7 +80,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster := newMockGCCluster(t)
 	cluster.Start(t)
 
 	baseDir := t.TempDir()
@@ -111,7 +111,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster := newMockGCCluster(t)
 
 	baseDir := t.TempDir()
 

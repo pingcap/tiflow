@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -110,15 +112,15 @@ func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...gr
 }
 
 // newMockRPCServer returns a mockRPCServer that is ready to use.
-func newMockRPCServer() *mockRPCServer {
+func newMockRPCServer(t *testing.T) *mockRPCServer {
 	serverID := "server1"
 	rpcLim := newRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
 	h := &preRPCHookImpl[mockRPCClientIface]{
-		id:          serverID,
-		leader:      &atomic.Value{},
-		leaderCli:   &LeaderClientWithLock[mockRPCClientIface]{},
-		initialized: atomic.NewBool(true),
-		limiter:     rpcLim,
+		id:             serverID,
+		leader:         &atomic.Value{},
+		leaderCli:      &LeaderClientWithLock[mockRPCClientIface]{},
+		featureChecker: mock.NewMockFeatureChecker(gomock.NewController(t)),
+		limiter:        rpcLim,
 	}
 	h.leader.Store(&Member{Name: serverID})
 	return &mockRPCServer{hook: h}
@@ -128,7 +130,7 @@ func TestForwardToLeader(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := newMockRPCServer()
+	s := newMockRPCServer(t)
 	req := &mockRPCReq{}
 	resp, err := s.MockRPC(ctx, req)
 	require.NoError(t, err)
@@ -169,16 +171,24 @@ func TestForwardToLeader(t *testing.T) {
 	require.ErrorContains(t, err, "mock failed")
 }
 
-func TestCheckInitialized(t *testing.T) {
+func TestFeatureChecker(t *testing.T) {
 	t.Parallel()
 
-	s := newMockRPCServer()
+	s := newMockRPCServer(t)
 	ctx := context.Background()
 	req := &mockRPCReq{}
 
-	s.hook.initialized.Store(false)
+	mockFeatureChecker, ok := s.hook.featureChecker.(*mock.MockFeatureChecker)
+	require.True(t, ok)
+
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(false)
 	_, err := s.MockRPC(ctx, req)
 	require.True(t, ErrMasterNotReady.Is(err))
+
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true)
+	_, err = s.MockRPC(ctx, req)
+	require.NoError(t, err)
+
 }
 
 func TestRPCLimiter(t *testing.T) {

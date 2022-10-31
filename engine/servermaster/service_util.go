@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 )
 
@@ -55,4 +56,42 @@ func generateNodeID(name string) string {
 	val := rand.Uint32()
 	id := fmt.Sprintf("%s-%08x", name, val)
 	return id
+}
+
+// featureDegrader is used to record whether a feature is available or degradation
+// in server master.
+type featureDegrader struct {
+	executorManager     atomic.Bool
+	masterWorkerManager atomic.Bool
+}
+
+func newFeatureDegrader() *featureDegrader {
+	fd := &featureDegrader{}
+	fd.reset()
+	return fd
+}
+
+func (d *featureDegrader) updateExecutorManager(val bool) {
+	d.executorManager.Store(val)
+}
+
+func (d *featureDegrader) updateMasterWorkerManager(val bool) {
+	d.masterWorkerManager.Store(val)
+}
+
+func (d *featureDegrader) reset() {
+	d.executorManager.Store(false)
+	d.masterWorkerManager.Store(false)
+}
+
+// Available implements rpcutil.FeatureChecker
+func (d *featureDegrader) Available(name string) bool {
+	switch name {
+	case "ListExecutors", "RegisterExecutor":
+		return d.executorManager.Load()
+	case "CreateJob", "GetJob", "ListJobs", "CancelJob", "DeleteJob",
+		"ScheduleTask":
+		return d.masterWorkerManager.Load()
+	}
+	return true
 }

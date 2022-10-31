@@ -19,6 +19,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
@@ -28,6 +29,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -52,7 +54,7 @@ type mockCluster struct {
 	cancel context.CancelFunc
 }
 
-func newMockGCCluster() *mockCluster {
+func newMockGCCluster(t *testing.T) *mockCluster {
 	meta, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
@@ -68,7 +70,7 @@ func newMockGCCluster() *mockCluster {
 		id,
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		atomic.NewBool(true),
+		rpcutilMock.NewMockFeatureChecker(gomock.NewController(t)),
 		&rate.Limiter{}, nil))
 
 	executorGroup := client.NewMockExecutorGroup()
