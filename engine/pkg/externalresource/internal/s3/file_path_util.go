@@ -26,12 +26,13 @@ func getPathPredAlwaysTrue() pathPredFunc {
 	}
 }
 
-func getPathPredByName(target string) pathPredFunc {
+func getPathPredByName(target string, keepPlaceholder bool) pathPredFunc {
 	return func(path string) bool {
-		resName, _, ok := strings.Cut(path, "/")
-		if !ok {
+		resName, fileName, ok := strings.Cut(path, "/")
+		if !ok || fileName == placeholderFileName {
 			return false
 		}
+
 		return resName == target
 	}
 }

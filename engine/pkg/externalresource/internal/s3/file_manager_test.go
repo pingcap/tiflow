@@ -231,3 +231,63 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	_, err = fm2.GetPersistedResource(ctx, ident)
 	require.ErrorContains(t, err, "ResourceFilesNotFoundError")
 }
+
+func TestFileManagerCleanPersistedResource(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
+	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
+
+	ident := internal.ResourceIdent{
+		ResourceScope: internal.ResourceScope{
+			Executor: "executor-1",
+			WorkerID: "worker-1",
+		},
+		Name: "resource-1",
+	}
+	desc, err := fm1.CreateResource(ctx, ident)
+	require.NoError(t, err)
+	storage, err := desc.ExternalStorage(ctx)
+	require.NoError(t, err)
+	err = fm1.SetPersisted(ctx, ident)
+	require.NoError(t, err)
+
+	// clean from creator
+	err = storage.WriteFile(ctx, "file-1", []byte("test-content"))
+	require.NoError(t, err)
+	_, err = fm1.CleanPersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err := storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	err = storage.WriteFile(ctx, "file-1", []byte("test-content"))
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// clean from other node
+	_, err = fm2.CleanPersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// clean non-existent resources from other nodes
+	err = fm1.RemoveResource(ctx, ident)
+	require.NoError(t, err)
+	_, err = fm2.CleanPersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
+}

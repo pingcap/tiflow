@@ -227,9 +227,7 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	require.Panics(t, func() {
 		openStorageWithClean("/local/test-option", brk2, "worker-2")
 	})
-	require.Panics(t, func() {
-		openStorageWithClean("/s3/test-option", brk2, "worker-2")
-	})
+	openStorageWithClean("/s3/test-option", brk2, "worker-2")
 }
 
 func TestBrokerRemoveResource(t *testing.T) {

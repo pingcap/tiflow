@@ -77,6 +77,9 @@ type FileManager interface {
 	// GetPersistedResource returns the descriptor of an already persisted resource.
 	GetPersistedResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
 
+	// CleanPersistedResource cleans the persisted resource.
+	CleanPersistedResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
+
 	// RemoveTemporaryFiles cleans up all un-persisted resource files under the scope.
 	RemoveTemporaryFiles(ctx context.Context, scope ResourceScope) error
 
