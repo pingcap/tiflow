@@ -233,6 +233,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	}
 
 	// set global tidb_external_ts to secondary ts
+	// TiDB supports tidb_external_ts system variable since v6.4.0.
 	query = fmt.Sprintf("set global tidb_external_ts = %s", secondaryTs)
 	_, err = tx.Exec(query)
 	if err != nil {
