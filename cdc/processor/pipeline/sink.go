@@ -200,6 +200,10 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 
 // emitRowToSink checks event and emits event.Row to sink.
 func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEvent) error {
+	if event == nil || event.Row == nil {
+		return nil
+	}
+
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
 		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
 		time.Sleep(10 * time.Second)
@@ -217,15 +221,6 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 			return n.sinkV1.EmitRowChangedEvents(ctx, rows...)
 		}
 		n.sinkV2.AppendRowChangedEvents(rows...)
-		return nil
-	}
-
-	if event == nil || event.Row == nil {
-		log.Warn("skip emit nil event",
-			zap.Int64("tableID", n.tableID),
-			zap.String("namespace", n.changefeed.Namespace),
-			zap.String("changefeed", n.changefeed.ID),
-			zap.Any("event", event))
 		return nil
 	}
 
