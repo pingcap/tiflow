@@ -1312,7 +1312,7 @@ type GetJobRequest struct {
 	TenantId  string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	ProjectId string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// Whether to return the config of the job.
-	// Config may contain sensitive information, so it is not returned by default.
+	// Config may contain sensitive information, it is not returned by default.
 	IncludeConfig bool `protobuf:"varint,4,opt,name=include_config,json=includeConfig,proto3" json:"include_config,omitempty"`
 }
 
@@ -1389,7 +1389,7 @@ type ListJobsRequest struct {
 	TenantId  string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	ProjectId string `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// Whether to return the config of the job.
-	// Config may contain sensitive information, so it is not returned by default.
+	// Config may contain sensitive information, it is not returned by default.
 	IncludeConfig bool `protobuf:"varint,5,opt,name=include_config,json=includeConfig,proto3" json:"include_config,omitempty"`
 }
 

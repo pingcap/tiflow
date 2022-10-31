@@ -139,7 +139,7 @@
           },
           {
             "name": "include_config",
-            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, so it is not returned by default.",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
             "in": "query",
             "required": false,
             "type": "boolean"
@@ -231,7 +231,7 @@
           },
           {
             "name": "include_config",
-            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, so it is not returned by default.",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
             "in": "query",
             "required": false,
             "type": "boolean"

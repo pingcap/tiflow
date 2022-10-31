@@ -248,7 +248,7 @@ message GetJobRequest {
     string tenant_id = 2;
     string project_id = 3;
     // Whether to return the config of the job.
-    // Config may contain sensitive information, so it is not returned by default.
+    // Config may contain sensitive information, it is not returned by default.
     bool include_config = 4;
 }
 
@@ -261,7 +261,7 @@ message ListJobsRequest {
     string tenant_id = 3;
     string project_id = 4;
     // Whether to return the config of the job.
-    // Config may contain sensitive information, so it is not returned by default.
+    // Config may contain sensitive information, it is not returned by default.
     bool include_config = 5;
 }
 
