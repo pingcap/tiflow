@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// MounterGroup is a group of mounter workers
 type MounterGroup interface {
 	Run(ctx context.Context) error
 	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
@@ -49,6 +50,7 @@ const (
 	defaultMetricInterval   = 15 * time.Second
 )
 
+// NewMounterGroup return a group of mounters.
 func NewMounterGroup(
 	schemaStorage SchemaStorage,
 	workerNum int,
@@ -56,7 +58,7 @@ func NewMounterGroup(
 	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
-) MounterGroup {
+) *mounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}

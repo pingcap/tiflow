@@ -208,8 +208,6 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 			result[idx] = event
 			idx++
 		}
-		// TODO (3AceShowHand): if the first received event is resolved ts, there is a high chance that
-		// no data events can be consumed from the sorter, so just skip the batch read.
 	}
 
 	for {
@@ -371,12 +369,6 @@ func (n *sorterNode) start(
 					return errors.Trace(err)
 				}
 				if e.Row == nil {
-					log.Debug("message's row changed event is nil, it should be ignored",
-						zap.String("namespace", n.changefeed.Namespace),
-						zap.String("changefeed", n.changefeed.ID),
-						zap.Int64("tableID", n.tableID),
-						zap.String("tableName", n.tableName),
-						zap.Uint64("startTs", e.StartTs))
 					continue
 				}
 

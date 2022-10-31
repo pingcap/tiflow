@@ -86,18 +86,21 @@ func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
 }
 
+// SetUpFinishedCh set up the finished chan, should be called before mount the event.
 func (e *PolymorphicEvent) SetUpFinishedCh() {
 	if e.finished == nil {
 		e.finished = make(chan struct{})
 	}
 }
 
+// MarkFinished is called to indicate that mount is finished.
 func (e *PolymorphicEvent) MarkFinished() {
 	if e.finished != nil {
 		close(e.finished)
 	}
 }
 
+// WaitFinished is called by caller to wait for the mount finished.
 func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
 	if e.finished != nil {
 		select {
