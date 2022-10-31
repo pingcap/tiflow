@@ -1233,7 +1233,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
 	for i := 0; i < worker.concurrency; i++ {
-		// Allocate a buffer with 1.5x length than average to reduce reallocate.
+		// Allocate a buffer with 2x length than average to reduce reallocate.
 		buffLen := len(events) / worker.concurrency * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
