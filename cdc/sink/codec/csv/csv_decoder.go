@@ -15,6 +15,7 @@ package csv
 
 import (
 	"context"
+	"io"
 
 	"github.com/pingcap/errors"
 	lconfig "github.com/pingcap/tidb/br/pkg/lightning/config"
@@ -33,11 +34,16 @@ type batchDecoder struct {
 	parser    *mydump.CSVParser
 	data      []byte
 	msg       *csvMessage
+	tableInfo *model.TableInfo
 	closed    bool
 }
 
 // NewBatchDecoder creates a new BatchDecoder
-func NewBatchDecoder(ctx context.Context, csvConfig *config.CSVConfig, value []byte) (codec.EventBatchDecoder, error) {
+func NewBatchDecoder(ctx context.Context,
+	csvConfig *config.CSVConfig,
+	tableInfo *model.TableInfo,
+	value []byte,
+) (codec.EventBatchDecoder, error) {
 	var backslashEscape bool
 
 	// if quote is not set in config, we should unespace backslash
@@ -61,6 +67,7 @@ func NewBatchDecoder(ctx context.Context, csvConfig *config.CSVConfig, value []b
 	}
 	return &batchDecoder{
 		csvConfig: csvConfig,
+		tableInfo: tableInfo,
 		data:      value,
 		msg:       newCSVMessage(csvConfig),
 		parser:    csvParser,
@@ -72,6 +79,9 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	err := b.parser.ReadRow()
 	if err != nil {
 		b.closed = true
+		if errors.Cause(err) == io.EOF {
+			return model.MessageTypeUnknown, false, nil
+		}
 		return model.MessageTypeUnknown, false, err
 	}
 
@@ -93,7 +103,12 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.closed {
 		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed, errors.New("no csv row can be found"))
 	}
-	return csvMsg2RowChangedEvent(b.msg), nil
+
+	e, err := csvMsg2RowChangedEvent(b.msg, b.tableInfo.Columns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return e, nil
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface.
