@@ -136,6 +136,13 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "include_config",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -221,6 +228,13 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "include_config",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -520,7 +534,8 @@
         },
         "config": {
           "type": "string",
-          "format": "byte"
+          "format": "byte",
+          "description": "Output will ignore this field by default unless include_config is set to true."
         },
         "detail": {
           "type": "string",
