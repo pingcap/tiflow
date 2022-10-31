@@ -65,7 +65,7 @@ type tableActor struct {
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
-	mounter entry.Mounter
+	mg entry.MounterGroup
 	// backend tableSink
 	tableSinkV1 sinkv1.Sink
 	tableSinkV2 sinkv2.TableSink
@@ -117,7 +117,7 @@ type tableActor struct {
 func NewTableActor(
 	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
-	mounter entry.Mounter,
+	mg entry.MounterGroup,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -153,7 +153,7 @@ func NewTableActor(
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
-		mounter:       mounter,
+		mg:            mg,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSinkV1:   sinkV1,
@@ -314,7 +314,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	if !t.useEventSortEngine {
 		sorterNode := newSorterNode(t.tableName, t.tableID,
 			t.replicaInfo.StartTs, flowController,
-			t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled(),
+			t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
 			t.upstream.PDClient,
 		)
 		t.sortNode = sorterNode

@@ -304,6 +304,7 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
 	}
+	cfg.Mydumper.SourceID = l.cfg.SourceID
 	return cfg, nil
 }
 
