@@ -20,15 +20,15 @@ import (
 
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/executor/server/mocks"
+	"github.com/pingcap/tiflow/engine/executor/server/mock"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
-func newMetastoreManagerForTesting(ctrl *gomock.Controller) (*metastoreManagerImpl, *mocks.MockMetastoreCreator) {
-	mockCreator := mocks.NewMockMetastoreCreator(ctrl)
+func newMetastoreManagerForTesting(ctrl *gomock.Controller) (*metastoreManagerImpl, *mock.MockMetastoreCreator) {
+	mockCreator := mock.NewMockMetastoreCreator(ctrl)
 	return &metastoreManagerImpl{
 		creator: mockCreator,
 	}, mockCreator

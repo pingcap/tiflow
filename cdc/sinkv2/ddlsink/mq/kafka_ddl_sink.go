@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
-	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -39,7 +39,7 @@ func NewKafkaDDLSink(
 	adminClientCreator pkafka.ClusterAdminClientCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
-	topic, err := mqutil.GetTopic(sinkURI)
+	topic, err := util.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -72,7 +72,7 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := mqutil.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -98,7 +98,7 @@ func NewKafkaDDLSink(
 		}
 	}()
 
-	topicManager, err := mqutil.GetTopicManagerAndTryCreateTopic(
+	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		topic,
 		baseConfig.DeriveTopicConfig(),
 		client,
@@ -113,7 +113,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := mqutil.GetEncoderConfig(sinkURI, protocol, replicaConfig,
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
 		saramaConfig.Producer.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
