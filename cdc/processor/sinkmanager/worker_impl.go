@@ -41,15 +41,14 @@ var _ worker = (*workerImpl)(nil)
 type workerImpl struct {
 	changefeedID model.ChangeFeedID
 	sortEngine   sorter.EventSortEngine
-	redoManager  redo.LogManager
-	memQuota     *changefeedMemQuota
+	// redoManager only has value when the redo log is enabled.
+	redoManager redo.LogManager
+	memQuota    *changefeedMemQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
-	// The max size of group of one batch.
-	maxBatchGroupSize uint64
 }
 
 // newWorker creates a new worker.
@@ -64,16 +63,16 @@ func newWorker(
 	maxBatchGroupSize uint64,
 ) worker {
 	return &workerImpl{
-		changefeedID:      changefeedID,
-		sortEngine:        sortEngine,
-		redoManager:       redoManager,
-		memQuota:          quota,
-		splitTxn:          splitTxn,
-		enableOldValue:    enableOldValue,
-		maxBatchGroupSize: maxBatchGroupSize,
+		changefeedID:   changefeedID,
+		sortEngine:     sortEngine,
+		redoManager:    redoManager,
+		memQuota:       quota,
+		splitTxn:       splitTxn,
+		enableOldValue: enableOldValue,
 	}
 }
 
+// TODO bit txn should not keep force consuming
 func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *tableSinkTask) error {
 	for {
 		select {
@@ -89,13 +88,12 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			var lastPos sorter.Position
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
-			batchGroupCount := uint64(1)
 			// We have to get the latest barrier ts, this is because the barrier ts may be updated.
 			// We always want to get the latest value.
-			currentBarrierTs := task.lastBarrierTs.Load()
+			currentBarrierTs := task.upperBarrierTs.Load()
 			upperBound := sorter.Position{
-				CommitTs: currentBarrierTs - 1,
-				StartTs:  currentBarrierTs,
+				StartTs:  currentBarrierTs - 1,
+				CommitTs: currentBarrierTs,
 			}
 
 			// Two functions to simplify the code.
@@ -169,7 +167,6 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 					if w.splitTxn {
 						batchID = 1
-						batchGroupCount = 1
 					}
 					// 1) If we need to split the transaction into multiple batches,
 					// 	  we have to update the resolved ts as soon as possible.
@@ -188,15 +185,11 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 				} else {
 					if w.splitTxn {
-						if currentTotalSize%batchGroupCount >= maxUpdateIntervalSize {
+						// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
+						if currentTotalSize >= maxUpdateIntervalSize*50 {
 							if err := appendEventsAndRecordCurrentSize(); err != nil {
 								return errors.Trace(err)
 							}
-							// One more item is added to the batch group.
-							batchGroupCount++
-						}
-						// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
-						if batchGroupCount >= w.maxBatchGroupSize {
 							if err := advanceTableSinkAndResetCurrentSize(e); err != nil {
 								return errors.Trace(err)
 							}

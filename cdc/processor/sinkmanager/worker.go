@@ -31,15 +31,16 @@ type tableSinkTask struct {
 	// lowerBound indicates the lower bound of the table sink.
 	// It is a closed interval.
 	lowerBound sorter.Position
-	// lastBarrierTs indicates the upper bound of the table sink.
+	// upperBarrierTs indicates the upper bound of the table sink.
 	// It is a closed interval.
-	// Use atomic to get the latest value.
-	lastBarrierTs *atomic.Uint64
-	tableSink     *tableSinkWrapper
-	callback      writeSuccessCallback
+	// Use atomic pointer to get the latest value.
+	upperBarrierTs *atomic.Uint64
+	tableSink      *tableSinkWrapper
+	callback       writeSuccessCallback
 }
 
 type worker interface {
 	// Pull data from source manager for the table sink.
+	// We suppose that the worker only handle one task at a time.
 	receiveTableSinkTask(ctx context.Context, taskChan <-chan *tableSinkTask) error
 }
