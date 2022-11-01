@@ -22,6 +22,8 @@ import (
 
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -43,7 +45,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -390,6 +394,20 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
+	if s.cfg.EnableGCTuning {
+		limit, err := memory.MemTotal()
+		if err != nil {
+			log.Warn("get memory failed", zap.Error(err))
+			limit = 0
+		}
+		threshold := limit * 7 / 10
+		log.Info("set memory threshold to GC tuner",
+			zap.Uint64("memory limit", limit),
+			zap.Uint64("threshold", threshold))
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(threshold)
+	}
+
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
@@ -630,7 +648,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.selfID),
@@ -640,31 +658,29 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.masterClient.Heartbeat(ctx, req)
+			_, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				log.L().Error("heartbeat rpc meet error", zap.Error(err))
-				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
-				}
-				continue
-			}
-			if resp.Err != nil {
-				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
-				switch resp.Err.Code {
-				case pb.ErrorCode_UnknownExecutor:
-					log.L().Info("heartbeat failed, will retry", zap.Error(err))
-					continue
-				case pb.ErrorCode_TombstoneExecutor:
-					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
-				case pb.ErrorCode_MasterNotReady:
+				if rpcutil.ErrMasterNotReady.Is(err) {
 					s.lastHearbeatTime = t
 					if rl.Allow() {
 						log.L().Info("heartbeat success with MasterNotReady")
 					}
 					continue
-				default:
 				}
+
+				log.Warn("heartbeat rpc meet error", zap.Error(err))
+				// TODO: move all errors into one package, so that executor
+				// server no longer needs to depend on servermaster package.
+				if servermaster.ErrTombstoneExecutorError.Is(err) {
+					return errors.ErrHeartbeat.GenWithStack("logic error: %v", err)
+				}
+
+				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+					return errors.WrapError(errors.ErrHeartbeat, err, "timeout")
+				}
+				continue
 			}
+
 			// We aim to keep lastHbTime of executor consistent with lastHbTime of Master.
 			// If we set the heartbeat time of executor to the start time of rpc, it will
 			// be a little bit earlier than the heartbeat time of master, which is safe.
@@ -673,9 +689,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			if rl.Allow() {
-				log.L().Info("heartbeat success",
-					zap.String("leader", resp.Leader),
-					zap.Strings("members", resp.Addrs))
+				log.L().Info("heartbeat success")
 			}
 		}
 	}

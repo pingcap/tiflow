@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -28,21 +29,35 @@ import (
 // TODO: For now, we create a real sink instance and validate it.
 // Maybe we should support the dry-run mode to validate sink.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
-	if err := preCheckSinkURI(sinkURI); err != nil {
+	var err error
+	if err = preCheckSinkURI(sinkURI); err != nil {
 		return err
 	}
 
 	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"), sinkURI, cfg, errCh)
-	if err != nil {
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableNewSink {
+		var s Sink
+		s, err = New(ctx, model.DefaultChangeFeedID("sink-verify"), sinkURI, cfg, errCh)
+		if err != nil {
+			cancel()
+			return err
+		}
+		// NOTICE: We have to cancel the context before we close it,
+		// otherwise we will write data to closed chan after sink closed.
 		cancel()
-		return err
+		err = s.Close(ctx)
+	} else {
+		var s *factory.SinkFactory
+		s, err = factory.New(ctx, sinkURI, cfg, errCh)
+		if err != nil {
+			cancel()
+			return err
+		}
+		cancel()
+		err = s.Close()
 	}
-	// NOTICE: We have to cancel the context before we close it,
-	// otherwise we will write data to closed chan after sink closed.
-	cancel()
-	err = s.Close(ctx)
 	if err != nil {
 		return err
 	}
