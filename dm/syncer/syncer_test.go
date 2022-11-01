@@ -1732,7 +1732,6 @@ func TestDownstreamTableHasAutoRandom(t *testing.T) {
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	require.NoError(t, err)
 	dbConn, err := db.Conn(ctx)
 	require.NoError(t, err)
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
