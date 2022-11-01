@@ -190,7 +190,6 @@ func TestFeatureChecker(t *testing.T) {
 	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true)
 	_, err = s.MockRPC(ctx, req)
 	require.NoError(t, err)
-
 }
 
 func TestRPCLimiter(t *testing.T) {
