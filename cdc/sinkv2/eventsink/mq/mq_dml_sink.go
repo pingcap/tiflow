@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -144,6 +146,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			},
 			rowEvent: row,
 		}
+		mq.WorkerDispatchedEventCount.WithLabelValues(s.id.Namespace, s.id.ID, strconv.Itoa(index)).Inc()
 	}
 
 	return nil
