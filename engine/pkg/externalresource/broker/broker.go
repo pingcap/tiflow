@@ -76,7 +76,7 @@ func NewBroker(
 	client client.ServerMasterClient,
 ) (*DefaultBroker, error) {
 	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
-	if err != nil || resp.Err != nil {
+	if err != nil {
 		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
 	}
 	var storageConfig resModel.Config

@@ -75,7 +75,7 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 
 	ret := common.NewMsg(config.ProtocolCsv, nil, b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(b.batchSize)
-	if len(b.callbackBuf) != 0 && len(b.callbackBuf) == b.batchSize {
+	if len(b.callbackBuf) != 0 {
 		callbacks := b.callbackBuf
 		ret.Callback = func() {
 			for _, cb := range callbacks {

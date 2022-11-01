@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       "minio-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-master-1:
     image: dataflow:test
     container_name: server-master-1
@@ -46,6 +48,8 @@ services:
         condition: service_healthy
       "minio-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-master-2:
     image: dataflow:test
     container_name: server-master-2
@@ -69,6 +73,8 @@ services:
         condition: service_healthy
       "minio-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-executor-0:
     image: dataflow:test
     container_name: server-executor-0
@@ -93,6 +99,8 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-1:
     image: dataflow:test
     container_name: server-executor-1
@@ -117,6 +125,8 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-2:
     image: dataflow:test
     container_name: server-executor-2
@@ -141,6 +151,8 @@ services:
       - "server-master-1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -150,6 +162,7 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
+
   mysql-standalone:
     image: mysql:8.0
     container_name: mysql-standalone
@@ -165,6 +178,8 @@ services:
       interval: 10s
       timeout: 600s
       retries: 60
+    restart: on-failure
+
   minio-standalone:
     image: minio/minio
     container_name: minio-standalone
@@ -180,6 +195,7 @@ services:
       interval: 10s
       timeout: 60s
       retries: 6
+
   minio-createbuckets:
     image: minio/mc
     container_name: minio-createbuckets
