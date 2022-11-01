@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
@@ -56,14 +57,14 @@ func New(ctx context.Context,
 	s := &SinkFactory{}
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
-	case sink.MySQLSchema, sink.MySQLSSLSchema, sink.TiDBSchema, sink.TiDBSSLSchema:
+	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {
 			return nil, err
 		}
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
-	case sink.KafkaSchema, sink.KafkaSSLSchema:
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
@@ -71,7 +72,14 @@ func New(ctx context.Context,
 		}
 		s.rowSink = mqs
 		s.sinkType = sink.RowSink
-	case sink.BlackHoleSchema:
+	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.AzblobScheme:
+		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
+		if err != nil {
+			return nil, err
+		}
+		s.txnSink = storageSink
+		s.sinkType = sink.TxnSink
+	case sink.BlackHoleScheme:
 		bs := blackhole.New()
 		s.rowSink = bs
 		s.sinkType = sink.RowSink

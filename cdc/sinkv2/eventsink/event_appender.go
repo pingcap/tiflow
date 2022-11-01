@@ -49,8 +49,14 @@ type TxnEventAppender struct{}
 // The callers of this function should **make sure** that
 // the commitTs and startTs of rows is **strictly increasing**.
 // 1. Txns ordered by commitTs and startTs.
-// 2. Rows grouped by startTs and big txn batch,
-// cause the startTs is the unique identifier of the transaction.
+// 2. Rows are grouped into SingleTableTxn by startTs and big txn batch,
+// since the startTs is the unique identifier of a transaction.
+// After Append, the structure of the buffer is:
+// buffer = [Txn1[row11, row12...], Txn2[row21,row22...]...], in which:
+//  1. If Txn1.CommitTs < Txn2.CommitTs, then Txn1.startTs can be
+//     either less or larger than Txn2.startTs.
+//  2. If Txn1.CommitTs == Txn2.CommitTs, then Txn1.startTs must be
+//     **less than** Txn2.startTs.
 func (t *TxnEventAppender) Append(
 	buffer []*model.SingleTableTxn,
 	rows ...*model.RowChangedEvent,
@@ -59,9 +65,10 @@ func (t *TxnEventAppender) Append(
 		// This means no txn is in the buffer.
 		if len(buffer) == 0 {
 			txn := &model.SingleTableTxn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-				Table:    row.Table,
+				StartTs:      row.StartTs,
+				CommitTs:     row.CommitTs,
+				Table:        row.Table,
+				TableVersion: row.TableInfoVersion,
 			}
 			txn.Append(row)
 			buffer = append(buffer, txn)
@@ -86,9 +93,10 @@ func (t *TxnEventAppender) Append(
 		// their commitTs can be same but startTs will be never same.
 		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
 			buffer = append(buffer, &model.SingleTableTxn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-				Table:    row.Table,
+				StartTs:      row.StartTs,
+				CommitTs:     row.CommitTs,
+				Table:        row.Table,
+				TableVersion: row.TableInfoVersion,
 			})
 		}
 
