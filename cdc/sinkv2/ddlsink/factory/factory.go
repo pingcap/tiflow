@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/blackhole"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql"
@@ -41,13 +42,15 @@ func New(
 	}
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
-	case sink.KafkaSchema, sink.KafkaSSLSchema:
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			kafka.NewAdminClientImpl, ddlproducer.NewKafkaDDLProducer)
-	case sink.BlackHoleSchema:
+	case sink.BlackHoleScheme:
 		return blackhole.New(), nil
-	case sink.MySQLSSLSchema, sink.MySQLSchema, sink.TiDBSchema, sink.TiDBSSLSchema:
+	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		return mysql.NewMySQLDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
+	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.AzblobScheme:
+		return cloudstorage.NewCloudStorageDDLSink(ctx, sinkURI)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
