@@ -61,7 +61,7 @@ type dmlSink struct {
 }
 
 const (
-	defaultWorkerNum = 8
+	defaultWorkerNum = 3
 )
 
 func newSink(ctx context.Context,
