@@ -243,10 +243,12 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 			s.syncPointRetention.Seconds())
 		_, err = tx.Exec(query)
 		if err != nil {
-			// It is ok to ignore the error, since clear sync point is not necessary.
+			// It is ok to ignore the error, since it will not affect the correctness of the system,
+			// and no any business logic depends on this behavior, so we just log the error.
 			log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err)))
+		} else {
+			s.lastCleanSyncPointTime = time.Now()
 		}
-		s.lastCleanSyncPointTime = time.Now()
 	}
 
 	err = tx.Commit()
