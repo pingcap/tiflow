@@ -238,11 +238,15 @@ type LoadMode string
 
 const (
 	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
+	// deprecated, use LoadModeLogical instead.
 	LoadModeSQL LoadMode = "sql"
 	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	// deprecated, loader will be removed in future.
 	LoadModeLoader = "loader"
-	// LoadModeSST means import data by sst files, uses tidb-lightning local backend to load data.
-	LoadModeSST = "sst"
+	// LoadModeLogical means use tidb backend of lightning to load data, which uses SQL to load data.
+	LoadModeLogical = "logical"
+	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
+	LoadModePhysical = "physical"
 )
 
 // DuplicateResolveType defines the duplication resolution when meet duplicate rows.
@@ -290,11 +294,13 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 func (m *LoaderConfig) adjust() error {
-	if m.ImportMode == "" {
-		m.ImportMode = LoadModeSQL
+	if m.ImportMode == "" || m.ImportMode == LoadModeSQL {
+		m.ImportMode = LoadModeLogical
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
-	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader && m.ImportMode != LoadModeSST {
+	switch m.ImportMode {
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 

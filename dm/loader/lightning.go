@@ -108,7 +108,7 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
-	if cfg.LoaderConfig.ImportMode == config.LoadModeSST {
+	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
