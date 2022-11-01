@@ -93,7 +93,7 @@ func newSink(ctx context.Context,
 		producer:     producer,
 	}
 	for i := 0; i < defaultWorkerNum; i++ {
-		w := newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder.Build(), producer, msgChan, statistics)
+		w := newWorker(i, changefeedID, encoderConfig.Protocol, encoderBuilder.Build(), producer, msgChan, statistics)
 		s.workers[i] = w
 	}
 

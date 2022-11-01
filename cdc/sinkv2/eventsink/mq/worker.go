@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -68,10 +69,13 @@ type worker struct {
 	metricMQWorkerFlushDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
+
+	index int
 }
 
 // newWorker creates a new flush worker.
 func newWorker(
+	index int,
 	id model.ChangeFeedID,
 	protocol config.Protocol,
 	encoder codec.EventBatchEncoder,
@@ -80,6 +84,7 @@ func newWorker(
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
+		index:                       index,
 		changeFeedID:                id,
 		protocol:                    protocol,
 		msgChan:                     inputChan,
@@ -116,6 +121,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
+		zap.Int("index", w.index),
 	)
 	for {
 		select {
@@ -132,6 +138,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
+			mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Inc()
 			start := time.Now()
 			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
 				event.rowEvent.Event, event.rowEvent.Callback)
