@@ -144,8 +144,5 @@ func IsSyncPointIgnoreError(err error) bool {
 	}
 	// We should ignore the error when the downstream has no
 	// such system variable for compatibility.
-	if mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-		return true
-	}
-	return false
+	return mysqlErr.Number == mysql.ErrUnknownSystemVariable
 }

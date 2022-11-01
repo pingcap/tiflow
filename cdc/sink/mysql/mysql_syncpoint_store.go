@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/errorutil"
 	"net"
 	"net/url"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
@@ -165,7 +165,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -173,7 +173,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -192,7 +192,7 @@ func (s *mysqlSyncPointStore) CreateSyncTable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			log.Error("failed to create syncpoint table", zap.Error(err2))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -216,7 +216,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		log.Info("sync table: get tidb_current_ts err")
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			log.Error("failed to write syncpoint table", zap.Error(err))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -227,7 +227,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+			log.Error("failed to write syncpoint table", zap.Error(err2))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -243,7 +243,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		} else {
 			err2 := tx.Rollback()
 			if err2 != nil {
-				log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
+				log.Error("failed to write syncpoint table", zap.Error(err2))
 			}
 			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
@@ -262,7 +262,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		_, err = tx.Exec(query)
 		if err != nil {
 			// It is ok to ignore the error, since clean sync point is not necessary.
-			log.Error("failed to clean syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err)))
+			log.Error("failed to clean syncpoint table", zap.Error(err))
 		}
 		s.lastCleanSyncPointTime = time.Now()
 		log.Info("clean outdate syncpoint successfully", zap.String("query", query))

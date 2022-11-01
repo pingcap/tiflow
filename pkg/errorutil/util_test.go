@@ -113,6 +113,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 }
 
 func TestIsSyncPointIgnoreError(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		err error
 		ret bool
