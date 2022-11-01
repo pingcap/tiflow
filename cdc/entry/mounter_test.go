@@ -1114,10 +1114,10 @@ func TestBuildTableInfo(t *testing.T) {
 				" c3 BIT(10) NOT NULL," +
 				" UNIQUE KEY (c2, c3)" +
 				")",
-			// CDC discards field length, charset and collation.
+			// CDC discards field length.
 			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
 				"  `c` int(0) unsigned DEFAULT NULL,\n" +
-				"  `c2` varchar(0) CHARACTER SET  COLLATE  NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
 				"  `c3` bit(0) NOT NULL,\n" +
 				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
@@ -1134,7 +1134,7 @@ func TestBuildTableInfo(t *testing.T) {
 			// CDC discards virtual generated column, and generating expression of stored generated column.
 			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
 				"  `c` int(0) unsigned NOT NULL,\n" +
-				"  `c2` varchar(0) CHARACTER SET  COLLATE  NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
 				"  `gen2` int(0) GENERATED ALWAYS AS (pass_generated_check) STORED,\n" +
 				"  `c3` bit(0) NOT NULL,\n" +
 				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +

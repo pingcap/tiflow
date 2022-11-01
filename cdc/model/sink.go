@@ -469,6 +469,9 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 		columnInfo.Name = model.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
+		// TiKV always use utf8mb4 to store, and collation is not recorded by CDC
+		columnInfo.SetCharset(mysql.UTF8MB4Charset)
+		columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
 
 		// inverse initColumnsFlag
 		flag := col.Flag
