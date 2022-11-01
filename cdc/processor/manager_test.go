@@ -304,7 +304,7 @@ func TestQueryTableCount(t *testing.T) {
 	tableCh := make(chan int, 1)
 	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
 	require.Nil(t, err)
-	err = m.handleCommand()
+	err = m.handleCommand(nil)
 	require.Nil(t, err)
 	select {
 	case count := <-tableCh:

@@ -172,6 +172,8 @@ services:
       interval: 10s
       timeout: 600s
       retries: 60
+    restart: on-failure
+
   minio-standalone:
     image: minio/minio
     container_name: minio-standalone
@@ -187,6 +189,7 @@ services:
       interval: 10s
       timeout: 60s
       retries: 6
+
   minio-createbuckets:
     image: minio/mc
     container_name: minio-createbuckets
