@@ -440,16 +440,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
-	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
-
-	// ResourceManagerService should be initialized after registerMetaStore.
-	// FIXME: We should do these work inside NewServer.
-	s.initResourceManagerService()
-	s.scheduler = scheduler.NewScheduler(
-		s.executorManager,
-		s.resourceManagerService)
-
 	wg, ctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() error {
@@ -808,6 +798,19 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 		log.Info("job manager exited")
 	}()
+
+	// The following member variables are used in leader only and released after
+	// the leader is resigned, so initialize these variables in this function,
+	// instead of initializing them in the NewServer or Server.Run
+
+	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
+	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
+
+	// ResourceManagerService should be initialized after registerMetaStore.
+	s.initResourceManagerService()
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
