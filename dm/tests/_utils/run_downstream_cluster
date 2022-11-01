@@ -18,7 +18,7 @@ export TIKV_STATUS_ADDR="127.0.0.1:2018"
 start_pd() {
 	echo "Starting PD..."
 
-	cat > "$WORK_DIR/pd.toml" <<EOF
+	cat >"$WORK_DIR/pd.toml" <<EOF
 [replication]
 # The number of replicas for each region.
 max-replicas = 1
