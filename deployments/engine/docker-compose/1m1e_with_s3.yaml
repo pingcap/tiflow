@@ -1,0 +1,103 @@
+version: "2.3"
+services:
+  server-master:
+    image: dataflow:test
+    container_name: server-master-0
+    volumes:
+      - ./config/master_with_s3.toml:/config.toml
+      - /tmp/tiflow_engine_test:/log
+    command:
+      - "/tiflow"
+      - "master"
+      - "--name=server-master"
+      - "--addr=0.0.0.0:10240"
+      - "--advertise-addr=server-master:10240"
+      - "--config=/config.toml"
+      - "--log-file=/log/server-master-0.log"
+    ports:
+      - "10240:10240"
+    depends_on:
+      "etcd-standalone":
+        condition: service_started
+      "mysql-standalone":
+        condition: service_healthy
+    restart: unless-stopped
+
+  server-executor:
+    image: dataflow:test
+    container_name: server-executor-0
+    volumes:
+      - ./config/executor.toml:/config.toml
+      - /tmp/tiflow_engine_test:/log
+    command:
+      - "/tiflow"
+      - "executor"
+      - "--name=server-executor"
+      - "--addr=0.0.0.0:10241"
+      - "--advertise-addr=server-executor:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
+      - "--log-file=/log/server-executor-0.log"
+    ports:
+      - "10241:10241"
+    depends_on:
+      - "server-master"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - TZ=UTC
+    restart: unless-stopped
+
+  etcd-standalone:
+    image: quay.io/coreos/etcd
+    container_name: etcd-standalone
+    command:
+      - "etcd"
+      - "--listen-client-urls=http://0.0.0.0:2379"
+      - "--advertise-client-urls=http://etcd-standalone:2379"
+    ports:
+      - "12479:2379"
+
+  mysql-standalone:
+    image: mysql:8.0
+    container_name: mysql-standalone
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    volumes:
+      - './config/mysql_meta.cnf:/etc/my.cnf'
+    ports:
+      - "3336:3306"
+    healthcheck:
+      test: mysql -h127.0.0.1 -P3306 -e "show databases"
+      interval: 10s
+      timeout: 600s
+      retries: 60
+
+  minio-standalone:
+    image: minio/minio
+    container_name: minio-standalone
+    command: server --console-address ":9001" /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: engine
+      MINIO_ROOT_PASSWORD: engineSecret
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 60s
+      retries: 6
+  minio-createbuckets:
+    image: minio/mc
+    container_name: minio-createbuckets
+    depends_on:
+      - minio-standalone
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio-standalone:9000 engine engineSecret || exit 1;
+      /usr/bin/mc mb myminio/engine-it || exit 1;
+      /usr/bin/mc version enable myminio/engine-ut;
+      exit 0;
+      "

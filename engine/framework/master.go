@@ -394,10 +394,9 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	// Don't cancel this context until it meets first error. In this way this
-	// context can be used in business logic and leaves a robust way to cancel
-	// business logic from runtime.(If business uses context correctly)
-	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
+	// Note this context must not be held in any resident goroutine.
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {

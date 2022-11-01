@@ -65,9 +65,10 @@ func (t *TxnEventAppender) Append(
 		// This means no txn is in the buffer.
 		if len(buffer) == 0 {
 			txn := &model.SingleTableTxn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-				Table:    row.Table,
+				StartTs:      row.StartTs,
+				CommitTs:     row.CommitTs,
+				Table:        row.Table,
+				TableVersion: row.TableInfoVersion,
 			}
 			txn.Append(row)
 			buffer = append(buffer, txn)
@@ -92,9 +93,10 @@ func (t *TxnEventAppender) Append(
 		// their commitTs can be same but startTs will be never same.
 		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
 			buffer = append(buffer, &model.SingleTableTxn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-				Table:    row.Table,
+				StartTs:      row.StartTs,
+				CommitTs:     row.CommitTs,
+				Table:        row.Table,
+				TableVersion: row.TableInfoVersion,
 			})
 		}
 
