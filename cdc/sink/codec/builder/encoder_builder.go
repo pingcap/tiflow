@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
+	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
 	"github.com/pingcap/tiflow/cdc/sink/codec/maxwell"
 	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -42,6 +43,8 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *common.Config) (codec.E
 		return canal.NewJSONBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
+	case config.ProtocolCsv:
+		return csv.NewBatchEncoderBuilder(c), nil
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
 	}
