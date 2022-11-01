@@ -89,7 +89,7 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
-    import-mode: sql
+    import-mode: physical
     on-duplicate: replace
 syncers:
   sync-01:
