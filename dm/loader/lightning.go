@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -74,7 +75,7 @@ type LightningLoader struct {
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
 
-	statusRecorder *statusRecorder
+	speedRecorder *export.SpeedRecorder
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -91,7 +92,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
-		statusRecorder:        newStatusRecorder(),
+		speedRecorder:         export.NewSpeedRecorder(),
 	}
 	return loader
 }
@@ -465,7 +466,7 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
-	currentSpeed := l.statusRecorder.getSpeed(finished)
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
