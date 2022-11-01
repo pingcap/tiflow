@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -41,7 +42,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
-
 	"go.uber.org/zap"
 )
 
@@ -210,7 +210,7 @@ type fileIndexRange struct {
 	end   uint64
 }
 
-type Consumer struct {
+type consumer struct {
 	sink             sink.Sink
 	replicationCfg   *config.ReplicaConfig
 	externalStorage  storage.ExternalStorage
@@ -219,7 +219,7 @@ type Consumer struct {
 	tableIDGenerator *fakeTableIDGenerator
 }
 
-func NewConsumer(ctx context.Context) (*Consumer, error) {
+func newConsumer(ctx context.Context) (*consumer, error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
 	if err != nil {
@@ -238,13 +238,16 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			replicaConfig.Sink.Protocol)
 	}
 
-	bs, err := storage.ParseBackend(upstreamURIStr, &storage.BackendOptions{})
+	bs, err := storage.ParseBackend(upstreamURIStr, nil)
 	if err != nil {
 		log.Error("failed to parse storage backend", zap.Error(err))
 		return nil, err
 	}
 
-	storage, err := storage.New(ctx, bs, nil)
+	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
+		SendCredentials: false,
+		S3Retryer:       rcommon.DefaultS3Retryer(),
+	})
 	if err != nil {
 		log.Error("failed to create external storage", zap.Error(err))
 		return nil, err
@@ -258,7 +261,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		return nil, err
 	}
 
-	return &Consumer{
+	return &consumer{
 		sink:            s,
 		replicationCfg:  replicaConfig,
 		externalStorage: storage,
@@ -271,7 +274,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 }
 
 // map1 - map2
-func (c *Consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func (c *consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -290,7 +293,7 @@ func (c *Consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]
 	return resMap
 }
 
-func (c *Consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
+func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
 	m := make(map[dmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
 
@@ -346,7 +349,7 @@ func (c *Consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 	return m, err
 }
 
-func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
+func (c *consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
 	var events []*model.RowChangedEvent
 	var tableDetail cloudstorage.TableDetail
 
@@ -410,7 +413,7 @@ func (c *Consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dm
 	return err
 }
 
-func (c *Consumer) Run(ctx context.Context) error {
+func (c *consumer) run(ctx context.Context) error {
 	ticker := time.NewTicker(flushInterval)
 	for {
 		select {
@@ -498,13 +501,13 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	consumer, err := NewConsumer(ctx)
+	consumer, err := newConsumer(ctx)
 	if err != nil {
 		log.Error("failed to create storage consumer", zap.Error(err))
 		os.Exit(1)
 	}
 
-	if err := consumer.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+	if err := consumer.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("error occurred while running consumer", zap.Error(err))
 		os.Exit(1)
 	}
