@@ -99,7 +99,6 @@ func TestExecutorManager(t *testing.T) {
 	require.True(t, ErrUnknownExecutor.Is(err))
 
 	cancel()
-	mgr.Stop()
 	wg.Wait()
 }
 
@@ -261,6 +260,5 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}, event)
 
 	cancel()
-	mgr.Stop()
 	mgrWg.Wait()
 }
