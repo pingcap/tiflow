@@ -424,30 +424,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-// Stop and clean resources.
-// TODO: implement stop gracefully.
-func (s *Server) Stop() {
-	if s.mockGrpcServer != nil {
-		s.mockGrpcServer.Stop()
-	}
-	// in some tests this fields is not initialized
-	if s.masterCli != nil {
-		s.masterCli.Close()
-	}
-	if s.frameMetaClient != nil {
-		s.frameMetaClient.Close()
-	}
-	if s.frameworkClientConn != nil {
-		s.frameworkClientConn.Close()
-	}
-	if s.businessClientConn != nil {
-		s.businessClientConn.Close()
-	}
-	if s.executorManager != nil {
-		s.executorManager.Stop()
-	}
-}
-
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
 	err := s.registerMetaStore(ctx)

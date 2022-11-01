@@ -43,7 +43,6 @@ type ExecutorManager interface {
 	ListExecutors() []*ormModel.Executor
 	GetAddr(executorID model.ExecutorID) (string, bool)
 	Run(ctx context.Context) error
-	Stop()
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -291,7 +290,7 @@ func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 	ticker := time.NewTicker(e.keepAliveInterval)
 	defer func() {
 		ticker.Stop()
-		e.Stop()
+		e.notifier.Close()
 		log.Info("executor manager exited")
 	}()
 	for {
@@ -305,11 +304,6 @@ func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// Stop implements ExecutorManager.Stop
-func (e *ExecutorManagerImpl) Stop() {
-	e.notifier.Close()
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {
