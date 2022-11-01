@@ -271,6 +271,8 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 
 func (m *Dumpling) status() *pb.DumpStatus {
 	dumpStatus := m.core.GetStatus()
+	// dumpStatus.CurrentSpeedBPS
+	// dumpStatus.Progress
 	s := &pb.DumpStatus{
 		TotalTables:       dumpStatus.TotalTables,
 		CompletedTables:   dumpStatus.CompletedTables,
