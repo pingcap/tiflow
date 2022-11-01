@@ -126,7 +126,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.Nil(t, err)
 	// startTs can not be updated
-	require.Equal(t, "table", string(newCfInfo.Config.Sink.TxnAtomicity))
+	require.Equal(t, "none", string(newCfInfo.Config.Sink.TxnAtomicity))
 	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
