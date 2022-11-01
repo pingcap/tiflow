@@ -54,7 +54,7 @@ type mockCluster struct {
 	cancel context.CancelFunc
 }
 
-func newMockGCCluster(t *testing.T) *mockCluster {
+func newMockGCCluster(t *testing.T) (*mockCluster, *rpcutilMock.MockFeatureChecker) {
 	meta, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
@@ -66,11 +66,12 @@ func newMockGCCluster(t *testing.T) *mockCluster {
 	id := "leader"
 	leaderVal := &atomic.Value{}
 	leaderVal.Store(&rpcutil.Member{Name: id})
+	mockFeatureChecker := rpcutilMock.NewMockFeatureChecker(gomock.NewController(t))
 	service := manager.NewService(meta, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
 		id,
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		rpcutilMock.NewMockFeatureChecker(gomock.NewController(t)),
+		mockFeatureChecker,
 		&rate.Limiter{}, nil))
 
 	executorGroup := client.NewMockExecutorGroup()
@@ -86,7 +87,7 @@ func newMockGCCluster(t *testing.T) *mockCluster {
 		brokers:       make(map[model.ExecutorID]*broker.DefaultBroker),
 		executorGroup: executorGroup,
 		meta:          meta,
-	}
+	}, mockFeatureChecker
 }
 
 func (c *mockCluster) Start(t *testing.T) {

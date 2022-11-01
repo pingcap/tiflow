@@ -112,25 +112,27 @@ func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...gr
 }
 
 // newMockRPCServer returns a mockRPCServer that is ready to use.
-func newMockRPCServer(t *testing.T) *mockRPCServer {
+func newMockRPCServer(t *testing.T) (*mockRPCServer, *mock.MockFeatureChecker) {
 	serverID := "server1"
 	rpcLim := newRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
+	mockFeatureChecker := mock.NewMockFeatureChecker(gomock.NewController(t))
 	h := &preRPCHookImpl[mockRPCClientIface]{
 		id:             serverID,
 		leader:         &atomic.Value{},
 		leaderCli:      &LeaderClientWithLock[mockRPCClientIface]{},
-		featureChecker: mock.NewMockFeatureChecker(gomock.NewController(t)),
+		featureChecker: mockFeatureChecker,
 		limiter:        rpcLim,
 	}
 	h.leader.Store(&Member{Name: serverID})
-	return &mockRPCServer{hook: h}
+	return &mockRPCServer{hook: h}, mockFeatureChecker
 }
 
 func TestForwardToLeader(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := newMockRPCServer(t)
+	s, mockFeatureChecker := newMockRPCServer(t)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 	req := &mockRPCReq{}
 	resp, err := s.MockRPC(ctx, req)
 	require.NoError(t, err)
@@ -174,7 +176,7 @@ func TestForwardToLeader(t *testing.T) {
 func TestFeatureChecker(t *testing.T) {
 	t.Parallel()
 
-	s := newMockRPCServer(t)
+	s, _ := newMockRPCServer(t)
 	ctx := context.Background()
 	req := &mockRPCReq{}
 
