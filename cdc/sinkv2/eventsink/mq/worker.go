@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -50,6 +51,7 @@ type mqEvent struct {
 
 // worker will send messages to the DML producer on a batch basis.
 type worker struct {
+	index int
 	// changeFeedID indicates this sink belongs to which processor(changefeed).
 	changeFeedID model.ChangeFeedID
 	// protocol indicates the protocol used by this sink.
@@ -72,6 +74,7 @@ type worker struct {
 
 // newWorker creates a new flush worker.
 func newWorker(
+	index int,
 	id model.ChangeFeedID,
 	protocol config.Protocol,
 	encoder codec.EventBatchEncoder,
@@ -79,6 +82,7 @@ func newWorker(
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
+		index:                       index,
 		changeFeedID:                id,
 		protocol:                    protocol,
 		msgChan:                     chann.New[mqEvent](),
@@ -115,6 +119,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
+		zap.Int("index", w.index),
 	)
 	for {
 		select {
@@ -149,6 +154,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+				mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Add(float64(message.GetRowsCount()))
 			}
 			duration := time.Since(start)
 			w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
