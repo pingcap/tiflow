@@ -2442,7 +2442,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ms := newMySQLSink4Test(ctx)
-	ms.params.safeMode = false
+	ms.params.safeMode = true
 	ms.params.enableOldValue = true
 	for _, tc := range testCases {
 		dmls := ms.prepareDMLs(tc.input)

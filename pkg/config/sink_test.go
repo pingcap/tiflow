@@ -91,7 +91,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		{
 			sinkURI:       "mysql://normal:123456@127.0.0.1:3306",
 			expectedErr:   "",
-			expectedLevel: tableTxnAtomicity,
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
