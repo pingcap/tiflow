@@ -138,7 +138,6 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
-			mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Inc()
 			start := time.Now()
 			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
 				event.rowEvent.Event, event.rowEvent.Callback)
@@ -157,6 +156,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+				mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Add(float64(message.GetRowsCount()))
 			}
 			duration := time.Since(start)
 			w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
