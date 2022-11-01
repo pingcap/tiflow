@@ -150,7 +150,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 }
 
 func (s *dmlSink) partition2WorkerIdx(partition int32) int {
-	return int(partition) % defaultWorkerNum
+	return int(partition) % len(s.workers)
 }
 
 // Close closes the sink.
