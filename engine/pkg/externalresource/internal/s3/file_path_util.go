@@ -29,7 +29,11 @@ func getPathPredAlwaysTrue() pathPredFunc {
 func getPathPredByName(target string, keepPlaceholder bool) pathPredFunc {
 	return func(path string) bool {
 		resName, fileName, ok := strings.Cut(path, "/")
-		if !ok || fileName == placeholderFileName {
+		if !ok {
+			return false
+		}
+
+		if keepPlaceholder && fileName == placeholderFileName {
 			return false
 		}
 

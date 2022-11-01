@@ -153,7 +153,12 @@ func (m *FileManager) CleanPersistedResource(
 	if err != nil {
 		return nil, err
 	}
-	m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, true))
+
+	err = m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, true))
+	if err != nil {
+		return nil, err
+	}
+
 	return desc, nil
 }
 

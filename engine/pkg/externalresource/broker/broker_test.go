@@ -196,7 +196,7 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 		hdl, err := brk.OpenStorage(
 			context.Background(),
 			fakeProjectInfo,
-			resModel.WorkerID(workerID),
+			workerID,
 			"job-1",
 			resID, WithCleanBeforeOpen())
 		require.NoError(t, err)

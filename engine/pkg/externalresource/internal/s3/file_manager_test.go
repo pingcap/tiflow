@@ -285,6 +285,9 @@ func TestFileManagerCleanPersistedResource(t *testing.T) {
 	// clean non-existent resources from other nodes
 	err = fm1.RemoveResource(ctx, ident)
 	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.False(t, ok)
 	_, err = fm2.CleanPersistedResource(ctx, ident)
 	require.NoError(t, err)
 	ok, err = storage.FileExists(ctx, placeholderFileName)
