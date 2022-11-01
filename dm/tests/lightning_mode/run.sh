@@ -64,6 +64,14 @@ function run() {
 	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "123456"
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+
+	# restart to standalone tidb
+	killall -9 tidb-server 2>/dev/null || true
+	killall -9 tikv-server 2>/dev/null || true
+	killall -9 pd-server 2>/dev/null || true
+	rm -rf /tmp/tidb || true
+	rm -rf /tmp/1000_tidb || true
+	run_tidb_server 4000 $TIDB_PASSWORD
 }
 
 cleanup_data lightning_mode
