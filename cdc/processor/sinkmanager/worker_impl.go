@@ -60,7 +60,6 @@ func newWorker(
 	quota *changefeedMemQuota,
 	splitTxn bool,
 	enableOldValue bool,
-	maxBatchGroupSize uint64,
 ) worker {
 	return &workerImpl{
 		changefeedID:   changefeedID,
