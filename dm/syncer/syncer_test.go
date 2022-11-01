@@ -1745,7 +1745,6 @@ func TestDownstreamTableHasAutoRandom(t *testing.T) {
 
 		mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 			sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-		// create table t (c bigint primary key auto_random);
 		mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
 			sqlmock.NewRows([]string{"Table", "Create Table"}).
 				AddRow(tableName, c.input))
