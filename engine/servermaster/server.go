@@ -436,6 +436,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	// resourceManagerService relies on meta store
+	s.initResourceManagerService()
+
 	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
 		return err
 	}
@@ -807,7 +810,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
 
 	// ResourceManagerService should be initialized after registerMetaStore.
-	s.initResourceManagerService()
 	s.scheduler = scheduler.NewScheduler(
 		s.executorManager,
 		s.resourceManagerService)
