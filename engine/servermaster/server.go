@@ -847,11 +847,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 
 	errg.Go(func() error {
-		defer func() {
-			s.executorManager.Stop()
-			log.Info("executor manager exited")
-		}()
-		return s.executorManager.Start(errgCtx)
+		return s.executorManager.Run(errgCtx)
 	})
 
 	errg.Go(func() error {
