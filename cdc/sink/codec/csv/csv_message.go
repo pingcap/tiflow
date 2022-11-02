@@ -239,9 +239,8 @@ func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
 		if ft.GetCharset() == charset.CharsetBin {
 			blob, err := base64.StdEncoding.DecodeString(str)
 			return blob, err
-		} else {
-			return []byte(str), nil
 		}
+		return []byte(str), nil
 	case mysql.TypeFloat:
 		val, err := strconv.ParseFloat(str, 32)
 		return val, err
@@ -252,10 +251,9 @@ func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
 			val, err := strconv.ParseUint(str, 10, 64)
 			return val, err
-		} else {
-			val, err := strconv.ParseInt(str, 10, 64)
-			return val, err
 		}
+		val, err := strconv.ParseInt(str, 10, 64)
+		return val, err
 	case mysql.TypeBit:
 		val, err := strconv.ParseUint(str, 10, 64)
 		return val, err
