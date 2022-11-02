@@ -15,13 +15,13 @@ package mq
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
@@ -47,6 +47,14 @@ const (
 type mqEvent struct {
 	key      mqv1.TopicPartitionKey
 	rowEvent *eventsink.RowChangeCallbackableEvent
+
+	msg *common.Message
+
+	done chan struct{}
+}
+
+func (m mqEvent) MarkDone() {
+
 }
 
 // worker will send messages to the DML producer on a batch basis.
@@ -62,6 +70,8 @@ type worker struct {
 	ticker *time.Ticker
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
+
+	encoderGroup codec.EncoderGroup
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 	// metricMQWorkerFlushDuration is the metric of the flush duration.
@@ -75,21 +85,18 @@ type worker struct {
 
 // newWorker creates a new flush worker.
 func newWorker(
-	index int,
 	id model.ChangeFeedID,
 	protocol config.Protocol,
-	encoder codec.EventBatchEncoder,
+	encoderGroup codec.EncoderGroup,
 	producer dmlproducer.DMLProducer,
-	inputChan *chann.Chann[mqEvent],
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
-		index:                       index,
 		changeFeedID:                id,
 		protocol:                    protocol,
-		msgChan:                     inputChan,
+		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
-		encoder:                     encoder,
+		encoderGroup:                encoderGroup,
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -123,45 +130,89 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		zap.String("protocol", w.protocol.String()),
 		zap.Int("index", w.index),
 	)
+
+	// Fixed size of the batch.
+	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case event, ok := <-w.msgChan.Out():
-			if !ok {
-				log.Warn("MQ sink flush worker channel closed")
-				return nil
+		endIndex, err := w.batch(ctx, eventsBuf)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if endIndex == 0 {
+			continue
+		}
+
+		msgs := eventsBuf[:endIndex]
+		for _, msg := range msgs {
+			if err := w.encoderGroup.AddEvent(ctx, &msg); err != nil {
+				return errors.Trace(err)
 			}
-			// Skip this event when the table is stopping.
-			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-				event.rowEvent.Callback()
-				log.Debug("Skip event of stopped table", zap.Any("event", event))
-				continue
+		}
+
+		for _, msg := range msgs {
+			if err := msg.WaitFinished(ctx); err != nil {
+				return errors.Trace(err)
 			}
-			start := time.Now()
-			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
-				event.rowEvent.Event, event.rowEvent.Callback)
+			err := w.statistics.RecordBatchExecution(func() (int, error) {
+				err := w.producer.AsyncSendMessage(ctx, msg.key.Topic, msg.key.Partition, msg.msg)
+				if err != nil {
+					return 0, err
+				}
+				return 1, nil
+			})
 			if err != nil {
 				return err
 			}
-			w.statistics.ObserveRows(event.rowEvent.Event)
-			for _, message := range w.encoder.Build() {
-				err := w.statistics.RecordBatchExecution(func() (int, error) {
-					err := w.producer.AsyncSendMessage(ctx, event.key.Topic, event.key.Partition, message)
-					if err != nil {
-						return 0, err
-					}
-					return message.GetRowsCount(), nil
-				})
-				if err != nil {
-					return err
-				}
-				mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Add(float64(message.GetRowsCount()))
-			}
-			duration := time.Since(start)
-			w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
 		}
+
+		//err = w.asyncSend(ctx, partitionedRows)
+		//if err != nil {
+		//	return errors.Trace(err)
+		//}
+		//duration := time.Since(start)
+		//w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
 	}
+
+	//for {
+	//	select {
+	//	case <-ctx.Done():
+	//		return errors.Trace(ctx.Err())
+	//	case event, ok := <-w.msgChan.Out():
+	//		if !ok {
+	//			log.Warn("MQ sink flush worker channel closed")
+	//			return nil
+	//		}
+	//		// Skip this event when the table is stopping.
+	//		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+	//			event.rowEvent.Callback()
+	//			log.Debug("Skip event of stopped table", zap.Any("event", event))
+	//			continue
+	//		}
+	//		start := time.Now()
+	//		err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
+	//			event.rowEvent.Event, event.rowEvent.Callback)
+	//		if err != nil {
+	//			return err
+	//		}
+	//		w.statistics.ObserveRows(event.rowEvent.Event)
+	//		for _, message := range w.encoder.Build() {
+	//			err := w.statistics.RecordBatchExecution(func() (int, error) {
+	//				err := w.producer.AsyncSendMessage(ctx, event.key.Topic, event.key.Partition, message)
+	//				if err != nil {
+	//					return 0, err
+	//				}
+	//				return message.GetRowsCount(), nil
+	//			})
+	//			if err != nil {
+	//				return err
+	//			}
+	//			mq.WorkerDispatchedEventCount.WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID, strconv.Itoa(w.index)).Add(float64(message.GetRowsCount()))
+	//		}
+	//		duration := time.Since(start)
+	//		w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
+	//	}
+	//}
 }
 
 // Collect messages and send them to the producer in batches.

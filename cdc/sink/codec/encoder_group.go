@@ -13,12 +13,40 @@
 
 package codec
 
+import (
+	"context"
+
+	"github.com/pingcap/tiflow/cdc/model"
+)
+
+const (
+	defaultEncoderGroupSize = 16
+)
+
 type EncoderGroup interface {
+	Run(ctx context.Context) error
+	AddEvent(ctx context.Context, event *mqEvent) error
 }
 
 type encoderGroup struct {
+	builder EncoderBuilder
+	number  int
 }
 
-func NewEncoderGroup(builder EncoderBuilder) *encoderGroup {
-	return &encoderGroup{}
+func NewEncoderGroup(builder EncoderBuilder, number int) *encoderGroup {
+	if number <= 0 {
+		number = defaultEncoderGroupSize
+	}
+	return &encoderGroup{
+		builder: builder,
+		number:  number,
+	}
+}
+
+func (g *encoderGroup) Run(ctx context.Context) error {
+	return nil
+}
+
+func (g *encoderGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	return nil
 }

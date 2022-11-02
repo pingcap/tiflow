@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
@@ -29,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -48,10 +48,10 @@ type dmlSink struct {
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
-	outputCh *chann.Chann[mqEvent]
+	worker *worker
 
-	workers []*worker
-	//worker *worker
+	encoderGroup codec.EncoderGroup
+
 	// eventRouter used to route events to the right topic and partition.
 	eventRouter *dispatcher.EventRouter
 	// topicManager used to manage topics.
@@ -59,10 +59,6 @@ type dmlSink struct {
 	topicManager manager.TopicManager
 	producer     dmlproducer.DMLProducer
 }
-
-const (
-	defaultWorkerNum = 3
-)
 
 func newSink(ctx context.Context,
 	producer dmlproducer.DMLProducer,
@@ -77,24 +73,17 @@ func newSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, 8)
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	msgChan := chann.New[mqEvent]()
-
-	//w := newWorker(changefeedID, encoderConfig.Protocol, encoder, producer, statistics)
-	//
 	s := &dmlSink{
 		id:           changefeedID,
 		protocol:     encoderConfig.Protocol,
-		workers:      make([]*worker, defaultWorkerNum),
+		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderGroup, producer, statistics),
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
-		outputCh:     msgChan,
 		producer:     producer,
-	}
-	for i := 0; i < defaultWorkerNum; i++ {
-		w := newWorker(i, changefeedID, encoderConfig.Protocol, encoderBuilder.Build(), producer, msgChan, statistics)
-		s.workers[i] = w
+		encoderGroup: encoderGroup,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
@@ -118,12 +107,12 @@ func newSink(ctx context.Context,
 
 func (s *dmlSink) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
-	for _, w := range s.workers {
-		w := w
-		g.Go(func() error {
-			return w.run(ctx)
-		})
-	}
+	g.Go(func() error {
+		return s.worker.run(ctx)
+	})
+	g.Go(func() error {
+		return s.encoderGroup.Run(ctx)
+	})
 	return g.Wait()
 }
 
@@ -144,7 +133,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 		}
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
-		s.outputCh.In() <- mqEvent{
+		s.worker.msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
@@ -157,21 +146,6 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 
 // Close closes the sink.
 func (s *dmlSink) Close() error {
-	s.outputCh.Close()
-	for range s.outputCh.Out() {
-
-	}
-	s.producer.Close()
-	//w.msgChan.Close()
-	//// We must finish consuming the data here,
-	//// otherwise it will cause the channel to not close properly.
-	//for range w.msgChan.Out() {
-	//	// Do nothing. We do not care about the data.
-	//}
-	//w.producer.Close()
-
-	//for _, w := range s.workers {
-	//	w.close()
-	//}
+	s.worker.close()
 	return nil
 }
