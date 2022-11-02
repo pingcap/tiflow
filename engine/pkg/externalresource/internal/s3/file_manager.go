@@ -132,9 +132,9 @@ func (m *FileManager) GetPersistedResource(
 	return desc, nil
 }
 
-// CleanPersistedResource cleans the s3 directory of the given resource.
-// Note that CleanPersistedResource will work on any executor for any persisted resource.
-func (m *FileManager) CleanPersistedResource(
+// CleanOrRecreatePersistedResource cleans the s3 directory of the given resource.
+// Note that CleanOrRecreatePersistedResource will work on any executor for any persisted resource.
+func (m *FileManager) CleanOrRecreatePersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	desc, err := m.GetPersistedResource(ctx, ident)

@@ -173,7 +173,7 @@ func (b *DefaultBroker) OpenStorage(
 	} else if !options.cleanBeforeOpen {
 		desc, err = b.getPersistResource(ctx, fm, record, resName)
 	} else {
-		desc, err = b.cleanPersistResource(ctx, fm, record, resName)
+		desc, err = b.cleanOrRecreatePersistResource(ctx, fm, record, resName)
 	}
 	if err != nil {
 		return nil, err
@@ -348,7 +348,7 @@ func (b *DefaultBroker) getPersistResource(
 	return desc, nil
 }
 
-func (b *DefaultBroker) cleanPersistResource(
+func (b *DefaultBroker) cleanOrRecreatePersistResource(
 	ctx context.Context, fm internal.FileManager,
 	record *resModel.ResourceMeta,
 	resName resModel.ResourceName,
@@ -361,7 +361,7 @@ func (b *DefaultBroker) cleanPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	desc, err := fm.CleanPersistedResource(ctx, ident)
+	desc, err := fm.CleanOrRecreatePersistedResource(ctx, ident)
 	if err != nil {
 		return nil, err
 	}

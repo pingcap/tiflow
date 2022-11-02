@@ -232,7 +232,7 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	require.ErrorContains(t, err, "ResourceFilesNotFoundError")
 }
 
-func TestFileManagerCleanPersistedResource(t *testing.T) {
+func TestFileManagerCleanOrRecreatePersistedResource(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -257,7 +257,7 @@ func TestFileManagerCleanPersistedResource(t *testing.T) {
 	// clean from creator
 	err = storage.WriteFile(ctx, "file-1", []byte("test-content"))
 	require.NoError(t, err)
-	_, err = fm1.CleanPersistedResource(ctx, ident)
+	_, err = fm1.CleanOrRecreatePersistedResource(ctx, ident)
 	require.NoError(t, err)
 	ok, err := storage.FileExists(ctx, placeholderFileName)
 	require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestFileManagerCleanPersistedResource(t *testing.T) {
 	require.True(t, ok)
 
 	// clean from other node
-	_, err = fm2.CleanPersistedResource(ctx, ident)
+	_, err = fm2.CleanOrRecreatePersistedResource(ctx, ident)
 	require.NoError(t, err)
 	ok, err = storage.FileExists(ctx, placeholderFileName)
 	require.NoError(t, err)
@@ -288,7 +288,7 @@ func TestFileManagerCleanPersistedResource(t *testing.T) {
 	ok, err = storage.FileExists(ctx, placeholderFileName)
 	require.NoError(t, err)
 	require.False(t, ok)
-	_, err = fm2.CleanPersistedResource(ctx, ident)
+	_, err = fm2.CleanOrRecreatePersistedResource(ctx, ident)
 	require.NoError(t, err)
 	ok, err = storage.FileExists(ctx, placeholderFileName)
 	require.NoError(t, err)

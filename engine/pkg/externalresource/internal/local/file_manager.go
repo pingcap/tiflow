@@ -109,8 +109,8 @@ func (m *FileManager) GetPersistedResource(
 	return res, nil
 }
 
-// CleanPersistedResource cleans the local directory of the given resource.
-func (m *FileManager) CleanPersistedResource(
+// CleanOrRecreatePersistedResource cleans the local directory of the given resource.
+func (m *FileManager) CleanOrRecreatePersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	m.validateExecutor(ident.Executor, ident)
