@@ -85,9 +85,9 @@ func (d *featureDegrader) reset() {
 }
 
 // Available implements rpcutil.FeatureChecker
-func (d *featureDegrader) Available(name string) bool {
-	switch name {
-	case "ListExecutors", "RegisterExecutor":
+func (d *featureDegrader) Available(apiName string) bool {
+	switch apiName {
+	case "ListExecutors", "RegisterExecutor", "Heartbeat":
 		return d.executorManager.Load()
 	case "CreateJob", "GetJob", "ListJobs", "CancelJob", "DeleteJob",
 		"ScheduleTask":
