@@ -120,3 +120,13 @@ func TestReceiverClose(t *testing.T) {
 	}
 	n.Close()
 }
+
+func TestFlushWithClosedNotifier(t *testing.T) {
+	t.Parallel()
+
+	n := NewNotifier[int]()
+	n.Notify(1)
+	n.Close()
+	err := n.Flush(context.Background())
+	require.Nil(t, err)
+}
