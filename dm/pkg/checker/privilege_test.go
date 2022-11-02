@@ -33,7 +33,7 @@ type testCheckSuite struct{}
 func TestVerifyDumpPrivileges(t *testing.T) {
 	cases := []struct {
 		grants            []string
-		checkTables       []*filter.Table
+		checkTables       []filter.Table
 		dumpWholeInstance bool
 		dumpState         State
 		errStr            string
@@ -56,7 +56,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		{
 			grants:    []string{"GRANT RELOAD ON *.* TO 'user'@'%'"}, // lack SELECT privilege
 			dumpState: StateFailure,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "db1", Name: "tb1"},
 			},
 			errStr: "lack of Select privilege: {`db1`.`tb1`}; ",
@@ -71,7 +71,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 				"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'",
 			},
 			dumpState: StateFailure,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "db1", Name: "anomaly_score"},
 			},
 			errStr: "lack of Select privilege: {`db1`.`anomaly_score`}; ",
@@ -116,7 +116,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{ // Aurora have `LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA`
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "db1", Name: "tb1"},
 			},
 			dumpState: StateFailure,
@@ -126,7 +126,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			grants: []string{ // test `LOAD FROM S3, SELECT INTO S3` not at end
 				"GRANT INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, LOAD FROM S3, SELECT INTO S3, SELECT ON *.* TO 'root'@'%' WITH GRANT OPTION",
 			},
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "db1", Name: "tb1"},
 			},
 			dumpState: StateSuccess,
@@ -142,7 +142,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "medz", Name: "medz"},
 			},
 			errStr: "lack of RELOAD global (*.*) privilege; ",
@@ -152,7 +152,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 				"GRANT ALL PRIVILEGES ON `medz`.* TO `zhangsan`@`10.8.1.9` WITH GRANT OPTION",
 			},
 			dumpState: StateFailure,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "medz", Name: "medz"},
 			},
 			errStr: "lack of RELOAD global (*.*) privilege; ",
@@ -163,7 +163,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 				"GRANT SELECT (c) ON `lance`.`t` TO 'user'@'%'",
 			},
 			dumpState: StateFailure,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "lance", Name: "t"},
 			},
 			errStr: "lack of Select privilege: {`lance`.`t`}; ",
@@ -175,7 +175,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 				"GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`",
 			},
 			dumpState: StateSuccess,
-			checkTables: []*filter.Table{
+			checkTables: []filter.Table{
 				{Schema: "db1", Name: "t"},
 			},
 		},
