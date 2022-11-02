@@ -168,3 +168,25 @@ func getCreateTableStmt(p *parser.Parser, statement string) (*ast.CreateTableStm
 	}
 	return ctStmt, nil
 }
+
+func getCharset(stmt *ast.CreateTableStmt) string {
+	if stmt.Options != nil {
+		for _, option := range stmt.Options {
+			if option.Tp == ast.TableOptionCharset {
+				return option.StrValue
+			}
+		}
+	}
+	return ""
+}
+
+func getCollation(stmt *ast.CreateTableStmt) string {
+	if stmt.Options != nil {
+		for _, option := range stmt.Options {
+			if option.Tp == ast.TableOptionCollate {
+				return option.StrValue
+			}
+		}
+	}
+	return ""
+}
