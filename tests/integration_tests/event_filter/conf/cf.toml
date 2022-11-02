@@ -1,0 +1,8 @@
+[filter]
+rules = ["event_filter.*"] # replicate all tables in the event_filter database
+# This event filter rules will apply to table t1 only.
+[[filter.event-filters]]
+matcher = ["event_filter.t1"]
+ignore-event = ["drop table", "delete"]
+ignore-insert-value-expr = "id = 2 or city = 'tokyo'"
+
