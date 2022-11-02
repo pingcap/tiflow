@@ -792,6 +792,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	// TODO refactor this method to make it more readable and maintainable.
 	errg, errgCtx := errgroup.WithContext(ctx)
 
+	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
+	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
+
+	// ResourceManagerService should be initialized after registerMetaStore.
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
+
 	errg.Go(func() error {
 		return s.executorManager.Run(errgCtx)
 	})
