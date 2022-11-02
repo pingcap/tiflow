@@ -424,30 +424,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-// Stop and clean resources.
-// TODO: implement stop gracefully.
-func (s *Server) Stop() {
-	if s.mockGrpcServer != nil {
-		s.mockGrpcServer.Stop()
-	}
-	// in some tests this fields is not initialized
-	if s.masterCli != nil {
-		s.masterCli.Close()
-	}
-	if s.frameMetaClient != nil {
-		s.frameMetaClient.Close()
-	}
-	if s.frameworkClientConn != nil {
-		s.frameworkClientConn.Close()
-	}
-	if s.businessClientConn != nil {
-		s.businessClientConn.Close()
-	}
-	if s.executorManager != nil {
-		s.executorManager.Stop()
-	}
-}
-
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
 	err := s.registerMetaStore(ctx)
@@ -460,19 +436,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	// resourceManagerService relies on meta store
+	s.initResourceManagerService()
+
 	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
 		return err
 	}
-
-	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
-	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
-
-	// ResourceManagerService should be initialized after registerMetaStore.
-	// FIXME: We should do these work inside NewServer.
-	s.initResourceManagerService()
-	s.scheduler = scheduler.NewScheduler(
-		s.executorManager,
-		s.resourceManagerService)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -824,11 +793,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	errg, errgCtx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		defer func() {
-			s.executorManager.Stop()
-			log.Info("executor manager exited")
-		}()
-		return s.executorManager.Start(errgCtx)
+		return s.executorManager.Run(errgCtx)
 	})
 
 	errg.Go(func() error {
@@ -853,6 +818,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 		log.Info("job manager exited")
 	}()
+
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
