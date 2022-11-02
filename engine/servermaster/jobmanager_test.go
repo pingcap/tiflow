@@ -507,7 +507,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Type:   pb.Job_FakeJob,
 		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -530,7 +530,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -553,7 +553,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error test",
 		},
 	}, job))
@@ -766,4 +766,110 @@ func TestIsJobTerminated(t *testing.T) {
 	require.True(t, isJobTerminated(frameModel.MasterStateFinished))
 	require.True(t, isJobTerminated(frameModel.MasterStateFailed))
 	require.True(t, isJobTerminated(frameModel.MasterStateStopped))
+}
+
+func TestBuildPBJob(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		masterMeta    *frameModel.MasterMeta
+		includeConfig bool
+		job           *pb.Job
+	}{
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-1",
+				Type:   frameModel.CvsJobMaster,
+				State:  frameModel.MasterStateUninit,
+				Config: []byte("job-1-config"),
+				Detail: []byte("job-1-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-1",
+				Type:   pb.Job_CVSDemo,
+				State:  pb.Job_Created,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-1-config"),
+				Detail: []byte("job-1-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-2",
+				Type:   frameModel.DMJobMaster,
+				State:  frameModel.MasterStateInit,
+				Config: []byte("job-2-config"),
+				Detail: []byte("job-2-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-2",
+				Type:   pb.Job_DM,
+				State:  pb.Job_Running,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-2-config"),
+				Detail: []byte("job-2-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-3",
+				Type:   frameModel.CdcJobMaster,
+				State:  frameModel.MasterStateStopped,
+				Config: []byte("job-3-config"),
+				Detail: []byte("job-3-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-3",
+				Type:   pb.Job_CDC,
+				State:  pb.Job_Canceled,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-3-config"),
+				Detail: []byte("job-3-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-4",
+				Type:   frameModel.FakeJobMaster,
+				State:  frameModel.MasterStateFinished,
+				Config: []byte("job-4-config"),
+				Detail: []byte("job-4-detail"),
+			},
+			job: &pb.Job{
+				Id:     "job-4",
+				Type:   pb.Job_FakeJob,
+				State:  pb.Job_Finished,
+				Error:  &pb.Job_Error{},
+				Detail: []byte("job-4-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:       "job-5",
+				Type:     frameModel.FakeJobMaster,
+				State:    frameModel.MasterStateFailed,
+				Config:   []byte("job-5-config"),
+				Detail:   []byte("job-5-detail"),
+				ErrorMsg: "job-5-error",
+			},
+			job: &pb.Job{
+				Id:    "job-5",
+				Type:  pb.Job_FakeJob,
+				State: pb.Job_Failed,
+				Error: &pb.Job_Error{
+					Message: "job-5-error",
+				},
+				Detail: []byte("job-5-detail"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		job, err := buildPBJob(tc.masterMeta, tc.includeConfig)
+		require.NoError(t, err)
+		require.True(t, proto.Equal(tc.job, job))
+	}
 }
