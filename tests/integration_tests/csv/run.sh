@@ -48,17 +48,17 @@ function run() {
 
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+   	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	SINK_URI="s3://logbucket/storage_test?flush-interval=5s&endpoint=http://127.0.0.1:24927/"
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml
-	run_storage_consumer $WORK_DIR s3://logbucket $CUR/conf/changefeed.toml
+    SINK_URI="s3://logbucket/storage_test?flush-interval=5s&endpoint=http://127.0.0.1:24927/"
+    run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml
 
-	run_sql_file $CUR/data/schema.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/schema.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 8
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+    run_sql_file $CUR/data/schema.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql_file $CUR/data/schema.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_storage_consumer $WORK_DIR  "s3://logbucket/storage_test?endpoint=http://127.0.0.1:24927/" $CUR/conf/changefeed.toml
+    sleep 8
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 
 trap stop EXIT
