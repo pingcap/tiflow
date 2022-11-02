@@ -16,7 +16,6 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
@@ -61,13 +60,6 @@ func (c *taskSchedulerClient) ReportExecutorWorkload(
 	call := internal.NewCall(
 		c.cli.ReportExecutorWorkload,
 		request)
-	resp, err := call.Do(ctx)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-		return errors.Errorf("ReportExecutorWorkload: %s",
-			resp.String())
-	}
-	return nil
+	_, err := call.Do(ctx)
+	return err
 }

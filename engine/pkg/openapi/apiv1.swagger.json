@@ -136,6 +136,13 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "include_config",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -221,6 +228,13 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "include_config",
+            "description": "Whether to return the config of the job.\nConfig may contain sensitive information, it is not returned by default.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -272,7 +286,7 @@
     },
     "/api/v1/jobs/{id}/cancel": {
       "post": {
-        "summary": "NOTE: for the compability of existing openapi(ticdc) format, \nwe use `/cancel` but not `:cancel`(google api suggested) \nrefer to: https://cloud.google.com/apis/design/custom_methods",
+        "summary": "NOTE: for the compatibility of existing openapi(ticdc) format,\nwe use `/cancel` but not `:cancel`(google api suggested)\nrefer to: https://cloud.google.com/apis/design/custom_methods",
         "operationId": "JobManager_CancelJob",
         "responses": {
           "200": {
@@ -383,6 +397,17 @@
     }
   },
   "definitions": {
+    "JobError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
     "JobState": {
       "type": "string",
       "enum": [
@@ -426,41 +451,6 @@
     "enginepbCreateResourceResponse": {
       "type": "object"
     },
-    "enginepbError": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "$ref": "#/definitions/enginepbErrorCode"
-        },
-        "message": {
-          "type": "string"
-        },
-        "not_leader": {
-          "$ref": "#/definitions/enginepbNotLeader"
-        }
-      }
-    },
-    "enginepbErrorCode": {
-      "type": "string",
-      "enum": [
-        "MasterNotLeader",
-        "UnknownExecutor",
-        "NotEnoughResource",
-        "SubJobSubmitFailed",
-        "TombstoneExecutor",
-        "SubJobBuildFailed",
-        "BuildGrpcConnFailed",
-        "InvalidMetaStoreType",
-        "MasterNotReady",
-        "UnKnownJob",
-        "MetaStoreNotExists",
-        "MetaStoreSerializeFail",
-        "UnexpectedJobStatus",
-        "StorageConfigSerializeFail",
-        "UnknownError"
-      ],
-      "title": "- MasterNotLeader: This master is not leader right now.\n - UnknownExecutor: Executor has been removed so it can't be recognized.\n - NotEnoughResource: no enough resource can be used.\n - SubJobSubmitFailed: submit subjob failed\n - TombstoneExecutor: TombstoneExecutor\n - BuildGrpcConnFailed: create gRPC connection failed\n - InvalidMetaStoreType: unknown or upsupported metastore type\n - MasterNotReady: MasterNotReady means the master is staring up, and not ready to serve\n - MetaStoreNotExists: metastore not exists\n - MetaStoreSerializeFail: metastore serialize fail\n - UnexpectedJobStatus: job status is not expected for the operation.\n - StorageConfigSerializeFail: storage config serialize fail"
-    },
     "enginepbExecWorkload": {
       "type": "object",
       "properties": {
@@ -475,12 +465,7 @@
       }
     },
     "enginepbExecWorkloadResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        }
-      }
+      "type": "object"
     },
     "enginepbExecutor": {
       "type": "object",
@@ -525,21 +510,7 @@
       }
     },
     "enginepbHeartbeatResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
-        "leader": {
-          "type": "string"
-        },
-        "addrs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
+      "type": "object"
     },
     "enginepbIsReadyResponse": {
       "type": "object",
@@ -563,7 +534,8 @@
         },
         "config": {
           "type": "string",
-          "format": "byte"
+          "format": "byte",
+          "description": "Output will ignore this field by default unless include_config is set to true."
         },
         "detail": {
           "type": "string",
@@ -571,7 +543,7 @@
           "readOnly": true
         },
         "error": {
-          "$ref": "#/definitions/enginepbError"
+          "$ref": "#/definitions/JobError"
         },
         "selectors": {
           "type": "array",
@@ -654,19 +626,6 @@
         }
       }
     },
-    "enginepbNotLeader": {
-      "type": "object",
-      "properties": {
-        "request": {
-          "type": "string",
-          "title": "The requested server address"
-        },
-        "leader": {
-          "type": "string",
-          "title": "leader address"
-        }
-      }
-    },
     "enginepbPreDispatchTaskResponse": {
       "type": "object"
     },
@@ -684,9 +643,6 @@
     "enginepbQueryMetaStoreResponse": {
       "type": "object",
       "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
         "address": {
           "type": "string"
         }
@@ -709,9 +665,6 @@
     "enginepbQueryStorageConfigResponse": {
       "type": "object",
       "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        },
         "config": {
           "type": "string"
         }
@@ -765,20 +718,11 @@
             "format": "int64"
           },
           "title": "for record time"
-        },
-        "err": {
-          "$ref": "#/definitions/enginepbError",
-          "title": "error"
         }
       }
     },
     "enginepbRegisterMetaStoreResponse": {
-      "type": "object",
-      "properties": {
-        "err": {
-          "$ref": "#/definitions/enginepbError"
-        }
-      }
+      "type": "object"
     },
     "enginepbRemoveLocalResourceResponse": {
       "type": "object"
@@ -825,7 +769,6 @@
     "enginepbStoreType": {
       "type": "string",
       "enum": [
-        "SystemMetaStore",
         "AppMetaStore"
       ]
     },
