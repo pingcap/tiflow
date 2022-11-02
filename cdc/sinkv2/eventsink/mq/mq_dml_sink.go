@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/hash"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -52,9 +53,10 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
+	producer     dmlproducer.DMLProducer
 
-	workers  []*worker
-	producer dmlproducer.DMLProducer
+	workers []*worker
+	hasher  *hash.PositionInertia
 }
 
 const (
@@ -82,6 +84,7 @@ func newSink(ctx context.Context,
 		topicManager: topicManager,
 		workers:      make([]*worker, defaultWorkerNum),
 		producer:     producer,
+		hasher:       hash.NewPositionInertia(),
 	}
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
@@ -136,7 +139,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			return errors.Trace(err)
 		}
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
-		index := s.partition2WorkerIdx(partition)
+		index := s.getWorkerIndex(row.Event)
 		// This never be blocked because this is an unbounded channel.
 		s.workers[index].msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{
@@ -149,8 +152,23 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 	return nil
 }
 
-func (s *dmlSink) partition2WorkerIdx(partition int32) int {
-	return int(partition) % len(s.workers)
+func (s *dmlSink) getWorkerIndex(row *model.RowChangedEvent) int {
+	s.hasher.Reset()
+	s.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+
+	dispatchCols := row.Columns
+	if len(row.Columns) == 0 {
+		dispatchCols = row.PreColumns
+	}
+	for _, col := range dispatchCols {
+		if col == nil {
+			continue
+		}
+		if col.Flag.IsHandleKey() {
+			s.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+		}
+	}
+	return int(s.hasher.Sum32()) % len(s.workers)
 }
 
 // Close closes the sink.
