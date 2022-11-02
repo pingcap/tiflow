@@ -307,7 +307,11 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
 
-		if strings.Contains(path, "schema.json") {
+		if strings.HasSuffix(path, "metadata") {
+			return nil
+		}
+
+		if strings.HasSuffix(path, "schema.json") {
 			err := schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
