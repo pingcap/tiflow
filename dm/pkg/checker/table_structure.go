@@ -43,7 +43,7 @@ const (
 )
 
 type checkItem struct {
-	table    *filter.Table
+	table    filter.Table
 	sourceID string
 }
 
@@ -75,16 +75,15 @@ func (o *incompatibilityOption) String() string {
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
 	dbs         map[string]*sql.DB
-	tableMap    map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
+	tableMap    map[string][]filter.Table // sourceID => {[table1, table2, ...]}
 	reMu        sync.Mutex
 	inCh        chan *checkItem
 	optCh       chan *incompatibilityOption
-	wg          sync.WaitGroup
 	dumpThreads int
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, dumpThreads int) RealChecker {
+func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]filter.Table, dumpThreads int) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
@@ -116,14 +115,19 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	eg, checkCtx := errgroup.WithContext(ctx)
 	for i := 0; i < concurrency; i++ {
 		eg.Go(func() error {
-			return c.checkTable(checkCtx)
+			return c.startWorker(checkCtx)
 		})
 	}
 	// start consuming results before dispatching
 	// or the dispatching thread could be blocked when
 	// the output channel is full.
-	c.wg.Add(1)
-	go c.handleOpts(ctx, r)
+	var optWg sync.WaitGroup
+	optWg.Add(1)
+	go func() {
+		defer optWg.Done()
+		c.handleOpts(ctx, r)
+	}()
+
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
 	if err := eg.Wait(); err != nil {
 		c.reMu.Lock()
@@ -131,7 +135,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		c.reMu.Unlock()
 	}
 	close(c.optCh)
-	c.wg.Wait()
+	optWg.Wait()
 
 	log.L().Logger.Info("check table structure over", zap.Duration("spend time", time.Since(startTime)))
 	return r
@@ -143,7 +147,6 @@ func (c *TablesChecker) Name() string {
 }
 
 func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
-	defer c.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
@@ -174,7 +177,7 @@ func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
 	}
 }
 
-func (c *TablesChecker) checkTable(ctx context.Context) error {
+func (c *TablesChecker) startWorker(ctx context.Context) error {
 	var (
 		sourceID string
 		p        *parser.Parser
@@ -317,10 +320,10 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 type ShardingTablesChecker struct {
 	targetTableID                string
 	dbs                          map[string]*sql.DB
-	tableMap                     map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
+	tableMap                     map[string][]filter.Table // sourceID => {[table1, table2, ...]}
 	checkAutoIncrementPrimaryKey bool
 	firstCreateTableStmtNode     *ast.CreateTableStmt
-	firstTable                   *filter.Table
+	firstTable                   filter.Table
 	firstSourceID                string
 	inCh                         chan *checkItem
 	reMu                         sync.Mutex
@@ -328,7 +331,13 @@ type ShardingTablesChecker struct {
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, checkAutoIncrementPrimaryKey bool, dumpThreads int) RealChecker {
+func NewShardingTablesChecker(
+	targetTableID string,
+	dbs map[string]*sql.DB,
+	tableMap map[string][]filter.Table,
+	checkAutoIncrementPrimaryKey bool,
+	dumpThreads int,
+) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
@@ -581,7 +590,7 @@ func (c *ShardingTablesChecker) Name() string {
 type OptimisticShardingTablesChecker struct {
 	targetTableID string
 	dbs           map[string]*sql.DB
-	tableMap      map[string][]*filter.Table // sourceID => [table1, table2, ...]
+	tableMap      map[string][]filter.Table // sourceID => [table1, table2, ...]
 	reMu          sync.Mutex
 	joinedMu      sync.Mutex
 	inCh          chan *checkItem
@@ -590,7 +599,12 @@ type OptimisticShardingTablesChecker struct {
 }
 
 // NewOptimisticShardingTablesChecker returns a RealChecker.
-func NewOptimisticShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, dumpThreads int) RealChecker {
+func NewOptimisticShardingTablesChecker(
+	targetTableID string,
+	dbs map[string]*sql.DB,
+	tableMap map[string][]filter.Table,
+	dumpThreads int,
+) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
@@ -720,7 +734,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 	}
 }
 
-func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table, inCh chan *checkItem) {
+func dispatchTableItem(ctx context.Context, tableMap map[string][]filter.Table, inCh chan *checkItem) {
 	for sourceID, tables := range tableMap {
 		for _, table := range tables {
 			select {
@@ -734,7 +748,7 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table,
 	close(inCh)
 }
 
-func getConcurrency(ctx context.Context, tableMap map[string][]*filter.Table, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
+func getConcurrency(ctx context.Context, tableMap map[string][]filter.Table, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
 	concurrency := dumpThreads
 	for sourceID := range tableMap {
 		db, ok := dbs[sourceID]

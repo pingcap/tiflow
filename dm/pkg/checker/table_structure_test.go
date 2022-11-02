@@ -39,7 +39,7 @@ func TestShardingTablesChecker(t *testing.T) {
 
 	checker := NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -52,7 +52,7 @@ func TestShardingTablesChecker(t *testing.T) {
 	// 2. check different column number
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -75,7 +75,7 @@ func TestShardingTablesChecker(t *testing.T) {
 	// 3. check different column def
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -97,7 +97,7 @@ func TestShardingTablesChecker(t *testing.T) {
 	// 4. test tiflow#5759
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 			{Schema: "test-db", Name: "test-table-3"},
@@ -155,7 +155,7 @@ func TestTablesChecker(t *testing.T) {
 
 	checker := NewTablesChecker(
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 		}},
 		1)
@@ -179,7 +179,7 @@ func TestTablesChecker(t *testing.T) {
 
 	checker = NewTablesChecker(
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 		}},
 		1)
@@ -213,7 +213,7 @@ func TestTablesChecker(t *testing.T) {
 
 	checker = NewTablesChecker(
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 			{Schema: "test-db", Name: "test-table-3"},
@@ -327,9 +327,9 @@ func TestOptimisticShardingTablesChecker(t *testing.T) {
 		checker := NewOptimisticShardingTablesChecker(
 			"test-name",
 			map[string]*sql.DB{"test-source": db},
-			map[string][]*filter.Table{"test-source": {
-				&filter.Table{Schema: "test-db", Name: "test-table-1"},
-				&filter.Table{Schema: "test-db", Name: "test-table-2"},
+			map[string][]filter.Table{"test-source": {
+				{Schema: "test-db", Name: "test-table-1"},
+				{Schema: "test-db", Name: "test-table-2"},
 			}},
 			0)
 		result := checker.Check(ctx)
@@ -361,7 +361,7 @@ func TestUnknownCharsetCollation(t *testing.T) {
 
 	checker := NewTablesChecker(
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 		}},
 		1)
@@ -386,7 +386,7 @@ PRIMARY KEY ("c")
 
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -410,7 +410,7 @@ PRIMARY KEY ("c")
 
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -434,7 +434,7 @@ PRIMARY KEY ("c")
 
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
+		map[string][]filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
@@ -466,9 +466,9 @@ CREATE TABLE "test-table-2" (
 	checker = NewOptimisticShardingTablesChecker(
 		"test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string][]*filter.Table{"test-source": {
-			&filter.Table{Schema: "test-db", Name: "test-table-1"},
-			&filter.Table{Schema: "test-db", Name: "test-table-2"},
+		map[string][]filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
 		}},
 		0)
 	result = checker.Check(ctx)
