@@ -150,12 +150,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 
-		if len(rowsResult) == 0 {
+		switch {
+		case len(rowsResult) == 0:
 			err = terror.ErrNoMasterStatus.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-		} else if len(rowsResult[0]) != 5 {
+		case len(rowsResult[0]) != 5:
 			ctx.L().Warn("The number of columns that SHOW MASTER STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
-		} else {
+		default:
 			binlogName = rowsResult[0][0]
 			var posInt int64
 			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
@@ -175,12 +176,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 
-		if len(rowsResult) == 0 {
+		switch {
+		case len(rowsResult) == 0:
 			err = terror.ErrNoMasterStatus.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-		} else if len(rowsResult[0]) != 4 {
+		case len(rowsResult[0]) != 4:
 			ctx.L().Warn("The number of columns that SHOW MASTER STATUS returns for MariaDB is not equal to 4, will not use the retrieved information")
-		} else {
+		default:
 			binlogName = rowsResult[0][0]
 			var posInt int64
 			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
