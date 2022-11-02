@@ -113,6 +113,7 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 
 	rps, totalRps := int64(0), int64(0)
 	if seconds > 0 && totalSeconds > 0 {
+		// todo: use speed recorder count rps
 		rps = (total - last) / seconds
 		totalRps = total / totalSeconds
 

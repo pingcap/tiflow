@@ -29,12 +29,12 @@ func (l *Loader) Status(_ *binlog.SourceStatus) interface{} {
 	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finishedSize)))
 
 	s := &pb.LoadStatus{
-		FinishedBytes:              finishedSize,
-		TotalBytes:                 totalSize,
-		Progress:                   progress,
-		MetaBinlog:                 l.metaBinlog.Load(),
-		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
-		CurrentSpeedBytesPerSecond: currentSpeed,
+		FinishedBytes:  finishedSize,
+		TotalBytes:     totalSize,
+		Progress:       progress,
+		MetaBinlog:     l.metaBinlog.Load(),
+		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		Bps:            currentSpeed,
 	}
 	go l.printStatus()
 	return s

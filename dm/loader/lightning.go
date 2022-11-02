@@ -475,12 +475,12 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 		zap.Int64("current speed (bytes / seconds)", currentSpeed),
 	)
 	s := &pb.LoadStatus{
-		FinishedBytes:              finished,
-		TotalBytes:                 total,
-		Progress:                   progress,
-		MetaBinlog:                 l.metaBinlog.Load(),
-		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
-		CurrentSpeedBytesPerSecond: currentSpeed,
+		FinishedBytes:  finished,
+		TotalBytes:     total,
+		Progress:       progress,
+		MetaBinlog:     l.metaBinlog.Load(),
+		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		Bps:            currentSpeed,
 	}
 	return s
 }
