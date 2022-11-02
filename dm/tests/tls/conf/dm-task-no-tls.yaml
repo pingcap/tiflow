@@ -1,0 +1,52 @@
+---
+name: test
+task-mode: all
+is-sharding: false
+meta-schema: "dm_meta"
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: root
+  password: ""
+  max-allowed-packet: null
+  session: {}
+  security:
+    ssl-ca: ""
+    ssl-cert: ""
+    ssl-key: ""
+    cert-allowed-cn: []
+    ssl-ca-bytes: []
+    ssl-key-bytes: []
+    ssl-cert-bytes: []
+    ssl-ca-base64: ""
+    ssl-key-base64: ""
+    ssl-cert-base64: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance"
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
+black-white-list:
+  instance:
+    do-dbs: ["tls"]
+
+mydumpers:
+  global:
+    threads: 4
+    chunk-filesize: 0
+    skip-tz-utc: true
+    extra-args: "--statement-size=100"
+
+loaders:
+  global:
+    pool-size: 16
+    dir: "./dumped_data"
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100

@@ -135,3 +135,15 @@ func IsRetryableDDLError(err error) bool {
 	}
 	return true
 }
+
+// IsSyncPointIgnoreError returns whether the error is ignorable for syncpoint.
+func IsSyncPointIgnoreError(err error) bool {
+	err = errors.Cause(err)
+	mysqlErr, ok := err.(*gmysql.MySQLError)
+	if !ok {
+		return false
+	}
+	// We should ignore the error when the downstream has no
+	// such system variable for compatibility.
+	return mysqlErr.Number == mysql.ErrUnknownSystemVariable
+}

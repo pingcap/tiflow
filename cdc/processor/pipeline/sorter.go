@@ -361,6 +361,7 @@ func (n *sorterNode) start(
 					continue
 				}
 
+				atomic.AddInt64(&n.remainEvents, -1)
 				if err := e.WaitFinished(ctx); err != nil {
 					if errors.Cause(err) != context.Canceled {
 						ctx.Throw(err)
