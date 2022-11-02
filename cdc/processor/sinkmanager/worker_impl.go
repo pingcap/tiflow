@@ -17,12 +17,9 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sorter"
-	"go.uber.org/zap"
 )
 
 const (
@@ -71,7 +68,6 @@ func newWorker(
 	}
 }
 
-// TODO bit txn should not keep force consuming
 func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *tableSinkTask) error {
 	for {
 		select {
@@ -135,24 +131,11 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
-					if err := retry.Do(ctx, func() error {
-						if w.memQuota.tryAcquire(defaultRequestMemSize) {
-							availableMem += defaultRequestMemSize
-							return nil
-						}
-						return errors.New("failed to acquire memory quota")
-					},
-						retry.WithBackoffBaseDelay(1000 /* 1s */),
-						retry.WithBackoffMaxDelay(3000 /* 3s */),
-						retry.WithMaxTries(3 /* fail after 10s*/),
-					); err != nil {
-						log.Error("Failed to acquire memory quota, please consider increasing the quota for the changefeed.",
-							zap.String("namespace", w.changefeedID.Namespace),
-							zap.String("changefeed", w.changefeedID.ID),
-							zap.Int64("table", task.tableID),
-						)
-						return errors.Trace(err)
-					}
+					// This probably cause out of memory.
+					// TODO: find a better way to control how many workers
+					//       can executed the memory quota at the same time.
+					w.memQuota.forceAcquire(defaultRequestMemSize)
+					availableMem += defaultRequestMemSize
 				}
 				availableMem -= e.Row.ApproximateBytes()
 				events = append(events, e)

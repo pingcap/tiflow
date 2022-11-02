@@ -29,6 +29,18 @@ func TestMemQuotaTryAcquire(t *testing.T) {
 	require.False(t, m.tryAcquire(1))
 }
 
+func TestMemQuotaForceAcquire(t *testing.T) {
+	t.Parallel()
+
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	require.True(t, m.tryAcquire(100))
+	require.False(t, m.tryAcquire(1))
+	m.forceAcquire(1)
+	m.mu.Lock()
+	require.Equal(t, uint64(101), m.usedBytes)
+	m.mu.Unlock()
+}
+
 func TestMemQuotaRefund(t *testing.T) {
 	t.Parallel()
 

@@ -59,6 +59,12 @@ func (m *changefeedMemQuota) tryAcquire(nBytes uint64) bool {
 	return true
 }
 
+func (m *changefeedMemQuota) forceAcquire(nBytes uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.usedBytes += nBytes
+}
+
 func (m *changefeedMemQuota) refund(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
