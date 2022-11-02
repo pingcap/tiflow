@@ -216,6 +216,8 @@ func (t *testDumplingSuite) TestConstructArgs(c *C) {
 }
 
 func genDumpCfg(t *testing.T) *config.SubTaskConfig {
+	t.Helper()
+
 	dir := t.TempDir()
 	return &config.SubTaskConfig{
 		Name:     "dumpling_ut",
