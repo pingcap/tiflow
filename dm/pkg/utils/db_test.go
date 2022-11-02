@@ -425,6 +425,4 @@ func TestGetSlaveServerID(t *testing.T) {
 		require.Equal(t, ca.results, results)
 		require.NoError(t, mock.ExpectationsWereMet())
 	}
-
-	require.NoError(t, mock.ExpectationsWereMet())
 }

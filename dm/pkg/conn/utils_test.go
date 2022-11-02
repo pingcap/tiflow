@@ -62,9 +62,7 @@ func TestGetBinlogDB(t *testing.T) {
 }
 
 func TestGetMasterStatus(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
-	defer cancel()
-
+	ctx := context.Background()
 	tctx := tcontext.NewContext(ctx, log.L())
 
 	db, mock, err := sqlmock.New()
@@ -125,6 +123,4 @@ func TestGetMasterStatus(t *testing.T) {
 		require.Equal(t, ca.gtidStr, gtidStr)
 		require.NoError(t, mock.ExpectationsWereMet())
 	}
-
-	require.NoError(t, mock.ExpectationsWereMet())
 }
