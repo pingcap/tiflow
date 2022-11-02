@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = Suite(&testDumplingSuite{})
@@ -148,12 +148,12 @@ func TestCallStatus(t *testing.T) {
 	dumpConf.PromRegistry = tidbpromutil.NewDefaultRegistry()
 
 	s := m.Status(nil).(*pb.DumpStatus)
-	assert.Equal(t, s.CompletedTables, float64(0))
-	assert.Equal(t, s.FinishedBytes, float64(0))
-	assert.Equal(t, s.FinishedRows, float64(0))
-	assert.Equal(t, s.EstimateTotalRows, float64(0))
-	assert.Equal(t, s.Progress, "")
-	assert.Equal(t, s.Bps, int64(0))
+	require.Equal(t, s.CompletedTables, float64(0))
+	require.Equal(t, s.FinishedBytes, float64(0))
+	require.Equal(t, s.FinishedRows, float64(0))
+	require.Equal(t, s.EstimateTotalRows, float64(0))
+	require.Equal(t, s.Progress, "")
+	require.Equal(t, s.Bps, int64(0))
 
 	// NewDumper is the only way we can set conf to Dumper, but it will return error. so we just ignore the error
 	dumpling, _ := export.NewDumper(ctx, dumpConf)
@@ -161,12 +161,12 @@ func TestCallStatus(t *testing.T) {
 
 	m.Close()
 	s = m.Status(nil).(*pb.DumpStatus)
-	assert.Equal(t, s.CompletedTables, float64(0))
-	assert.Equal(t, s.FinishedBytes, float64(0))
-	assert.Equal(t, s.FinishedRows, float64(0))
-	assert.Equal(t, s.EstimateTotalRows, float64(0))
-	assert.Equal(t, s.Progress, "")
-	assert.Equal(t, s.Bps, int64(0))
+	require.Equal(t, s.CompletedTables, float64(0))
+	require.Equal(t, s.FinishedBytes, float64(0))
+	require.Equal(t, s.FinishedRows, float64(0))
+	require.Equal(t, s.EstimateTotalRows, float64(0))
+	require.Equal(t, s.Progress, "")
+	require.Equal(t, s.Bps, int64(0))
 }
 
 func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
