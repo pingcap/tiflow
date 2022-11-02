@@ -193,9 +193,9 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
-		zap.Uint64("requestID", state.getRequestID()),
-		zap.Stringer("span", state.getRegionSpan()),
-		zap.Uint64("resolvedTs", state.getRegionInfoResolvedTs()),
+		zap.Uint64("requestID", state.requestID),
+		zap.Stringer("span", state.sri.span),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
@@ -325,7 +325,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.String("addr", w.storeAddr),
 							zap.Uint64("regionID", rts.regionID),
-							zap.Stringer("span", state.getRegionSpan()),
+							zap.Stringer("span", state.sri.span),
 							zap.Duration("duration", sinceLastResolvedTs),
 							zap.Duration("lastEvent", sinceLastEvent),
 							zap.Uint64("resolvedTs", lastResolvedTs),
@@ -727,7 +727,7 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
+		if state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
@@ -762,7 +762,7 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		if !state.isInitialized() {
+		if state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		state.updateResolvedTs(resolvedTs)
