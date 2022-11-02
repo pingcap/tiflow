@@ -117,7 +117,7 @@ message DumpStatus {
     double finishedRows = 4;
     double estimateTotalRows = 5;
     int64 bps = 6;
-    float progress = 7;
+    string progress = 7;
 }
 
 // LoadStatus represents status for load unit
