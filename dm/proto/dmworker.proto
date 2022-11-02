@@ -146,6 +146,7 @@ message ShardingGroup {
 
 // SyncStatus represents status for sync unit
 message SyncStatus {
+    // totalEvents/totalTps/recentTps has been deprecated now
     int64 totalEvents = 1;
     int64 totalTps = 2;
     int64 recentTps = 3;
@@ -160,6 +161,9 @@ message SyncStatus {
     int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
     string blockDDLOwner = 13; // block ddl upstream info, format "task-`upstreamDatabase`.`upstreamTable`"
     string conflictMsg = 14; // block ddl conflict reason
+    int64 totalRows = 15;
+    int64 totalRps = 16;
+    int64 recentRps = 17;
 }
 
 // SourceStatus represents status for source runing on dm-worker
