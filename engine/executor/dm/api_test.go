@@ -45,12 +45,12 @@ func TestQueryStatusAPI(t *testing.T) {
 			Progress:          "20.00 %",
 		}
 		loadStatus = &pb.LoadStatus{
-			FinishedBytes:              4,
-			TotalBytes:                 100,
-			Progress:                   "4%",
-			MetaBinlog:                 "mysql-bin.000002, 8",
-			MetaBinlogGTID:             "1-2-3",
-			CurrentSpeedBytesPerSecond: 1000,
+			FinishedBytes:  4,
+			TotalBytes:     100,
+			Progress:       "4%",
+			MetaBinlog:     "mysql-bin.000002, 8",
+			MetaBinlogGTID: "1-2-3",
+			Bps:            1000,
 		}
 		syncStatus = &pb.SyncStatus{
 			TotalRows:           10,
