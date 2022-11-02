@@ -162,7 +162,7 @@ function run() {
 
   # this test contains `set global tidb_external_ts = ?` , which requires super privilege, so we
   # can't use the normal user
-	SINK_URI="mysql://root:123456@127.0.0.1:3306/?max-txn-row=1"
+	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
 
 	goSql
