@@ -46,6 +46,11 @@ func (m *MockCDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) er
 	return ret0
 }
 
+// Close close th etcd client
+func (m *MockCDCEtcdClient) Close() error {
+	return nil
+}
+
 // CheckMultipleCDCClusterExist indicates an expected call of CheckMultipleCDCClusterExist.
 func (mr *MockCDCEtcdClientMockRecorder) CheckMultipleCDCClusterExist(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

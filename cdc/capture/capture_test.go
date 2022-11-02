@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -34,31 +35,39 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+func genCreateEtcdClientFunc(ctx context.Context, clientURL *url.URL) createEtcdClientFunc {
+	return func() (etcd.CDCEtcdClient, error) {
+		logConfig := logutil.DefaultZapLoggerConfig
+		logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+		etcdCli, err := clientv3.New(clientv3.Config{
+			Endpoints:   []string{clientURL.String()},
+			Context:     ctx,
+			LogConfig:   &logConfig,
+			DialTimeout: 3 * time.Second,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+		if err != nil {
+			etcdCli.Close()
+			return nil, err
+		}
+
+		return cdcEtcdClient, nil
+	}
+}
+
 func TestReset(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// init etcd mocker
 	clientURL, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
 	require.Nil(t, err)
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{clientURL.String()},
-		Context:     ctx,
-		LogConfig:   &logConfig,
-		DialTimeout: 3 * time.Second,
-	})
-	require.NoError(t, err)
-
-	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
-	require.Nil(t, err)
-	// Close the client before the test function exits to prevent possible
-	// ctx leaks.
-	// Ref: https://github.com/grpc/grpc-go/blob/master/stream.go#L229
-	defer client.Close()
 
 	cp := NewCapture4Test(nil)
-	cp.EtcdClient = client
+	cp.createEtcdClient = genCreateEtcdClientFunc(ctx, clientURL)
 
 	// simulate network isolation scenarios
 	etcdServer.Close()
@@ -70,10 +79,10 @@ func TestReset(t *testing.T) {
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond)
+	cancel()
 	info, err := cp.Info()
 	require.Nil(t, err)
 	require.NotNil(t, info)
-	cancel()
 	wg.Wait()
 }
 

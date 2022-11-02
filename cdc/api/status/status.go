@@ -63,7 +63,12 @@ func (h *statusAPI) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	h.capture.WriteDebugInfo(ctx, w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	h.writeEtcdInfo(ctx, h.capture.GetEtcdClient(), w)
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		fmt.Fprintf(w, "failed to etc client: %s\n\n", err.Error())
+		return
+	}
+	h.writeEtcdInfo(ctx, etcdClient, w)
 }
 
 func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
