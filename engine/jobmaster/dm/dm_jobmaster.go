@@ -52,6 +52,7 @@ type JobMaster struct {
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
 	taskManager           *TaskManager
+	ddlCoordinator        *DDLCoordinator
 	messageAgent          dmpkg.MessageAgent
 	checkpointAgent       checkpoint.Agent
 	messageHandlerManager p2p.MessageHandlerManager
@@ -108,6 +109,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err

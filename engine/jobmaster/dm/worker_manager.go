@@ -266,8 +266,8 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
-			resId := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
-			resources = append(resources, resId)
+			resID := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
+			resources = append(resources, resID)
 		}
 
 		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304

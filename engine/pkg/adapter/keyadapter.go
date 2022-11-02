@@ -23,9 +23,10 @@ import (
 
 // Defines all key adapters
 var (
-	DMJobKeyAdapter        KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job")
-	DMInfoKeyAdapter       KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/info")
-	DMFinishedStateAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/finished-state")
+	DMJobKeyAdapter         KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job")
+	DMInfoKeyAdapter        KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/info")
+	DMFinishedStateAdapter  KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/finished-state")
+	DMDropColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/drop-columns/")
 )
 
 // KeyAdapter is used to construct etcd like key

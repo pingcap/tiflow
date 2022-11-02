@@ -14,21 +14,32 @@
 package checkpoint
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	"github.com/pingcap/tidb/util/schemacmp"
+	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -65,6 +76,8 @@ type Agent interface {
 	Remove(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 	Upgrade(ctx context.Context, preVer semver.Version) error
+	FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (map[metadata.TargetTable][]metadata.SourceTable, error)
+	FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error)
 }
 
 // AgentImpl implements Agent
@@ -154,6 +167,98 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 // UpgradeFuncs implement the Upgrader interface.
 func (c *AgentImpl) UpgradeFuncs() []bootstrap.UpgradeFunc {
 	return nil
+}
+
+// FetchAllDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
+func (c *AgentImpl) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (map[metadata.TargetTable][]metadata.SourceTable, error) {
+	c.logger.Info("fetch all do tables from upstream")
+
+	var (
+		mu      sync.Mutex
+		result  = make(map[metadata.TargetTable][]metadata.SourceTable, len(cfg.Upstreams))
+		g, gCtx = errgroup.WithContext(ctx)
+	)
+
+	for _, upstream := range cfg.Upstreams {
+		up := upstream
+		g.Go(func() error {
+			db, err := conn.DefaultDBProvider.Apply(up.DBCfg)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			// fetch all do tables
+			baList, err := filter.New(up.CaseSensitive, cfg.BAList[up.BAListName])
+			if err != nil {
+				return err
+			}
+			sourceTables, err := utils.FetchAllDoTables(gCtx, db.DB, baList)
+			if err != nil {
+				return err
+			}
+
+			// route tables
+			routeRules := make([]*router.TableRule, 0, len(up.RouteRules))
+			for _, ruleName := range up.RouteRules {
+				routeRules = append(routeRules, cfg.Routes[ruleName])
+			}
+			router, err := regexprrouter.NewRegExprRouter(up.CaseSensitive, routeRules)
+			if err != nil {
+				return err
+			}
+			for schema, tables := range sourceTables {
+				for _, table := range tables {
+					targetSchema, targetTable, err := router.Route(schema, table)
+					if err != nil {
+						return err
+					}
+
+					target := metadata.TargetTable{Schema: targetSchema, Table: targetTable}
+					mu.Lock()
+					result[target] = append(result[target], metadata.SourceTable{Source: up.SourceID, Schema: schema, Table: table})
+					mu.Unlock()
+				}
+			}
+			return nil
+		})
+
+	}
+	err := g.Wait()
+	return result, err
+}
+
+// FetchTableStmt fetch create table statement from checkpoint.
+// TODO(https://github.com/pingcap/tiflow/issues/5334): save create table statement to checkpoint instead of table info.
+func (c *AgentImpl) FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error) {
+	c.logger.Info("fetch table info from checkpoint")
+	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	query := `SELECT table_info FROM ` + syncTableName(jobID, cfg) + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`
+	row := db.DB.QueryRowContext(ctx, query, sourceTable.Source, sourceTable.Schema, sourceTable.Table)
+	if row.Err() != nil {
+		return "", row.Err()
+	}
+	var tiBytes []byte
+	if err := row.Scan(&tiBytes); err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.Errorf("table info not found %v", sourceTable)
+		}
+		return "", err
+	}
+	var ti *model.TableInfo
+	if bytes.Equal(tiBytes, []byte("null")) {
+		return "", errors.Errorf("table info not found %v", sourceTable)
+	}
+	if err := json.Unmarshal(tiBytes, &ti); err != nil {
+		return "", err
+	}
+	t := schemacmp.Encode(ti)
+	return t.String(), nil
 }
 
 func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {

@@ -33,6 +33,7 @@ type FinishedState struct {
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
 }
 
+// FinishedStateStore manage the state of finish_state.
 type FinishedStateStore struct {
 	// rmwLock is used to prevent concurrent read-modify-write to the state.
 	rmwLock sync.Mutex
@@ -47,6 +48,7 @@ func (f *FinishedStateStore) key() string {
 	return adapter.DMFinishedStateAdapter.Encode()
 }
 
+// ReadModifyWrite read-modify-write to the state.
 func (f *FinishedStateStore) ReadModifyWrite(
 	ctx context.Context,
 	action func(*FinishedState) error,

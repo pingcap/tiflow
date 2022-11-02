@@ -45,6 +45,23 @@ type JobStatus struct {
 	FinishedUnitStatus map[string][]*metadata.FinishedTaskStatus `json:"finished_unit_status,omitempty"`
 }
 
+// TableStmt represents create table statements of a source table.
+type TableStmt struct {
+	Current string
+	Pending string
+}
+
+// DDLLock represents ddl lock of a target table.
+type DDLLock struct {
+	// source table -> [current table, pending table(conflict table)]
+	TableStmts map[metadata.SourceTable]TableStmt
+}
+
+// ShowDDLLocksResponse represents response of show ddl locks.
+type ShowDDLLocksResponse struct {
+	Locks map[metadata.TargetTable]DDLLock
+}
+
 // QueryJobStatus is the api of query job status.
 func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
 	state, err := jm.metadata.JobStore().Get(ctx)
@@ -153,17 +170,7 @@ func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg 
 
 // GetJobCfg gets job config.
 func (jm *JobMaster) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
-	state, err := jm.metadata.JobStore().Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-	job := state.(*metadata.Job)
-
-	taskCfgs := make([]*config.TaskCfg, 0, len(job.Tasks))
-	for _, task := range job.Tasks {
-		taskCfgs = append(taskCfgs, task.Cfg)
-	}
-	return config.FromTaskCfgs(taskCfgs), nil
+	return jm.metadata.JobStore().GetJobCfg(ctx)
 }
 
 // UpdateJobCfg updates job config.
@@ -280,4 +287,9 @@ func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *d
 		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
 	return resp.(*dmpkg.CommonTaskResponse)
+}
+
+// ShowDDLLocks implements the api of show ddl locks request.
+func (jm *JobMaster) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
+	return jm.ddlCoordinator.ShowDDLLocks(ctx)
 }

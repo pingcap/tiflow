@@ -550,3 +550,20 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 func (m *MockCheckpointAgent) Upgrade(ctx context.Context, preVer semver.Version) error {
 	return nil
 }
+
+func (m *MockCheckpointAgent) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (map[metadata.TargetTable][]metadata.SourceTable, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[metadata.TargetTable][]metadata.SourceTable), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Get(0).(string), args.Error(1)
+}

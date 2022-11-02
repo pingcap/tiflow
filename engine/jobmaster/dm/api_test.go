@@ -393,6 +393,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
 	require.NoError(t, err)
 	require.Equal(t, expectedStatus, string(status))
+	require.NoError(t, err)
 }
 
 func TestOperateTask(t *testing.T) {

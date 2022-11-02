@@ -243,3 +243,17 @@ func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
 func (jobStore *JobStore) UpgradeFuncs() []bootstrap.UpgradeFunc {
 	return nil
 }
+
+// GetJobCfg gets the job config.
+func (jobStore *JobStore) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
+	state, err := jobStore.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	job := state.(*Job)
+	taskCfg := make([]*config.TaskCfg, 0, len(job.Tasks))
+	for _, task := range job.Tasks {
+		taskCfg = append(taskCfg, task.Cfg)
+	}
+	return config.FromTaskCfgs(taskCfg), nil
+}
