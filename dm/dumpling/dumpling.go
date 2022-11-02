@@ -271,14 +271,14 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 
 func (m *Dumpling) status() *pb.DumpStatus {
 	dumpStatus := m.core.GetStatus()
-	// dumpStatus.CurrentSpeedBPS
-	// dumpStatus.Progress
 	s := &pb.DumpStatus{
 		TotalTables:       dumpStatus.TotalTables,
 		CompletedTables:   dumpStatus.CompletedTables,
 		FinishedBytes:     dumpStatus.FinishedBytes,
 		FinishedRows:      dumpStatus.FinishedRows,
 		EstimateTotalRows: dumpStatus.EstimateTotalRows,
+		Progress:          dumpStatus.Progress,
+		Bps:               int64(dumpStatus.CurrentSpeedBPS),
 	}
 	var estimateProgress string
 	if s.FinishedRows >= s.EstimateTotalRows {
@@ -292,6 +292,8 @@ func (m *Dumpling) status() *pb.DumpStatus {
 		zap.Int64("estimated_total_rows", int64(s.EstimateTotalRows)),
 		zap.Int64("finished_rows", int64(s.FinishedRows)),
 		zap.String("estimated_progress", estimateProgress),
+		zap.String("new progress", s.Progress),
+		zap.Int64("bps", s.Bps),
 	)
 	return s
 }

@@ -68,18 +68,21 @@ func TestQueryStatusAPI(t *testing.T) {
 			FinishedBytes:     100,
 			FinishedRows:      10,
 			EstimateTotalRows: 1000,
+			Bps:               1000,
+			Progress:          "20.00 %",
 		}
 		loadStatus = &pb.LoadStatus{
-			FinishedBytes:  4,
-			TotalBytes:     100,
-			Progress:       "4%",
-			MetaBinlog:     "mysql-bin.000002, 8",
-			MetaBinlogGTID: "1-2-3",
+			FinishedBytes:              4,
+			TotalBytes:                 100,
+			Progress:                   "4%",
+			MetaBinlog:                 "mysql-bin.000002, 8",
+			MetaBinlogGTID:             "1-2-3",
+			CurrentSpeedBytesPerSecond: 1000,
 		}
 		syncStatus = &pb.SyncStatus{
-			TotalEvents:         10,
-			TotalTps:            10,
-			RecentTps:           10,
+			TotalRows:           10,
+			TotalRps:            10,
+			RecentRps:           10,
 			MasterBinlog:        "mysql-bin.000002, 4",
 			MasterBinlogGtid:    "1-2-20",
 			SyncerBinlog:        "mysql-bin.000001, 432",
@@ -241,7 +244,9 @@ func TestQueryStatusAPI(t *testing.T) {
 					"completedTables": 1,
 					"finishedBytes": 100,
 					"finishedRows": 10,
-					"estimateTotalRows": 1000
+					"estimateTotalRows": 1000,
+					"bps": 1000,
+					"progress": "20.00 %"
 				}
 			}
 		},
@@ -261,7 +266,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalBytes": 100,
 					"progress": "4%",
 					"metaBinlog": "mysql-bin.000002, 8",
-					"metaBinlogGTID": "1-2-3"
+					"metaBinlogGTID": "1-2-3",
+					"currentSpeedBytesPerSecond": 1000
 				}
 			}
 		},
@@ -287,9 +293,6 @@ func TestQueryStatusAPI(t *testing.T) {
 					]
 				},
 				"status": {
-					"totalEvents": 10,
-					"totalTps": 10,
-					"recentTps": 10,
 					"masterBinlog": "mysql-bin.000002, 4",
 					"masterBinlogGtid": "1-2-20",
 					"syncerBinlog": "mysql-bin.000001, 432",
@@ -298,7 +301,10 @@ func TestQueryStatusAPI(t *testing.T) {
 						"ALTER TABLE db.tb ADD COLUMN a INT"
 					],
 					"binlogType": "remote",
-					"secondsBehindMaster": 10
+					"secondsBehindMaster": 10,
+					"totalRows": 10,
+					"totalRps": 10,
+					"recentRps": 10
 				}
 			}
 		},
@@ -328,7 +334,9 @@ func TestQueryStatusAPI(t *testing.T) {
 					"completedTables": 1,
 					"finishedBytes": 100,
 					"finishedRows": 10,
-					"estimateTotalRows": 1000
+					"estimateTotalRows": 1000,
+					"bps": 1000,
+					"progress": "20.00 %"
 				}
 			},
 			{
@@ -342,7 +350,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalBytes": 100,
 					"progress": "4%",
 					"metaBinlog": "mysql-bin.000002, 8",
-					"metaBinlogGTID": "1-2-3"
+					"metaBinlogGTID": "1-2-3",
+					"currentSpeedBytesPerSecond": 1000
 				}
 			}
 		],
@@ -358,7 +367,9 @@ func TestQueryStatusAPI(t *testing.T) {
 					"completedTables": 1,
 					"finishedBytes": 100,
 					"finishedRows": 10,
-					"estimateTotalRows": 1000
+					"estimateTotalRows": 1000,
+					"bps": 1000,
+					"progress": "20.00 %"
 				}
 			},
 			{
@@ -372,13 +383,15 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalBytes": 100,
 					"progress": "4%",
 					"metaBinlog": "mysql-bin.000002, 8",
-					"metaBinlogGTID": "1-2-3"
+					"metaBinlogGTID": "1-2-3",
+					"currentSpeedBytesPerSecond": 1000
 				}
 			}
 		]
 	}
 }`
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
+	require.NoError(t, err)
 	require.Equal(t, expectedStatus, string(status))
 }
 

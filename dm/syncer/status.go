@@ -30,9 +30,9 @@ import (
 func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 	syncerLocation := s.checkpoint.FlushedGlobalPoint()
 	st := &pb.SyncStatus{
-		TotalEvents:         s.count.Load(),
-		TotalTps:            s.totalTps.Load(),
-		RecentTps:           s.tps.Load(),
+		TotalRows:           s.count.Load(),
+		TotalRps:            s.totalRps.Load(),
+		RecentRps:           s.rps.Load(),
 		SyncerBinlog:        syncerLocation.Position.String(),
 		SecondsBehindMaster: s.secondsBehindMaster.Load(),
 	}
@@ -153,6 +153,6 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 	s.lastCount.Store(total)
 	s.lastBinlogSizeCount.Store(totalBinlogSize)
 	s.lastTime.Store(time.Now())
-	s.totalTps.Store(totalTps)
-	s.tps.Store(tps)
+	s.totalRps.Store(totalTps)
+	s.rps.Store(tps)
 }
