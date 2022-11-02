@@ -789,8 +789,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.leader.Store(&rpcutil.Member{})
 	}()
 
-	// TODO refactor this method to make it more readable and maintainable.
-	errg, errgCtx := errgroup.WithContext(ctx)
+	// The following member variables are used in leader only and released after
+	// the leader is resigned, so initialize these variables in this function,
+	// instead of initializing them in the NewServer or Server.Run
 
 	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
 	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
@@ -799,6 +800,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	s.scheduler = scheduler.NewScheduler(
 		s.executorManager,
 		s.resourceManagerService)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
 		return s.executorManager.Run(errgCtx)
