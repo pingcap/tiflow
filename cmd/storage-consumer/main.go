@@ -335,6 +335,9 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 
 		return nil
 	})
+	if err != nil {
+		return m, err
+	}
 
 	// filter out those files whose "schema.json" file has not been generated yet.
 	for key := range c.tableIdxMap {
@@ -343,10 +346,6 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		if _, ok := schemaSet[schemaKey]; !ok {
 			delete(c.tableIdxMap, key)
 		}
-	}
-
-	if err != nil {
-		return m, err
 	}
 
 	m = c.diffTwoMaps(c.tableIdxMap, origTableMap)
