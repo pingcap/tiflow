@@ -231,7 +231,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		for {
 			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
 			if err2 != nil {
-				s.tctx.L().Warn("error when getting DDL status fromTiDB", zap.Error(err2))
+				s.tctx.L().Warn("error when getting DDL status from TiDB", zap.Error(err2))
 			}
 			failpoint.Inject("TestStatus", func(val failpoint.Value) {
 				status = val.(string)

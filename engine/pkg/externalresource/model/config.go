@@ -46,11 +46,7 @@ func (c *Config) LocalEnabled() bool {
 
 // S3Enabled returns true if the S3 storage is enabled
 func (c *Config) S3Enabled() bool {
-	if c.S3.Bucket == "" {
-		return false
-	}
-	return c.S3.RoleARN != "" || (c.S3.Endpoint != "" &&
-		c.S3.AccessKey != "" && c.S3.SecretAccessKey != "")
+	return c.S3.Bucket != ""
 }
 
 // ValidateAndAdjust validates and adjusts the configuration

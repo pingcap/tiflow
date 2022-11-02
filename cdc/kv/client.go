@@ -1205,7 +1205,7 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTs(ctx, cevent.ResolvedTs, worker, addr)
+			err = s.sendResolvedTs(ctx, cevent.ResolvedTs, worker)
 			if err != nil {
 				return err
 			}
@@ -1233,7 +1233,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
 	for i := 0; i < worker.concurrency; i++ {
-		// Allocate a buffer with 1.5x length than average to reduce reallocate.
+		// Allocate a buffer with 2x length than average to reduce reallocate.
 		buffLen := len(events) / worker.concurrency * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
@@ -1314,13 +1314,12 @@ func (s *eventFeedSession) sendResolvedTs(
 	ctx context.Context,
 	resolvedTs *cdcpb.ResolvedTs,
 	worker *regionWorker,
-	addr string,
 ) error {
 	statefulEvents := make([]*regionStatefulEvent, worker.concurrency)
 	// split resolved ts
 	for i := 0; i < worker.concurrency; i++ {
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
-		buffLen := len(resolvedTs.Regions) / worker.concurrency * 3 / 2
+		buffLen := len(resolvedTs.Regions) / worker.concurrency * 2
 		statefulEvents[i] = &regionStatefulEvent{
 			resolvedTsEvent: &resolvedTsEvent{
 				resolvedTs: resolvedTs.Ts,
@@ -1332,15 +1331,6 @@ func (s *eventFeedSession) sendResolvedTs(
 	for _, regionID := range resolvedTs.Regions {
 		state, ok := worker.getRegionState(regionID)
 		if ok {
-			if state.isStopped() {
-				log.Debug("drop resolved ts due to region feed stopped",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", regionID),
-					zap.Uint64("requestID", state.requestID),
-					zap.String("addr", addr))
-				continue
-			}
 			slot := worker.inputCalcSlot(regionID)
 			statefulEvents[slot].resolvedTsEvent.regions = append(
 				statefulEvents[slot].resolvedTsEvent.regions, state,
