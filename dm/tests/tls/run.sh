@@ -399,12 +399,11 @@ function prepare_test_no_tls() {
 	run_tidb_server 4000 $TIDB_PASSWORD
 
 	cp $cur/conf/source-no-tls.yaml $WORK_DIR/source-no-tls.yaml
-	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker3/relay_log" $WORK_DIR/source-no-tls.yaml
 
 	prepare_data
 }
 
-function test_master_when_empty_tlsconfig() {
+function test_source_and_target_with_empty_tlsconfig() {
 	prepare_test_no_tls
 
 	cp $cur/conf/dm-master-no-tls.toml $WORK_DIR/
@@ -443,7 +442,7 @@ function test_master_when_empty_tlsconfig() {
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
 
-	echo "============================== test_master_when_empty_tlsconfig success =================================="
+	echo "============================== test_source_and_target_with_empty_tlsconfig success =================================="
 }
 
 function run() {
@@ -453,7 +452,7 @@ function run() {
 	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
 
-	test_master_when_empty_tlsconfig
+	test_source_and_target_with_empty_tlsconfig
 }
 
 cleanup_data tls
