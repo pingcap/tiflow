@@ -183,117 +183,117 @@ function run() {
 
 	kill_dm_worker
 
-	# multi-schema change tests
-	# test invalid connection with status running (multi-schema change)
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"running\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test invalid connection with status running (multi-schema change)"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN i INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 1"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` INT(4) NOT NULL DEFAULT '0'" 1
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 2"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` INT(4) NOT NULL DEFAULT '0'" 1
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "check test invalid connection with status running (multi-schema change) successfully"
-
-	kill_dm_worker
-
-	# test invalid connection with status queueing (multi-schema change)
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"queueing\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test invalid connection with status queueing (multi-schema change)"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN k INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN m INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN k INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN m INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 1"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` INT(4) NOT NULL DEFAULT '0'" 1
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 2"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` INT(4) NOT NULL DEFAULT '0'" 1
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "check test invalid connection with status queueing (multi-schema change) successfully"
-
-	kill_dm_worker
-
-	# test invalid connection with status none (multi-schema change)
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"none\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test invalid connection with status none (multi-schema change)"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN n INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN h INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN n INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN h INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 1"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` INT(4) NOT NULL DEFAULT '0'" 1
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` INT(4) NOT NULL DEFAULT '0'"
-	echo "check count 2"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` INT(4) NOT NULL DEFAULT '0'" 1
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "check test invalid connection with status none (multi-schema change) successfully"
-
-	kill_dm_worker
-
-	# test inserting data after invalid connection (multi-schema change)
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test inserting data after invalid connection (multi-schema change)"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i TINYINT NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j TINYINT NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (5,5,5,5,5,5)"
-	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (6,6,6,6,6,6)"
-
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` TINYINT NOT NULL DEFAULT '0'"
-	echo "check count 1"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` TINYINT NOT NULL DEFAULT '0'" 1
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` TINYINT NOT NULL DEFAULT '0'"
-	echo "check count 2"
-	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` TINYINT NOT NULL DEFAULT '0'" 1
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "check test inserting data after invalid connection (multi-schema change) successfully"
-
-	kill_dm_worker
-
-	# test adding UNIQUE on column with duplicate data (multi-schema change)
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "start test adding UNIQUE on column with duplicate data (multi-schema change)"
-
-	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (7,7,7,7,7,7)"
-	run_sql_tidb "INSERT INTO gbk.invalid_conn_test1 VALUES (8,8,7,7,8,8)"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(k), ADD UNIQUE(m)"
-
-	echo "check cancelled error"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status gbk" \
-		"origin SQL: \[ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(k), ADD UNIQUE(m)\]: DDL ALTER TABLE \`gbk\`.\`invalid_conn_test1\` ADD UNIQUE(\`k\`) executed in background and met error" 1
-	echo "check test adding UNIQUE on column with duplicate data (multi-schema change) successfully"
+	#	# multi-schema change tests
+	#	# test invalid connection with status running (multi-schema change)
+	#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"running\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
+	#	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	#	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	#
+	#	echo "start test invalid connection with status running (multi-schema change)"
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN i INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 1"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 2"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	#	echo "check test invalid connection with status running (multi-schema change) successfully"
+	#
+	#	kill_dm_worker
+	#
+	#	# test invalid connection with status queueing (multi-schema change)
+	#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"queueing\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
+	#	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	#	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	#
+	#	echo "start test invalid connection with status queueing (multi-schema change)"
+	#
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN k INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN m INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN k INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN m INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 1"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`k\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 2"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`m\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	#	echo "check test invalid connection with status queueing (multi-schema change) successfully"
+	#
+	#	kill_dm_worker
+	#
+	#	# test invalid connection with status none (multi-schema change)
+	#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatus=1*return(\"none\");github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
+	#	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	#	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	#
+	#	echo "start test invalid connection with status none (multi-schema change)"
+	#
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN n INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN h INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN n INT(4) NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN h INT(4) NOT NULL DEFAULT _UTF8MB4'0'"
+	#
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 1"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`n\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` INT(4) NOT NULL DEFAULT '0'"
+	#	echo "check count 2"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`h\` INT(4) NOT NULL DEFAULT '0'" 1
+	#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	#	echo "check test invalid connection with status none (multi-schema change) successfully"
+	#
+	#	kill_dm_worker
+	#
+	#	# test inserting data after invalid connection (multi-schema change)
+	#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
+	#	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	#	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	#
+	#	echo "start test inserting data after invalid connection (multi-schema change)"
+	#
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i TINYINT NOT NULL DEFAULT _UTF8MB4'0', MODIFY COLUMN j TINYINT NOT NULL DEFAULT _UTF8MB4'0'"
+	#	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (5,5,5,5,5,5)"
+	#	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (6,6,6,6,6,6)"
+	#
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` TINYINT NOT NULL DEFAULT '0'"
+	#	echo "check count 1"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` TINYINT NOT NULL DEFAULT '0'" 1
+	#	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` TINYINT NOT NULL DEFAULT '0'"
+	#	echo "check count 2"
+	#	check_count "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`j\` TINYINT NOT NULL DEFAULT '0'" 1
+	#	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	#	echo "check test inserting data after invalid connection (multi-schema change) successfully"
+	#
+	#	kill_dm_worker
+	#
+	#	# test adding UNIQUE on column with duplicate data (multi-schema change)
+	#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/ChangeDuration=return()"
+	#	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	#	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	#	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	#
+	#	echo "start test adding UNIQUE on column with duplicate data (multi-schema change)"
+	#
+	#	run_sql_source1 "INSERT INTO gbk.invalid_conn_test1 VALUES (7,7,7,7,7,7)"
+	#	run_sql_tidb "INSERT INTO gbk.invalid_conn_test1 VALUES (8,8,7,7,8,8)"
+	#	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(k), ADD UNIQUE(m)"
+	#
+	#	echo "check cancelled error"
+	#	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	#		"query-status gbk" \
+	#		"origin SQL: \[ALTER TABLE gbk.invalid_conn_test1 ADD UNIQUE(k), ADD UNIQUE(m)\]: DDL ALTER TABLE \`gbk\`.\`invalid_conn_test1\` ADD UNIQUE(\`k\`) executed in background and met error" 1
+	#	echo "check test adding UNIQUE on column with duplicate data (multi-schema change) successfully"
 }
 
 cleanup_data gbk gbk2 gbk3
