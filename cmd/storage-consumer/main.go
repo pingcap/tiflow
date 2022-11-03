@@ -150,7 +150,9 @@ func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
 	return strings.Join(elems, "/")
 }
 
-// {schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/CDC{num}.{extension}
+// dml file path pattern is as follows:
+// {schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/CDC{num}.extension
+// in this pattern, partition-separator and date-separator could be empty.
 func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error) {
 	var partitionNum int64
 
@@ -205,16 +207,19 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 	return fileIdx, nil
 }
 
+// fileIndexRange defines a range of files. eg. CDC000002.csv ~ CDC000005.csv
 type fileIndexRange struct {
 	start uint64
 	end   uint64
 }
 
 type consumer struct {
-	sink             sink.Sink
-	replicationCfg   *config.ReplicaConfig
-	externalStorage  storage.ExternalStorage
-	tableIdxMap      map[dmlPathKey]uint64
+	sink            sink.Sink
+	replicationCfg  *config.ReplicaConfig
+	externalStorage storage.ExternalStorage
+	// tableIdxMap maintains a map of <dmlPathKey, max file index>
+	tableIdxMap map[dmlPathKey]uint64
+	// tableTsMap maintains a map of <dmlPathKey, max commit ts>
 	tableTsMap       map[dmlPathKey]uint64
 	tableIDGenerator *fakeTableIDGenerator
 }
@@ -293,6 +298,7 @@ func (c *consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]
 	return resMap
 }
 
+// getNewFiles returns dml files in specific ranges.
 func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
 	m := make(map[dmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
@@ -352,7 +358,8 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 	return m, err
 }
 
-func (c *consumer) writeDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
+// emitDMLEvents decodes RowChangedEvents from file content and emit them.
+func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
 	var events []*model.RowChangedEvent
 	var tableDetail cloudstorage.TableDetail
 
@@ -464,7 +471,7 @@ func (c *consumer) run(ctx context.Context) error {
 				}
 				tableID := c.tableIDGenerator.generateFakeTableID(
 					k.schema, k.table, k.partitionNum)
-				err = c.writeDMLEvents(ctx, tableID, k, content)
+				err = c.emitDMLEvents(ctx, tableID, k, content)
 				if err != nil {
 					return errors.Trace(err)
 				}
