@@ -63,8 +63,8 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 			select {
 			case <-ctx.Done():
 				return
-			case frag := <-msgChan.Out():
-				if atomic.LoadUint64(&w.isClosed) == 1 {
+			case frag, ok := <-msgChan.Out():
+				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
 					return
 				}
 				err := w.encodeEvents(ctx, frag)
