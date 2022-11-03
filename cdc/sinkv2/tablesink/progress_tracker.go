@@ -130,12 +130,17 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	}
 	lastBuffer := r.pendingEvents[bufferCount-1]
 
+	log.Info("add event to tracker", zap.Uint64("eventID", eventID), zap.Uint64("bit", bit))
+
 	// Set the corresponding bit to 1.
 	// For example, if the eventID is 3, the bit is 3 % 64 = 3.
 	// 0000000000000000000000000000000000000000000000000000000000000000 ->
 	// 0000000000000000000000000000000000000000000000000000000000001000
 	// When we advance the progress, we can try to find the first 0 bit to indicate the progress.
-	postEventFlush = func() { atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
+	postEventFlush = func() {
+		atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit)
+		log.Info("post event flushed", zap.Uint64("eventID", eventID), zap.Uint64("bit", bit))
+	}
 	return
 }
 
