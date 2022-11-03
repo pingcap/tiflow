@@ -61,6 +61,7 @@ type WorkerManager struct {
 
 	jobID           string
 	jobStore        *metadata.JobStore
+	unitStore       *metadata.UnitStateStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
@@ -78,6 +79,7 @@ func NewWorkerManager(
 	jobID string,
 	initWorkerStatus []runtime.WorkerStatus,
 	jobStore *metadata.JobStore,
+	unitStore *metadata.UnitStateStore,
 	workerAgent WorkerAgent,
 	messageAgent dmpkg.MessageAgent,
 	checkpointAgent CheckpointAgent,
@@ -88,6 +90,7 @@ func NewWorkerManager(
 		DefaultTicker:      ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
 		jobID:              jobID,
 		jobStore:           jobStore,
+		unitStore:          unitStore,
 		workerAgent:        workerAgent,
 		messageAgent:       messageAgent,
 		checkpointAgent:    checkpointAgent,
@@ -276,7 +279,30 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
+			recordError = err
+			continue
+		}
+
+		// create success, record unit state
+		if err = wm.unitStore.ReadModifyWrite(ctx, func(state *metadata.UnitState) error {
+			status, ok := state.CurrentUnitStatus[taskID]
+			if !ok {
+				state.CurrentUnitStatus[taskID] = &metadata.TaskStatus{
+					Unit:        nextUnit,
+					Task:        taskID,
+					CreatedTime: time.Now(),
+					// we don't care about the Stage and CfgModRevision here
+				}
+			} else {
+				if status.Unit != nextUnit {
+					status.CreatedTime = time.Now()
+					status.Unit = nextUnit
+				}
+			}
+			return nil
+		}); err != nil {
+			wm.logger.Error("read current unit state failed", zap.String("task", taskID), zap.Error(err))
 			recordError = err
 			continue
 		}
@@ -346,6 +372,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
+	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,

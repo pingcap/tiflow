@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -25,31 +26,35 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// FinishedState represents the state of finished units.
-type FinishedState struct {
+// UnitState represents the state of units.
+type UnitState struct {
 	state
 
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
+	CurrentUnitStatus  map[string]*TaskStatus
 }
 
-type FinishedStateStore struct {
+type UnitStateStore struct {
 	// rmwLock is used to prevent concurrent read-modify-write to the state.
 	rmwLock sync.Mutex
 	*frameworkMetaStore
 }
 
-func (f *FinishedStateStore) createState() state {
-	return &FinishedState{FinishedUnitStatus: map[string][]*FinishedTaskStatus{}}
+func (f *UnitStateStore) createState() state {
+	return &UnitState{
+		FinishedUnitStatus: map[string][]*FinishedTaskStatus{},
+		CurrentUnitStatus:  map[string]*TaskStatus{},
+	}
 }
 
-func (f *FinishedStateStore) key() string {
+func (f *UnitStateStore) key() string {
 	return adapter.DMFinishedStateAdapter.Encode()
 }
 
-func (f *FinishedStateStore) ReadModifyWrite(
+func (f *UnitStateStore) ReadModifyWrite(
 	ctx context.Context,
-	action func(*FinishedState) error,
+	action func(*UnitState) error,
 ) error {
 	f.rmwLock.Lock()
 	defer f.rmwLock.Unlock()
@@ -62,16 +67,16 @@ func (f *FinishedStateStore) ReadModifyWrite(
 			return err
 		}
 	}
-	err = action(s.(*FinishedState))
+	err = action(s.(*UnitState))
 	if err != nil {
 		return err
 	}
 	return f.Put(ctx, s)
 }
 
-// NewFinishedStateStore creates a new FinishedStateStore.
-func NewFinishedStateStore(kvClient metaModel.KVClient) *FinishedStateStore {
-	ret := &FinishedStateStore{
+// NewUnitStateStore creates a new UnitStateStore.
+func NewUnitStateStore(kvClient metaModel.KVClient) *UnitStateStore {
+	ret := &UnitStateStore{
 		frameworkMetaStore: newJSONFrameworkMetaStore(kvClient),
 	}
 	ret.frameworkMetaStore.stateFactory = ret
@@ -84,6 +89,7 @@ type TaskStatus struct {
 	Task           string
 	Stage          TaskStage
 	CfgModRevision uint64
+	CreatedTime    time.Time
 }
 
 // FinishedTaskStatus wraps the TaskStatus with FinishedStatus.

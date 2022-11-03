@@ -106,7 +106,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
-		finishedTaskState  = &metadata.FinishedState{
+		unitState          = &metadata.UnitState{
 			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
 				"task2": {
 					&metadata.FinishedTaskStatus{
@@ -153,7 +153,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger(), false)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
 	messageAgent.On("SendRequest", mock.Anything, "task3", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
@@ -164,7 +164,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
 	messageAgent.On("SendRequest", mock.Anything, "task6", mock.Anything, mock.Anything).Return(syncStatusResp, nil).Once()
 
-	err := jm.metadata.FinishedStateStore().Put(ctx, finishedTaskState)
+	err := jm.metadata.UnitStateStore().Put(ctx, unitState)
 	require.NoError(t, err)
 
 	// no job
@@ -415,14 +415,14 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
+			metadata:        metadata.NewMetaData(metaKVClient, log.L()),
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {

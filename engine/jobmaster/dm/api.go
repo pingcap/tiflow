@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"golang.org/x/sync/errgroup"
 )
 
 // TaskStatus represents status of a task
@@ -33,6 +34,7 @@ type TaskStatus struct {
 	WorkerID       frameModel.WorkerID        `json:"worker_id"`
 	ConfigOutdated bool                       `json:"config_outdated"`
 	Status         *dmpkg.QueryStatusResponse `json:"status"`
+	CreatedTime    time.Time
 }
 
 // JobStatus represents status of a job
@@ -47,11 +49,11 @@ type JobStatus struct {
 
 // QueryJobStatus is the api of query job status.
 func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
-	state, err := jm.metadata.JobStore().Get(ctx)
+	jobState, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	job := state.(*metadata.Job)
+	job := jobState.(*metadata.Job)
 
 	if len(tasks) == 0 {
 		for task := range job.Tasks {
@@ -67,25 +69,25 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 	var (
 		workerStatusMap = jm.workerManager.WorkerStatus()
-		wg              sync.WaitGroup
 		mu              sync.Mutex
+		wg, ctx2        = errgroup.WithContext(ctx)
 		jobStatus       = &JobStatus{
 			JobID:      jm.ID(),
 			TaskStatus: make(map[string]TaskStatus),
 		}
+		unitState *metadata.UnitState
+		unitMu    sync.Mutex
 	)
 
 	for _, task := range tasks {
 		taskID := task
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() error {
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
 				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
+				createdTime     time.Time
 			)
 
 			// task not exist
@@ -100,7 +102,19 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				} else if workerStatus.Stage != runtime.WorkerFinished {
 					workerID = workerStatus.ID
 					cfgModRevision = workerStatus.CfgModRevision
-					queryStatusResp = jm.QueryStatus(ctx, taskID)
+					queryStatusResp = jm.QueryStatus(ctx2, taskID)
+
+					unitMu.Lock()
+					// unit state should not be null when job is running
+					if unitState == nil {
+						s, err := jm.metadata.UnitStateStore().Get(ctx2)
+						if err != nil {
+							return err
+						}
+						unitState = s.(*metadata.UnitState)
+					}
+					createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
+					unitMu.Unlock()
 				}
 			}
 
@@ -110,22 +124,20 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
 				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
+				CreatedTime:    createdTime,
 			}
 			mu.Unlock()
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
-
-	s, err := jm.metadata.FinishedStateStore().Get(ctx)
-	if err != nil {
-		if errors.Cause(err) == metadata.ErrStateNotFound {
-			return jobStatus, nil
-		}
+	if err := wg.Wait(); err != nil {
 		return nil, err
 	}
-	if state, ok := s.(*metadata.FinishedState); ok {
-		jobStatus.FinishedUnitStatus = state.FinishedUnitStatus
+
+	if unitState != nil {
+		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
 	}
+
 	return jobStatus, nil
 }
 

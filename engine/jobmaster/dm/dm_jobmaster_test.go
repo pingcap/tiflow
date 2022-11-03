@@ -408,7 +408,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent.AssertExpectations(t.T())
 }
 
-func TestDuplicateFinishedState(t *testing.T) {
+func TestDuplicateUnitState(t *testing.T) {
 	ctx := context.Background()
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
@@ -430,7 +430,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	err := jm.initComponents()
 	require.NoError(t, err)
-	state := &metadata.FinishedState{FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
+	state := &metadata.UnitState{FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
 		"task2": {
 			&metadata.FinishedTaskStatus{
 				TaskStatus: metadata.TaskStatus{
@@ -450,7 +450,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 			},
 		},
 	}}
-	err = jm.metadata.FinishedStateStore().Put(ctx, state)
+	err = jm.metadata.UnitStateStore().Put(ctx, state)
 	require.NoError(t, err)
 
 	// the difference is the cfgModRevision
@@ -466,9 +466,9 @@ func TestDuplicateFinishedState(t *testing.T) {
 	err = jm.onWorkerFinished(finishedTaskStatus, workerHandle)
 	require.NoError(t, err)
 
-	state2Iface, err := jm.metadata.FinishedStateStore().Get(ctx)
+	state2Iface, err := jm.metadata.UnitStateStore().Get(ctx)
 	require.NoError(t, err)
-	state2 := state2Iface.(*metadata.FinishedState)
+	state2 := state2Iface.(*metadata.UnitState)
 	require.Equal(t, 1, len(state2.FinishedUnitStatus))
 	require.Equal(t, 2, len(state2.FinishedUnitStatus["task2"]))
 	require.Equal(t, frameModel.WorkerDMLoad, state2.FinishedUnitStatus["task2"][1].Unit)
