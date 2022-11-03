@@ -176,9 +176,6 @@ type mockExecutorManager struct {
 	count      map[model.ExecutorStatus]int
 }
 
-func (m *mockExecutorManager) Stop() {
-}
-
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
@@ -232,7 +229,6 @@ func TestCollectMetric(t *testing.T) {
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
@@ -322,5 +318,4 @@ func TestHTTPErrorHandler(t *testing.T) {
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }

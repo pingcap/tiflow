@@ -17,13 +17,14 @@ import (
 	"sync"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 )
 
 func (*testLoaderSuite) TestConcurrentStatus(c *C) {
-	l := &Loader{statusRecorder: newStatusRecorder()}
+	l := &Loader{speedRecorder: export.NewSpeedRecorder()}
 	l.cfg = &config.SubTaskConfig{}
 	l.logger = log.L()
 	l.finishedDataSize.Store(100)
