@@ -85,7 +85,7 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 
 func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	encoder := g.builder.Build()
-	inputChan := g.inputCh[idx]
+	inputCh := g.inputCh[idx]
 	metric := encoderGroupInputChanSizeGauge.
 		WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID, strconv.Itoa(idx))
 	ticker := time.NewTicker(defaultMetricInterval)
@@ -95,13 +95,13 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			metric.Set(float64(len(inputChan)))
-		case promise := <-inputChan:
+			metric.Set(float64(len(inputCh)))
+		case promise := <-inputCh:
 			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.Event, promise.callback); err != nil {
 				return err
 			}
 			promise.Messages = encoder.Build()
-			promise.Done()
+			close(promise.done)
 		}
 	}
 }
@@ -113,8 +113,14 @@ func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int
 	case <-ctx.Done():
 		return ctx.Err()
 	case g.inputCh[index] <- promise:
-		g.responses <- promise
 	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case g.responses <- promise:
+	}
+
 	return nil
 }
 
@@ -130,7 +136,7 @@ type responsePromise struct {
 
 	Messages []*common.Message
 
-	doneCh chan struct{}
+	done chan struct{}
 }
 
 func newResponsePromise(topic string, partition int32, event *model.RowChangedEvent, callback func()) *responsePromise {
@@ -140,20 +146,15 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 		Event:     event,
 		callback:  callback,
 
-		// todo: shall we must use block channel here ?
-		doneCh: make(chan struct{}),
+		done: make(chan struct{}),
 	}
-}
-
-func (p *responsePromise) Done() {
-	close(p.doneCh)
 }
 
 func (p *responsePromise) Wait(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-p.doneCh:
+	case <-p.done:
 	}
 	return nil
 }
