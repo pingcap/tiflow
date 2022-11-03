@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,17 +47,66 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
-	require.Nil(t, m.blockAcquire(1))
-	resolvedTs := model.NewResolvedTs(1)
-	m.record(1, resolvedTs, 1)
+	require.Nil(t, m.blockAcquire(100))
+	m.record(1, model.NewResolvedTs(1), 50)
+	m.record(1, model.NewResolvedTs(2), 50)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.Nil(t, m.blockAcquire(100))
+		require.Nil(t, m.blockAcquire(50))
 	}()
-	m.release(1, resolvedTs)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, m.blockAcquire(50))
+	}()
+	m.release(1, model.NewResolvedTs(1))
+	m.release(1, model.NewResolvedTs(2))
+	wg.Wait()
+}
+
+func TestMemQuotaClose(t *testing.T) {
+	t.Parallel()
+
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	require.Nil(t, m.blockAcquire(100))
+	m.record(1, model.NewResolvedTs(2), 100)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := m.blockAcquire(50)
+		if err != nil {
+			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := m.blockAcquire(50)
+		if err != nil {
+			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := m.blockAcquire(50)
+		if err != nil {
+			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+		}
+	}()
+
+	// Randomly release some memory.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m.release(1, model.NewResolvedTs(2))
+	}()
+	m.close()
 	wg.Wait()
 }
 
