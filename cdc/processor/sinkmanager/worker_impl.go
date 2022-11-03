@@ -25,11 +25,10 @@ import (
 const (
 	// defaultRequestMemSize is the default memory usage for a request.
 	defaultRequestMemSize = 10 * 1024 * 1024 // 10MB
-	// maxUpdateIntervalSize is the maximum size of events that can be updated in a single batch.
-	// It has two purposes:
-	// 1. Avoid update resolved ts too frequently, if there are too many small transactions.
-	// 2. Limit the maximum size of a group of one batch, if there is a big translation.
-	maxUpdateIntervalSize = 1024 * 1024 // 1MB
+	// Avoid update resolved ts too frequently, if there are too many small transactions.
+	maxUpdateIntervalSize = 1024 * 256 // 256KB
+	// Limit the maximum size of a group of one batch, if there is a big translation.
+	maxBigTxnBatchSize = maxUpdateIntervalSize * 20 // 5MB
 )
 
 // Assert that workerImpl implements worker.
@@ -170,7 +169,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				} else {
 					if w.splitTxn {
 						// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
-						if currentTotalSize >= maxUpdateIntervalSize*50 {
+						if currentTotalSize >= maxBigTxnBatchSize {
 							if err := appendEventsAndRecordCurrentSize(); err != nil {
 								return errors.Trace(err)
 							}
