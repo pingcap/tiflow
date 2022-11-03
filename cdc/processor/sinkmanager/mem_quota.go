@@ -16,9 +16,11 @@ package sinkmanager
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -27,7 +29,7 @@ type memConsumeRecord struct {
 	size       uint64
 }
 
-type changefeedMemQuota struct {
+type memQuota struct {
 	changefeedID model.ChangeFeedID
 	// totalBytes is the total memory quota for one changefeed.
 	totalBytes uint64
@@ -37,11 +39,13 @@ type changefeedMemQuota struct {
 	// usedBytes is the memory usage of one changefeed.
 	usedBytes uint64
 	// tableMemory is the memory usage of each table.
-	tableMemory map[model.TableID][]*memConsumeRecord
+	tableMemory  map[model.TableID][]*memConsumeRecord
+	isAborted    atomic.Bool
+	consumedCond *sync.Cond
 }
 
-func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *changefeedMemQuota {
-	return &changefeedMemQuota{
+func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
+	return &memQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
@@ -49,7 +53,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *changefeed
 	}
 }
 
-func (m *changefeedMemQuota) tryAcquire(nBytes uint64) bool {
+func (m *memQuota) tryAcquire(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.usedBytes+nBytes > m.totalBytes {
@@ -59,19 +63,37 @@ func (m *changefeedMemQuota) tryAcquire(nBytes uint64) bool {
 	return true
 }
 
-func (m *changefeedMemQuota) forceAcquire(nBytes uint64) {
+func (m *memQuota) forceAcquire(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	m.usedBytes += nBytes
 }
 
-func (m *changefeedMemQuota) refund(nBytes uint64) {
+func (m *memQuota) blockAcquire(nBytes uint64) error {
+	for {
+		if m.isAborted.Load() {
+			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+		}
+
+		m.mu.Lock()
+		if m.usedBytes+nBytes <= m.totalBytes {
+			m.usedBytes += nBytes
+			m.mu.Unlock()
+			return nil
+		}
+		m.mu.Unlock()
+		m.consumedCond.Wait()
+	}
+}
+
+func (m *memQuota) refund(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usedBytes -= nBytes
 }
 
-func (m *changefeedMemQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
+func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
@@ -83,13 +105,13 @@ func (m *changefeedMemQuota) record(tableID model.TableID, resolved model.Resolv
 	})
 }
 
-func (m *changefeedMemQuota) hasAvailable(nBytes uint64) bool {
+func (m *memQuota) hasAvailable(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usedBytes+nBytes <= m.totalBytes
 }
 
-func (m *changefeedMemQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
+func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
@@ -111,4 +133,13 @@ func (m *changefeedMemQuota) release(tableID model.TableID, resolved model.Resol
 		m.usedBytes -= records[j].size
 	}
 	m.tableMemory[tableID] = append(make([]*memConsumeRecord, 0, len(records[i:])), records[i:]...)
+
+	if m.usedBytes < m.totalBytes {
+		m.consumedCond.Signal()
+	}
+}
+
+func (m *memQuota) abort() {
+	m.isAborted.Store(true)
+	m.consumedCond.Broadcast()
 }

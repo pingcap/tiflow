@@ -40,7 +40,7 @@ type workerImpl struct {
 	sortEngine   sorter.EventSortEngine
 	// redoManager only has value when the redo log is enabled.
 	redoManager redo.LogManager
-	memQuota    *changefeedMemQuota
+	memQuota    *memQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -54,7 +54,7 @@ func newWorker(
 	changefeedID model.ChangeFeedID,
 	sortEngine sorter.EventSortEngine,
 	redoManager redo.LogManager,
-	quota *changefeedMemQuota,
+	quota *memQuota,
 	splitTxn bool,
 	enableOldValue bool,
 ) worker {
@@ -131,10 +131,14 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
-					// This probably cause out of memory.
-					// TODO: find a better way to control how many workers
-					//       can executed the memory quota at the same time.
-					w.memQuota.forceAcquire(defaultRequestMemSize)
+					if !w.splitTxn {
+						w.memQuota.forceAcquire(defaultRequestMemSize)
+					} else {
+						err := w.memQuota.blockAcquire(defaultRequestMemSize)
+						if err != nil {
+							return errors.Trace(err)
+						}
+					}
 					availableMem += defaultRequestMemSize
 				}
 				availableMem -= e.Row.ApproximateBytes()
