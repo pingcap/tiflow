@@ -132,6 +132,10 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
 					if !w.splitTxn {
+						// If we do not split the transaction, we do not need to wait for the memory quota.
+						// The worst case is all workers are exceeding the memory quota.
+						// It will cause out of memory. But it is acceptable for now.
+						// Because we split the transaction by default.
 						w.memQuota.forceAcquire(defaultRequestMemSize)
 					} else {
 						err := w.memQuota.blockAcquire(defaultRequestMemSize)
