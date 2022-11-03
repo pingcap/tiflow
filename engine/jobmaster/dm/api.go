@@ -45,8 +45,8 @@ type JobStatus struct {
 	FinishedUnitStatus map[string][]*metadata.FinishedTaskStatus `json:"finished_unit_status,omitempty"`
 }
 
-// TableStmt represents create table statements of a source table.
-type TableStmt struct {
+// ShardTable represents create table statements of a source table.
+type ShardTable struct {
 	Current string
 	Pending string
 }
@@ -54,7 +54,7 @@ type TableStmt struct {
 // DDLLock represents ddl lock of a target table.
 type DDLLock struct {
 	// source table -> [current table, pending table(conflict table)]
-	TableStmts map[metadata.SourceTable]TableStmt
+	ShardTables map[metadata.SourceTable]ShardTable
 }
 
 // ShowDDLLocksResponse represents response of show ddl locks.

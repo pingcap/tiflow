@@ -16,6 +16,7 @@ package dm
 import (
 	//"context"
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -463,15 +464,17 @@ func TestHandleDropTable(t *testing.T) {
 
 func TestHandle(t *testing.T) {
 	var (
-		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
-		tb2 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
-		tb  = metadata.TargetTable{Schema: "schema", Table: "tb"}
-		g   = &shardGroup{
+		tb1        = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
+		tb2        = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
+		tb         = metadata.TargetTable{Schema: "schema", Table: "tb"}
+		tableAgent = &MockCheckpointAgent{}
+		g          = &shardGroup{
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 			},
 			conflictTables:   make(map[metadata.SourceTable]string),
 			dropColumnsStore: metadata.NewDropColumnsStore(mock.NewMetaMock(), tb),
+			tableAgent:       tableAgent,
 		}
 	)
 
@@ -527,13 +530,14 @@ func TestHandle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
 	require.Equal(t, optimism.ConflictNone, conflictStage)
-	require.True(t, needDeleted)
+	require.False(t, needDeleted)
 
 	item = &metadata.DDLItem{
 		SourceTable: tb2,
 		DDLs:        []string{"drop table tb2"},
 		Type:        metadata.DropTable,
 	}
+	tableAgent.On("FetchTableStmt").Return(genCreateStmt("col1 int", "col3 int"), nil).Once()
 	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
@@ -569,7 +573,7 @@ func TestDDLCoordinator(t *testing.T) {
 	var (
 		checkpointAgent = &MockCheckpointAgent{}
 		jobStore        = metadata.NewJobStore(mock.NewMetaMock(), log.L())
-		ddlCoordinator  = NewDDLCoordinator("", nil, checkpointAgent, jobStore, log.L())
+		ddlCoordinator  = NewDDLCoordinator("", mock.NewMetaMock(), checkpointAgent, jobStore, log.L())
 
 		tb1         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
@@ -690,4 +694,65 @@ func TestDDLCoordinator(t *testing.T) {
 	require.Len(t, ddlCoordinator.tables[targetTable], 1)
 
 	checkpointAgent.AssertExpectations(t)
+}
+
+func TestShowDDLLocks(t *testing.T) {
+	ddlCoordinator := &DDLCoordinator{
+		shardGroups: map[metadata.TargetTable]*shardGroup{
+			{Schema: "db", Table: "tb"}: {
+				normalTables: map[metadata.SourceTable]string{
+					{Source: "source1", Schema: "db", Table: "tb"}: genCreateStmt("col1 int", "col2 int"),
+					{Source: "source2", Schema: "db", Table: "tb"}: genCreateStmt("col1 int", "col2 int"),
+				},
+				conflictTables: map[metadata.SourceTable]string{
+					{Source: "source2", Schema: "db", Table: "tb"}: genCreateStmt("col1 int", "col2 varchar(255)"),
+				},
+			},
+			{Schema: "database", Table: "table"}: {
+				normalTables: map[metadata.SourceTable]string{
+					{Source: "source1", Schema: "database1", Table: "table1"}: genCreateStmt("col1 int", "col2 int", "col3 int"),
+					{Source: "source1", Schema: "database2", Table: "table2"}: genCreateStmt("col1 int", "col2 int"),
+				},
+				conflictTables: map[metadata.SourceTable]string{
+					{Source: "source1", Schema: "database1", Table: "table1"}: genCreateStmt("col1 int", "col2 varchar(255)", "col3 int"),
+				},
+			},
+		},
+	}
+	resp := ddlCoordinator.ShowDDLLocks(context.Background())
+	bs, err := json.MarshalIndent(resp, "", "\t")
+	require.NoError(t, err)
+	expectedResp := `{
+	"Locks": {
+		"{\"Schema\":\"database\",\"Table\":\"table\"}": {
+			"ShardTables": {
+				"{\"Source\":\"source1\",\"Schema\":\"database1\",\"Table\":\"table1\"}": {
+					"Current": "CREATE TABLE tbl(col1 int, col2 int, col3 int)",
+					"Pending": "CREATE TABLE tbl(col1 int, col2 varchar(255), col3 int)"
+				},
+				"{\"Source\":\"source1\",\"Schema\":\"database2\",\"Table\":\"table2\"}": {
+					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
+					"Pending": ""
+				}
+			}
+		},
+		"{\"Schema\":\"db\",\"Table\":\"tb\"}": {
+			"ShardTables": {
+				"{\"Source\":\"source1\",\"Schema\":\"db\",\"Table\":\"tb\"}": {
+					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
+					"Pending": ""
+				},
+				"{\"Source\":\"source2\",\"Schema\":\"db\",\"Table\":\"tb\"}": {
+					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
+					"Pending": "CREATE TABLE tbl(col1 int, col2 varchar(255))"
+				}
+			}
+		}
+	}
+}`
+	require.Equal(t, expectedResp, string(bs))
+}
+
+func TestAddDroppedColumn(t *testing.T) {
+
 }

@@ -141,8 +141,8 @@ func (s *DropColumnsStore) AddDropColumns(ctx context.Context, cols []string, so
 	return s.frameworkMetaStore.Put(ctx, dropColumns)
 }
 
-// DelDropColumns deletes drop columns from the state
-func (s *DropColumnsStore) DelDropColumns(ctx context.Context, cols []string, sourceTable SourceTable) error {
+// DelDropColumn deletes drop column from the state
+func (s *DropColumnsStore) DelDropColumn(ctx context.Context, col string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.frameworkMetaStore.Get(ctx)
@@ -153,11 +153,16 @@ func (s *DropColumnsStore) DelDropColumns(ctx context.Context, cols []string, so
 		return err
 	}
 	dropColumns := state.(*DropColumns)
-	for _, col := range cols {
-		delete(dropColumns.Cols[col], sourceTable)
-		if len(dropColumns.Cols[col]) == 0 {
-			delete(dropColumns.Cols, col)
-		}
+	delete(dropColumns.Cols, col)
+
+	if len(dropColumns.Cols) == 0 {
+		return s.frameworkMetaStore.Delete(ctx)
 	}
 	return s.frameworkMetaStore.Put(ctx, dropColumns)
+}
+
+// DelAllDropColumns deletes all drop columns in metadata.
+func DelAllDropColumns(ctx context.Context, kvClient metaModel.KVClient) error {
+	_, err := kvClient.Delete(ctx, adapter.DMDropColumnsKeyAdapter.Encode(""), metaModel.WithPrefix())
+	return err
 }

@@ -75,6 +75,16 @@ func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent Tab
 	}
 }
 
+// Clear clears metadata.
+func (c *DDLCoordinator) Clear(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// wait all pending ddls coordinated.
+	c.pendings.Wait()
+
+	return metadata.DelAllDropColumns(ctx, c.kvClient)
+}
+
 // Reset resets the shard group.
 func (c *DDLCoordinator) Reset(ctx context.Context) error {
 	c.mu.Lock()
@@ -101,32 +111,6 @@ func (c *DDLCoordinator) Reset(ctx context.Context) error {
 	return nil
 }
 
-func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable metadata.TargetTable) (*shardGroup, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if g, ok := c.shardGroups[targetTable]; ok {
-		return g, nil
-	}
-
-	jobCfg, err := c.jobStore.GetJobCfg(ctx)
-	if err != nil {
-		return nil, err
-	}
-	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent)
-	if err != nil {
-		return nil, err
-	}
-	c.shardGroups[targetTable] = newGroup
-	return newGroup, nil
-}
-
-func (c *DDLCoordinator) removeShardGroup(targetTable metadata.TargetTable) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.shardGroups, targetTable)
-}
-
 // Coordinate coordinates ddls.
 func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	c.mu.Lock()
@@ -147,7 +131,7 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 
 	// if all source table is deleted, we should remove the shard group.
 	if deleted {
-		c.removeShardGroup(item.TargetTable)
+		c.removeShardGroup(ctx, item.TargetTable)
 	}
 
 	// handle table level ddl
@@ -179,9 +163,40 @@ func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse 
 	ddlLocks := make(map[metadata.TargetTable]DDLLock)
 	for targetTable, g := range c.shardGroups {
 		tbs := g.showTables()
-		ddlLocks[targetTable] = DDLLock{TableStmts: tbs}
+		ddlLocks[targetTable] = DDLLock{ShardTables: tbs}
 	}
 	return ShowDDLLocksResponse{Locks: ddlLocks}
+}
+
+func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable metadata.TargetTable) (*shardGroup, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if g, ok := c.shardGroups[targetTable]; ok {
+		return g, nil
+	}
+
+	jobCfg, err := c.jobStore.GetJobCfg(ctx)
+	if err != nil {
+		return nil, err
+	}
+	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent)
+	if err != nil {
+		return nil, err
+	}
+	c.shardGroups[targetTable] = newGroup
+	return newGroup, nil
+}
+
+func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metadata.TargetTable) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if g, ok := c.shardGroups[targetTable]; ok {
+		if err := g.clear(ctx); err != nil {
+			c.logger.Error("clear shard group failed", zap.Error(err))
+		}
+	}
+	delete(c.shardGroups, targetTable)
 }
 
 type shardGroup struct {
@@ -190,6 +205,8 @@ type shardGroup struct {
 	conflictTables   map[metadata.SourceTable]string
 	tableAgent       TableAgent
 	dropColumnsStore *metadata.DropColumnsStore
+	id               frameModel.MasterID
+	cfg              *config.JobCfg
 	deleted          bool
 }
 
@@ -199,6 +216,8 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 		normalTables:     make(map[metadata.SourceTable]string),
 		conflictTables:   make(map[metadata.SourceTable]string),
 		dropColumnsStore: metadata.NewDropColumnsStore(kvClient, targetTable),
+		id:               id,
+		cfg:              cfg,
 	}
 	for sourceTable := range sourceTables {
 		stmt, err := g.tableAgent.FetchTableStmt(ctx, id, cfg, sourceTable)
@@ -223,6 +242,9 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 		return nil, optimism.ConflictError, false, errors.Errorf("shard group for target table %v is deleted", item.TargetTable)
 	}
 
+	// nolint:errcheck
+	g.gcDropColumns(ctx)
+
 	var (
 		ddls          []string
 		needDeleted   bool
@@ -243,13 +265,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 		return nil, optimism.ConflictError, false, errors.Errorf("unknown ddl type %v", item.Type)
 	}
 
-	if g.isResolved() {
-		if err := g.clear(ctx); err != nil {
-			return nil, optimism.ConflictError, false, err
-		}
-		needDeleted = true
-	}
-	return ddls, conflictStage, needDeleted, err
+	return ddls, conflictStage, needDeleted || g.isResolved(ctx), err
 }
 
 // handleCreateTable handles create table ddl.
@@ -280,55 +296,6 @@ func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem
 		return true
 	}
 	return false
-}
-
-func (g *shardGroup) checkAddDropColumn(ctx context.Context, sourceTable metadata.SourceTable, ddl string, prevTableStmt, postTableStmt string, newDropColumns []string) (string, error) {
-	currTable := g.normalTables[sourceTable]
-	defer func() {
-		g.normalTables[sourceTable] = currTable
-	}()
-
-	g.normalTables[sourceTable] = prevTableStmt
-	oldJoined, err := g.joinTables(normal)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	postTable := genCmpTable(postTableStmt)
-	g.normalTables[sourceTable] = postTableStmt
-	newJoined, err := g.joinTables(normal)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	cmp, err := oldJoined.Compare(newJoined)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	if cmp <= 0 {
-		if col, err2 := optimism.AddDifferentFieldLenColumns("", ddl, oldJoined, newJoined); err2 != nil {
-			// check for add column with a larger field len
-			return "", err2
-		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
-			// check for add column with a smaller field len
-			return "", err2
-		} else if len(col) > 0 && (g.isDroppedColumn(ctx, col, sourceTable) || contains(newDropColumns, col)) {
-			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
-		}
-	}
-
-	if cmp >= 0 {
-		if col, err2 := optimism.GetColumnName("", ddl, ast.AlterTableDropColumn); err2 != nil {
-			return "", err2
-		} else if len(col) > 0 {
-			return col, nil
-		}
-	}
-	return "", nil
 }
 
 // handleDDLs handles ddl.
@@ -445,6 +412,55 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 	}
 	log.L().Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, optimism.ConflictSkipWaitRedirect
+}
+
+func (g *shardGroup) checkAddDropColumn(ctx context.Context, sourceTable metadata.SourceTable, ddl string, prevTableStmt, postTableStmt string, newDropColumns []string) (string, error) {
+	currTable := g.normalTables[sourceTable]
+	defer func() {
+		g.normalTables[sourceTable] = currTable
+	}()
+
+	g.normalTables[sourceTable] = prevTableStmt
+	oldJoined, err := g.joinTables(normal)
+	if err != nil {
+		// nolint:nilerr
+		return "", nil
+	}
+
+	postTable := genCmpTable(postTableStmt)
+	g.normalTables[sourceTable] = postTableStmt
+	newJoined, err := g.joinTables(normal)
+	if err != nil {
+		// nolint:nilerr
+		return "", nil
+	}
+
+	cmp, err := oldJoined.Compare(newJoined)
+	if err != nil {
+		// nolint:nilerr
+		return "", nil
+	}
+
+	if cmp <= 0 {
+		if col, err2 := optimism.AddDifferentFieldLenColumns("", ddl, oldJoined, newJoined); err2 != nil {
+			// check for add column with a larger field len
+			return "", err2
+		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
+			// check for add column with a smaller field len
+			return "", err2
+		} else if len(col) > 0 && (g.isDroppedColumn(ctx, col, sourceTable) || contains(newDropColumns, col)) {
+			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
+		}
+	}
+
+	if cmp >= 0 {
+		if col, err2 := optimism.GetColumnName("", ddl, ast.AlterTableDropColumn); err2 != nil {
+			return "", err2
+		} else if len(col) > 0 {
+			return col, nil
+		}
+	}
+	return "", nil
 }
 
 // joinTables join tables by tableType.
@@ -616,8 +632,52 @@ func (g *shardGroup) isDroppedColumn(ctx context.Context, col string, sourceTabl
 	return false
 }
 
-func (g *shardGroup) isResolved() bool {
+func (g *shardGroup) gcDropColumns(ctx context.Context) error {
+	state, err := g.dropColumnsStore.Get(ctx)
+	if err != nil {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
+			return nil
+		}
+		return err
+	}
+
+	dropColumns := state.(*metadata.DropColumns)
+OutLoop:
+	for col, sourceTables := range dropColumns.Cols {
+		for sourceTable := range sourceTables {
+			tbStmt, ok := g.normalTables[sourceTable]
+			if !ok || tbStmt == "" {
+				continue
+			}
+			if cols := getColumnNames(tbStmt); contains(cols, col) {
+				continue OutLoop
+			}
+		}
+
+		for sourceTable := range sourceTables {
+			tbStmt, err := g.tableAgent.FetchTableStmt(ctx, g.id, g.cfg, sourceTable)
+			if err != nil {
+				if strings.HasPrefix(err.Error(), "table info not found") {
+					continue
+				}
+				return err
+			}
+			if cols := getColumnNames(tbStmt); contains(cols, col) {
+				continue OutLoop
+			}
+		}
+		if err := g.dropColumnsStore.DelDropColumn(ctx, col); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *shardGroup) isResolved(ctx context.Context) bool {
 	if len(g.conflictTables) != 0 {
+		return false
+	}
+	if _, err := g.dropColumnsStore.Get(ctx); err == nil || errors.Cause(err) != metadata.ErrStateNotFound {
 		return false
 	}
 
@@ -644,16 +704,17 @@ func (g *shardGroup) clear(ctx context.Context) error {
 	return g.dropColumnsStore.Delete(ctx)
 }
 
-func (g *shardGroup) showTables() map[metadata.SourceTable]TableStmt {
+func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	tables := make(map[metadata.SourceTable]TableStmt, 0)
+	tables := make(map[metadata.SourceTable]ShardTable, 0)
 	for sourceTable, stmt := range g.normalTables {
-		tables[sourceTable] = TableStmt{
+		tables[sourceTable] = ShardTable{
 			Current: stmt,
 			Pending: g.conflictTables[sourceTable],
 		}
 	}
+	// show drop columns if needed.
 	return tables
 }
 
@@ -672,4 +733,17 @@ func contains(s []string, e string) bool {
 		}
 	}
 	return false
+}
+
+// getColumnNames and return columns' names for create table stmt.
+func getColumnNames(createStmt string) []string {
+	p, _ := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
+	s := stmtNode.(*ast.CreateTableStmt)
+
+	cols := make([]string, 0, len(s.Cols))
+	for _, col := range s.Cols {
+		cols = append(cols, col.Name.Name.O)
+	}
+	return cols
 }

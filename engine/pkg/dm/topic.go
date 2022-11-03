@@ -205,7 +205,7 @@ type CommonTaskResponse struct {
 // CoordinateDDLRequest is coordinate DDL request
 type CoordinateDDLRequest metadata.DDLItem
 
-// CoordinateDDLRequest is coordinate DDL response
+// CoordinateDDLResponse is coordinate DDL response
 type CoordinateDDLResponse struct {
 	ErrorMsg      string
 	DDLs          []string
