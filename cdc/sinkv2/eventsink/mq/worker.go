@@ -63,6 +63,7 @@ type worker struct {
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
 
+	encoderGroup codec.EncoderGroup
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 	// metricMQWorkerFlushDuration is the metric of the flush duration.
@@ -70,8 +71,6 @@ type worker struct {
 	metricMQWorkerFlushDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
-
-	encoderGroup codec.EncoderGroup
 }
 
 // newWorker creates a new flush worker.
@@ -294,10 +293,20 @@ func (w *worker) asyncSend(
 
 func (w *worker) sendMessages(ctx context.Context) error {
 	responses := w.encoderGroup.Responses()
+	ticker := time.NewTicker(15 * time.Second)
+	metric := codec.EncoderGroupResponseChanSizeGauge.
+		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	defer func() {
+		ticker.Stop()
+		codec.EncoderGroupResponseChanSizeGauge.
+			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			metric.Set(float64(len(responses)))
 		case promise, ok := <-responses:
 			if !ok {
 				log.Warn("MQ sink encode response promise channel closed",
