@@ -73,13 +73,13 @@ func newSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoderGroup := codec.NewEncoderGroup(encoderBuilder, 8)
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, 16)
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	s := &dmlSink{
 		id:           changefeedID,
 		protocol:     encoderConfig.Protocol,
-		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderGroup, producer, statistics),
+		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder, encoderGroup, producer, statistics),
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
 		producer:     producer,
