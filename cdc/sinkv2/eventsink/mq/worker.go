@@ -88,7 +88,7 @@ func newWorker(
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
 		encoder:                     builder.Build(),
-		encoderGroup:                codec.NewEncoderGroup(builder, 16),
+		encoderGroup:                codec.NewEncoderGroup(builder, 16, id),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,

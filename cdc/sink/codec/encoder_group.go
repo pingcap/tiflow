@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,8 @@ type EncoderGroup interface {
 }
 
 type encoderGroup struct {
+	changefeedID model.ChangeFeedID
+
 	builder EncoderBuilder
 	count   int
 	inputCh []chan *responsePromise
@@ -44,7 +47,7 @@ type encoderGroup struct {
 	responses chan *responsePromise
 }
 
-func NewEncoderGroup(builder EncoderBuilder, number int) *encoderGroup {
+func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.ChangeFeedID) *encoderGroup {
 	if number <= 0 {
 		number = defaultEncoderGroupSize
 	}
@@ -55,16 +58,21 @@ func NewEncoderGroup(builder EncoderBuilder, number int) *encoderGroup {
 	}
 
 	return &encoderGroup{
-		builder: builder,
-		count:   number,
-		inputCh: inputCh,
-		index:   0,
+		changefeedID: changefeedID,
 
+		builder:   builder,
+		count:     number,
+		inputCh:   inputCh,
+		index:     0,
 		responses: make(chan *responsePromise, defaultInputChannelSize*number),
 	}
 }
 
 func (g *encoderGroup) Run(ctx context.Context) error {
+	defer func() {
+		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+		close(g.responses)
+	}()
 	eg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < g.count; i++ {
 		idx := i
@@ -78,10 +86,16 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	encoder := g.builder.Build()
 	inputChan := g.inputCh[idx]
+	metric := encoderGroupInputChanSizeGauge.
+		WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID, strconv.Itoa(idx))
+	ticker := time.NewTicker(defaultMetricInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-ticker.C:
+			metric.Set(float64(len(inputChan)))
 		case promise := <-inputChan:
 			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.event, promise.callback); err != nil {
 				return err
