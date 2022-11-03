@@ -149,15 +149,6 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	// we do not pass a `context` to the etcd client,
-	// to prevent it's cancelled when the server is closing.
-	// For example, when the non-owner node goes offline,
-	// it would resign the campaign key which was put by call `campaign`,
-	// if this is not done due to the passed context cancelled,
-	// the key will be kept for the lease TTL, which is 10 seconds,
-	// then cause the new owner cannot be elected immediately after the old owner offline.
-	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-
 	createEtcdClient := func() (etcd.CDCEtcdClient, error) {
 		etcdCli, err := clientv3.New(clientv3.Config{
 			Endpoints:   s.pdEndpoints,

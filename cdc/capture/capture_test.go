@@ -67,7 +67,7 @@ func TestReset(t *testing.T) {
 	require.Nil(t, err)
 
 	cp := NewCapture4Test(nil)
-	cp.CreateEtcdClient = genCreateEtcdClientFunc(ctx, clientURL)
+	cp.createEtcdClient = genCreateEtcdClientFunc(ctx, clientURL)
 
 	// simulate network isolation scenarios
 	etcdServer.Close()
