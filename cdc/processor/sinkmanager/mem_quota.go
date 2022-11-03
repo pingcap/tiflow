@@ -39,18 +39,23 @@ type memQuota struct {
 	// usedBytes is the memory usage of one changefeed.
 	usedBytes uint64
 	// tableMemory is the memory usage of each table.
-	tableMemory  map[model.TableID][]*memConsumeRecord
-	isAborted    atomic.Bool
-	consumedCond *sync.Cond
+	tableMemory map[model.TableID][]*memConsumeRecord
+	// isClosed is used to indicate whether the mem quota is closed.
+	isClosed atomic.Bool
+	// blockAcquireCond is used to notify the blocked acquire.
+	blockAcquireCond *sync.Cond
 }
 
 func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
-	return &memQuota{
+	m := &memQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
 		tableMemory:  make(map[model.TableID][]*memConsumeRecord),
 	}
+	m.blockAcquireCond = sync.NewCond(&m.mu)
+
+	return m
 }
 
 func (m *memQuota) tryAcquire(nBytes uint64) bool {
@@ -71,19 +76,18 @@ func (m *memQuota) forceAcquire(nBytes uint64) {
 }
 
 func (m *memQuota) blockAcquire(nBytes uint64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for {
-		if m.isAborted.Load() {
+		if m.isClosed.Load() {
 			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
 		}
 
-		m.mu.Lock()
 		if m.usedBytes+nBytes <= m.totalBytes {
 			m.usedBytes += nBytes
-			m.mu.Unlock()
 			return nil
 		}
-		m.mu.Unlock()
-		m.consumedCond.Wait()
+		m.blockAcquireCond.Wait()
 	}
 }
 
@@ -135,11 +139,11 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	m.tableMemory[tableID] = append(make([]*memConsumeRecord, 0, len(records[i:])), records[i:]...)
 
 	if m.usedBytes < m.totalBytes {
-		m.consumedCond.Signal()
+		m.blockAcquireCond.Signal()
 	}
 }
 
-func (m *memQuota) abort() {
-	m.isAborted.Store(true)
-	m.consumedCond.Broadcast()
+func (m *memQuota) close() {
+	m.isClosed.Store(true)
+	m.blockAcquireCond.Broadcast()
 }

@@ -14,6 +14,7 @@
 package sinkmanager
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -39,6 +40,24 @@ func TestMemQuotaForceAcquire(t *testing.T) {
 	m.mu.Lock()
 	require.Equal(t, uint64(101), m.usedBytes)
 	m.mu.Unlock()
+}
+
+func TestMemQuotaBlockAcquire(t *testing.T) {
+	t.Parallel()
+
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	require.Nil(t, m.blockAcquire(1))
+	resolvedTs := model.NewResolvedTs(1)
+	m.record(1, resolvedTs, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, m.blockAcquire(100))
+	}()
+	m.release(1, resolvedTs)
+	wg.Wait()
 }
 
 func TestMemQuotaRefund(t *testing.T) {
