@@ -81,6 +81,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			// Used to record the last written position.
 			// We need to use it to update the lower bound of the table sink.
 			var lastPos sorter.Position
+			lastCommitTs := uint64(0)
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
 			// We have to get the latest barrier ts, this is because the barrier ts may be updated.
@@ -102,8 +103,8 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				events = events[:0]
 				return nil
 			}
-			advanceTableSinkAndResetCurrentSize := func(event *model.PolymorphicEvent) error {
-				err := w.advanceTableSink(task, event.CRTs, currentTotalSize, batchID)
+			advanceTableSinkAndResetCurrentSize := func() error {
+				err := w.advanceTableSink(task, lastCommitTs, currentTotalSize, batchID)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -120,14 +121,6 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				}
 				// There is no more data.
 				if e == nil {
-					// This means that we append all the events to the table sink.
-					// But we have not updated the resolved ts.
-					// Because we do not reach the maxUpdateIntervalSize.
-					if currentTotalSize != 0 {
-						if err := advanceTableSinkAndResetCurrentSize(e); err != nil {
-							return errors.Trace(err)
-						}
-					}
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
@@ -147,6 +140,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				}
 				availableMem -= e.Row.ApproximateBytes()
 				events = append(events, e)
+				lastCommitTs = e.CRTs
 				// We meet a finished transaction.
 				if pos.Valid() {
 					lastPos = pos
@@ -164,7 +158,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					//    we only update the resolved ts when the currentTotalSize reaches the maxUpdateIntervalSize
 					//    to avoid updating the resolved ts too frequently.
 					if w.splitTxn || currentTotalSize >= maxUpdateIntervalSize {
-						if err := advanceTableSinkAndResetCurrentSize(e); err != nil {
+						if err := advanceTableSinkAndResetCurrentSize(); err != nil {
 							return errors.Trace(err)
 						}
 					}
@@ -180,12 +174,20 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 							if err := appendEventsAndRecordCurrentSize(); err != nil {
 								return errors.Trace(err)
 							}
-							if err := advanceTableSinkAndResetCurrentSize(e); err != nil {
+							if err := advanceTableSinkAndResetCurrentSize(); err != nil {
 								return errors.Trace(err)
 							}
 							batchID++
 						}
 					}
+				}
+			}
+			// This means that we append all the events to the table sink.
+			// But we have not updated the resolved ts.
+			// Because we do not reach the maxUpdateIntervalSize.
+			if currentTotalSize != 0 {
+				if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+					return errors.Trace(err)
 				}
 			}
 			// Do not forget to refund the useless memory quota.
