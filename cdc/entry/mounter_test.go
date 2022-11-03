@@ -304,7 +304,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false).(*mounterImpl)
+		time.UTC, filter, false).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -1011,7 +1011,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounterImpl)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounter)
 
 	type testCase struct {
 		schema  string
@@ -1063,9 +1063,9 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			pEvent := model.NewPolymorphicEvent(rawKV)
-			ignored, err := mounter.DecodeEvent(ctx, pEvent)
+			err := mounter.DecodeEvent(ctx, pEvent)
 			require.Nil(t, err)
-			if ignored {
+			if pEvent.Row == nil {
 				return
 			}
 			row := pEvent.Row

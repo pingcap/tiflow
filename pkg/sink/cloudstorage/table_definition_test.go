@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -25,14 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildTableColFromTiColumnInfo(t *testing.T) {
+func TestTableCol(t *testing.T) {
 	testCases := []struct {
 		name      string
 		filedType byte
 		flen      int
 		decimal   int
 		flag      uint
-		elems     []string
+		charset   string
 		expected  string
 	}{
 		{
@@ -44,11 +45,11 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 			expected:  `{"ColumnName":"","ColumnType":"TIME","ColumnScale":"5"}`,
 		},
 		{
-			name:      "int(5) UNSIGNED ZEROFILL",
+			name:      "int(5) UNSIGNED",
 			filedType: mysql.TypeLong,
 			flen:      5,
 			decimal:   math.MinInt,
-			flag:      mysql.UnsignedFlag | mysql.ZerofillFlag,
+			flag:      mysql.UnsignedFlag,
 			expected:  `{"ColumnName":"","ColumnType":"INT UNSIGNED","ColumnPrecision":"5"}`,
 		},
 		{
@@ -144,8 +145,8 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 			filedType: mysql.TypeLong,
 			flen:      math.MinInt,
 			decimal:   math.MinInt,
-			flag:      0,
-			expected:  `{"ColumnName":"","ColumnType":"INT","ColumnPrecision":"11"}`,
+			flag:      mysql.PriKeyFlag,
+			expected:  `{"ColumnIsPk":"true", "ColumnName":"", "ColumnPrecision":"11", "ColumnType":"INT"}`,
 		},
 		{
 			name:      "bigint(20)",
@@ -196,6 +197,15 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 			expected:  `{"ColumnName":"","ColumnType":"BLOB","ColumnPrecision":"100"}`,
 		},
 		{
+			name:      "text",
+			filedType: mysql.TypeBlob,
+			flen:      100,
+			decimal:   math.MinInt,
+			flag:      0,
+			charset:   charset.CharsetUTF8MB4,
+			expected:  `{"ColumnName":"","ColumnType":"TEXT","ColumnPrecision":"100"}`,
+		},
+		{
 			name:      "tinyblob",
 			filedType: mysql.TypeTinyBlob,
 			flen:      120,
@@ -222,13 +232,11 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 		{
 			name:      "enum",
 			filedType: mysql.TypeEnum,
-			elems:     []string{"a", "b"},
 			expected:  `{"ColumnName":"","ColumnType":"ENUM"}`,
 		},
 		{
 			name:      "set",
 			filedType: mysql.TypeSet,
-			elems:     []string{"a", "b"},
 			expected:  `{"ColumnName":"","ColumnType":"SET"}`,
 		},
 		{
@@ -300,16 +308,22 @@ func TestBuildTableColFromTiColumnInfo(t *testing.T) {
 		if tc.flag != 0 {
 			ft.SetFlag(tc.flag)
 		}
+		if len(tc.charset) != 0 {
+			ft.SetCharset(tc.charset)
+		}
 		col := &timodel.ColumnInfo{FieldType: *ft}
 		var tableCol TableCol
 		tableCol.FromTiColumnInfo(col)
 		encodedCol, err := json.Marshal(tableCol)
 		require.Nil(t, err, tc.name)
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
+
+		_, err = tableCol.ToTiColumnInfo()
+		require.Nil(t, err)
 	}
 }
 
-func TestBuildTableDefFromTableInfo(t *testing.T) {
+func TestTableDetail(t *testing.T) {
 	var columns []*timodel.ColumnInfo
 	var def TableDetail
 
@@ -376,4 +390,8 @@ func TestBuildTableDefFromTableInfo(t *testing.T) {
 		],
 		"TableColumnsTotal": 4
 	}`, string(encodedDef))
+
+	tableInfo, err = def.ToTableInfo()
+	require.Nil(t, err)
+	require.Len(t, tableInfo.Columns, 4)
 }

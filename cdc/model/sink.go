@@ -652,10 +652,11 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table    *TableName
-	StartTs  uint64
-	CommitTs uint64
-	Rows     []*RowChangedEvent
+	Table        *TableName
+	TableVersion uint64
+	StartTs      uint64
+	CommitTs     uint64
+	Rows         []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

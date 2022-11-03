@@ -56,7 +56,7 @@ var (
 			Subsystem: "owner",
 			Name:      "checkpoint_lag_histogram",
 			Help:      "checkpoint lag histogram of changefeeds",
-			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
+			Buckets:   lagBucket(),
 		}, []string{"namespace", "changefeed"})
 
 	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
@@ -80,7 +80,7 @@ var (
 			Subsystem: "owner",
 			Name:      "resolved_ts_lag_histogram",
 			Help:      "resolved_ts lag histogram of changefeeds",
-			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 10),
+			Buckets:   lagBucket(),
 		}, []string{"namespace", "changefeed"})
 
 	ownershipCounter = prometheus.NewCounter(
@@ -148,4 +148,15 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedTickDuration)
 	registry.MustRegister(changefeedCloseDuration)
 	registry.MustRegister(changefeedIgnoredDDLEventCounter)
+}
+
+// lagBucket returns the lag buckets for prometheus metric
+// 10 seconds is the reasonable LAG for most cases,
+// for prometheus histogram_quantile func,
+// we use small bucket distance to do accurate approximation
+func lagBucket() []float64 {
+	buckets := prometheus.LinearBuckets(0.5, 0.5, 20)
+	buckets = append(buckets, prometheus.LinearBuckets(11, 1, 10)...)
+	buckets = append(buckets, prometheus.ExponentialBuckets(40, 2, 10)...)
+	return buckets
 }

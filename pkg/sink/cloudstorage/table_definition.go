@@ -16,9 +16,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -26,7 +28,6 @@ import (
 type TableCol struct {
 	Name      string `json:"ColumnName" `
 	Tp        string `json:"ColumnType"`
-	Length    string `json:"ColumnLength,omitempty"`
 	Precision string `json:"ColumnPrecision,omitempty"`
 	Scale     string `json:"ColumnScale,omitempty"`
 	Nullable  string `json:"ColumnNullable,omitempty"`
@@ -53,7 +54,6 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	if mysql.HasUnsignedFlag(col.GetFlag()) {
 		t.Tp += " UNSIGNED"
 	}
-
 	if mysql.HasPriKeyFlag(col.GetFlag()) {
 		t.IsPK = "true"
 	}
@@ -83,6 +83,74 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	}
 }
 
+// ToTiColumnInfo converts from TableCol to TiDB ColumnInfo.
+func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
+	col := new(timodel.ColumnInfo)
+
+	col.Name = timodel.NewCIStr(t.Name)
+	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(t.Tp, " UNSIGNED")))
+	col.FieldType = *types.NewFieldType(tp)
+	if strings.Contains(t.Tp, "UNSIGNED") {
+		col.AddFlag(mysql.UnsignedFlag)
+	}
+	if t.IsPK == "true" {
+		col.AddFlag(mysql.PriKeyFlag)
+	}
+	if t.Nullable == "false" {
+		col.AddFlag(mysql.NotNullFlag)
+	}
+	if strings.Contains(t.Tp, "BLOB") || strings.Contains(t.Tp, "BINARY") {
+		col.SetCharset(charset.CharsetBin)
+	} else {
+		col.SetCharset(charset.CharsetUTF8MB4)
+	}
+	setFlen := func(precision string) error {
+		if len(precision) > 0 {
+			flen, err := strconv.Atoi(precision)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			col.SetFlen(flen)
+		}
+		return nil
+	}
+	setDecimal := func(scale string) error {
+		if len(scale) > 0 {
+			decimal, err := strconv.Atoi(scale)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			col.SetDecimal(decimal)
+		}
+		return nil
+	}
+	switch col.GetType() {
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
+		err := setDecimal(t.Scale)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	case mysql.TypeDouble, mysql.TypeFloat, mysql.TypeNewDecimal:
+		err := setFlen(t.Precision)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		err = setDecimal(t.Scale)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
+		mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeBlob,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeYear:
+		err := setFlen(t.Precision)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	return col, nil
+}
+
 // TableDetail is the detailed table definition used for cloud storage sink.
 type TableDetail struct {
 	Table        string     `json:"Table"`
@@ -103,4 +171,26 @@ func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
 		tableCol.FromTiColumnInfo(col)
 		t.Columns = append(t.Columns, tableCol)
 	}
+}
+
+// ToTableInfo converts from TableDetail to TableInfo.
+func (t *TableDetail) ToTableInfo() (*model.TableInfo, error) {
+	info := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: t.Schema,
+			Table:  t.Table,
+		},
+		TableInfo: &timodel.TableInfo{
+			Name: timodel.NewCIStr(t.Table),
+		},
+	}
+	for _, col := range t.Columns {
+		tiCol, err := col.ToTiColumnInfo()
+		if err != nil {
+			return nil, err
+		}
+		info.Columns = append(info.Columns, tiCol)
+	}
+
+	return info, nil
 }

@@ -186,8 +186,8 @@ type Syncer struct {
 
 	lastCount atomic.Int64
 	count     atomic.Int64
-	totalTps  atomic.Int64
-	tps       atomic.Int64
+	totalRps  atomic.Int64
+	rps       atomic.Int64
 
 	filteredInsert atomic.Int64
 	filteredUpdate atomic.Int64
@@ -1401,7 +1401,10 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
-				affected = len(ddlJob.ddls) / 2
+				// simulate the value of affected along with the injected error due to the adding of SET SQL of timezone and timestamp
+				if affected == 0 {
+					affected++
+				}
 			})
 			if err != nil {
 				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)

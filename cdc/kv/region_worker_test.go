@@ -62,9 +62,7 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[idx]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.RLock()
 				require.Equal(t, uint64(idx+1), s.requestID)
-				s.lock.RUnlock()
 			}
 		}()
 	}
@@ -79,10 +77,10 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[rand.Intn(regionCount)]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.Lock()
-				s.lastResolvedTs += 10
-				s.lock.Unlock()
+				lastResolvedTs := s.getLastResolvedTs()
+				s.updateResolvedTs(s.getLastResolvedTs() + 10)
 				rsm.setState(regionID, s)
+				require.GreaterOrEqual(t, s.getLastResolvedTs(), lastResolvedTs)
 			}
 		}()
 	}
@@ -95,9 +93,6 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 		require.Greater(t, s.lastResolvedTs, uint64(1000))
 		totalResolvedTs += s.lastResolvedTs
 	}
-	// 100 regions, initial resolved ts 1000;
-	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
-	require.Equal(t, uint64(100*1000+2000*10*concurrency), totalResolvedTs)
 }
 
 func TestRegionStateManagerBucket(t *testing.T) {
@@ -273,19 +268,19 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 	s1 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(1, 1, 1),
 	}, 1)
-	s1.initialized = true
+	s1.initialized.Store(true)
 	s1.lastResolvedTs = 9
 
 	s2 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(2, 2, 2),
 	}, 2)
-	s2.initialized = true
+	s2.initialized.Store(true)
 	s2.lastResolvedTs = 11
 
 	s3 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(3, 3, 3),
 	}, 3)
-	s3.initialized = false
+	s3.initialized.Store(false)
 	s3.lastResolvedTs = 8
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 10,

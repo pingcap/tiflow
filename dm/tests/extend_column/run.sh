@@ -9,7 +9,9 @@ db="extend_column"
 tb="t"
 yb="y"
 
-function run() {
+function run_case() {
+	cleanup_data extend_column1
+	cleanup_data extend_column2
 	# table `y` has extend and generate column
 	# table `t` has extend and different instance
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -33,7 +35,9 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# start DM task in all mode
-	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s/import-mode-placeholder/$1/g" $WORK_DIR/dm-task.yaml
+	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
 	# check load data
 	# only extend table
@@ -92,13 +96,18 @@ function run() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 1"
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1>1 and c_table='2' and c_schema='extend_column2' and c_source='replica02';" "count(1): 0"
 
+	cleanup_process $*
 }
 
-cleanup_data extend_column1
-cleanup_data extend_column2
+function run() {
+	for import_mode in "sql" "loader"; do
+		echo "running extend_column case with import_mode: $import_mode"
+		run_case $import_mode
+	done
+}
+
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
-cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
