@@ -599,6 +599,7 @@ func (c *captureImpl) register(ctx context.Context) error {
 // AsyncClose closes the capture by deregister it from etcd
 // Note: this function should be reentrant
 func (c *captureImpl) AsyncClose() {
+	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
 	o, _ := c.GetOwner()
