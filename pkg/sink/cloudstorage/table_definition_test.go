@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -32,6 +33,7 @@ func TestTableCol(t *testing.T) {
 		flen      int
 		decimal   int
 		flag      uint
+		charset   string
 		expected  string
 	}{
 		{
@@ -195,6 +197,15 @@ func TestTableCol(t *testing.T) {
 			expected:  `{"ColumnName":"","ColumnType":"BLOB","ColumnPrecision":"100"}`,
 		},
 		{
+			name:      "text",
+			filedType: mysql.TypeBlob,
+			flen:      100,
+			decimal:   math.MinInt,
+			flag:      0,
+			charset:   charset.CharsetUTF8MB4,
+			expected:  `{"ColumnName":"","ColumnType":"TEXT","ColumnPrecision":"100"}`,
+		},
+		{
 			name:      "tinyblob",
 			filedType: mysql.TypeTinyBlob,
 			flen:      120,
@@ -296,6 +307,9 @@ func TestTableCol(t *testing.T) {
 		}
 		if tc.flag != 0 {
 			ft.SetFlag(tc.flag)
+		}
+		if len(tc.charset) != 0 {
+			ft.SetCharset(tc.charset)
 		}
 		col := &timodel.ColumnInfo{FieldType: *ft}
 		var tableCol TableCol
