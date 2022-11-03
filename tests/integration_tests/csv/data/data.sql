@@ -1,5 +1,5 @@
 use `test`;
--- make sure `nullable` can be handled by the mounter and mq encoding protocol
+-- make sure `nullable` can be handled properly.
 INSERT INTO multi_data_type() VALUES ();
 
 INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smallint_unsigned, t_mediumint
