@@ -445,7 +445,7 @@ func TestGetSlaveServerID(t *testing.T) {
 	for _, ca := range casesWithErr {
 		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
 		results, err2 := GetSlaveServerID(context.Background(), db)
-		fmt.Println(err2.Error())
+		fmt.Println(err2)
 		require.Equal(t, ca.results, err2)
 		require.Nil(t, results)
 	}
