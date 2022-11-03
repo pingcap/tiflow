@@ -79,7 +79,6 @@ func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
 	builder codec.EncoderBuilder,
-	group codec.EncoderGroup,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
 ) *worker {
@@ -89,7 +88,7 @@ func newWorker(
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
 		encoder:                     builder.Build(),
-		encoderGroup:                group,
+		encoderGroup:                codec.NewEncoderGroup(builder, 16),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -109,10 +108,23 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("protocol", w.protocol.String()),
 		)
 	}()
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return w.encoderGroup.Run(ctx)
+	})
+
 	if w.protocol.IsBatchEncode() {
-		return w.batchEncodeRun(ctx)
+		g.Go(func() error {
+			return w.batchEncodeRun(ctx)
+		})
+	} else {
+		g.Go(func() error {
+			return w.nonBatchEncodeRun(ctx)
+		})
 	}
-	return w.nonBatchEncodeRun(ctx)
+
+	return g.Wait()
 }
 
 // Directly send the message to the producer.
@@ -156,7 +168,6 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 	})
 
 	return g.Wait()
-
 }
 
 // Collect messages and send them to the producer in batches.

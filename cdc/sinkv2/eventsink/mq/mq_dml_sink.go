@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
@@ -34,7 +33,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -49,8 +47,6 @@ type dmlSink struct {
 	protocol config.Protocol
 
 	worker *worker
-
-	encoderGroup codec.EncoderGroup
 
 	// eventRouter used to route events to the right topic and partition.
 	eventRouter *dispatcher.EventRouter
@@ -73,22 +69,20 @@ func newSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoderGroup := codec.NewEncoderGroup(encoderBuilder, 16)
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	s := &dmlSink{
 		id:           changefeedID,
 		protocol:     encoderConfig.Protocol,
-		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder, encoderGroup, producer, statistics),
+		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder, producer, statistics),
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
 		producer:     producer,
-		encoderGroup: encoderGroup,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
 	go func() {
-		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.worker.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -103,17 +97,6 @@ func newSink(ctx context.Context,
 	}()
 
 	return s, nil
-}
-
-func (s *dmlSink) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return s.worker.run(ctx)
-	})
-	g.Go(func() error {
-		return s.encoderGroup.Run(ctx)
-	})
-	return g.Wait()
 }
 
 // WriteEvents writes events to the sink.
