@@ -191,19 +191,10 @@ func getCollation(stmt *ast.CreateTableStmt) string {
 	return ""
 }
 
-// getPKAndNotNullUK returns a map of INDEX_NAME -> set of COLUMN_NAMEs.
-func getPKAndNotNullUK(stmt *ast.CreateTableStmt) map[string]map[string]struct{} {
+// getPKAndUK returns a map of INDEX_NAME -> set of COLUMN_NAMEs.
+func getPKAndUK(stmt *ast.CreateTableStmt) map[string]map[string]struct{} {
 	ret := make(map[string]map[string]struct{})
 
-	columnNotNull := make(map[string]struct{})
-	for _, col := range stmt.Cols {
-		for _, opt := range col.Options {
-			if opt.Tp == ast.ColumnOptionNotNull {
-				columnNotNull[col.Name.Name.L] = struct{}{}
-			}
-		}
-	}
-ConstraintLoop:
 	for _, constraint := range stmt.Constraints {
 		switch constraint.Tp {
 		case ast.ConstraintPrimaryKey:
@@ -212,14 +203,10 @@ ConstraintLoop:
 				ret["PRIMARY"][key.Column.Name.L] = struct{}{}
 			}
 		case ast.ConstraintUniq, ast.ConstraintUniqKey, ast.ConstraintUniqIndex:
-			tmp := make(map[string]struct{})
+			ret[constraint.Name] = make(map[string]struct{})
 			for _, key := range constraint.Keys {
-				if _, ok := columnNotNull[key.Column.Name.L]; !ok {
-					continue ConstraintLoop
-				}
-				tmp[key.Column.Name.L] = struct{}{}
+				ret[constraint.Name][key.Column.Name.L] = struct{}{}
 			}
-			ret[constraint.Name] = tmp
 		}
 	}
 	return ret

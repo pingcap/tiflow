@@ -374,8 +374,8 @@ func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.Create
 	}
 
 	// check PK/UK
-	upstreamPKUK := getPKAndNotNullUK(upstream)
-	downstreamPKUK := getPKAndNotNullUK(downstream)
+	upstreamPKUK := getPKAndUK(upstream)
+	downstreamPKUK := getPKAndUK(downstream)
 	// the number of PK/UK should be small, we use a simple but slow algorithm for now
 	for idxNameUp, s := range upstreamPKUK {
 		for idxNameDown, s2 := range downstreamPKUK {
