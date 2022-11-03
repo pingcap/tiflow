@@ -99,6 +99,7 @@ func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int
 	case <-ctx.Done():
 		return ctx.Err()
 	case g.inputCh[index] <- promise:
+		g.responses <- promise
 		return nil
 	}
 }
