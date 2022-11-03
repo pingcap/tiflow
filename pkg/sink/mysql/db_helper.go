@@ -174,6 +174,9 @@ func generateDSNByConfig(
 	// equals to executing "SET NAMES utf8mb4"
 	dsnCfg.Params["charset"] = defaultCharacterSet
 
+	// disable foreign_key_checks
+	dsnCfg.Params["foreign_key_checks"] = "0"
+
 	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
 	if err != nil {
 		return "", err

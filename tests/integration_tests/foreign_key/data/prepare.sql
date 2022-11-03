@@ -18,7 +18,6 @@ delete from t1 where id=4;
 set @@foreign_key_checks=1;
 
 -- Check foreign key on delete/update set null.
-create table t1 (id int key);
 create table t3 (id int key);
 create table t4 (id int key, b int, foreign key (b) references t3 (id) on delete set null on update set null);
 begin;
