@@ -120,6 +120,9 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	g.Go(func() error {
 		return w.nonBatchEncodeRun(ctx)
 	})
+	g.Go(func() error {
+		return w.sendMessages(ctx)
+	})
 	return g.Wait()
 }
 
@@ -130,40 +133,30 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
 	)
-
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case event, ok := <-w.msgChan.Out():
-				if !ok {
-					log.Warn("MQ sink flush worker channel closed",
-						zap.String("namespace", w.changeFeedID.Namespace),
-						zap.String("changefeed", w.changeFeedID.ID))
-					return nil
-				}
-				if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-					event.rowEvent.Callback()
-					log.Debug("Skip event of stopped table",
-						zap.String("namespace", w.changeFeedID.Namespace),
-						zap.String("changefeed", w.changeFeedID.ID),
-						zap.Any("event", event))
-					continue
-				}
-				if err := w.encoderGroup.AddEvent(ctx, event.key.Topic, event.key.Partition, event.rowEvent.Event, event.rowEvent.Callback); err != nil {
-					return errors.Trace(err)
-				}
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case event, ok := <-w.msgChan.Out():
+			if !ok {
+				log.Warn("MQ sink flush worker channel closed",
+					zap.String("namespace", w.changeFeedID.Namespace),
+					zap.String("changefeed", w.changeFeedID.ID))
+				return nil
+			}
+			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+				event.rowEvent.Callback()
+				log.Debug("Skip event of stopped table",
+					zap.String("namespace", w.changeFeedID.Namespace),
+					zap.String("changefeed", w.changeFeedID.ID),
+					zap.Any("event", event))
+				continue
+			}
+			if err := w.encoderGroup.AddEvent(ctx, event.key.Topic, event.key.Partition, event.rowEvent.Event, event.rowEvent.Callback); err != nil {
+				return errors.Trace(err)
 			}
 		}
-	})
-
-	g.Go(func() error {
-		return w.sendMessages(ctx)
-	})
-
-	return g.Wait()
+	}
 }
 
 // Collect messages and send them to the producer in batches.

@@ -131,6 +131,7 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 }
 
 func (p *responsePromise) Done() {
+	p.event = nil
 	close(p.doneCh)
 }
 
