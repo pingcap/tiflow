@@ -344,6 +344,7 @@ func (c *TablesChecker) checkUnique(cst *ast.Constraint) bool {
 }
 
 func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.CreateTableStmt) []*incompatibilityOption {
+	//nolint: prealloc
 	var options []*incompatibilityOption
 
 	// check charset of upstream/downstream tables
