@@ -43,6 +43,7 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -311,8 +312,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	var ownerErr, processorErr, messageServerErr error
-
 	defer func() {
 		// Before call `AsyncClose`, we must wait all routine to exit.
 		// So we close etcd client safely.
@@ -320,7 +319,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		c.grpcService.Reset(nil)
 	}()
 
-	wg := sync.WaitGroup{}
+	g, stdCtx := errgroup.WithContext(stdCtx)
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
@@ -331,10 +330,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		SortEngineFactory: c.sortEngineFactory,
 	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.cancel()
+	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
 		// so we should restart the capture.
@@ -346,14 +342,10 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 			log.Info("campaign owner routine exited, restart the capture",
 				zap.String("captureID", c.info.ID))
 		}
-		ownerErr = err
-	}()
+		return cerror.ErrCaptureSuicide.FastGenByArgs()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.cancel()
-
+	g.Go(func() error {
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
@@ -370,29 +362,14 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
 		log.Info("processor routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
-		processorErr = err
-	}()
+		return err
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.cancel()
-		messageServerErr = c.MessageServer.Run(ctx)
-	}()
+	g.Go(func() error {
+		return c.MessageServer.Run(ctx)
+	})
 
-	wg.Wait()
-
-	if messageServerErr != nil {
-		errors.Trace(messageServerErr)
-	}
-	if processorErr != nil {
-		errors.Trace(processorErr)
-	}
-	if ownerErr != nil {
-		errors.Trace(ownerErr)
-	}
-
-	return nil
+	return errors.Trace(g.Wait())
 }
 
 // Info gets the capture info
