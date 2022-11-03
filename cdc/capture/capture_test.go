@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func genCreateEtcdClientFunc(ctx context.Context, clientURL *url.URL) CreateEtcdClientFunc {
+func genCreateEtcdClientFunc(ctx context.Context, clientURL *url.URL) createEtcdClientFunc {
 	return func() (etcd.CDCEtcdClient, error) {
 		logConfig := logutil.DefaultZapLoggerConfig
 		logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)

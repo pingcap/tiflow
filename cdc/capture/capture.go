@@ -49,7 +49,7 @@ import (
 
 const cleanMetaDuration = 10 * time.Second
 
-type CreateEtcdClientFunc func() (etcd.CDCEtcdClient, error)
+type createEtcdClientFunc func() (etcd.CDCEtcdClient, error)
 
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
@@ -93,7 +93,7 @@ type captureImpl struct {
 	election election
 
 	// CreateEtcdClient used to create etcd client when capture restarts
-	CreateEtcdClient CreateEtcdClientFunc
+	CreateEtcdClient createEtcdClientFunc
 	EtcdClient       etcd.CDCEtcdClient
 	tableActorSystem *system.System
 
@@ -132,7 +132,7 @@ type captureImpl struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
-	createEtcdClient CreateEtcdClientFunc,
+	createEtcdClient createEtcdClientFunc,
 	grpcService *p2p.ServerWrapper,
 	tableActorSystem *system.System,
 	sortEngineMangerFactory *factory.SortEngineFactory,
