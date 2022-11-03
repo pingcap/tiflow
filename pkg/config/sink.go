@@ -42,8 +42,11 @@ const (
 	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
 	tableTxnAtomicity AtomicityLevel = "table"
 
-	defaultMqTxnAtomicity    = noneTxnAtomicity
-	defaultMysqlTxnAtomicity = tableTxnAtomicity
+	defaultMqTxnAtomicity = noneTxnAtomicity
+	// Note(dongmen): We change this default value to `noneTxnAtomicity` in v6.4.0.
+	// TODO(dongmen): If everything goes well, we can remove this default value in v6.5.0,
+	// and keep a defaultTxnAtomicity is enough.
+	defaultMysqlTxnAtomicity = noneTxnAtomicity
 )
 
 const (
