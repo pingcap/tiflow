@@ -426,12 +426,12 @@ func TestGetSlaveServerID(t *testing.T) {
 		rows    *sqlmock.Rows
 		results error
 	}{
-		// For MariaDB, when invalid conversion of Server_id (converting uint32 in the upper-half of uint32 values to int32)
+		// For MariaDB, when invalid conversion of Server_id (converting int32 in the upper-half of uint32 values to uint32)
 		{
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(-1, "iconnect2", 3306, 192168011).
 				AddRow(1921680101, "athena", 3306, 192168011),
-			terror.ErrInvalidConversion.Generate(-1, -1),
+			terror.ErrInvalidConversion.Generate(-1),
 		},
 	}
 
