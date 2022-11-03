@@ -109,21 +109,17 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 		)
 	}()
 
+	if w.protocol.IsBatchEncode() {
+		return w.batchEncodeRun(ctx)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return w.encoderGroup.Run(ctx)
 	})
-
-	if w.protocol.IsBatchEncode() {
-		g.Go(func() error {
-			return w.batchEncodeRun(ctx)
-		})
-	} else {
-		g.Go(func() error {
-			return w.nonBatchEncodeRun(ctx)
-		})
-	}
-
+	g.Go(func() error {
+		return w.nonBatchEncodeRun(ctx)
+	})
 	return g.Wait()
 }
 
