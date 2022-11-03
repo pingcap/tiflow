@@ -815,7 +815,7 @@ workaround = "Please check the upstream settings like privileges, RDS settings t
 tags = ["upstream", "medium"]
 
 [error.DM-functional-11131]
-message = "invalidly converting %d (int32 in the upper-half of uint32 values) to uint32"
+message = "invalidly converting (int32 in the upper-half of uint32 values) to uint32"
 description = ""
 workaround = "Please check the value of int32 and make sure its conversion to uint32 is valid."
 tags = ["upstream", "medium"]
