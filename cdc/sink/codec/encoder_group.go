@@ -97,7 +97,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ticker.C:
 			metric.Set(float64(len(inputChan)))
 		case promise := <-inputChan:
-			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.event, promise.callback); err != nil {
+			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.Event, promise.callback); err != nil {
 				return err
 			}
 			promise.Messages = encoder.Build()
@@ -125,7 +125,7 @@ func (g *encoderGroup) Responses() <-chan *responsePromise {
 type responsePromise struct {
 	Topic     string
 	Partition int32
-	event     *model.RowChangedEvent
+	Event     *model.RowChangedEvent
 	callback  func()
 
 	Messages []*common.Message
@@ -137,7 +137,7 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 	return &responsePromise{
 		Topic:     topic,
 		Partition: partition,
-		event:     event,
+		Event:     event,
 		callback:  callback,
 
 		doneCh: make(chan struct{}, 1),
@@ -145,7 +145,6 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 }
 
 func (p *responsePromise) Done() {
-	p.event = nil
 	close(p.doneCh)
 }
 
