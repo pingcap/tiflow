@@ -119,6 +119,16 @@ func TestMemQuotaRefund(t *testing.T) {
 	m.refund(50)
 	require.True(t, m.tryAcquire(1))
 	require.True(t, m.tryAcquire(49))
+
+	// Test notify the blocked acquire.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, m.blockAcquire(50))
+	}()
+	m.refund(50)
+	wg.Wait()
 }
 
 func TestMemQuotaHasAvailable(t *testing.T) {
