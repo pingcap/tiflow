@@ -216,6 +216,16 @@ error = '''
 invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
+["CDC:ErrCloudStorageDefragmentFailed"]
+error = '''
+cloud storage defragment encoded messages failed
+'''
+
+["CDC:ErrCloudStorageInvalidConfig"]
+error = '''
+cloud storage config invalid
+'''
+
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d

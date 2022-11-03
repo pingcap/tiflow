@@ -330,7 +330,7 @@ func main() {
 		}
 	}()
 
-	<-consumer.ready // Await till the consumer has been set up
+	<-consumer.ready // wait till the consumer has been set up
 	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)

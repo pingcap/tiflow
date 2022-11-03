@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -445,7 +446,7 @@ type Loader struct {
 	dbTableDataFinishedSize     map[string]map[string]*atomic.Int64
 	dbTableDataLastFinishedSize map[string]map[string]*atomic.Int64
 	dbTableDataLastUpdatedTime  atomic.Time
-	statusRecorder              *statusRecorder
+	speedRecorder               *export.SpeedRecorder
 
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
@@ -466,14 +467,14 @@ type Loader struct {
 // NewLoader creates a new Loader.
 func NewLoader(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *Loader {
 	loader := &Loader{
-		cfg:            cfg,
-		cli:            cli,
-		db2Tables:      make(map[string]Tables2DataFiles),
-		tableInfos:     make(map[string]*tableInfo),
-		workerWg:       new(sync.WaitGroup),
-		logger:         log.With(zap.String("task", cfg.Name), zap.String("unit", "load")),
-		workerName:     workerName,
-		statusRecorder: newStatusRecorder(),
+		cfg:           cfg,
+		cli:           cli,
+		db2Tables:     make(map[string]Tables2DataFiles),
+		tableInfos:    make(map[string]*tableInfo),
+		workerWg:      new(sync.WaitGroup),
+		logger:        log.With(zap.String("task", cfg.Name), zap.String("unit", "load")),
+		workerName:    workerName,
+		speedRecorder: export.NewSpeedRecorder(),
 	}
 	loader.fileJobQueueClosed.Store(true) // not open yet
 	return loader
