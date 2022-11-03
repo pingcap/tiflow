@@ -346,6 +346,8 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 	}
 
 	// filter out those files whose "schema.json" file has not been generated yet.
+	// because we strongly rely on this schema file to get correct table definition
+	// and do message decoding.
 	for key := range c.tableIdxMap {
 		schemaKey := key.schemaPathKey
 		// cannot find the scheme file, filter out the item.
@@ -462,8 +464,8 @@ func (c *consumer) run(ctx context.Context) error {
 		})
 
 		for _, k := range keys {
-			v := fileMap[k]
-			for i := v.start; i <= v.end; i++ {
+			fileRange := fileMap[k]
+			for i := fileRange.start; i <= fileRange.end; i++ {
 				filePath := k.generateDMLFilePath(i)
 				content, err := c.externalStorage.ReadFile(ctx, filePath)
 				if err != nil {
