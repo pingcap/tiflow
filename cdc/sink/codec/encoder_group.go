@@ -26,7 +26,7 @@ import (
 
 const (
 	defaultEncoderGroupSize = 16
-	defaultInputChannelSize = 256
+	defaultInputChanSize    = 1024
 	defaultMetricInterval   = 15 * time.Second
 )
 
@@ -54,7 +54,7 @@ func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.Chan
 
 	inputCh := make([]chan *responsePromise, number)
 	for i := 0; i < number; i++ {
-		inputCh[i] = make(chan *responsePromise, defaultInputChannelSize)
+		inputCh[i] = make(chan *responsePromise, defaultInputChanSize)
 	}
 
 	return &encoderGroup{
@@ -64,7 +64,7 @@ func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.Chan
 		count:     number,
 		inputCh:   inputCh,
 		index:     0,
-		responses: make(chan *responsePromise, defaultInputChannelSize*number),
+		responses: make(chan *responsePromise, defaultInputChanSize*number),
 	}
 }
 
@@ -114,8 +114,8 @@ func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int
 		return ctx.Err()
 	case g.inputCh[index] <- promise:
 		g.responses <- promise
-		return nil
 	}
+	return nil
 }
 
 func (g *encoderGroup) Responses() <-chan *responsePromise {
@@ -154,6 +154,6 @@ func (p *responsePromise) Wait(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-p.doneCh:
-		return nil
 	}
+	return nil
 }
