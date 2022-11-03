@@ -109,7 +109,28 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
+		currentTime, _     = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 		unitState          = &metadata.UnitState{
+			CurrentUnitStatus: map[string]*metadata.TaskStatus{
+				// worker not found
+				"task1": {},
+				// worker not found
+				"task2": {},
+				"task3": {
+					CreatedTime: currentTime,
+				},
+				"task4": {
+					CreatedTime: currentTime,
+				},
+				"task5": {
+					CreatedTime: currentTime,
+				},
+				"task6": {
+					CreatedTime: currentTime,
+				},
+				// worker not found
+				"task7": {},
+			},
 			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
 				"task2": {
 					&metadata.FinishedTaskStatus{
@@ -118,6 +139,7 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task2",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
+							CreatedTime:    currentTime,
 						},
 						Status: dumpStatusBytes,
 					},
@@ -127,6 +149,7 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task2",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
+							CreatedTime:    currentTime,
 						},
 						Status: loadStatusBytes,
 					},
@@ -138,6 +161,7 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task7",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
+							CreatedTime:    currentTime,
 						},
 						Status: dumpStatusBytes,
 					},
@@ -147,6 +171,7 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task7",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
+							CreatedTime:    currentTime,
 						},
 						Status: loadStatusBytes,
 					},
@@ -204,7 +229,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "0001-01-01T00:00:00Z"
 		},
 		"task2": {
 			"expected_stage": "Finished",
@@ -216,7 +242,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "0001-01-01T00:00:00Z"
 		},
 		"task3": {
 			"expected_stage": "Finished",
@@ -228,7 +255,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task4": {
 			"expected_stage": "Running",
@@ -248,7 +276,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"bps": 1000,
 					"progress": "20.00 %"
 				}
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task5": {
 			"expected_stage": "Running",
@@ -269,7 +298,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
 				}
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task6": {
 			"expected_stage": "Running",
@@ -306,7 +336,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalRps": 10,
 					"recentRps": 10
 				}
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task7": {
 			"expected_stage": "Finished",
@@ -318,7 +349,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "0001-01-01T00:00:00Z"
 		}
 	},
 	"finished_unit_status": {
@@ -328,6 +360,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -344,6 +377,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -361,6 +395,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -377,6 +412,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,

@@ -34,7 +34,7 @@ type TaskStatus struct {
 	WorkerID       frameModel.WorkerID        `json:"worker_id"`
 	ConfigOutdated bool                       `json:"config_outdated"`
 	Status         *dmpkg.QueryStatusResponse `json:"status"`
-	CreatedTime    time.Time
+	CreatedTime    time.Time                  `json:"created_time"`
 }
 
 // JobStatus represents status of a job
