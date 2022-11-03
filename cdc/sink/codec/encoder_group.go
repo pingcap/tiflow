@@ -26,7 +26,7 @@ import (
 
 const (
 	defaultEncoderGroupSize = 16
-	defaultInputChanSize    = 1024
+	defaultInputChanSize    = 256
 	defaultMetricInterval   = 15 * time.Second
 )
 
@@ -140,7 +140,8 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 		Event:     event,
 		callback:  callback,
 
-		doneCh: make(chan struct{}, 1),
+		// todo: shall we must use block channel here ?
+		doneCh: make(chan struct{}),
 	}
 }
 

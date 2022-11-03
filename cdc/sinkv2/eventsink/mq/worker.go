@@ -132,7 +132,6 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
 	)
-	count := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,10 +154,6 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 			if err := w.encoderGroup.AddEvent(ctx, event.key.Topic, event.key.Partition, event.rowEvent.Event, event.rowEvent.Callback); err != nil {
 				return errors.Trace(err)
 			}
-			count++
-			log.Info("add event to encoder group", zap.Int("count", count),
-				zap.Uint64("start-ts", event.rowEvent.Event.StartTs),
-				zap.Uint64("commit-ts", event.rowEvent.Event.CommitTs))
 		}
 	}
 }
@@ -306,7 +301,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		codec.EncoderGroupResponseChanSizeGauge.
 			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	}()
-	count := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -333,11 +327,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					return err
 				}
 			}
-
-			log.Info("promise resolved",
-				zap.Int("count", count),
-				zap.Uint64("start-ts", promise.Event.StartTs),
-				zap.Uint64("commit-ts", promise.Event.CommitTs))
 		}
 	}
 }
