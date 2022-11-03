@@ -19,8 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -72,6 +74,9 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 	defer func() {
 		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
 		close(g.responses)
+		log.Info("encoder group exited",
+			zap.String("namespace", g.changefeedID.Namespace),
+			zap.String("changefeed", g.changefeedID.ID))
 	}()
 	eg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < g.count; i++ {
