@@ -92,13 +92,13 @@ func init() {
 }
 
 type schemaPathKey struct {
-	schema       string
-	table        string
-	tableVersion int64
+	schema  string
+	table   string
+	version int64
 }
 
 func (s schemaPathKey) generagteSchemaFilePath() string {
-	return fmt.Sprintf("%s/%s/%d/schema.json", s.schema, s.table, s.tableVersion)
+	return fmt.Sprintf("%s/%s/%d/schema.json", s.schema, s.table, s.version)
 }
 
 func (s *schemaPathKey) parseSchemaFilePath(path string) error {
@@ -119,9 +119,9 @@ func (s *schemaPathKey) parseSchemaFilePath(path string) error {
 	}
 
 	*s = schemaPathKey{
-		schema:       matches[1],
-		table:        matches[2],
-		tableVersion: int64(version),
+		schema:  matches[1],
+		table:   matches[2],
+		version: int64(version),
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
 
 	elems = append(elems, d.schema)
 	elems = append(elems, d.table)
-	elems = append(elems, fmt.Sprintf("%d", d.tableVersion))
+	elems = append(elems, fmt.Sprintf("%d", d.version))
 
 	if d.partitionNum != 0 {
 		elems = append(elems, fmt.Sprintf("%d", d.partitionNum))
@@ -196,9 +196,9 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 
 	*d = dmlPathKey{
 		schemaPathKey: schemaPathKey{
-			schema:       matches[1],
-			table:        matches[2],
-			tableVersion: version,
+			schema:  matches[1],
+			table:   matches[2],
+			version: version,
 		},
 		partitionNum: partitionNum,
 		date:         matches[5],
@@ -454,8 +454,8 @@ func (c *consumer) run(ctx context.Context) error {
 			if keys[i].table != keys[j].table {
 				return keys[i].table < keys[j].table
 			}
-			if keys[i].tableVersion != keys[j].tableVersion {
-				return keys[i].tableVersion < keys[j].tableVersion
+			if keys[i].version != keys[j].version {
+				return keys[i].version < keys[j].version
 			}
 			if keys[i].partitionNum != keys[j].partitionNum {
 				return keys[i].partitionNum < keys[j].partitionNum
