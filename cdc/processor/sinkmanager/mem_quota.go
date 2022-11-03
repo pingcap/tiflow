@@ -58,6 +58,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 	return m
 }
 
+// tryAcquire returns true if the memory quota is available, otherwise returns false.
 func (m *memQuota) tryAcquire(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -68,6 +69,7 @@ func (m *memQuota) tryAcquire(nBytes uint64) bool {
 	return true
 }
 
+// forceAcquire is used to force acquire the memory quota.
 func (m *memQuota) forceAcquire(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -75,6 +77,7 @@ func (m *memQuota) forceAcquire(nBytes uint64) {
 	m.usedBytes += nBytes
 }
 
+// blockAcquire is used to block the request when the memory quota is not available.
 func (m *memQuota) blockAcquire(nBytes uint64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -91,12 +94,14 @@ func (m *memQuota) blockAcquire(nBytes uint64) error {
 	}
 }
 
+// refund directly release the memory quota.
 func (m *memQuota) refund(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usedBytes -= nBytes
 }
 
+// record records the memory usage of a table.
 func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -109,12 +114,16 @@ func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size
 	})
 }
 
+// hasAvailable returns true if the memory quota is available, otherwise returns false.
 func (m *memQuota) hasAvailable(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usedBytes+nBytes <= m.totalBytes
 }
 
+// release try to use resolvedTs to release the memory quota.
+// Because we append records in order, we can use binary search to find the first record
+// that is greater than resolvedTs, and release the memory quota of the records before it.
 func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -143,6 +152,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	}
 }
 
+// close the mem quota and notify the blocked acquire.
 func (m *memQuota) close() {
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
