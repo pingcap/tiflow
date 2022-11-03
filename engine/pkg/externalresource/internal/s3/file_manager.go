@@ -132,7 +132,8 @@ func (m *FileManager) GetPersistedResource(
 	return desc, nil
 }
 
-// CleanOrRecreatePersistedResource cleans the s3 directory of the given resource.
+// CleanOrRecreatePersistedResource cleans the s3 directory or recreates placeholder
+// file of the given resource.
 // Note that CleanOrRecreatePersistedResource will work on any executor for any persisted resource.
 func (m *FileManager) CleanOrRecreatePersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
