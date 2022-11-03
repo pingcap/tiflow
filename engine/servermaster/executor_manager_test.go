@@ -22,16 +22,15 @@ import (
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
-	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/orm/mock"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorManager(t *testing.T) {
 	t.Parallel()
 
-	metaClient := executormeta.NewMockClient(gomock.NewController(t))
-
+	metaClient := mock.NewMockClient(gomock.NewController(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
@@ -47,7 +46,7 @@ func TestExecutorManager(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -80,10 +79,15 @@ func TestExecutorManager(t *testing.T) {
 	_, err = mgr.HandleHeartbeat(newHeartbeatReq())
 	require.NoError(t, err)
 
-	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*execModel.Executor{}, nil)
+	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*ormModel.Executor{}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
 
-	mgr.Start(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		mgr.Run(ctx)
+	}()
 
 	require.Eventually(t, func() bool {
 		return mgr.ExecutorCount(model.Running) == 0
@@ -95,13 +99,13 @@ func TestExecutorManager(t *testing.T) {
 	require.True(t, ErrUnknownExecutor.Is(err))
 
 	cancel()
-	mgr.Stop()
+	wg.Wait()
 }
 
 func TestExecutorManagerWatch(t *testing.T) {
 	t.Parallel()
 
-	metaClient := executormeta.NewMockClient(gomock.NewController(t))
+	metaClient := mock.NewMockClient(gomock.NewController(t))
 
 	heartbeatTTL := time.Millisecond * 400
 	checkInterval := time.Millisecond * 50
@@ -118,7 +122,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -144,7 +148,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
-		DoAndReturn(func(ctx context.Context, executor *execModel.Executor) error {
+		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
 			require.Equal(t, 2, executor.Capability)
@@ -198,14 +202,19 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}
 
 	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).
-		Return([]*execModel.Executor{
+		Return([]*ormModel.Executor{
 			{ID: executorID1, Address: "127.0.0.1:10001"},
 			{ID: executorID2, Address: "127.0.0.1:10002"},
 		}, nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID1).Times(1).Return(nil)
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID2).Times(1).Return(nil)
 
-	mgr.Start(ctx)
+	var mgrWg sync.WaitGroup
+	mgrWg.Add(1)
+	go func() {
+		defer mgrWg.Done()
+		mgr.Run(ctx)
+	}()
 
 	// mgr.Start will reset executors first, so there will be two online events.
 	event = <-stream.C
@@ -221,8 +230,8 @@ func TestExecutorManagerWatch(t *testing.T) {
 		Addr: "127.0.0.1:10002",
 	}, event)
 
-	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
 	var wg sync.WaitGroup
+	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
 	cancel1 := bgExecutorHeartbeat(ctx, &wg, executorID1)
 	cancel2 := bgExecutorHeartbeat(ctx, &wg, executorID2)
 	require.Equal(t, 2, mgr.ExecutorCount(model.Running))
@@ -251,5 +260,5 @@ func TestExecutorManagerWatch(t *testing.T) {
 	}, event)
 
 	cancel()
-	mgr.Stop()
+	mgrWg.Wait()
 }

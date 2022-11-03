@@ -52,9 +52,10 @@ const (
 	defaultReadTimeout         = "2m"
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
-	defaultSafeMode            = true
-	defaultTxnIsolationRC      = "READ-COMMITTED"
-	defaultCharacterSet        = "utf8mb4"
+	// Note(dongmen): defaultSafeMode is set to false since v6.4.0.
+	defaultSafeMode       = false
+	defaultTxnIsolationRC = "READ-COMMITTED"
+	defaultCharacterSet   = "utf8mb4"
 
 	// BackoffBaseDelay indicates the base delay time for retrying.
 	BackoffBaseDelay = 500 * time.Millisecond

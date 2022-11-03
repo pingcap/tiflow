@@ -16,6 +16,9 @@ import (
 	"context"
 	"testing"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -29,13 +32,44 @@ func TestCSVBatchDecoder(t *testing.T) {
 "U","employee","hr",433305438660591630,102,"Alex","Alice","2018-06-15","Beijing"
 `
 	ctx := context.Background()
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "hr",
+			Table:  "employee",
+		},
+		TableInfo: &timodel.TableInfo{
+			Name: timodel.NewCIStr("employee"),
+			Columns: []*timodel.ColumnInfo{
+				{
+					Name:      timodel.NewCIStr("Id"),
+					FieldType: *types.NewFieldType(mysql.TypeInt24),
+				},
+				{
+					Name:      timodel.NewCIStr("LastName"),
+					FieldType: *types.NewFieldType(mysql.TypeVarchar),
+				},
+				{
+					Name:      timodel.NewCIStr("FirstName"),
+					FieldType: *types.NewFieldType(mysql.TypeVarchar),
+				},
+				{
+					Name:      timodel.NewCIStr("HireDate"),
+					FieldType: *types.NewFieldType(mysql.TypeDate),
+				},
+				{
+					Name:      timodel.NewCIStr("OfficeLocation"),
+					FieldType: *types.NewFieldType(mysql.TypeVarchar),
+				},
+			},
+		},
+	}
 	decoder, err := NewBatchDecoder(ctx, &config.CSVConfig{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",
 		NullString:      "\\N",
 		IncludeCommitTs: true,
-	}, []byte(csvData))
+	}, tableInfo, []byte(csvData))
 	require.Nil(t, err)
 
 	for i := 0; i < 5; i++ {
