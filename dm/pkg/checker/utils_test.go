@@ -83,13 +83,14 @@ func TestGetColumnsAndIgnorable(t *testing.T) {
 		sql      string
 		expected map[string]bool
 	}{
-		{"CREATE TABLE `t` (\n" +
-			"  `c` int(11) NOT NULL,\n" +
-			"  `c2` int(11) NOT NULL,\n" +
-			"  `c3` int(11) DEFAULT '1',\n" +
-			"  `c4` int(11) NOT NULL DEFAULT '2',\n" +
-			"  PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */\n" +
-			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		{
+			"CREATE TABLE `t` (\n" +
+				"  `c` int(11) NOT NULL,\n" +
+				"  `c2` int(11) NOT NULL,\n" +
+				"  `c3` int(11) DEFAULT '1',\n" +
+				"  `c4` int(11) NOT NULL DEFAULT '2',\n" +
+				"  PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 			map[string]bool{"c": false, "c2": false, "c3": true, "c4": true},
 		},
 		{
