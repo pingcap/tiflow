@@ -900,7 +900,7 @@ var (
 	// pkg/utils.
 	ErrNoMasterStatus            = New(codeNoMasterStatus, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns an empty result for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
 	ErrIncorrectReturnColumnsNum = New(codeIncorrectReturnColumnsNum, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns incorrect number of columns for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
-	ErrInvalidConversion         = New(codeInvalidConversion, ClassFunctional, ScopeUpstream, LevelMedium, "invalidly converting (int32 in the upper-half of uint32 values) to uint32", "Please check the value of int32 and make sure its conversion to uint32 is valid.")
+	ErrInvalidConversion         = New(codeInvalidConversion, ClassFunctional, ScopeUpstream, LevelMedium, "invalidly converting %d (int32 in the upper-half of uint32 values) to uint32", "Please check the value of int32 and make sure its conversion to uint32 is valid.")
 
 	// pkg/binlog.
 	ErrBinlogNotLogColumn = New(codeBinlogNotLogColumn, ClassBinlogOp, ScopeUpstream, LevelHigh, "upstream didn't log enough columns in binlog", "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used.")

@@ -430,7 +430,7 @@ func TestGetSlaveServerID(t *testing.T) {
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(-1, "iconnect2", 3306, 192168011).
 				AddRow(1921680101, "athena", 3306, 192168011),
-			terror.ErrInvalidConversion.Generate(),
+			terror.ErrInvalidConversion.Generate(-1),
 		},
 	}
 
@@ -439,12 +439,11 @@ func TestGetSlaveServerID(t *testing.T) {
 		results, err2 := GetSlaveServerID(context.Background(), db)
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
-		require.NoError(t, mock.ExpectationsWereMet())
 	}
 	for _, ca := range casesWithErr {
 		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
 		results, err2 := GetSlaveServerID(context.Background(), db)
-		require.Equal(t, ca.results, err2)
+		require.Error(t, err2)
 		require.Nil(t, results)
 	}
 }
