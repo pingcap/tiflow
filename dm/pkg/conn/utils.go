@@ -155,7 +155,9 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			err = terror.ErrNoMasterStatus.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		case len(rowsResult[0]) != 5:
-			ctx.L().Warn("The number of columns that SHOW MASTER STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
+			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
+			err = terror.ErrIncorrectReturnColumnsNum.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
 			var posInt int64
@@ -181,7 +183,9 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			err = terror.ErrNoMasterStatus.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		case len(rowsResult[0]) != 4:
-			ctx.L().Warn("The number of columns that SHOW MASTER STATUS returns for MariaDB is not equal to 4, will not use the retrieved information")
+			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS returns for MariaDB is not equal to 4, will not use the retrieved information")
+			err = terror.ErrIncorrectReturnColumnsNum.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
 			var posInt int64
