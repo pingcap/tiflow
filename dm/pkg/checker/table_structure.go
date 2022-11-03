@@ -373,6 +373,64 @@ func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.Create
 		})
 	}
 
+	// check PK/UK
+	upstreamPKUK := getPKAndNotNullUK(upstream)
+	downstreamPKUK := getPKAndNotNullUK(downstream)
+	// the number of PK/UK should be small, we use a simple but slow algorithm for now
+	for idxNameUp, s := range upstreamPKUK {
+		for idxNameDown, s2 := range downstreamPKUK {
+			if stringSetEqual(s, s2) {
+				delete(upstreamPKUK, idxNameUp)
+				delete(downstreamPKUK, idxNameDown)
+				break
+			}
+		}
+	}
+	for idxName, cols := range upstreamPKUK {
+		options = append(options, &incompatibilityOption{
+			state: StateWarning,
+			errMessage: fmt.Sprintf("upstream has more PK or NOT NULL UK than downstream, index name: %s, columns: %v",
+				idxName, utils.SetToSlice(cols)),
+		})
+	}
+	for idxName, cols := range downstreamPKUK {
+		options = append(options, &incompatibilityOption{
+			state: StateWarning,
+			errMessage: fmt.Sprintf("downstream has more PK or NOT NULL UK than upstream, table name: %s, index name: %s, columns: %v",
+				downstream.Table.Name.O, idxName, utils.SetToSlice(cols)),
+		})
+	}
+
+	// check columns
+	upstreamCols := getColumnsAndIgnorable(upstream)
+	downstreamCols := getColumnsAndIgnorable(downstream)
+	// TODO: handle extended column
+	for col := range upstreamCols {
+		if _, ok := downstreamCols[col]; ok {
+			delete(upstreamCols, col)
+			delete(downstreamCols, col)
+		}
+	}
+	if len(upstreamCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state: StateWarning,
+			errMessage: fmt.Sprintf("upstream has more columns than downstream, columns: %v",
+				maps.Keys(upstreamCols)),
+		})
+	}
+	for col, ignorable := range downstreamCols {
+		if ignorable {
+			delete(downstreamCols, col)
+		}
+	}
+	if len(downstreamCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state: StateWarning,
+			errMessage: fmt.Sprintf("downstream has more columns than upstream that require values to insert records, table name: %s, columns: %v",
+				downstream.Table.Name.O, maps.Keys(downstreamCols)),
+		})
+	}
+
 	return options
 }
 

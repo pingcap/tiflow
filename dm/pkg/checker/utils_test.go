@@ -14,10 +14,14 @@
 package checker
 
 import (
-	tc "github.com/pingcap/check"
+	"testing"
+
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/stretchr/testify/require"
 )
 
-func (t *testCheckSuite) TestVersionComparsion(c *tc.C) {
+func TestVersionComparison(t *testing.T) {
 	// test normal cases
 	cases := []struct {
 		rawVersion     string
@@ -38,16 +42,15 @@ func (t *testCheckSuite) TestVersionComparsion(c *tc.C) {
 	)
 	for _, cs := range cases {
 		version, err = toMySQLVersion(cs.rawVersion)
-		c.Assert(err, tc.IsNil)
-
-		c.Assert(version.Ge(SupportedVersion["mysql"].Min), tc.Equals, cs.ge)
-		c.Assert(version.Gt(SupportedVersion["mysql"].Min), tc.Equals, cs.gt)
-		c.Assert(version.Lt(SupportedVersion["mysql"].Max), tc.Equals, cs.lt)
-		c.Assert(version.Le(SupportedVersion["mysql"].Max), tc.Equals, cs.le)
+		require.NoError(t, err)
+		require.Equal(t, cs.ge, version.Ge(SupportedVersion["mysql"].Min))
+		require.Equal(t, cs.gt, version.Gt(SupportedVersion["mysql"].Min))
+		require.Equal(t, cs.lt, version.Lt(SupportedVersion["mysql"].Max))
+		require.Equal(t, cs.le, version.Le(SupportedVersion["mysql"].Max))
 	}
 }
 
-func (t *testCheckSuite) TestToVersion(c *tc.C) {
+func TestToVersion(t *testing.T) {
 	// test normal cases
 	cases := []struct {
 		rawVersion      string
@@ -66,7 +69,56 @@ func (t *testCheckSuite) TestToVersion(c *tc.C) {
 
 	for _, cs := range cases {
 		version, err := toMySQLVersion(cs.rawVersion)
-		c.Assert(version, tc.Equals, cs.expectedVersion)
-		c.Assert(err != nil, tc.Equals, cs.hasError)
+		require.Equal(t, cs.expectedVersion, version)
+		if cs.hasError {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+}
+
+func TestGetColumnsAndIgnorable(t *testing.T) {
+	cases := []struct {
+		sql      string
+		expected map[string]bool
+	}{
+		{"CREATE TABLE `t` (\n" +
+			"  `c` int(11) NOT NULL,\n" +
+			"  `c2` int(11) NOT NULL,\n" +
+			"  `c3` int(11) DEFAULT '1',\n" +
+			"  `c4` int(11) NOT NULL DEFAULT '2',\n" +
+			"  PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */\n" +
+			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			map[string]bool{"c": false, "c2": false, "c3": true, "c4": true},
+		},
+		{
+			" CREATE TABLE `t2` (\n" +
+				"  `c` int(11) NOT NULL AUTO_INCREMENT,\n" +
+				"  `c2` int(11) DEFAULT NULL,\n" +
+				"  `c3` int(11) GENERATED ALWAYS AS (`c2` + 1) VIRTUAL,\n" +
+				"  PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			map[string]bool{"c": true, "c2": true, "c3": true},
+		},
+		// TODO: in this case, c2 should NOT be ignored when inserting
+		{
+			"CREATE TABLE `t3` (\n" +
+				"  `c` bigint(20) NOT NULL /*T![auto_rand] AUTO_RANDOM(5) */,\n" +
+				"  `c2` int(11) DEFAULT NULL,\n" +
+				"  `c3` int(11) GENERATED ALWAYS AS (`c2` + 1) VIRTUAL NOT NULL,\n" +
+				"  `c4` int(11) DEFAULT NULL,\n" +
+				"  PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin /*T![auto_rand_base] AUTO_RANDOM_BASE=30001 */",
+			map[string]bool{"c": true, "c2": true, "c3": true, "c4": true},
+		},
+	}
+
+	p := parser.New()
+	for _, c := range cases {
+		stmt, err := p.ParseOneStmt(c.sql, "", "")
+		require.NoError(t, err)
+		columns := getColumnsAndIgnorable(stmt.(*ast.CreateTableStmt))
+		require.Equal(t, c.expected, columns)
 	}
 }

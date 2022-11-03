@@ -261,14 +261,20 @@ func TestTablesChecker(t *testing.T) {
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
 		  "c" int(11) NOT NULL,
-		  PRIMARY KEY ("c")
-		) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+		  "d" int(11) NOT NULL,
+		  "e" int(11) NOT NULL,
+		  PRIMARY KEY ("c"),
+		  UNIQUE KEY "idx_d" ("d")
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table", `CREATE TABLE "test-table" (
   		  "c" int(11) NOT NULL,
+  		  "d" int(11) NOT NULL,
+  		  "f" int(11) DEFAULT NULL,
+  		  "g" int(11) NOT NULL,
 		  PRIMARY KEY ("c")
-		) ENGINE=InnoDB DEFAULT CHARSET=gbk`)
+		) ENGINE=InnoDB DEFAULT CHARSET=gbk COLLATE=gbk_chinese_ci`)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table`").WillReturnRows(createTableRow2)
 
 	checker = NewTablesChecker(
@@ -284,8 +290,22 @@ func TestTablesChecker(t *testing.T) {
 		1)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
-	require.Len(t, result.Errors, 1)
-	require.Equal(t, "table `test-db`.`test-table-1` charset is not same, upstream: (test-table-1 latin1), downstream: (test-table gbk)", result.Errors[0].ShortErr)
+	require.Len(t, result.Errors, 5)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` charset is not same, upstream: (test-table-1 latin1), downstream: (test-table gbk)",
+		result.Errors[0].ShortErr)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` collation is not same, upstream: (test-table-1 latin1_bin), downstream: (test-table gbk_chinese_ci)",
+		result.Errors[1].ShortErr)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` upstream has more PK or NOT NULL UK than downstream, index name: idx_d, columns: [d]",
+		result.Errors[2].ShortErr)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` upstream has more columns than downstream, columns: [e]",
+		result.Errors[3].ShortErr)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` downstream has more columns than upstream that require values to insert records, table name: test-table, columns: [g]",
+		result.Errors[4].ShortErr)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 }

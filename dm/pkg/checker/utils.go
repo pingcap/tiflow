@@ -190,3 +190,76 @@ func getCollation(stmt *ast.CreateTableStmt) string {
 	}
 	return ""
 }
+
+// getPKAndNotNullUK returns a map of INDEX_NAME -> set of COLUMN_NAMEs.
+func getPKAndNotNullUK(stmt *ast.CreateTableStmt) map[string]map[string]struct{} {
+	ret := make(map[string]map[string]struct{})
+
+	columnNotNull := make(map[string]struct{})
+	for _, col := range stmt.Cols {
+		for _, opt := range col.Options {
+			if opt.Tp == ast.ColumnOptionNotNull {
+				columnNotNull[col.Name.Name.L] = struct{}{}
+			}
+		}
+	}
+ConstraintLoop:
+	for _, constraint := range stmt.Constraints {
+		switch constraint.Tp {
+		case ast.ConstraintPrimaryKey:
+			ret["PRIMARY"] = make(map[string]struct{})
+			for _, key := range constraint.Keys {
+				ret["PRIMARY"][key.Column.Name.L] = struct{}{}
+			}
+		case ast.ConstraintUniq, ast.ConstraintUniqKey, ast.ConstraintUniqIndex:
+			tmp := make(map[string]struct{})
+			for _, key := range constraint.Keys {
+				if _, ok := columnNotNull[key.Column.Name.L]; !ok {
+					continue ConstraintLoop
+				}
+				tmp[key.Column.Name.L] = struct{}{}
+			}
+			ret[constraint.Name] = tmp
+		}
+	}
+	return ret
+}
+
+func stringSetEqual(a, b map[string]struct{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// getColumnsAndIgnorable return a map of COLUMN_NAME -> if this columns can be
+// ignored when inserting data, which means it has default value or can be null.
+func getColumnsAndIgnorable(stmt *ast.CreateTableStmt) map[string]bool {
+	ret := make(map[string]bool)
+	for _, col := range stmt.Cols {
+		notNull := false
+		hasDefaultValue := false
+		for _, opt := range col.Options {
+			switch opt.Tp {
+			case ast.ColumnOptionNotNull:
+				notNull = true
+			case ast.ColumnOptionDefaultValue,
+				ast.ColumnOptionAutoIncrement,
+				ast.ColumnOptionAutoRandom,
+				ast.ColumnOptionGenerated:
+				// if the generated column has NOT NULL, its referring columns
+				// must not be NULL. But even if we mark the referring columns
+				// as not ignorable, the data may still be NULL so replication
+				// is still failed. For simplicity, we just ignore this case.
+				hasDefaultValue = true
+			}
+		}
+		ret[col.Name.Name.L] = !notNull || hasDefaultValue
+	}
+	return ret
+}
