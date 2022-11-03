@@ -49,7 +49,7 @@ import (
 
 const cleanMetaDuration = 10 * time.Second
 
-type createEtcdClientFunc func() (etcd.CDCEtcdClient, error)
+type CreateEtcdClientFunc func() (etcd.CDCEtcdClient, error)
 
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
@@ -92,8 +92,8 @@ type captureImpl struct {
 	session  *concurrency.Session
 	election election
 
-	// createEtcdClient used to create etcd client when capture restarts
-	createEtcdClient createEtcdClientFunc
+	// CreateEtcdClient used to create etcd client when capture restarts
+	CreateEtcdClient CreateEtcdClientFunc
 	EtcdClient       etcd.CDCEtcdClient
 	tableActorSystem *system.System
 
@@ -132,7 +132,7 @@ type captureImpl struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
-	createEtcdClient createEtcdClientFunc,
+	createEtcdClient CreateEtcdClientFunc,
 	grpcService *p2p.ServerWrapper,
 	tableActorSystem *system.System,
 	sortEngineMangerFactory *factory.SortEngineFactory,
@@ -164,8 +164,9 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 			AdvertiseAddr: "127.0.0.1",
 			Version:       "test",
 		},
-		migrator: &migrate.NoOpMigrator{},
-		config:   config.GetGlobalServerConfig(),
+		initialized: true,
+		migrator:    &migrate.NoOpMigrator{},
+		config:      config.GetGlobalServerConfig(),
 	}
 	res.owner = o
 	return res
@@ -190,24 +191,23 @@ func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
 }
 
 func (c *captureImpl) GetEtcdClient() (etcd.CDCEtcdClient, error) {
-	/*
-		c.captureMu.Lock()
-		defer c.captureMu.Unlock()
-		if !c.initialized {
-			return nil, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
-		}*/
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
+	if !c.initialized {
+		return nil, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
+	}
 	return c.EtcdClient, nil
 }
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
-
-	etcdClient, err := c.createEtcdClient()
+	etcdClient, err := c.CreateEtcdClient()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
+
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
 	c.EtcdClient = etcdClient
 	c.migrator = migrate.NewMigrator(c.EtcdClient, c.pdEndpoints, c.config)
 

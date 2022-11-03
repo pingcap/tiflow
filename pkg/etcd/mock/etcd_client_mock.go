@@ -46,15 +46,24 @@ func (m *MockCDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) er
 	return ret0
 }
 
-// Close close th etcd client
-func (m *MockCDCEtcdClient) Close() error {
-	return nil
-}
-
 // CheckMultipleCDCClusterExist indicates an expected call of CheckMultipleCDCClusterExist.
 func (mr *MockCDCEtcdClientMockRecorder) CheckMultipleCDCClusterExist(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckMultipleCDCClusterExist", reflect.TypeOf((*MockCDCEtcdClient)(nil).CheckMultipleCDCClusterExist), ctx)
+}
+
+// Close mocks base method.
+func (m *MockCDCEtcdClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCDCEtcdClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCDCEtcdClient)(nil).Close))
 }
 
 // CreateChangefeedInfo mocks base method.

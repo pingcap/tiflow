@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func genCreateEtcdClientFunc(ctx context.Context, clientURL *url.URL) createEtcdClientFunc {
+func genCreateEtcdClientFunc(ctx context.Context, clientURL *url.URL) CreateEtcdClientFunc {
 	return func() (etcd.CDCEtcdClient, error) {
 		logConfig := logutil.DefaultZapLoggerConfig
 		logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
@@ -67,7 +67,7 @@ func TestReset(t *testing.T) {
 	require.Nil(t, err)
 
 	cp := NewCapture4Test(nil)
-	cp.createEtcdClient = genCreateEtcdClientFunc(ctx, clientURL)
+	cp.CreateEtcdClient = genCreateEtcdClientFunc(ctx, clientURL)
 
 	// simulate network isolation scenarios
 	etcdServer.Close()
@@ -79,10 +79,11 @@ func TestReset(t *testing.T) {
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond)
-	cancel()
+
 	info, err := cp.Info()
 	require.Nil(t, err)
 	require.NotNil(t, info)
+	cancel()
 	wg.Wait()
 }
 
