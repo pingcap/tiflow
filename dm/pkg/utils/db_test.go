@@ -15,6 +15,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -400,6 +402,7 @@ func TestGetSlaveServerID(t *testing.T) {
 		rows    *sqlmock.Rows
 		results map[uint32]struct{}
 	}{
+		// For MySQL
 		{
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id", "Slave_UUID"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
@@ -408,6 +411,7 @@ func TestGetSlaveServerID(t *testing.T) {
 				192168010: {}, 1921680101: {},
 			},
 		},
+		// For MariaDB
 		{
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011).
@@ -418,11 +422,31 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 	}
 
+	casesWithErr := []struct {
+		rows    *sqlmock.Rows
+		results error
+	}{
+		// For MariaDB, when invalid conversion of Server_id (converting uint32 in the upper-half of uint32 values to int32)
+		{
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
+				AddRow(-1, "iconnect2", 3306, 192168011).
+				AddRow(1921680101, "athena", 3306, 192168011),
+			terror.ErrInvalidConversion.Generate(-1, -1),
+		},
+	}
+
 	for _, ca := range cases {
 		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
 		results, err2 := GetSlaveServerID(context.Background(), db)
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
 		require.NoError(t, mock.ExpectationsWereMet())
+	}
+	for _, ca := range casesWithErr {
+		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
+		results, err2 := GetSlaveServerID(context.Background(), db)
+		fmt.Println(err2.Error())
+		require.Equal(t, ca.results, err2)
+		require.Nil(t, results)
 	}
 }

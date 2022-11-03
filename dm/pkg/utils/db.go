@@ -140,6 +140,10 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
+		// check whether serverIDInt is int32 and serverID is in the upper-half of uint32 values
+		if fmt.Sprint(serverID) != fmt.Sprint(serverIDInt) {
+			return nil, terror.ErrInvalidConversion.Generate(serverID, serverID)
+		}
 		serverIDs[uint32(serverIDInt)] = struct{}{}
 	}
 	return serverIDs, nil

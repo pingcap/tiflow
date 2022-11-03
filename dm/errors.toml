@@ -814,6 +814,12 @@ description = ""
 workaround = "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS."
 tags = ["upstream", "medium"]
 
+[error.DM-functional-11131]
+message = "invalidly converting %s (uint32 in the upper-half of uint32 values) to int32"
+description = ""
+workaround = "Please check the value of %s and make sure its conversion to uint32 is valid."
+tags = ["upstream", "medium"]
+
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
 description = ""
