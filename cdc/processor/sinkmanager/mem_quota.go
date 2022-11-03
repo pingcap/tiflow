@@ -96,9 +96,13 @@ func (m *memQuota) blockAcquire(nBytes uint64) error {
 
 // refund directly release the memory quota.
 func (m *memQuota) refund(nBytes uint64) {
+	if nBytes == 0 {
+		return
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usedBytes -= nBytes
+	m.blockAcquireCond.Signal()
 }
 
 // record records the memory usage of a table.
