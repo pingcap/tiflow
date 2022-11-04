@@ -113,23 +113,15 @@ func TestQueryStatusAPI(t *testing.T) {
 		unitState          = &metadata.UnitState{
 			CurrentUnitStatus: map[string]*metadata.TaskStatus{
 				// worker not found
-				"task1": {},
+				"task1": {CreatedTime: currentTime},
 				// worker not found
-				"task2": {},
-				"task3": {
-					CreatedTime: currentTime,
-				},
-				"task4": {
-					CreatedTime: currentTime,
-				},
-				"task5": {
-					CreatedTime: currentTime,
-				},
-				"task6": {
-					CreatedTime: currentTime,
-				},
+				"task2": {CreatedTime: currentTime},
+				"task3": {CreatedTime: currentTime},
+				"task4": {CreatedTime: currentTime},
+				"task5": {CreatedTime: currentTime},
+				"task6": {CreatedTime: currentTime},
 				// worker not found
-				"task7": {},
+				"task7": {CreatedTime: currentTime},
 			},
 			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
 				"task2": {
@@ -191,6 +183,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	messageAgent.On("SendRequest", mock.Anything, "task5", mock.Anything, mock.Anything).Return(loadStatusResp, nil).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
 	messageAgent.On("SendRequest", mock.Anything, "task6", mock.Anything, mock.Anything).Return(syncStatusResp, nil).Once()
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", frameModel.WorkerDMLoad, "worker7", runtime.WorkerFinished, 3))
 
 	err := jm.metadata.UnitStateStore().Put(ctx, unitState)
 	require.NoError(t, err)
@@ -230,7 +223,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "0001-01-01T00:00:00Z"
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task2": {
 			"expected_stage": "Finished",
@@ -243,7 +236,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "0001-01-01T00:00:00Z"
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task3": {
 			"expected_stage": "Finished",
@@ -343,14 +336,8 @@ func TestQueryStatusAPI(t *testing.T) {
 			"expected_stage": "Finished",
 			"worker_id": "",
 			"config_outdated": true,
-			"status": {
-				"error_message": "worker for task task7 not found",
-				"unit": "",
-				"stage": "",
-				"result": null,
-				"status": null
-			},
-			"created_time": "0001-01-01T00:00:00Z"
+			"status": null,
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		}
 	},
 	"finished_unit_status": {

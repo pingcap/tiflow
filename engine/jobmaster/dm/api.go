@@ -34,7 +34,7 @@ type TaskStatus struct {
 	WorkerID       frameModel.WorkerID        `json:"worker_id"`
 	ConfigOutdated bool                       `json:"config_outdated"`
 	Status         *dmpkg.QueryStatusResponse `json:"status"`
-	CreatedTime    time.Time                  `json:"created_time"`
+	CreatedTime    *time.Time                 `json:"created_time"`
 }
 
 // JobStatus represents status of a job
@@ -99,13 +99,27 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				if !ok {
 					// worker unscheduled
 					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
-				} else if workerStatus.Stage != runtime.WorkerFinished {
-					workerID = workerStatus.ID
-					cfgModRevision = workerStatus.CfgModRevision
-					queryStatusResp = jm.QueryStatus(ctx2, taskID)
 
 					unitMu.Lock()
-					// unit state should not be null when job is running
+					// unit state may not be null when worker is unscheduled but task resume
+					if unitState == nil {
+						s, err := jm.metadata.UnitStateStore().Get(ctx2)
+						if err == nil {
+							unitState = s.(*metadata.UnitState)
+							createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
+						}
+					} else {
+						createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
+					}
+					unitMu.Unlock()
+				} else {
+					if workerStatus.Stage != runtime.WorkerFinished {
+						workerID = workerStatus.ID
+						cfgModRevision = workerStatus.CfgModRevision
+						queryStatusResp = jm.QueryStatus(ctx2, taskID)
+					}
+					unitMu.Lock()
+					// unit state should not be null when worker exist
 					if unitState == nil {
 						s, err := jm.metadata.UnitStateStore().Get(ctx2)
 						if err != nil {
@@ -124,7 +138,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
 				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
-				CreatedTime:    createdTime,
+				CreatedTime:    &createdTime,
 			}
 			mu.Unlock()
 			return nil

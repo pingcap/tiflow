@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -387,6 +388,7 @@ func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tas
 		return nil, fmt.Errorf("status code %d, body %s", resp.StatusCode, string(respBody))
 	}
 
+	log.L().Info(string(respBody))
 	var jobStatus dm.JobStatus
 	err = json.Unmarshal(respBody, &jobStatus)
 	return &jobStatus, err
