@@ -295,7 +295,7 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
-		m.ImportMode = LoadModePhysical
+		m.ImportMode = LoadModeLogical
 	}
 	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) {
 		m.ImportMode = LoadModeLogical
