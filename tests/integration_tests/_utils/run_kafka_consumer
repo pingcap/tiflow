@@ -20,7 +20,7 @@ cd $workdir
 down_uri="mysql://root@127.0.0.1:3306/?safe-mode=false"
 # some consumer may require `consumer_replica_config`, set it separately
 if [ "$safe_mode" != "" ]; then
-  down_uri="mysql://root@127.0.0.1:3306/?safe-mode=${safe_mode}"
+	down_uri="mysql://root@127.0.0.1:3306/?safe-mode=${safe_mode}"
 fi
 
 echo "downstream uri is: ${down_uri}"
