@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -1008,11 +1009,16 @@ func AdjustDBTimeZone(config *DBConfig, timeZone string) {
 	config.Session["time_zone"] = timeZone
 }
 
-var defaultParser = parser.New()
+var (
+	defaultParser = parser.New()
+	parserMu      sync.Mutex
+)
 
 func checkValidExpr(expr string) error {
 	expr = "select " + expr
+	parserMu.Lock()
 	_, _, err := defaultParser.Parse(expr, "", "")
+	parserMu.Unlock()
 	return err
 }
 
