@@ -77,6 +77,11 @@ type FileManager interface {
 	// GetPersistedResource returns the descriptor of an already persisted resource.
 	GetPersistedResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
 
+	// CleanOrRecreatePersistedResource cleans or recreates the persisted resource.
+	// For local filemanager, it simply removes the resource and recreates it.
+	// For s3 filemanager, it either cleans files or recreates resources.
+	CleanOrRecreatePersistedResource(ctx context.Context, ident ResourceIdent) (ResourceDescriptor, error)
+
 	// RemoveTemporaryFiles cleans up all un-persisted resource files under the scope.
 	RemoveTemporaryFiles(ctx context.Context, scope ResourceScope) error
 
