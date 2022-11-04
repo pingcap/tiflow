@@ -422,8 +422,8 @@ func TestGetSlaveServerID(t *testing.T) {
 	}
 
 	casesWithErr := []struct {
-		rows    *sqlmock.Rows
-		results error
+		rows *sqlmock.Rows
+		err  error
 	}{
 		// For MariaDB, when invalid conversion of Server_id (converting int32 in the upper-half of uint32 values to uint32)
 		{
@@ -443,7 +443,7 @@ func TestGetSlaveServerID(t *testing.T) {
 	for _, ca := range casesWithErr {
 		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
 		results, err2 := GetSlaveServerID(context.Background(), db)
-		require.Error(t, err2)
+		require.EqualError(t, ca.err, err2.Error())
 		require.Nil(t, results)
 	}
 }
