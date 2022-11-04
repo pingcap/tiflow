@@ -107,7 +107,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			}
 			promise.Messages = encoder.Build()
 			close(promise.done)
-			log.Info("encode promise finished", zap.Int("index", idx), zap.Any("event", promise.Event))
+			log.Debug("encode promise finished", zap.Int("index", idx), zap.Any("event", promise.Event))
 		}
 	}
 }
@@ -127,7 +127,7 @@ func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int
 	case g.responses <- promise:
 	}
 
-	log.Info("add event to encoder group", zap.Int("index", int(index)), zap.Any("event", event))
+	log.Debug("add event to encoder group", zap.Int("index", int(index)), zap.Any("event", event))
 
 	return nil
 }
@@ -159,13 +159,13 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 }
 
 func (p *responsePromise) Wait(ctx context.Context) error {
-	log.Info("start wait for the promise", zap.Any("event", p.Event))
+	log.Debug("start wait for the promise", zap.Any("event", p.Event))
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-p.done:
 	}
 
-	log.Info("wait event finished", zap.Any("event", p.Event))
+	log.Debug("wait event finished", zap.Any("event", p.Event))
 	return nil
 }
