@@ -234,6 +234,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 }
 
 // Build implements the EventJSONBatchEncoder interface
+// Build should be called immediately after call AppendRowChangedEvent
 func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil
