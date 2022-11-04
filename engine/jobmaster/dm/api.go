@@ -120,33 +120,23 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	}
 	wg.Wait()
 
-	for _, task := range tasks {
-		// get createdTime from unit state store
-		if _, ok := job.Tasks[task]; ok {
-			_, workerExist := workerStatusMap[task]
+	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	if err != nil {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
+			return jobStatus, nil
+		}
+		return nil, err
+	}
 
-			if unitState == nil {
-				s, err := jm.metadata.UnitStateStore().Get(ctx)
-				if err != nil {
-					if workerExist {
-						// unit state should not be null when worker exist
-						return nil, err
-					} else {
-						// worker/unitState both don't exist, skip it
-						continue
-					}
-				}
-				unitState = s.(*metadata.UnitState)
-			}
+	unitState = state.(*metadata.UnitState)
+	for _, task := range tasks {
+		if _, ok := job.Tasks[task]; ok {
 			status := jobStatus.TaskStatus[task]
 			status.CreatedTime = unitState.CurrentUnitStatus[task].CreatedTime
 			jobStatus.TaskStatus[task] = status
 		}
-
 	}
-	if unitState != nil {
-		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
-	}
+	jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
 
 	return jobStatus, nil
 }

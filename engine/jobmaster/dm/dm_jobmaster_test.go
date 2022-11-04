@@ -408,7 +408,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent.AssertExpectations(t.T())
 }
 
-func TestDuplicateUnitState(t *testing.T) {
+func TestDuplicateFinishedState(t *testing.T) {
 	ctx := context.Background()
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
