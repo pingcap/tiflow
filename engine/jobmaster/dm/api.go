@@ -109,21 +109,11 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			}
 
 			mu.Lock()
-			if status, ok := jobStatus.TaskStatus[taskID]; ok {
-				jobStatus.TaskStatus[taskID] = TaskStatus{
-					ExpectedStage:  expectedStage,
-					WorkerID:       workerID,
-					Status:         queryStatusResp,
-					ConfigOutdated: cfgModRevision != expectedCfgModRevision,
-					CreatedTime:    status.CreatedTime,
-				}
-			} else {
-				jobStatus.TaskStatus[taskID] = TaskStatus{
-					ExpectedStage:  expectedStage,
-					WorkerID:       workerID,
-					Status:         queryStatusResp,
-					ConfigOutdated: cfgModRevision != expectedCfgModRevision,
-				}
+			jobStatus.TaskStatus[taskID] = TaskStatus{
+				ExpectedStage:  expectedStage,
+				WorkerID:       workerID,
+				Status:         queryStatusResp,
+				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
 			}
 			mu.Unlock()
 		}()
