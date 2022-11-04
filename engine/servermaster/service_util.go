@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 )
@@ -57,6 +58,9 @@ func generateNodeID(name string) string {
 	id := fmt.Sprintf("%s-%08x", name, val)
 	return id
 }
+
+// ensure featureDegrader implements rpcutil.FeatureChecker
+var _ rpcutil.FeatureChecker = &featureDegrader{}
 
 // featureDegrader is used to record whether a feature is available or degradation
 // in server master.
