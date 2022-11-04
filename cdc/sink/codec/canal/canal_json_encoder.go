@@ -240,7 +240,7 @@ func (c *JSONBatchEncoder) Build() []*common.Message {
 	}
 
 	result := c.messages
-	c.messages = c.messages[:0]
+	c.messages = nil
 	return result
 }
 

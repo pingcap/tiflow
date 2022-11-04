@@ -324,7 +324,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range promise.Messages {
-				message.Callback = promise.Callback
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, promise.Topic, promise.Partition, message); err != nil {
 						return 0, err

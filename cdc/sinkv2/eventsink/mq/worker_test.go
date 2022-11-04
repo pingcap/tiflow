@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -31,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -76,7 +74,7 @@ func TestEncoderGroup(t *testing.T) {
 	}
 	tableStatus := state.TableSinkSinking
 
-	count := 10
+	count := 512
 	total := 0
 	events := make([]mqEvent, 0, count)
 	for i := 0; i < count; i++ {
@@ -87,7 +85,6 @@ func TestEncoderGroup(t *testing.T) {
 				Event: row,
 				Callback: func() {
 					total += bit
-					log.Info("call back", zap.Int("bit", bit), zap.Int("total", total))
 				},
 				SinkState: &tableStatus,
 			},

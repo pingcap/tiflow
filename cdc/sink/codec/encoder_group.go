@@ -150,7 +150,7 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 		Partition: partition,
 		Event:     event,
 		Callback:  callback,
-		
+
 		done: make(chan struct{}),
 	}
 }
