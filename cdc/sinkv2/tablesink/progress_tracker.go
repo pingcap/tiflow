@@ -135,9 +135,7 @@ func (r *progressTracker) addEvent() (postEventFlush func()) {
 	// 0000000000000000000000000000000000000000000000000000000000000000 ->
 	// 0000000000000000000000000000000000000000000000000000000000001000
 	// When we advance the progress, we can try to find the first 0 bit to indicate the progress.
-	postEventFlush = func() {
-		atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit)
-	}
+	postEventFlush = func() { atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
 	return
 }
 

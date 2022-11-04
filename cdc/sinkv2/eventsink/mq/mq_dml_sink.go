@@ -47,13 +47,11 @@ type dmlSink struct {
 	protocol config.Protocol
 
 	worker *worker
-
 	// eventRouter used to route events to the right topic and partition.
 	eventRouter *dispatcher.EventRouter
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-	producer     dmlproducer.DMLProducer
 }
 
 func newSink(ctx context.Context,
@@ -77,7 +75,6 @@ func newSink(ctx context.Context,
 		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder, producer, statistics),
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
-		producer:     producer,
 	}
 
 	// Spawn a goroutine to send messages by the worker.

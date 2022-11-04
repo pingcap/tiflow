@@ -111,7 +111,6 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("protocol", w.protocol.String()),
 		)
 	}()
-
 	if w.protocol.IsBatchEncode() {
 		return w.batchEncodeRun(ctx)
 	}
@@ -170,7 +169,6 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
 	)
-
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
