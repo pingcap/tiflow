@@ -136,15 +136,11 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	}
 	for _, serverID := range rowsResult {
 		// serverID will not be null
-		serverIDInt, err := strconv.Atoi(serverID)
+		serverIDUInt, err := strconv.ParseUint(serverID, 10, 32)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-		// check whether serverID is int32 in the upper-half of uint32 values
-		if serverID != fmt.Sprint(uint32(serverIDInt)) {
-			return nil, terror.ErrInvalidConversion.Generate(serverIDInt)
-		}
-		serverIDs[uint32(serverIDInt)] = struct{}{}
+		serverIDs[uint32(serverIDUInt)] = struct{}{}
 	}
 	return serverIDs, nil
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -419,18 +418,14 @@ func TestGetSlaveServerID(t *testing.T) {
 				192168010: {}, 1921680101: {},
 			},
 		},
-	}
-
-	casesWithErr := []struct {
-		rows *sqlmock.Rows
-		err  error
-	}{
-		// For MariaDB, when invalid conversion of Server_id (converting int32 in the upper-half of uint32 values to uint32)
+		// For MariaDB, with Server_id greater than 2^31, to test uint conversion
 		{
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
-				AddRow(-1, "iconnect2", 3306, 192168011).
-				AddRow(1921680101, "athena", 3306, 192168011),
-			terror.ErrInvalidConversion.Generate(-1),
+				AddRow(2147483649, "iconnect2", 3306, 192168011).
+				AddRow(2147483650, "athena", 3306, 192168011),
+			map[uint32]struct{}{
+				2147483649: {}, 2147483650: {},
+			},
 		},
 	}
 
@@ -439,11 +434,5 @@ func TestGetSlaveServerID(t *testing.T) {
 		results, err2 := GetSlaveServerID(context.Background(), db)
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
-	}
-	for _, ca := range casesWithErr {
-		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
-		results, err2 := GetSlaveServerID(context.Background(), db)
-		require.EqualError(t, ca.err, err2.Error())
-		require.Nil(t, results)
 	}
 }
