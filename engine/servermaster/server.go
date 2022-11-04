@@ -113,7 +113,7 @@ type Server struct {
 
 	metaStoreManager MetaStoreManager
 
-	leaderInitialized atomic.Bool
+	leaderDegrader *featureDegrader
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
@@ -158,23 +158,23 @@ func NewServer(cfg *Config) (*Server, error) {
 	p2pMsgRouter := p2p.NewMessageRouter(id, cfg.AdvertiseAddr)
 
 	server := &Server{
-		id:                id,
-		cfg:               cfg,
-		leaderInitialized: *atomic.NewBool(false),
-		leader:            atomic.Value{},
-		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
-		msgService:        msgService,
-		p2pMsgRouter:      p2pMsgRouter,
-		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		metrics:           newServerMasterMetric(),
-		metaStoreManager:  NewMetaStoreManager(),
+		id:               id,
+		cfg:              cfg,
+		leaderDegrader:   newFeatureDegrader(),
+		leader:           atomic.Value{},
+		masterCli:        &rpcutil.LeaderClientWithLock[multiClient]{},
+		msgService:       msgService,
+		p2pMsgRouter:     p2pMsgRouter,
+		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:          newServerMasterMetric(),
+		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&server.leader,
 		server.masterCli,
-		&server.leaderInitialized,
+		server.leaderDegrader,
 		server.rpcLogRL,
 		masterRPCLimiterAllowList,
 	)
@@ -785,21 +785,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		IsLeader:      true,
 	})
 	defer func() {
-		s.leaderInitialized.Store(false)
+		s.leaderDegrader.reset()
 		s.leader.Store(&rpcutil.Member{})
-	}()
-
-	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
-	if err != nil {
-		return
-	}
-	defer func() {
-		err := s.jobManager.Close(ctx)
-		if err != nil {
-			log.Warn("job manager close with error", zap.Error(err))
-		}
-		log.Info("job manager exited")
 	}()
 
 	// The following member variables are used in leader only and released after
@@ -814,21 +801,44 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		s.executorManager,
 		s.resourceManagerService)
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
-	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
-
 	// TODO refactor this method to make it more readable and maintainable.
 	errg, errgCtx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return s.executorManager.Run(errgCtx)
+	})
+
+	errg.Go(func() error {
+		updater := executorInfoUpdater{
+			msgRouter:     s.p2pMsgRouter,
+			executorGroup: executorClients,
+		}
+		return serverutil.WatchExecutors(errgCtx, s.executorManager, updater)
+	})
+
+	s.leaderDegrader.updateExecutorManager(true)
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
+	if err != nil {
+		return
+	}
+	defer func() {
+		err := s.jobManager.Close(ctx)
+		if err != nil {
+			log.Warn("job manager close with error", zap.Error(err))
+		}
+		log.Info("job manager exited")
+	}()
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
 	errg.Go(func() error {
 		return s.gcRunner.Run(errgCtx)
 	})
 	errg.Go(func() error {
 		return s.gcCoordinator.Run(errgCtx)
-	})
-
-	errg.Go(func() error {
-		return s.executorManager.Run(errgCtx)
 	})
 
 	errg.Go(func() error {
@@ -852,15 +862,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	})
 
-	errg.Go(func() error {
-		updater := executorInfoUpdater{
-			msgRouter:     s.p2pMsgRouter,
-			executorGroup: executorClients,
-		}
-		return serverutil.WatchExecutors(errgCtx, s.executorManager, updater)
-	})
-
-	s.leaderInitialized.Store(true)
+	s.leaderDegrader.updateMasterWorkerManager(true)
 	log.Info("leader is initialized", zap.Duration("took", time.Since(start)))
 
 	return errg.Wait()
