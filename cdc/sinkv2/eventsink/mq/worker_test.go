@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -37,12 +39,10 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
-	encoder := builder.Build()
-	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, config.ProtocolOpen, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	return newWorker(id, config.ProtocolOpen, builder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -50,12 +50,77 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(200)
 	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
-	encoder := builder.Build()
-	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, config.ProtocolCanalJSON, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	return newWorker(id, config.ProtocolCanalJSON, builder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+}
+
+func TestEncoderGroup(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker, p := newNonBatchEncodeWorker(ctx, t)
+	defer worker.close()
+
+	key := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
+	}
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+	tableStatus := state.TableSinkSinking
+
+	count := 10
+	total := 0
+	events := make([]mqEvent, 0, count)
+	for i := 0; i < count; i++ {
+		bit := i
+		events = append(events, mqEvent{
+			key: key,
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: row,
+				Callback: func() {
+					total += bit
+					log.Info("call back", zap.Int("bit", bit), zap.Int("total", total))
+				},
+				SinkState: &tableStatus,
+			},
+		})
+	}
+
+	expected := 0
+	for i := 0; i < count; i++ {
+		expected += i
+	}
+
+	for _, e := range events {
+		worker.msgChan.In() <- e
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Eventually(t, func() bool {
+		return len(mp.GetAllEvents()) == count
+	}, 3*time.Second, 100*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return total == expected
+	}, 3*time.Second, 10*time.Millisecond)
+	cancel()
+
+	wg.Wait()
 }
 
 func TestBatchEncode_Batch(t *testing.T) {
@@ -193,17 +258,17 @@ func TestBatchEncode_Group(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	require.Len(t, paritionedRows, 3)
-	require.Len(t, paritionedRows[key1], 3)
+	partitionedRows := worker.group(events)
+	require.Len(t, partitionedRows, 3)
+	require.Len(t, partitionedRows[key1], 3)
 	// We must ensure that the sequence is not broken.
 	require.LessOrEqual(
 		t,
-		paritionedRows[key1][0].Event.GetCommitTs(), paritionedRows[key1][1].Event.GetCommitTs(),
-		paritionedRows[key1][2].Event.GetCommitTs(),
+		partitionedRows[key1][0].Event.GetCommitTs(), partitionedRows[key1][1].Event.GetCommitTs(),
+		partitionedRows[key1][2].Event.GetCommitTs(),
 	)
-	require.Len(t, paritionedRows[key2], 1)
-	require.Len(t, paritionedRows[key3], 1)
+	require.Len(t, partitionedRows[key2], 1)
+	require.Len(t, partitionedRows[key3], 1)
 }
 
 func TestBatchEncode_AsyncSend(t *testing.T) {
@@ -302,8 +367,8 @@ func TestBatchEncode_AsyncSend(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedRows)
+	partitionedRows := worker.group(events)
+	err := worker.asyncSend(context.Background(), partitionedRows)
 	require.NoError(t, err)
 	mp := p.(*dmlproducer.MockDMLProducer)
 	require.Len(t, mp.GetAllEvents(), 6)
@@ -364,8 +429,8 @@ func TestBatchEncode_AsyncSendWhenTableStopping(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedRows)
+	partitionedRows := worker.group(events)
+	err := worker.asyncSend(context.Background(), partitionedRows)
 	require.NoError(t, err)
 	mp := p.(*dmlproducer.MockDMLProducer)
 	require.Len(t, mp.GetAllEvents(), 2)
