@@ -91,6 +91,7 @@ func newWorker(
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
 		builder:                     builder,
+		encoder:                     builder.Build(),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -170,7 +171,6 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("protocol", w.protocol.String()),
 	)
 
-	w.encoder = w.builder.Build()
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
