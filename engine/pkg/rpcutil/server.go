@@ -123,6 +123,12 @@ type MasterNotReadyError struct {
 	rpcerror.Error[rpcerror.Retryable, rpcerror.Unavailable]
 }
 
+// FeatureChecker defines an interface that checks whether a feature is available
+// or under degradation.
+type FeatureChecker interface {
+	Available(name string) bool
+}
+
 // PreRPCHook provides some common functionality that should be executed before
 // some RPC, like "forward to leader", "checking rate limit". It should be embedded
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
@@ -145,8 +151,8 @@ type preRPCHookImpl[T RPCClientType] struct {
 	leader    *atomic.Value // should be a Member
 	leaderCli *LeaderClientWithLock[T]
 
-	// check server initialized
-	initialized *atomic.Bool
+	// check feature of server is available
+	featureChecker FeatureChecker
 
 	// rate limiter
 	limiter *rpcLimiter
@@ -157,17 +163,17 @@ func NewPreRPCHook[T RPCClientType](
 	id string,
 	leader *atomic.Value,
 	leaderCli *LeaderClientWithLock[T],
-	initialized *atomic.Bool,
+	featureChecker FeatureChecker,
 	limiter *rate.Limiter,
 	rpcLimiterAllowList []string,
 ) PreRPCHook {
 	rpcLim := newRPCLimiter(limiter, rpcLimiterAllowList)
 	return &preRPCHookImpl[T]{
-		id:          id,
-		leader:      leader,
-		leaderCli:   leaderCli,
-		initialized: initialized,
-		limiter:     rpcLim,
+		id:             id,
+		leader:         leader,
+		leaderCli:      leaderCli,
+		featureChecker: featureChecker,
+		limiter:        rpcLim,
 	}
 }
 
@@ -176,8 +182,8 @@ func NewPreRPCHook[T RPCClientType](
 //     the `req` argument must fit with the caller of PreRPC which is an RPC.
 //     the `respPointer` argument must be a pointer to the response and the response
 //     must fit with the caller of PreRPC which is an RPC.
-//   - check if the server is initialized
-//   - rate limit
+//   - check if the feature is initialized by method name.
+//   - rate limit.
 //
 // TODO: we can build a (req type -> resp type) map at compile time, to avoid passing
 // in respPointer.
@@ -197,7 +203,7 @@ func (h preRPCHookImpl[T]) PreRPC(
 		return
 	}
 
-	if !h.initialized.Load() {
+	if !h.featureChecker.Available(methodName) {
 		return true, ErrMasterNotReady.GenWithStack(&MasterNotReadyError{})
 	}
 	return false, nil

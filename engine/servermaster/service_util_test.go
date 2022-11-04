@@ -36,3 +36,16 @@ func TestGenerateNodeID(t *testing.T) {
 
 	require.GreaterOrEqual(t, len(ids), minUniqueCount, "too many collisions")
 }
+
+func TestFeatureDegrader(t *testing.T) {
+	fd := newFeatureDegrader()
+	require.False(t, fd.Available("ListExecutors"))
+	require.False(t, fd.Available("CreateJob"))
+	require.True(t, fd.Available("QueryMetaStore"))
+	require.True(t, fd.Available("UnknownAPI"))
+
+	fd.updateExecutorManager(true)
+	fd.updateMasterWorkerManager(true)
+	require.True(t, fd.Available("ListExecutors"))
+	require.True(t, fd.Available("CreateJob"))
+}
