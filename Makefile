@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt cdc kafka_consumer coverage \
+.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -141,6 +141,9 @@ cdc:
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
 
+storage_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
+
 install:
 	go install ./...
 
@@ -226,6 +229,9 @@ build_kafka_integration_test_images: clean_integration_test_containers
 clean_integration_test_containers: ## Clean MySQL and Kafka integration test containers.
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
+
+integration_test_storage: check_third_party_binary
+	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code
 	@echo "run gci (format imports)"
