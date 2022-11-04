@@ -32,9 +32,13 @@ const (
 	defaultMetricInterval   = 15 * time.Second
 )
 
+// EncoderGroup manages a group of encoders
 type EncoderGroup interface {
+	// Run start the group
 	Run(ctx context.Context) error
+	// AddEvent add an event into the group, handled by one of the encoders
 	AddEvent(ctx context.Context, topic string, partition int32, event *model.RowChangedEvent, callback func()) error
+	// Responses returns a channel to receive the encoded messages
 	Responses() <-chan *responsePromise
 }
 
@@ -49,6 +53,7 @@ type encoderGroup struct {
 	responses chan *responsePromise
 }
 
+// NewEncoderGroup creates a new EncoderGroup instance
 func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.ChangeFeedID) *encoderGroup {
 	if number <= 0 {
 		number = defaultEncoderGroupSize
@@ -155,6 +160,7 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 	}
 }
 
+// Wait waits until the response is ready, should be called before consume the promise.
 func (p *responsePromise) Wait(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
