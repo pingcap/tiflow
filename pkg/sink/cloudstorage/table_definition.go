@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -53,7 +54,6 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	if mysql.HasUnsignedFlag(col.GetFlag()) {
 		t.Tp += " UNSIGNED"
 	}
-
 	if mysql.HasPriKeyFlag(col.GetFlag()) {
 		t.IsPK = "true"
 	}
@@ -91,13 +91,18 @@ func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(t.Tp, " UNSIGNED")))
 	col.FieldType = *types.NewFieldType(tp)
 	if strings.Contains(t.Tp, "UNSIGNED") {
-		col.SetFlag(mysql.UnsignedFlag)
+		col.AddFlag(mysql.UnsignedFlag)
 	}
 	if t.IsPK == "true" {
-		col.SetFlag(mysql.PriKeyFlag)
+		col.AddFlag(mysql.PriKeyFlag)
 	}
 	if t.Nullable == "false" {
-		col.SetFlag(mysql.NotNullFlag)
+		col.AddFlag(mysql.NotNullFlag)
+	}
+	if strings.Contains(t.Tp, "BLOB") || strings.Contains(t.Tp, "BINARY") {
+		col.SetCharset(charset.CharsetBin)
+	} else {
+		col.SetCharset(charset.CharsetUTF8MB4)
 	}
 	setFlen := func(precision string) error {
 		if len(precision) > 0 {

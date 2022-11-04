@@ -192,8 +192,8 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 					tableSet = make(map[versionedTable]struct{})
 				default:
 				}
-			case frag := <-ch.Out():
-				if atomic.LoadUint64(&d.isClosed) == 1 {
+			case frag, ok := <-ch.Out():
+				if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
 				table := frag.versionedTable

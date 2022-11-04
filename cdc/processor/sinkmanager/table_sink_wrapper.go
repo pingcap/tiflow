@@ -106,7 +106,8 @@ func (t *tableSinkWrapper) close(ctx context.Context) error {
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, error) {
+func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
+	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
 		if e == nil || e.Row == nil {
@@ -132,6 +133,8 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			continue
 		}
 
+		size += e.Row.ApproximateBytes()
+
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
@@ -139,7 +142,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			if pipeline.ShouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := pipeline.SplitUpdateEvent(e)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, 0, errors.Trace(err)
 				}
 				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
 				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
@@ -152,5 +155,5 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			rowChangedEvents = append(rowChangedEvents, e.Row)
 		}
 	}
-	return rowChangedEvents, nil
+	return rowChangedEvents, uint64(size), nil
 }
