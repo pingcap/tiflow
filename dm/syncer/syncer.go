@@ -186,8 +186,8 @@ type Syncer struct {
 
 	lastCount atomic.Int64
 	count     atomic.Int64
-	totalTps  atomic.Int64
-	tps       atomic.Int64
+	totalRps  atomic.Int64
+	rps       atomic.Int64
 
 	filteredInsert atomic.Int64
 	filteredUpdate atomic.Int64

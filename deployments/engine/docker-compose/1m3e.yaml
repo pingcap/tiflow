@@ -40,7 +40,6 @@ services:
       - "--log-file=/log/server-executor-0.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -62,7 +61,6 @@ services:
       - "--log-file=/log/server-executor-1.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -84,7 +82,6 @@ services:
       - "--log-file=/log/server-executor-2.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

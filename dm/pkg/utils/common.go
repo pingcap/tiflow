@@ -122,7 +122,12 @@ func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[s
 }
 
 // FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
-func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, router *regexprrouter.RouteTable) (map[string][]*filter.Table, error) {
+func FetchTargetDoTables(
+	ctx context.Context,
+	db *sql.DB,
+	bw *filter.Filter,
+	router *regexprrouter.RouteTable,
+) (map[filter.Table][]filter.Table, error) {
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
 
@@ -135,7 +140,7 @@ func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, rou
 		return nil, err
 	}
 
-	mapper := make(map[string][]*filter.Table)
+	mapper := make(map[filter.Table][]filter.Table)
 	for schema, tables := range sourceTables {
 		for _, table := range tables {
 			targetSchema, targetTable, err := router.Route(schema, table)
@@ -143,8 +148,11 @@ func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, rou
 				return nil, terror.ErrGenTableRouter.Delegate(err)
 			}
 
-			targetTableName := dbutil.TableName(targetSchema, targetTable)
-			mapper[targetTableName] = append(mapper[targetTableName], &filter.Table{
+			target := filter.Table{
+				Schema: targetSchema,
+				Name:   targetTable,
+			}
+			mapper[target] = append(mapper[target], filter.Table{
 				Schema: schema,
 				Name:   table,
 			})

@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt cdc kafka_consumer coverage \
+.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -77,7 +77,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.3.0-master
+	RELEASE_VERSION := v6.4.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
@@ -140,6 +140,9 @@ cdc:
 
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
+
+storage_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
 install:
 	go install ./...
@@ -227,7 +230,10 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code tiflow-generate-mock
+integration_test_storage: check_third_party_binary
+	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
+
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
@@ -316,14 +322,9 @@ data-flow-diagram: docs/data-flow.dot
 swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
+generate_mock: ## Generate mock code.
 generate_mock: tools/bin/mockgen
-	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
-	tools/bin/mockgen -source cdc/owner/status_provider.go -destination cdc/owner/mock/status_provider_mock.go
-	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
-	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
-	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
-	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
-	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
+	scripts/generate-mock.sh
 
 clean:
 	go clean -i ./...
@@ -356,9 +357,6 @@ dm-chaos-case:
 
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
-
-dm_generate_mock: tools/bin/mockgen
-	./dm/tests/generate-mock.sh
 
 dm_generate_openapi: tools/bin/oapi-codegen
 	@echo "generate_openapi"
@@ -494,9 +492,6 @@ tiflow-demo:
 
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-
-tiflow-generate-mock: tools/bin/mockgen
-	scripts/generate-engine-mock.sh
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
