@@ -49,7 +49,7 @@ func (f *UnitStateStore) createState() state {
 }
 
 func (f *UnitStateStore) key() string {
-	return adapter.DMFinishedStateAdapter.Encode()
+	return adapter.DMUnitStateAdapter.Encode()
 }
 
 func (f *UnitStateStore) ReadModifyWrite(

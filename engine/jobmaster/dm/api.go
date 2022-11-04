@@ -34,7 +34,7 @@ type TaskStatus struct {
 	WorkerID       frameModel.WorkerID        `json:"worker_id"`
 	ConfigOutdated bool                       `json:"config_outdated"`
 	Status         *dmpkg.QueryStatusResponse `json:"status"`
-	CreatedTime    *time.Time                 `json:"created_time"`
+	CreatedTime    time.Time                  `json:"created_time"`
 }
 
 // JobStatus represents status of a job
@@ -138,7 +138,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
 				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
-				CreatedTime:    &createdTime,
+				CreatedTime:    createdTime,
 			}
 			mu.Unlock()
 			return nil
