@@ -16,7 +16,10 @@ package redo
 import (
 	"github.com/pingcap/tiflow/pkg/applier"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"net/url"
 )
 
 // applyRedoOptions defines flags for the `redo apply` command.
@@ -36,6 +39,25 @@ func (o *applyRedoOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.sinkURI, "sink-uri", "", "target database sink-uri")
 	// the possible error returned from MarkFlagRequired is `no such flag`
 	cmd.MarkFlagRequired("sink-uri") //nolint:errcheck
+}
+
+func (o *applyRedoOptions) complete(cmd *cobra.Command) error {
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(o.sinkURI)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	rawQuery := sinkURI.Query()
+	if rawQuery.Get("safe-mode") != "true" {
+		cmd.Println("Warning: sink-uri is not in safe-mode, " +
+			"redo log must be applied in safe-mode." +
+			"Automatically add `safe-mode=true` to sink-uri.")
+		rawQuery.Set("safe-mode", "true")
+		sinkURI.RawQuery = rawQuery.Encode()
+		o.sinkURI = sinkURI.String()
+		cmd.Println("New sink-uri is", o.sinkURI)
+	}
+	return nil
 }
 
 // run runs the `redo apply` command.
@@ -64,6 +86,9 @@ func newCmdApply(opt *options) *cobra.Command {
 		Short: "Apply redo logs in target sink",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.options = *opt
+			if err := o.complete(cmd); err != nil {
+				return err
+			}
 			return o.run(cmd)
 		},
 	}
