@@ -11,25 +11,16 @@ workdir=$1
 sink_uri=$2
 consumer_replica_config=$3
 log_suffix=$4
-safe_mode=$5
 pwd=$pwd
 
 echo "[$(date)] <<<<<< START kafka consumer in $TEST_NAME case >>>>>>"
 cd $workdir
-
-down_uri="mysql://root@127.0.0.1:3306/?safe-mode=false"
 # some consumer may require `consumer_replica_config`, set it separately
-if [ "$safe_mode" != "" ]; then
-	down_uri="mysql://root@127.0.0.1:3306/?safe-mode=${safe_mode}"
-fi
-
-echo "downstream uri is: ${down_uri}"
-
 if [ "$consumer_replica_config" != "" ]; then
 	echo "consumer replica config found: $consumer_replica_config"
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${down_uri} --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/?safe-mode=true --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 else
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri ${down_uri} >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/?safe-mode=true >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 fi
 
 cd $pwd
