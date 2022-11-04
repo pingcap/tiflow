@@ -66,7 +66,8 @@ type worker struct {
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
 	// encoderGroup only support non batch encode protocol at the moment.
-	encoderGroup codec.EncoderGroup
+	encoderGroup       codec.EncoderGroup
+	encoderConcurrency int
 
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
@@ -82,6 +83,7 @@ func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
 	builder codec.EncoderBuilder,
+	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
 ) *worker {
@@ -92,6 +94,7 @@ func newWorker(
 		ticker:                      time.NewTicker(flushInterval),
 		builder:                     builder,
 		encoder:                     builder.Build(),
+		encoderConcurrency:          encoderConcurrency,
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -115,7 +118,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 		return w.batchEncodeRun(ctx)
 	}
 
-	w.encoderGroup = codec.NewEncoderGroup(w.builder, 16, w.changeFeedID)
+	w.encoderGroup = codec.NewEncoderGroup(w.builder, w.encoderConcurrency, w.changeFeedID)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return w.encoderGroup.Run(ctx)

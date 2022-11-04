@@ -59,6 +59,7 @@ func newSink(ctx context.Context,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
+	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -69,10 +70,12 @@ func newSink(ctx context.Context,
 	}
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	worker := newWorker(changefeedID, encoderConfig.Protocol,
+		encoderBuilder, encoderConcurrency, producer, statistics)
 	s := &dmlSink{
 		id:           changefeedID,
 		protocol:     encoderConfig.Protocol,
-		worker:       newWorker(changefeedID, encoderConfig.Protocol, encoderBuilder, producer, statistics),
+		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
 	}

@@ -40,7 +40,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, config.ProtocolOpen, builder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	encoderConcurrency := 4
+	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -51,7 +53,9 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, config.ProtocolCanalJSON, builder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
+	encoderConcurrency := 4
+	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
 }
 
 func TestEncoderGroup(t *testing.T) {

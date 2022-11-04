@@ -53,6 +53,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Terminator: string(LF),
 			NullString: NULL,
 		},
+		EncoderConcurrency: 16,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -105,7 +106,7 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 	return string(cfg), nil
 }
 
-// UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
+// UnmarshalJSON unmarshal into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	// The purpose of casting ReplicaConfig to replicaConfig is to avoid recursive calls UnmarshalJSON,
 	// resulting in stack overflow
