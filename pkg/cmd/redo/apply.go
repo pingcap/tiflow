@@ -14,12 +14,12 @@
 package redo
 
 import (
+	"net/url"
+
 	"github.com/pingcap/tiflow/pkg/applier"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
-
-	"net/url"
 )
 
 // applyRedoOptions defines flags for the `redo apply` command.
@@ -48,14 +48,11 @@ func (o *applyRedoOptions) complete(cmd *cobra.Command) error {
 		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	rawQuery := sinkURI.Query()
+	// set safe-mode to true if not set
 	if rawQuery.Get("safe-mode") != "true" {
-		cmd.Println("Warning: sink-uri is not in safe-mode, " +
-			"redo log must be applied in safe-mode." +
-			"Automatically add `safe-mode=true` to sink-uri.")
 		rawQuery.Set("safe-mode", "true")
 		sinkURI.RawQuery = rawQuery.Encode()
 		o.sinkURI = sinkURI.String()
-		cmd.Println("New sink-uri is", o.sinkURI)
 	}
 	return nil
 }

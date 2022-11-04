@@ -14,10 +14,10 @@
 package redo
 
 import (
+	"testing"
+
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-
-	"testing"
 )
 
 func TestComplete(t *testing.T) {
