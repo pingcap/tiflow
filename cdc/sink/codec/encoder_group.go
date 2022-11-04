@@ -102,12 +102,11 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ticker.C:
 			metric.Set(float64(len(inputCh)))
 		case promise := <-inputCh:
-			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.Event, promise.callback); err != nil {
+			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.Event, promise.Callback); err != nil {
 				return err
 			}
 			promise.Messages = encoder.Build()
 			close(promise.done)
-			log.Debug("encode promise finished", zap.Int("index", idx), zap.Any("event", promise.Event))
 		}
 	}
 }
@@ -127,8 +126,6 @@ func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int
 	case g.responses <- promise:
 	}
 
-	log.Debug("add event to encoder group", zap.Int("index", int(index)), zap.Any("event", event))
-
 	return nil
 }
 
@@ -140,7 +137,7 @@ type responsePromise struct {
 	Topic     string
 	Partition int32
 	Event     *model.RowChangedEvent
-	callback  func()
+	Callback  func()
 
 	Messages []*common.Message
 
@@ -152,20 +149,17 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 		Topic:     topic,
 		Partition: partition,
 		Event:     event,
-		callback:  callback,
-
+		Callback:  callback,
+		
 		done: make(chan struct{}),
 	}
 }
 
 func (p *responsePromise) Wait(ctx context.Context) error {
-	log.Debug("start wait for the promise", zap.Any("event", p.Event))
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-p.done:
 	}
-
-	log.Debug("wait event finished", zap.Any("event", p.Event))
 	return nil
 }
