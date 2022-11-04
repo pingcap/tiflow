@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFinishedStateStore(t *testing.T) {
+func TestUnitStateStore(t *testing.T) {
 	t.Parallel()
 
 	s := NewUnitStateStore(mock.NewMetaMock())
