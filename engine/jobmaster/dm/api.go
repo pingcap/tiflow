@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"golang.org/x/sync/errgroup"
 )
 
 // TaskStatus represents status of a task
@@ -69,25 +68,26 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 	var (
 		workerStatusMap = jm.workerManager.WorkerStatus()
+		wg              sync.WaitGroup
 		mu              sync.Mutex
-		wg, ctx2        = errgroup.WithContext(ctx)
 		jobStatus       = &JobStatus{
 			JobID:      jm.ID(),
 			TaskStatus: make(map[string]TaskStatus),
 		}
 		unitState *metadata.UnitState
-		unitMu    sync.Mutex
 	)
 
 	for _, task := range tasks {
 		taskID := task
-		wg.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
 				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
-				createdTime     time.Time
 			)
 
 			// task not exist
@@ -99,55 +99,61 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				if !ok {
 					// worker unscheduled
 					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
-
-					unitMu.Lock()
-					// unit state may not be null when worker is unscheduled but task resume
-					if unitState == nil {
-						s, err := jm.metadata.UnitStateStore().Get(ctx2)
-						if err == nil {
-							unitState = s.(*metadata.UnitState)
-							createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
-						}
-					} else {
-						createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
-					}
-					unitMu.Unlock()
 				} else {
 					if workerStatus.Stage != runtime.WorkerFinished {
 						workerID = workerStatus.ID
 						cfgModRevision = workerStatus.CfgModRevision
-						queryStatusResp = jm.QueryStatus(ctx2, taskID)
+						queryStatusResp = jm.QueryStatus(ctx, taskID)
 					}
-					unitMu.Lock()
-					// unit state should not be null when worker exist
-					if unitState == nil {
-						s, err := jm.metadata.UnitStateStore().Get(ctx2)
-						if err != nil {
-							return err
-						}
-						unitState = s.(*metadata.UnitState)
-					}
-					createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
-					unitMu.Unlock()
 				}
 			}
 
 			mu.Lock()
-			jobStatus.TaskStatus[taskID] = TaskStatus{
-				ExpectedStage:  expectedStage,
-				WorkerID:       workerID,
-				Status:         queryStatusResp,
-				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
-				CreatedTime:    createdTime,
+			if status, ok := jobStatus.TaskStatus[taskID]; ok {
+				jobStatus.TaskStatus[taskID] = TaskStatus{
+					ExpectedStage:  expectedStage,
+					WorkerID:       workerID,
+					Status:         queryStatusResp,
+					ConfigOutdated: cfgModRevision != expectedCfgModRevision,
+					CreatedTime:    status.CreatedTime,
+				}
+			} else {
+				jobStatus.TaskStatus[taskID] = TaskStatus{
+					ExpectedStage:  expectedStage,
+					WorkerID:       workerID,
+					Status:         queryStatusResp,
+					ConfigOutdated: cfgModRevision != expectedCfgModRevision,
+				}
 			}
 			mu.Unlock()
-			return nil
-		})
+		}()
 	}
-	if err := wg.Wait(); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 
+	for _, task := range tasks {
+		// get createdTime from unit state store
+		if _, ok := job.Tasks[task]; ok {
+			_, workerExist := workerStatusMap[task]
+
+			if unitState == nil {
+				s, err := jm.metadata.UnitStateStore().Get(ctx)
+				if err != nil {
+					if workerExist {
+						// unit state should not be null when worker exist
+						return nil, err
+					} else {
+						// worker/unitState both don't exist, skip it
+						continue
+					}
+				}
+				unitState = s.(*metadata.UnitState)
+			}
+			status := jobStatus.TaskStatus[task]
+			status.CreatedTime = unitState.CurrentUnitStatus[task].CreatedTime
+			jobStatus.TaskStatus[task] = status
+		}
+
+	}
 	if unitState != nil {
 		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
 	}
