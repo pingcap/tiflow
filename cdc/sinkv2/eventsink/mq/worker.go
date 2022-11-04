@@ -60,10 +60,14 @@ type worker struct {
 	msgChan *chann.Chann[mqEvent]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
+
+	// builder is used to build encoders
+	builder codec.EncoderBuilder
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
-
+	// encoderGroup only support non batch encode protocol at the moment.
 	encoderGroup codec.EncoderGroup
+
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 	// metricMQWorkerFlushDuration is the metric of the flush duration.
@@ -86,8 +90,6 @@ func newWorker(
 		protocol:                    protocol,
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
-		encoder:                     builder.Build(),
-		encoderGroup:                codec.NewEncoderGroup(builder, 16, id),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -112,6 +114,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 		return w.batchEncodeRun(ctx)
 	}
 
+	w.encoderGroup = codec.NewEncoderGroup(w.builder, 16, w.changeFeedID)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return w.encoderGroup.Run(ctx)
@@ -165,6 +168,8 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
 	)
+
+	w.encoder = w.builder.Build()
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
