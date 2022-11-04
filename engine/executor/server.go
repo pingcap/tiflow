@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tidb/util/memory"
@@ -44,10 +43,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -254,7 +250,7 @@ func precheckMasterMeta(
 	if meta.ErrorMsg == "" {
 		return nil
 	}
-	errInMeta := perrors.New(meta.ErrorMsg)
+	errInMeta := errors.New(meta.ErrorMsg)
 	retryable, err := checkBusinessErrorIsRetryable(register, errInMeta, tp)
 	if err != nil {
 		return err
@@ -269,8 +265,8 @@ func precheckMasterMeta(
 func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
-	if pkgClient.ErrCreateWorkerTerminate.Is(err) {
-		return rpcerror.ToGRPCError(err)
+	if errors.Is(err, errors.ErrCreateWorkerTerminate) {
+		return err
 	}
 
 	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
@@ -278,17 +274,9 @@ func convertMakeTaskErrorToRPCError(
 		return inErr
 	}
 	if retryable {
-		return rpcerror.ToGRPCError(
-			pkgClient.ErrCreateWorkerNonTerminate.GenWithStack(
-				&pkgClient.CreateWorkerNonTerminateError{
-					Details: err.Error(),
-				}))
+		return errors.ErrCreateWorkerNonTerminate.Wrap(err).GenWithStackByArgs()
 	}
-	return rpcerror.ToGRPCError(
-		pkgClient.ErrCreateWorkerTerminate.GenWithStack(
-			&pkgClient.CreateWorkerTerminateError{
-				Details: err.Error(),
-			}))
+	return errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
 }
 
 // checkBusinessErrorIsRetryable converts raw error to business error if possible, and
@@ -343,10 +331,10 @@ func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatc
 
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, err
 	}
 	if !ok {
-		return nil, status.Error(codes.NotFound, "RequestID not found")
+		return nil, errors.ErrDispatchTaskRequestIDNotFound.GenWithStackByArgs(req.GetRequestId())
 	}
 	return &pb.ConfirmDispatchTaskResponse{}, nil
 }
@@ -478,7 +466,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -514,7 +502,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -660,7 +648,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			}
 			_, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				if rpcutil.ErrMasterNotReady.Is(err) {
+				if errors.Is(err, errors.ErrMasterNotReady) {
 					s.lastHearbeatTime = t
 					if rl.Allow() {
 						log.L().Info("heartbeat success with MasterNotReady")
@@ -669,9 +657,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				}
 
 				log.Warn("heartbeat rpc meet error", zap.Error(err))
-				// TODO: move all errors into one package, so that executor
-				// server no longer needs to depend on servermaster package.
-				if servermaster.ErrTombstoneExecutorError.Is(err) {
+				if errors.Is(err, errors.ErrTombstoneExecutor) {
 					return errors.ErrHeartbeat.GenWithStack("logic error: %v", err)
 				}
 
@@ -757,7 +743,7 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		case <-time.After(defaultDiscoveryAutoSyncInterval):
 			masters, err := s.masterClient.ListMasters(ctx)
 			if err != nil {

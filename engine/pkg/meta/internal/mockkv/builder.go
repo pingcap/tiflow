@@ -16,7 +16,7 @@ package mockkv
 import (
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ClientBuilderImpl is the mock kvclient builder
@@ -32,7 +32,7 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 	projectID metaModel.ProjectID, jobID metaModel.JobID,
 ) (metaModel.KVClient, error) {
 	if cc.StoreType() != metaModel.StoreTypeMockKV {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStack("invalid ClientConn for etcd kvclient builder,"+
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack("invalid ClientConn for etcd kvclient builder,"+
 			" conn type:%s", cc.StoreType())
 	}
 

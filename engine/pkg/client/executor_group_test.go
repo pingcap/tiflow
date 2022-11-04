@@ -21,6 +21,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,7 +60,7 @@ func TestExecutorGroup(t *testing.T) {
 
 	err = group.AddExecutor("executor-1", "test-addr:1234")
 	require.Error(t, err)
-	require.True(t, ErrExecutorAlreadyExists.Is(err))
+	require.True(t, errors.Is(err, errors.ErrExecutorAlreadyExists))
 
 	cli.(*MockExecutorClient).EXPECT().Close().Times(1)
 	err = group.RemoveExecutor("executor-1")
@@ -69,7 +70,7 @@ func TestExecutorGroup(t *testing.T) {
 
 	err = group.RemoveExecutor("executor-1")
 	require.Error(t, err)
-	require.True(t, ErrExecutorNotFound.Is(err))
+	require.True(t, errors.Is(err, errors.ErrExecutorNotFound))
 
 	err = group.UpdateExecutorList(map[model.ExecutorID]string{
 		"executor-1": "test-addr:1234",
@@ -188,9 +189,7 @@ func TestExecutorTombstoneCleaned(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	_, err = group.GetExecutorClientB(ctx, "executor-1")
-	info, ok := ErrExecutorNotFound.Convert(err)
-	require.True(t, ok)
-	require.False(t, info.IsTombstone)
+	require.True(t, errors.Is(err, errors.ErrTombstoneExecutor))
 }
 
 func TestGetExecutorBCanceled(t *testing.T) {

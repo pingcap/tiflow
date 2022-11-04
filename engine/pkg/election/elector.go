@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -268,7 +268,7 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithIsRetryableErr(func(err error) bool {
-			if errors.Cause(err) == ErrRecordConflict {
+			if errors.Is(err, errors.ErrElectionRecordConflict) {
 				log.Info("conflict encountered while updating record, retrying")
 			} else {
 				log.Warn("failed to update record, retrying", zap.Error(err))

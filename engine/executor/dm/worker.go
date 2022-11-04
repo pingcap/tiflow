@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -39,7 +38,7 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -258,7 +257,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	return derror.ErrWorkerFinish.FastGenByArgs()
+	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 
 // workerStatus gets worker status.

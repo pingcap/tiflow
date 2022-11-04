@@ -19,13 +19,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"go.uber.org/zap"
 )
@@ -66,7 +65,7 @@ func (m *FileManager) CreateResource(
 		Ident:    ident,
 	}
 	if err := os.MkdirAll(res.AbsolutePath(), 0o700); err != nil {
-		return nil, derrors.ErrCreateLocalFileDirectoryFailed.Wrap(err)
+		return nil, errors.ErrCreateLocalFileDirectoryFailed.Wrap(err)
 	}
 	log.Info("Created directory for local file resource",
 		zap.String("resource-name", res.ResourceIdent().Name),
@@ -90,9 +89,9 @@ func (m *FileManager) GetPersistedResource(
 	creator := res.ResourceIdent().WorkerID
 	if _, err := os.Stat(res.AbsolutePath()); err != nil {
 		if os.IsNotExist(err) {
-			return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
+			return nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 		}
-		return nil, derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+		return nil, errors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
 
 	m.mu.Lock()
@@ -100,10 +99,10 @@ func (m *FileManager) GetPersistedResource(
 
 	resources, exists := m.persistedResourcesByCreator[creator]
 	if !exists {
-		return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
+		return nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 	}
 	if _, ok := resources[resName]; !ok {
-		return nil, derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
+		return nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 	}
 
 	return res, nil
@@ -117,7 +116,7 @@ func (m *FileManager) CleanOrRecreatePersistedResource(
 	err := m.RemoveResource(ctx, ident)
 	// LocalFileManager may return ErrResourceDoesNotExist, which can be
 	// ignored because the resource no longer exists.
-	if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
+	if err != nil && !errors.Is(err, errors.ErrResourceDoesNotExist) {
 		return nil, err
 	}
 	desc, err := m.CreateResource(ctx, ident)
@@ -149,7 +148,7 @@ func (m *FileManager) RemoveTemporaryFiles(
 		}
 
 		// Other errors need to be thrown to the caller.
-		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+		return errors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
 
 	// Iterates over all resources created by `creator`.
@@ -169,7 +168,7 @@ func (m *FileManager) RemoveTemporaryFiles(
 			creator,
 			ResourceNameToFilePathName(resName))
 		if err := os.RemoveAll(fullPath); err != nil {
-			return derrors.ErrCleaningLocalTempFiles.Wrap(err)
+			return errors.ErrCleaningLocalTempFiles.Wrap(err)
 		}
 
 		log.Info("temporary resource is removed",
@@ -209,14 +208,14 @@ func (m *FileManager) RemoveResource(
 			log.Info("Trying to remove non-existing resource",
 				zap.String("creator", creator),
 				zap.String("resource-name", resName))
-			return derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
+			return errors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
 		}
-		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+		return errors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
 
 	// Note that the resourcePath is actually a directory.
 	if err := os.RemoveAll(filePath); err != nil {
-		return derrors.ErrRemovingLocalResource.Wrap(err)
+		return errors.ErrRemovingLocalResource.Wrap(err)
 	}
 
 	log.Info("Local resource has been removed",
@@ -277,7 +276,7 @@ func (m *FileManager) isPersisted(
 func iterOverResourceDirectories(path string, fn func(relPath string) error) error {
 	infos, err := os.ReadDir(path)
 	if err != nil {
-		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
+		return errors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
 
 	for _, info := range infos {
@@ -308,7 +307,7 @@ func PreCheckConfig(config resModel.LocalFileConfig) error {
 	}
 
 	if err := fsutil.IsDirReadWritable(baseDir); err != nil {
-		return derrors.ErrLocalFileDirNotWritable.GenWithStackByArgs()
+		return errors.ErrLocalFileDirNotWritable.GenWithStackByArgs()
 	}
 
 	diskInfo, err := fsutil.GetDiskInfo(baseDir)

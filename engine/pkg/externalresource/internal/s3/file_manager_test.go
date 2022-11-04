@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,7 +230,7 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fm2.GetPersistedResource(ctx, ident)
-	require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+	require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 }
 
 func TestFileManagerCleanOrRecreatePersistedResource(t *testing.T) {
