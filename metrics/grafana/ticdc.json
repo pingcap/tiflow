@@ -83,7 +83,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
-        "expr": "delta(up{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
+        "expr": "delta(up{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc|tidb|pd\"}[30s]) < BOOL 0",
         "hide": false,
         "iconColor": "#FF9830",
         "limit": 100,
@@ -13169,7 +13169,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
