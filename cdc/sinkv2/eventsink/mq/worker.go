@@ -299,7 +299,7 @@ func (w *worker) asyncSend(
 }
 
 func (w *worker) sendMessages(ctx context.Context) error {
-	responses := w.encoderGroup.Responses()
+	inputCh := w.encoderGroup.Output()
 	ticker := time.NewTicker(15 * time.Second)
 	metric := codec.EncoderGroupResponseChanSizeGauge.
 		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
@@ -313,20 +313,20 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			metric.Set(float64(len(responses)))
-		case promise, ok := <-responses:
+			metric.Set(float64(len(inputCh)))
+		case future, ok := <-inputCh:
 			if !ok {
 				log.Warn("MQ sink encode response promise channel closed",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			if err := promise.Wait(ctx); err != nil {
+			if err := future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			for _, message := range promise.Messages {
+			for _, message := range future.Messages {
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
-					if err := w.producer.AsyncSendMessage(ctx, promise.Topic, promise.Partition, message); err != nil {
+					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
 					}
 					return message.GetRowsCount(), nil

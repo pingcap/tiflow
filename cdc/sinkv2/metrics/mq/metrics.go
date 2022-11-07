@@ -29,18 +29,10 @@ var (
 				"It contains the grouping, encoding, and asynchronous sending off a batch of data.",
 			Buckets: prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
 		}, []string{"namespace", "changefeed"})
-
-	WorkerDispatchedEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "ticdc",
-		Subsystem: "sinkv2",
-		Name:      "mq_worker_dispatched_event_count",
-		Help:      "The number of events dispatched to each MQ worker.",
-	}, []string{"namespace", "changefeed", "index"})
 )
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerFlushDuration)
-	registry.MustRegister(WorkerDispatchedEventCount)
 	kafka.InitMetrics(registry)
 }

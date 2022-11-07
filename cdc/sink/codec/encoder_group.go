@@ -38,8 +38,8 @@ type EncoderGroup interface {
 	Run(ctx context.Context) error
 	// AddEvent add an event into the group, handled by one of the encoders
 	AddEvent(ctx context.Context, topic string, partition int32, event *model.RowChangedEvent, callback func()) error
-	// Responses returns a channel to receive the encoded messages
-	Responses() <-chan *responsePromise
+	// Output returns a channel produce futures
+	Output() <-chan *future
 }
 
 type encoderGroup struct {
@@ -47,10 +47,10 @@ type encoderGroup struct {
 
 	builder EncoderBuilder
 	count   int
-	inputCh []chan *responsePromise
+	inputCh []chan *future
 	index   uint64
 
-	responses chan *responsePromise
+	outputCh chan *future
 }
 
 // NewEncoderGroup creates a new EncoderGroup instance
@@ -59,26 +59,26 @@ func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.Chan
 		number = defaultEncoderGroupSize
 	}
 
-	inputCh := make([]chan *responsePromise, number)
+	inputCh := make([]chan *future, number)
 	for i := 0; i < number; i++ {
-		inputCh[i] = make(chan *responsePromise, defaultInputChanSize)
+		inputCh[i] = make(chan *future, defaultInputChanSize)
 	}
 
 	return &encoderGroup{
 		changefeedID: changefeedID,
 
-		builder:   builder,
-		count:     number,
-		inputCh:   inputCh,
-		index:     0,
-		responses: make(chan *responsePromise, defaultInputChanSize*number),
+		builder:  builder,
+		count:    number,
+		inputCh:  inputCh,
+		index:    0,
+		outputCh: make(chan *future, defaultInputChanSize*number),
 	}
 }
 
 func (g *encoderGroup) Run(ctx context.Context) error {
 	defer func() {
 		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
-		close(g.responses)
+		close(g.outputCh)
 		log.Info("encoder group exited",
 			zap.String("namespace", g.changefeedID.Namespace),
 			zap.String("changefeed", g.changefeedID.ID))
@@ -106,39 +106,39 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			return nil
 		case <-ticker.C:
 			metric.Set(float64(len(inputCh)))
-		case promise := <-inputCh:
-			if err := encoder.AppendRowChangedEvent(ctx, promise.Topic, promise.Event, promise.Callback); err != nil {
+		case future := <-inputCh:
+			if err := encoder.AppendRowChangedEvent(ctx, future.Topic, future.Event, future.Callback); err != nil {
 				return err
 			}
-			promise.Messages = encoder.Build()
-			close(promise.done)
+			future.Messages = encoder.Build()
+			close(future.done)
 		}
 	}
 }
 
 func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int32, event *model.RowChangedEvent, callback func()) error {
-	promise := newResponsePromise(topic, partition, event, callback)
+	future := newFuture(topic, partition, event, callback)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case g.inputCh[index] <- promise:
+	case g.inputCh[index] <- future:
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case g.responses <- promise:
+	case g.outputCh <- future:
 	}
 
 	return nil
 }
 
-func (g *encoderGroup) Responses() <-chan *responsePromise {
-	return g.responses
+func (g *encoderGroup) Output() <-chan *future {
+	return g.outputCh
 }
 
-type responsePromise struct {
+type future struct {
 	Topic     string
 	Partition int32
 	Event     *model.RowChangedEvent
@@ -149,8 +149,8 @@ type responsePromise struct {
 	done chan struct{}
 }
 
-func newResponsePromise(topic string, partition int32, event *model.RowChangedEvent, callback func()) *responsePromise {
-	return &responsePromise{
+func newFuture(topic string, partition int32, event *model.RowChangedEvent, callback func()) *future {
+	return &future{
 		Topic:     topic,
 		Partition: partition,
 		Event:     event,
@@ -160,8 +160,8 @@ func newResponsePromise(topic string, partition int32, event *model.RowChangedEv
 	}
 }
 
-// Wait waits until the response is ready, should be called before consume the promise.
-func (p *responsePromise) Wait(ctx context.Context) error {
+// Ready waits until the response is ready, should be called before consume the future.
+func (p *future) Ready(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
