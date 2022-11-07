@@ -4,6 +4,7 @@ package canal
 
 import (
 	json "encoding/json"
+
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
@@ -50,6 +51,7 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal(in *jlexer.Le
 		in.Consumed()
 	}
 }
+
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal(out *jwriter.Writer, in tidbExtension) {
 	out.RawByte('{')
 	first := true
@@ -96,6 +98,7 @@ func (v *tidbExtension) UnmarshalJSON(data []byte) error {
 func (v *tidbExtension) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal(l, v)
 }
+
 func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.Lexer, out *canalJSONMessageWithTiDBExtension) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
@@ -281,6 +284,7 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.L
 		in.Consumed()
 	}
 }
+
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal1(out *jwriter.Writer, in canalJSONMessageWithTiDBExtension) {
 	out.RawByte('{')
 	first := true
@@ -482,6 +486,7 @@ func (v *canalJSONMessageWithTiDBExtension) UnmarshalJSON(data []byte) error {
 func (v *canalJSONMessageWithTiDBExtension) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(l, v)
 }
+
 func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.Lexer, out *JSONMessage) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
@@ -656,6 +661,7 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.L
 		in.Consumed()
 	}
 }
+
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal2(out *jwriter.Writer, in JSONMessage) {
 	out.RawByte('{')
 	first := true

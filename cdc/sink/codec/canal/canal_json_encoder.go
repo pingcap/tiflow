@@ -166,7 +166,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 		IsDDL:         true,
 		EventType:     convertDdlEventType(e).String(),
 		ExecutionTime: convertToCanalTs(e.CommitTs),
-		BuildTime:     time.Now().UnixNano() / 1e6, // timestamp
+		BuildTime:     time.Now().UnixMilli(), // timestamp
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}

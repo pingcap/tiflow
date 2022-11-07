@@ -35,8 +35,8 @@ type canalJSONMessageInterface interface {
 	getTable() *string
 	getCommitTs() uint64
 	getQuery() string
-	getOld() map[string]interface{}
-	getData() map[string]interface{}
+	getOld() map[string]string
+	getData() map[string]string
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
 	messageType() model.MessageType
@@ -91,18 +91,18 @@ func (c *JSONMessage) getQuery() string {
 	return c.Query
 }
 
-func (c *JSONMessage) getOld() map[string]interface{} {
+func (c *JSONMessage) getOld() map[string]string {
 	if c.Old == nil {
 		return nil
 	}
-	return nil
+	return c.Old[0]
 }
 
-func (c *JSONMessage) getData() map[string]interface{} {
+func (c *JSONMessage) getData() map[string]string {
 	if c.Data == nil {
 		return nil
 	}
-	return nil
+	return c.Data[0]
 }
 
 func (c *JSONMessage) getMySQLType() map[string]string {
@@ -198,7 +198,7 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	return result, nil
 }
 
-func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
+func canalJSONColumnMap2RowChangeColumns(cols map[string]string, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
 		javaType, ok := javaSQLType[name]
