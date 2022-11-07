@@ -301,11 +301,11 @@ func (w *worker) asyncSend(
 func (w *worker) sendMessages(ctx context.Context) error {
 	inputCh := w.encoderGroup.Output()
 	ticker := time.NewTicker(15 * time.Second)
-	metric := codec.EncoderGroupResponseChanSizeGauge.
+	metric := codec.EncoderGroupOutputChanSizeGauge.
 		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	defer func() {
 		ticker.Stop()
-		codec.EncoderGroupResponseChanSizeGauge.
+		codec.EncoderGroupOutputChanSizeGauge.
 			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	}()
 	for {

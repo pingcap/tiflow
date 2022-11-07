@@ -54,13 +54,13 @@ type encoderGroup struct {
 }
 
 // NewEncoderGroup creates a new EncoderGroup instance
-func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.ChangeFeedID) *encoderGroup {
-	if number <= 0 {
-		number = defaultEncoderGroupSize
+func NewEncoderGroup(builder EncoderBuilder, count int, changefeedID model.ChangeFeedID) *encoderGroup {
+	if count <= 0 {
+		count = defaultEncoderGroupSize
 	}
 
-	inputCh := make([]chan *future, number)
-	for i := 0; i < number; i++ {
+	inputCh := make([]chan *future, count)
+	for i := 0; i < count; i++ {
 		inputCh[i] = make(chan *future, defaultInputChanSize)
 	}
 
@@ -68,10 +68,10 @@ func NewEncoderGroup(builder EncoderBuilder, number int, changefeedID model.Chan
 		changefeedID: changefeedID,
 
 		builder:  builder,
-		count:    number,
+		count:    count,
 		inputCh:  inputCh,
 		index:    0,
-		outputCh: make(chan *future, defaultInputChanSize*number),
+		outputCh: make(chan *future, defaultInputChanSize*count),
 	}
 }
 

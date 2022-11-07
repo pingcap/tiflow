@@ -8650,7 +8650,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ticdc_sink_encoder_group_response_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "expr": "ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
               "hide": false,
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}",

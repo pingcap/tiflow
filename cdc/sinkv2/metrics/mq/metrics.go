@@ -19,17 +19,15 @@ import (
 )
 
 // WorkerFlushDuration records the duration of flushing a group messages.
-var (
-	WorkerFlushDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "mq_worker_flush_duration",
-			Help: "Flush duration(s) for MQ worker. " +
-				"It contains the grouping, encoding, and asynchronous sending off a batch of data.",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
-		}, []string{"namespace", "changefeed"})
-)
+var WorkerFlushDuration = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "sinkv2",
+		Name:      "mq_worker_flush_duration",
+		Help: "Flush duration(s) for MQ worker. " +
+			"It contains the grouping, encoding, and asynchronous sending off a batch of data.",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+	}, []string{"namespace", "changefeed"})
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
