@@ -18,11 +18,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -74,24 +76,27 @@ var serviceMockData = []*resModel.ResourceMeta{
 	},
 }
 
-func newServiceTestSuite(t *testing.T) *serviceTestSuite {
+func newServiceTestSuite(t *testing.T) (
+	*serviceTestSuite, *rpcutilMock.MockFeatureChecker,
+) {
 	execPro := NewMockExecutorInfoProvider()
 	meta, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
 	id := "leader"
 	leaderVal := &atomic.Value{}
 	leaderVal.Store(&rpcutil.Member{Name: id})
+	mockFeatureChecker := rpcutilMock.NewMockFeatureChecker(gomock.NewController(t))
 	srvc := NewService(meta, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
 		id,
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		atomic.NewBool(true),
+		mockFeatureChecker,
 		&rate.Limiter{}, nil))
 	return &serviceTestSuite{
 		service:              srvc,
 		executorInfoProvider: execPro,
 		meta:                 meta,
-	}
+	}, mockFeatureChecker
 }
 
 func (s *serviceTestSuite) LoadMockData() {
@@ -108,8 +113,9 @@ func (s *serviceTestSuite) LoadMockData() {
 
 func TestServiceBasics(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
-	suite := newServiceTestSuite(t)
+	suite, mockFeatureChecker := newServiceTestSuite(t)
 	suite.LoadMockData()
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 
 	ctx := context.Background()
 	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
@@ -221,7 +227,7 @@ func TestServiceBasics(t *testing.T) {
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {
-	suite := newServiceTestSuite(t)
+	suite, _ := newServiceTestSuite(t)
 	suite.LoadMockData()
 
 	_, ok, err := suite.service.GetPlacementConstraint(context.Background(),

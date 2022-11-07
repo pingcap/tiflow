@@ -19,6 +19,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
@@ -28,6 +29,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -52,7 +54,7 @@ type mockCluster struct {
 	cancel context.CancelFunc
 }
 
-func newMockGCCluster() *mockCluster {
+func newMockGCCluster(t *testing.T) (*mockCluster, *rpcutilMock.MockFeatureChecker) {
 	meta, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
@@ -64,11 +66,12 @@ func newMockGCCluster() *mockCluster {
 	id := "leader"
 	leaderVal := &atomic.Value{}
 	leaderVal.Store(&rpcutil.Member{Name: id})
+	mockFeatureChecker := rpcutilMock.NewMockFeatureChecker(gomock.NewController(t))
 	service := manager.NewService(meta, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
 		id,
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		atomic.NewBool(true),
+		mockFeatureChecker,
 		&rate.Limiter{}, nil))
 
 	executorGroup := client.NewMockExecutorGroup()
@@ -84,7 +87,7 @@ func newMockGCCluster() *mockCluster {
 		brokers:       make(map[model.ExecutorID]*broker.DefaultBroker),
 		executorGroup: executorGroup,
 		meta:          meta,
-	}
+	}, mockFeatureChecker
 }
 
 func (c *mockCluster) Start(t *testing.T) {
