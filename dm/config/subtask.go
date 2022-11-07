@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -107,6 +108,7 @@ type DBConfig struct {
 	Security *Security `toml:"security" json:"security" yaml:"security"`
 
 	RawDBCfg *RawDBConfig `toml:"-" json:"-" yaml:"-"`
+	Net      string       `toml:"-" json:"-" yaml:"-"`
 }
 
 func (db *DBConfig) String() string {
@@ -291,6 +293,8 @@ type SubTaskConfig struct {
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
+	UUID            string                     `toml:"-" json:"-"`
+	IOBytesNumber   *atomic.Uint64             `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.

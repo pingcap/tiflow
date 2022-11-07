@@ -14,10 +14,13 @@
 package dbconn
 
 import (
+	"context"
 	"database/sql"
+	"net"
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -264,6 +267,18 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
 func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
+	if cfg.IOBytesNumber != nil {
+		mysql.RegisterDialContext(cfg.UUID, func(ctx context.Context, addr string) (net.Conn, error) {
+			d := &net.Dialer{}
+			tcpConn, err := d.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				return nil, err
+			}
+			return NewTCPConnWithIOCounter(tcpConn, cfg.IOBytesNumber), nil
+		})
+		dbCfg.Net = cfg.UUID
+	}
+
 	conns := make([]*DBConn, 0, count)
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {
