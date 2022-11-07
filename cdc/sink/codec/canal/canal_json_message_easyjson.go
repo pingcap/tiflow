@@ -4,7 +4,6 @@ package canal
 
 import (
 	json "encoding/json"
-
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
@@ -51,7 +50,6 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal(in *jlexer.Le
 		in.Consumed()
 	}
 }
-
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal(out *jwriter.Writer, in tidbExtension) {
 	out.RawByte('{')
 	first := true
@@ -98,7 +96,6 @@ func (v *tidbExtension) UnmarshalJSON(data []byte) error {
 func (v *tidbExtension) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal(l, v)
 }
-
 func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.Lexer, out *canalJSONMessageWithTiDBExtension) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
@@ -208,25 +205,31 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.L
 				in.Delim('[')
 				if out.Data == nil {
 					if !in.IsDelim(']') {
-						out.Data = make([]map[string]string, 0, 8)
+						out.Data = make([]map[string]interface{}, 0, 8)
 					} else {
-						out.Data = []map[string]string{}
+						out.Data = []map[string]interface{}{}
 					}
 				} else {
 					out.Data = (out.Data)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v4 map[string]string
+					var v4 map[string]interface{}
 					if in.IsNull() {
 						in.Skip()
 					} else {
 						in.Delim('{')
-						v4 = make(map[string]string)
+						v4 = make(map[string]interface{})
 						for !in.IsDelim('}') {
 							key := string(in.String())
 							in.WantColon()
-							var v5 string
-							v5 = string(in.String())
+							var v5 interface{}
+							if m, ok := v5.(easyjson.Unmarshaler); ok {
+								m.UnmarshalEasyJSON(in)
+							} else if m, ok := v5.(json.Unmarshaler); ok {
+								_ = m.UnmarshalJSON(in.Raw())
+							} else {
+								v5 = in.Interface()
+							}
 							(v4)[key] = v5
 							in.WantComma()
 						}
@@ -245,25 +248,31 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.L
 				in.Delim('[')
 				if out.Old == nil {
 					if !in.IsDelim(']') {
-						out.Old = make([]map[string]string, 0, 8)
+						out.Old = make([]map[string]interface{}, 0, 8)
 					} else {
-						out.Old = []map[string]string{}
+						out.Old = []map[string]interface{}{}
 					}
 				} else {
 					out.Old = (out.Old)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v6 map[string]string
+					var v6 map[string]interface{}
 					if in.IsNull() {
 						in.Skip()
 					} else {
 						in.Delim('{')
-						v6 = make(map[string]string)
+						v6 = make(map[string]interface{})
 						for !in.IsDelim('}') {
 							key := string(in.String())
 							in.WantColon()
-							var v7 string
-							v7 = string(in.String())
+							var v7 interface{}
+							if m, ok := v7.(easyjson.Unmarshaler); ok {
+								m.UnmarshalEasyJSON(in)
+							} else if m, ok := v7.(json.Unmarshaler); ok {
+								_ = m.UnmarshalJSON(in.Raw())
+							} else {
+								v7 = in.Interface()
+							}
 							(v6)[key] = v7
 							in.WantComma()
 						}
@@ -284,7 +293,6 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(in *jlexer.L
 		in.Consumed()
 	}
 }
-
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal1(out *jwriter.Writer, in canalJSONMessageWithTiDBExtension) {
 	out.RawByte('{')
 	first := true
@@ -420,7 +428,13 @@ func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal1(out *jwriter
 						}
 						out.String(string(v14Name))
 						out.RawByte(':')
-						out.String(string(v14Value))
+						if m, ok := v14Value.(easyjson.Marshaler); ok {
+							m.MarshalEasyJSON(out)
+						} else if m, ok := v14Value.(json.Marshaler); ok {
+							out.Raw(m.MarshalJSON())
+						} else {
+							out.Raw(json.Marshal(v14Value))
+						}
 					}
 					out.RawByte('}')
 				}
@@ -452,7 +466,13 @@ func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal1(out *jwriter
 						}
 						out.String(string(v17Name))
 						out.RawByte(':')
-						out.String(string(v17Value))
+						if m, ok := v17Value.(easyjson.Marshaler); ok {
+							m.MarshalEasyJSON(out)
+						} else if m, ok := v17Value.(json.Marshaler); ok {
+							out.Raw(m.MarshalJSON())
+						} else {
+							out.Raw(json.Marshal(v17Value))
+						}
 					}
 					out.RawByte('}')
 				}
@@ -486,7 +506,6 @@ func (v *canalJSONMessageWithTiDBExtension) UnmarshalJSON(data []byte) error {
 func (v *canalJSONMessageWithTiDBExtension) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal1(l, v)
 }
-
 func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.Lexer, out *JSONMessage) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
@@ -585,25 +604,31 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.L
 				in.Delim('[')
 				if out.Data == nil {
 					if !in.IsDelim(']') {
-						out.Data = make([]map[string]string, 0, 8)
+						out.Data = make([]map[string]interface{}, 0, 8)
 					} else {
-						out.Data = []map[string]string{}
+						out.Data = []map[string]interface{}{}
 					}
 				} else {
 					out.Data = (out.Data)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v21 map[string]string
+					var v21 map[string]interface{}
 					if in.IsNull() {
 						in.Skip()
 					} else {
 						in.Delim('{')
-						v21 = make(map[string]string)
+						v21 = make(map[string]interface{})
 						for !in.IsDelim('}') {
 							key := string(in.String())
 							in.WantColon()
-							var v22 string
-							v22 = string(in.String())
+							var v22 interface{}
+							if m, ok := v22.(easyjson.Unmarshaler); ok {
+								m.UnmarshalEasyJSON(in)
+							} else if m, ok := v22.(json.Unmarshaler); ok {
+								_ = m.UnmarshalJSON(in.Raw())
+							} else {
+								v22 = in.Interface()
+							}
 							(v21)[key] = v22
 							in.WantComma()
 						}
@@ -622,25 +647,31 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.L
 				in.Delim('[')
 				if out.Old == nil {
 					if !in.IsDelim(']') {
-						out.Old = make([]map[string]string, 0, 8)
+						out.Old = make([]map[string]interface{}, 0, 8)
 					} else {
-						out.Old = []map[string]string{}
+						out.Old = []map[string]interface{}{}
 					}
 				} else {
 					out.Old = (out.Old)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v23 map[string]string
+					var v23 map[string]interface{}
 					if in.IsNull() {
 						in.Skip()
 					} else {
 						in.Delim('{')
-						v23 = make(map[string]string)
+						v23 = make(map[string]interface{})
 						for !in.IsDelim('}') {
 							key := string(in.String())
 							in.WantColon()
-							var v24 string
-							v24 = string(in.String())
+							var v24 interface{}
+							if m, ok := v24.(easyjson.Unmarshaler); ok {
+								m.UnmarshalEasyJSON(in)
+							} else if m, ok := v24.(json.Unmarshaler); ok {
+								_ = m.UnmarshalJSON(in.Raw())
+							} else {
+								v24 = in.Interface()
+							}
 							(v23)[key] = v24
 							in.WantComma()
 						}
@@ -661,7 +692,6 @@ func easyjsonB5056ee2DecodeGithubComPingcapTiflowCdcSinkCodecCanal2(in *jlexer.L
 		in.Consumed()
 	}
 }
-
 func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal2(out *jwriter.Writer, in JSONMessage) {
 	out.RawByte('{')
 	first := true
@@ -788,7 +818,13 @@ func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal2(out *jwriter
 						}
 						out.String(string(v31Name))
 						out.RawByte(':')
-						out.String(string(v31Value))
+						if m, ok := v31Value.(easyjson.Marshaler); ok {
+							m.MarshalEasyJSON(out)
+						} else if m, ok := v31Value.(json.Marshaler); ok {
+							out.Raw(m.MarshalJSON())
+						} else {
+							out.Raw(json.Marshal(v31Value))
+						}
 					}
 					out.RawByte('}')
 				}
@@ -820,7 +856,13 @@ func easyjsonB5056ee2EncodeGithubComPingcapTiflowCdcSinkCodecCanal2(out *jwriter
 						}
 						out.String(string(v34Name))
 						out.RawByte(':')
-						out.String(string(v34Value))
+						if m, ok := v34Value.(easyjson.Marshaler); ok {
+							m.MarshalEasyJSON(out)
+						} else if m, ok := v34Value.(json.Marshaler); ok {
+							out.Raw(m.MarshalJSON())
+						} else {
+							out.Raw(json.Marshal(v34Value))
+						}
 					}
 					out.RawByte('}')
 				}
