@@ -289,12 +289,16 @@ type SubTaskConfig struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
-	// below member are injected by dataflow engine
+	// members below are injected by dataflow engine
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
-	UUID            string                     `toml:"-" json:"-"`
-	IOTotalBytes    *atomic.Uint64             `toml:"-" json:"-"`
+	// members below are injected by dataflow engine, UUID should be unique in
+	// one go runtime.
+	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
+	// key to let MySQL driver to find the right TCPConnWithIOCounter.
+	UUID         string         `toml:"-" json:"-"`
+	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
