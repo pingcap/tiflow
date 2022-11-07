@@ -264,6 +264,76 @@ function run() {
 	fi
 
 	export GO_FAILPOINTS=''
+
+	test_source_and_target_with_empty_gtid
+}
+
+function prepare_test_no_gtid() {
+	cleanup_process
+
+	# clean test dir
+	rm -rf $WORK_DIR
+	mkdir $WORK_DIR
+
+	# kill the old tidb
+	pkill -hup tidb-server 2>/dev/null || true
+	wait_process_exit tidb-server
+
+	# restart tidb
+	run_tidb_server 4000 $TIDB_PASSWORD
+
+	run_sql 'DROP DATABASE if exists incremental_mode;' $TIDB_PORT $TIDB_PASSWORD
+  run_sql 'DROP DATABASE if exists incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'CREATE DATABASE incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'use incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "CREATE TABLE incremental_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+  run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+}
+
+function test_source_and_target_with_empty_gtid() {
+	prepare_test_no_gtid
+	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1))
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	sed -i "s/binlog-gtid-placeholder/$uuid:0/g" $WORK_DIR/source1.yaml
+
+	cp $cur/conf/dm-master.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-task-no-gtid.yaml $WORK_DIR/
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "check master alive"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member" \
+		"\"alive\": true" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task-no-gtid.yaml --remove-meta=true" \
+		"\"result\": true" 2
+
+	run_sql 'INSERT INTO incremental_mode.t1 VALUES (1,1001);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1\
+		"\"stage\": \"Running\"" 1
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
+
+	echo "============================== test_source_and_target_with_empty_gtid success =================================="
 }
 
 cleanup_data $TEST_NAME
