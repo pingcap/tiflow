@@ -160,7 +160,7 @@ func newFuture(topic string, partition int32, event *model.RowChangedEvent, call
 	}
 }
 
-// Ready waits until the response is ready, should be called before consume the future.
+// Ready waits until the response is ready, should be called before consuming the future.
 func (p *future) Ready(ctx context.Context) error {
 	select {
 	case <-ctx.Done():

@@ -32,7 +32,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-	"encoder-concurrency": 16,
+    "encoder-concurrency": 16,
     "dispatch-rules": [
       {
         "db-name": "a",
