@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/charset"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -130,7 +131,10 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 				fmt.Errorf("the 4th column(%s) of csv row should be a valid commit-ts", datums[3].GetString()))
 		}
 		c.commitTs = commitTs
+	} else {
+		c.commitTs = 0
 	}
+	c.columns = c.columns[:0]
 
 	for i := 4; i < len(datums); i++ {
 		if datums[i].IsNull() {
@@ -223,8 +227,47 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	}
 }
 
-// convertToCSVType converts column from TiDB type to csv type.
-func convertToCSVType(col *model.Column, ft *types.FieldType) (any, error) {
+func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
+	str, ok := csvVal.(string)
+	if !ok {
+		return csvVal, nil
+	}
+
+	switch ft.GetType() {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		if ft.GetCharset() == charset.CharsetBin {
+			blob, err := base64.StdEncoding.DecodeString(str)
+			return blob, err
+		}
+		return []byte(str), nil
+	case mysql.TypeFloat:
+		val, err := strconv.ParseFloat(str, 32)
+		return val, err
+	case mysql.TypeDouble:
+		val, err := strconv.ParseFloat(str, 64)
+		return val, err
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
+		if mysql.HasUnsignedFlag(ft.GetFlag()) {
+			val, err := strconv.ParseUint(str, 10, 64)
+			return val, err
+		}
+		val, err := strconv.ParseInt(str, 10, 64)
+		return val, err
+	case mysql.TypeBit:
+		val, err := strconv.ParseUint(str, 10, 64)
+		return val, err
+	default:
+		return str, nil
+	}
+}
+
+// fromColValToCsvVal converts column from TiDB type to csv type.
+func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
+	if col.Value == nil {
+		return nil, nil
+	}
+
 	switch col.Type {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
@@ -293,7 +336,14 @@ func rowChangedEvent2CSVMsg(csvConfig *config.CSVConfig, e *model.RowChangedEven
 	return csvMsg, nil
 }
 
-func csvMsg2RowChangedEvent(csvMsg *csvMessage) *model.RowChangedEvent {
+func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.RowChangedEvent, error) {
+	var err error
+	if len(csvMsg.columns) != len(ticols) {
+		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
+			fmt.Errorf("the column length of csv message %d doesn't equal to that of tableInfo %d",
+				len(csvMsg.columns), len(ticols)))
+	}
+
 	e := new(model.RowChangedEvent)
 	e.CommitTs = csvMsg.commitTs
 	e.Table = &model.TableName{
@@ -301,12 +351,16 @@ func csvMsg2RowChangedEvent(csvMsg *csvMessage) *model.RowChangedEvent {
 		Table:  csvMsg.tableName,
 	}
 	if csvMsg.opType == operationDelete {
-		e.PreColumns = csvColumns2RowChangeColumns(csvMsg.columns)
+		e.PreColumns, err = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
 	} else {
-		e.Columns = csvColumns2RowChangeColumns(csvMsg.columns)
+		e.Columns, err = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
 	}
 
-	return e
+	if err != nil {
+		return nil, err
+	}
+
+	return e, nil
 }
 
 func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColInfo) ([]any, error) {
@@ -318,7 +372,7 @@ func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColIn
 			continue
 		}
 
-		converted, err := convertToCSVType(column, colInfos[i].Ft)
+		converted, err := fromColValToCsvVal(column, colInfos[i].Ft)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -328,28 +382,27 @@ func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColIn
 	return csvColumns, nil
 }
 
-func csvColumns2RowChangeColumns(csvCols []any) []*model.Column {
+func csvColumns2RowChangeColumns(csvCols []any, ticols []*timodel.ColumnInfo) ([]*model.Column, error) {
 	cols := make([]*model.Column, 0, len(csvCols))
-	for _, csvCol := range csvCols {
+	for idx, csvCol := range csvCols {
 		col := new(model.Column)
-		col.Charset = mysql.DefaultCharset
 
-		if str, ok := csvCol.(string); ok {
-			if blob, err := base64.StdEncoding.DecodeString(str); err == nil {
-				col.Value = blob
-				col.Charset = charset.CharsetBin
-			} else {
-				col.Value = csvCol
-			}
-		} else {
-			col.Value = csvCol
+		ticol := ticols[idx]
+		col.Type = ticol.GetType()
+		col.Charset = ticol.GetCharset()
+		col.Name = ticol.Name.O
+		if mysql.HasPriKeyFlag(ticol.GetFlag()) {
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
 		}
 
-		tp := new(types.FieldType)
-		types.DefaultTypeForValue(csvCol, tp, mysql.DefaultCharset, mysql.DefaultCollationName)
-		col.Type = tp.GetType()
+		val, err := fromCsvValToColValue(csvCol, ticol.FieldType)
+		if err != nil {
+			return cols, err
+		}
+		col.Value = val
 		cols = append(cols, col)
 	}
 
-	return cols
+	return cols, nil
 }

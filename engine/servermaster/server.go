@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -47,7 +46,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
@@ -115,7 +113,7 @@ type Server struct {
 
 	metaStoreManager MetaStoreManager
 
-	leaderInitialized atomic.Bool
+	leaderDegrader *featureDegrader
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
@@ -160,23 +158,23 @@ func NewServer(cfg *Config) (*Server, error) {
 	p2pMsgRouter := p2p.NewMessageRouter(id, cfg.AdvertiseAddr)
 
 	server := &Server{
-		id:                id,
-		cfg:               cfg,
-		leaderInitialized: *atomic.NewBool(false),
-		leader:            atomic.Value{},
-		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
-		msgService:        msgService,
-		p2pMsgRouter:      p2pMsgRouter,
-		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		metrics:           newServerMasterMetric(),
-		metaStoreManager:  NewMetaStoreManager(),
+		id:               id,
+		cfg:              cfg,
+		leaderDegrader:   newFeatureDegrader(),
+		leader:           atomic.Value{},
+		masterCli:        &rpcutil.LeaderClientWithLock[multiClient]{},
+		msgService:       msgService,
+		p2pMsgRouter:     p2pMsgRouter,
+		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:          newServerMasterMetric(),
+		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&server.leader,
 		server.masterCli,
-		&server.leaderInitialized,
+		server.leaderDegrader,
 		server.rpcLogRL,
 		masterRPCLimiterAllowList,
 	)
@@ -192,17 +190,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		return resp2, err
 	}
 
-	resp, err := s.executorManager.HandleHeartbeat(req)
-	if err == nil && resp.Err == nil {
-		for _, m := range s.elector.GetMembers() {
-			resp.Addrs = append(resp.Addrs, m.Address)
-		}
-		leader, exists := s.masterRPCHook.CheckLeader()
-		if exists {
-			resp.Leader = leader.AdvertiseAddr
-		}
-	}
-	return resp, err
+	return s.executorManager.HandleHeartbeat(req)
 }
 
 // CreateJob delegates request to leader's JobManager.CreateJob.
@@ -367,43 +355,28 @@ func (s *Server) RegisterMetaStore(
 func (s *Server) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest,
 ) (*pb.QueryMetaStoreResponse, error) {
-	getStore := func(storeID string) *pb.QueryMetaStoreResponse {
+	getStore := func(storeID string) (*pb.QueryMetaStoreResponse, error) {
 		store := s.metaStoreManager.GetMetaStore(storeID)
 		if store == nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreNotExists,
-					Message: fmt.Sprintf("store ID: %s", storeID),
-				},
-			}
+			return nil, ErrMetaStoreNotExists.GenWithStack(&MetaStoreNotExistsError{StoreID: storeID})
 		}
 		b, err := json.Marshal(store)
 		if err != nil {
-			return &pb.QueryMetaStoreResponse{
-				Err: &pb.Error{
-					Code:    pb.ErrorCode_MetaStoreSerializeFail,
-					Message: fmt.Sprintf("raw store config params: %v", store),
-				},
-			}
+			return nil, errors.Trace(err)
 		}
 
 		return &pb.QueryMetaStoreResponse{
 			Address: string(b),
-		}
+		}, nil
 	}
 
 	switch req.Tp {
 	case pb.StoreType_SystemMetaStore:
-		return getStore(FrameMetaID), nil
+		return getStore(FrameMetaID)
 	case pb.StoreType_AppMetaStore:
-		return getStore(DefaultBusinessMetaID), nil
+		return getStore(DefaultBusinessMetaID)
 	default:
-		return &pb.QueryMetaStoreResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_InvalidMetaStoreType,
-				Message: fmt.Sprintf("store type: %s", req.Tp),
-			},
-		}, nil
+		return nil, status.Errorf(codes.InvalidArgument, "unknown store type %v", req.Tp)
 	}
 }
 
@@ -413,12 +386,7 @@ func (s *Server) QueryStorageConfig(
 ) (*pb.QueryStorageConfigResponse, error) {
 	b, err := json.Marshal(s.cfg.Storage)
 	if err != nil {
-		return &pb.QueryStorageConfigResponse{
-			Err: &pb.Error{
-				Code:    pb.ErrorCode_MetaStoreSerializeFail,
-				Message: fmt.Sprintf("raw storage config params: %v", s.cfg.Storage),
-			},
-		}, nil
+		return nil, errors.Trace(err)
 	}
 	return &pb.QueryStorageConfigResponse{
 		Config: string(b),
@@ -456,30 +424,6 @@ func (s *Server) ReportExecutorWorkload(
 	return &pb.ExecWorkloadResponse{}, nil
 }
 
-// Stop and clean resources.
-// TODO: implement stop gracefully.
-func (s *Server) Stop() {
-	if s.mockGrpcServer != nil {
-		s.mockGrpcServer.Stop()
-	}
-	// in some tests this fields is not initialized
-	if s.masterCli != nil {
-		s.masterCli.Close()
-	}
-	if s.frameMetaClient != nil {
-		s.frameMetaClient.Close()
-	}
-	if s.frameworkClientConn != nil {
-		s.frameworkClientConn.Close()
-	}
-	if s.businessClientConn != nil {
-		s.businessClientConn.Close()
-	}
-	if s.executorManager != nil {
-		s.executorManager.Stop()
-	}
-}
-
 // Run the server master.
 func (s *Server) Run(ctx context.Context) error {
 	err := s.registerMetaStore(ctx)
@@ -492,23 +436,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	// resourceManagerService relies on meta store
+	s.initResourceManagerService()
+
 	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
 		return err
 	}
-
-	// executorMetaClient needs to be initialized after frameworkClientConn is initialized.
-	executorMetaClient, err := executormeta.NewClient(s.frameworkClientConn)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.executorManager = NewExecutorManagerImpl(executorMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
-
-	// ResourceManagerService should be initialized after registerMetaStore.
-	// FIXME: We should do these work inside NewServer.
-	s.initResourceManagerService()
-	s.scheduler = scheduler.NewScheduler(
-		s.executorManager,
-		s.resourceManagerService)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -852,9 +785,38 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		IsLeader:      true,
 	})
 	defer func() {
-		s.leaderInitialized.Store(false)
+		s.leaderDegrader.reset()
 		s.leader.Store(&rpcutil.Member{})
 	}()
+
+	// The following member variables are used in leader only and released after
+	// the leader is resigned, so initialize these variables in this function,
+	// instead of initializing them in the NewServer or Server.Run
+
+	// executorMetaClient needs to be initialized after frameMetaClient is initialized.
+	s.executorManager = NewExecutorManagerImpl(s.frameMetaClient, s.cfg.KeepAliveTTL, s.cfg.KeepAliveInterval)
+
+	// ResourceManagerService should be initialized after registerMetaStore.
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return s.executorManager.Run(errgCtx)
+	})
+
+	errg.Go(func() error {
+		updater := executorInfoUpdater{
+			msgRouter:     s.p2pMsgRouter,
+			executorGroup: executorClients,
+		}
+		return serverutil.WatchExecutors(errgCtx, s.executorManager, updater)
+	})
+
+	s.leaderDegrader.updateExecutorManager(true)
 
 	dctx = dctx.WithDeps(dp)
 	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID, s.cfg.JobBackoff)
@@ -872,22 +834,11 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, executorClients, &s.cfg.Storage)
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
-	// TODO refactor this method to make it more readable and maintainable.
-	errg, errgCtx := errgroup.WithContext(ctx)
-
 	errg.Go(func() error {
 		return s.gcRunner.Run(errgCtx)
 	})
 	errg.Go(func() error {
 		return s.gcCoordinator.Run(errgCtx)
-	})
-
-	errg.Go(func() error {
-		defer func() {
-			s.executorManager.Stop()
-			log.Info("executor manager exited")
-		}()
-		return s.executorManager.Start(errgCtx)
 	})
 
 	errg.Go(func() error {
@@ -911,15 +862,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	})
 
-	errg.Go(func() error {
-		updater := executorInfoUpdater{
-			msgRouter:     s.p2pMsgRouter,
-			executorGroup: executorClients,
-		}
-		return serverutil.WatchExecutors(errgCtx, s.executorManager, updater)
-	})
-
-	s.leaderInitialized.Store(true)
+	s.leaderDegrader.updateMasterWorkerManager(true)
 	log.Info("leader is initialized", zap.Duration("took", time.Since(start)))
 
 	return errg.Wait()

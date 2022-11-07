@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/charset"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -759,7 +761,7 @@ func TestCSVMessageEncode(t *testing.T) {
 func TestConvertToCSVType(t *testing.T) {
 	for _, group := range csvTestColumnsGroup {
 		for _, c := range group {
-			val, _ := convertToCSVType(&c.col, c.colInfo.Ft)
+			val, _ := fromColValToCsvVal(&c.col, c.colInfo.Ft)
 			require.Equal(t, c.want, val, c.col.Name)
 		}
 	}
@@ -798,7 +800,22 @@ func TestRowChangeEventConversion(t *testing.T) {
 		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
 
-		row2 := csvMsg2RowChangedEvent(csvMsg)
+		ticols := make([]*timodel.ColumnInfo, 0)
+		for _, col := range cols {
+			ticol := &timodel.ColumnInfo{
+				Name:      timodel.NewCIStr(col.Name),
+				FieldType: *types.NewFieldType(col.Type),
+			}
+			if col.Flag.IsBinary() {
+				ticol.SetCharset(charset.CharsetBin)
+			} else {
+				ticol.SetCharset(mysql.DefaultCharset)
+			}
+			ticols = append(ticols, ticol)
+		}
+
+		row2, err := csvMsg2RowChangedEvent(csvMsg, ticols)
+		require.Nil(t, err)
 		require.NotNil(t, row2)
 	}
 }

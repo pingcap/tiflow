@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -115,6 +115,20 @@ func (rl *rpcLimiter) Allow(methodName string) bool {
 	return rl.limiter.Allow()
 }
 
+// ErrMasterNotReady is returned when master is not ready.
+var ErrMasterNotReady = rpcerror.Normalize[MasterNotReadyError]()
+
+// MasterNotReadyError indicates that the master is not ready.
+type MasterNotReadyError struct {
+	rpcerror.Error[rpcerror.Retryable, rpcerror.Unavailable]
+}
+
+// FeatureChecker defines an interface that checks whether a feature is available
+// or under degradation.
+type FeatureChecker interface {
+	Available(name string) bool
+}
+
 // PreRPCHook provides some common functionality that should be executed before
 // some RPC, like "forward to leader", "checking rate limit". It should be embedded
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
@@ -137,8 +151,8 @@ type preRPCHookImpl[T RPCClientType] struct {
 	leader    *atomic.Value // should be a Member
 	leaderCli *LeaderClientWithLock[T]
 
-	// check server initialized
-	initialized *atomic.Bool
+	// check feature of server is available
+	featureChecker FeatureChecker
 
 	// rate limiter
 	limiter *rpcLimiter
@@ -149,17 +163,17 @@ func NewPreRPCHook[T RPCClientType](
 	id string,
 	leader *atomic.Value,
 	leaderCli *LeaderClientWithLock[T],
-	initialized *atomic.Bool,
+	featureChecker FeatureChecker,
 	limiter *rate.Limiter,
 	rpcLimiterAllowList []string,
 ) PreRPCHook {
 	rpcLim := newRPCLimiter(limiter, rpcLimiterAllowList)
 	return &preRPCHookImpl[T]{
-		id:          id,
-		leader:      leader,
-		leaderCli:   leaderCli,
-		initialized: initialized,
-		limiter:     rpcLim,
+		id:             id,
+		leader:         leader,
+		leaderCli:      leaderCli,
+		featureChecker: featureChecker,
+		limiter:        rpcLim,
 	}
 }
 
@@ -168,8 +182,8 @@ func NewPreRPCHook[T RPCClientType](
 //     the `req` argument must fit with the caller of PreRPC which is an RPC.
 //     the `respPointer` argument must be a pointer to the response and the response
 //     must fit with the caller of PreRPC which is an RPC.
-//   - check if the server is initialized
-//   - rate limit
+//   - check if the feature is initialized by method name.
+//   - rate limit.
 //
 // TODO: we can build a (req type -> resp type) map at compile time, to avoid passing
 // in respPointer.
@@ -189,8 +203,10 @@ func (h preRPCHookImpl[T]) PreRPC(
 		return
 	}
 
-	shouldRet, err = h.checkInitialized(respPointer)
-	return
+	if !h.featureChecker.Available(methodName) {
+		return true, ErrMasterNotReady.GenWithStack(&MasterNotReadyError{})
+	}
+	return false, nil
 }
 
 func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
@@ -198,23 +214,6 @@ func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
 	if h.limiter.Allow(methodName) {
 		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
-}
-
-func (h preRPCHookImpl[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
-	if h.initialized.Load() {
-		return false, nil
-	}
-
-	respStruct := reflect.ValueOf(respPointer).Elem().Elem()
-	errField := respStruct.FieldByName("Err")
-	if !errField.IsValid() {
-		return true, errors.ErrMasterNotInitialized.GenWithStackByArgs()
-	}
-
-	errField.Set(reflect.ValueOf(&pb.Error{
-		Code: pb.ErrorCode_MasterNotReady,
-	}))
-	return true, nil
 }
 
 func (h preRPCHookImpl[T]) forwardToLeader(

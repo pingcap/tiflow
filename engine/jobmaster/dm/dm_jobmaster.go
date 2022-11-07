@@ -16,7 +16,6 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -49,10 +48,6 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
-	// taskID -> FinishedTaskStatus
-	// worker exists after finished, so we need record the finished status for QueryJobStatus
-	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
-	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -182,7 +177,6 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 		return err
 	}
 
-	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
@@ -216,7 +210,26 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	taskStatus := finishedTaskStatus.TaskStatus
-	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
+
+	finishedStateStore := jm.metadata.FinishedStateStore()
+	err := finishedStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.FinishedState) error {
+		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
+			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
+			if status.Unit == taskStatus.Unit {
+				state.FinishedUnitStatus[taskStatus.Task][i] = &finishedTaskStatus
+				state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:i+1]
+				return nil
+			}
+		}
+		state.FinishedUnitStatus[taskStatus.Task] = append(
+			state.FinishedUnitStatus[taskStatus.Task], &finishedTaskStatus,
+		)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
@@ -399,6 +412,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
+		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
@@ -406,9 +420,11 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
+			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
+			return ctx.Err()
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
+				jm.Logger().Info("all worker are offline, will exit")
 				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
@@ -438,7 +454,7 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if err != nil {
 		// put cluster info for new job
 		// TODO: better error handling by error code.
-		if err.Error() == "state not found" {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
 			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
 			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
 		}

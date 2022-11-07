@@ -143,4 +143,7 @@ func TestValidateAndAdjust(t *testing.T) {
 	cfg.SyncPointInterval = time.Second * 30
 	cfg.SyncPointRetention = time.Minute * 10
 	require.Error(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.Sink.EncoderConcurrency = -1
+	require.Error(t, cfg.ValidateAndAdjust(nil))
 }

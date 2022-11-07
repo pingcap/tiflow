@@ -48,8 +48,8 @@ func WithForceNoRetry() CallOption {
 }
 
 // NewCall creates a new Call.
-func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), ReqT any, RespT any](f F,
-	req ReqT, ops ...CallOption,
+func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), ReqT any, RespT any](
+	f F, req ReqT, ops ...CallOption,
 ) *Call[ReqT, RespT, F] {
 	opts := &callerOpts{}
 

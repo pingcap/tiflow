@@ -76,8 +76,8 @@ func NewBroker(
 	client client.ServerMasterClient,
 ) (*DefaultBroker, error) {
 	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
-	if err != nil || resp.Err != nil {
-		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp.Err))
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
 	}
 	var storageConfig resModel.Config
 	err = json.Unmarshal([]byte(resp.Config), &storageConfig)
@@ -170,8 +170,10 @@ func (b *DefaultBroker) OpenStorage(
 	var desc internal.ResourceDescriptor
 	if !exists {
 		desc, err = b.createResource(ctx, fm, projectInfo, workerID, resName)
+	} else if !options.cleanBeforeOpen {
+		desc, err = b.getPersistResource(ctx, fm, record, resName)
 	} else {
-		desc, err = b.getPersistResource(ctx, fm, record, resName, options)
+		desc, err = b.cleanOrRecreatePersistResource(ctx, fm, record, resName)
 	}
 	if err != nil {
 		return nil, err
@@ -330,7 +332,6 @@ func (b *DefaultBroker) getPersistResource(
 	ctx context.Context, fm internal.FileManager,
 	record *resModel.ResourceMeta,
 	resName resModel.ResourceName,
-	options *openStorageOptions,
 ) (internal.ResourceDescriptor, error) {
 	ident := internal.ResourceIdent{
 		Name: resName,
@@ -340,23 +341,27 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	var desc internal.ResourceDescriptor
-
-	if options.cleanBeforeOpen {
-		err := fm.RemoveResource(ctx, ident)
-		// LocalFileManager may return ErrResourceDoesNotExist, which can be
-		// ignored because the resource no longer exists.
-		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
-			return nil, err
-		}
-		desc, err = fm.CreateResource(ctx, ident)
-		if err != nil {
-			return nil, err
-		}
-		return desc, nil
-	}
-
 	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func (b *DefaultBroker) cleanOrRecreatePersistResource(
+	ctx context.Context, fm internal.FileManager,
+	record *resModel.ResourceMeta,
+	resName resModel.ResourceName,
+) (internal.ResourceDescriptor, error) {
+	ident := internal.ResourceIdent{
+		Name: resName,
+		ResourceScope: internal.ResourceScope{
+			ProjectInfo: tenant.NewProjectInfo("", record.ProjectID),
+			Executor:    record.Executor, /* executor id where the resource is persisted */
+			WorkerID:    record.Worker,   /* creator id*/
+		},
+	}
+	desc, err := fm.CleanOrRecreatePersistedResource(ctx, ident)
 	if err != nil {
 		return nil, err
 	}

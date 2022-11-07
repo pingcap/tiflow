@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -59,8 +60,15 @@ type worker struct {
 	msgChan *chann.Chann[mqEvent]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
+
+	// builder is used to build encoders
+	builder codec.EncoderBuilder
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
+	// encoderGroup only support non batch encode protocol at the moment.
+	encoderGroup       codec.EncoderGroup
+	encoderConcurrency int
+
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 	// metricMQWorkerFlushDuration is the metric of the flush duration.
@@ -74,7 +82,8 @@ type worker struct {
 func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
-	encoder codec.EventBatchEncoder,
+	builder codec.EncoderBuilder,
+	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
 ) *worker {
@@ -83,7 +92,9 @@ func newWorker(
 		protocol:                    protocol,
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
-		encoder:                     encoder,
+		builder:                     builder,
+		encoder:                     builder.Build(),
+		encoderConcurrency:          encoderConcurrency,
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -106,7 +117,19 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	if w.protocol.IsBatchEncode() {
 		return w.batchEncodeRun(ctx)
 	}
-	return w.nonBatchEncodeRun(ctx)
+
+	w.encoderGroup = codec.NewEncoderGroup(w.builder, w.encoderConcurrency, w.changeFeedID)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return w.encoderGroup.Run(ctx)
+	})
+	g.Go(func() error {
+		return w.nonBatchEncodeRun(ctx)
+	})
+	g.Go(func() error {
+		return w.sendMessages(ctx)
+	})
+	return g.Wait()
 }
 
 // Directly send the message to the producer.
@@ -122,36 +145,22 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case event, ok := <-w.msgChan.Out():
 			if !ok {
-				log.Warn("MQ sink flush worker channel closed")
+				log.Warn("MQ sink flush worker channel closed",
+					zap.String("namespace", w.changeFeedID.Namespace),
+					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			// Skip this event when the table is stopping.
 			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
 				event.rowEvent.Callback()
-				log.Debug("Skip event of stopped table", zap.Any("event", event))
+				log.Debug("Skip event of stopped table",
+					zap.String("namespace", w.changeFeedID.Namespace),
+					zap.String("changefeed", w.changeFeedID.ID),
+					zap.Any("event", event))
 				continue
 			}
-			start := time.Now()
-			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
-				event.rowEvent.Event, event.rowEvent.Callback)
-			if err != nil {
-				return err
+			if err := w.encoderGroup.AddEvent(ctx, event.key.Topic, event.key.Partition, event.rowEvent.Event, event.rowEvent.Callback); err != nil {
+				return errors.Trace(err)
 			}
-			w.statistics.ObserveRows(event.rowEvent.Event)
-			for _, message := range w.encoder.Build() {
-				err := w.statistics.RecordBatchExecution(func() (int, error) {
-					err := w.producer.AsyncSendMessage(ctx, event.key.Topic, event.key.Partition, message)
-					if err != nil {
-						return 0, err
-					}
-					return message.GetRowsCount(), nil
-				})
-				if err != nil {
-					return err
-				}
-			}
-			duration := time.Since(start)
-			w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
 		}
 	}
 }
@@ -287,6 +296,48 @@ func (w *worker) asyncSend(
 	}
 
 	return nil
+}
+
+func (w *worker) sendMessages(ctx context.Context) error {
+	inputCh := w.encoderGroup.Output()
+	ticker := time.NewTicker(15 * time.Second)
+	metric := codec.EncoderGroupOutputChanSizeGauge.
+		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	defer func() {
+		ticker.Stop()
+		codec.EncoderGroupOutputChanSizeGauge.
+			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			metric.Set(float64(len(inputCh)))
+		case future, ok := <-inputCh:
+			if !ok {
+				log.Warn("MQ sink encode output channel closed",
+					zap.String("namespace", w.changeFeedID.Namespace),
+					zap.String("changefeed", w.changeFeedID.ID))
+				return nil
+			}
+			start := time.Now()
+			if err := future.Ready(ctx); err != nil {
+				return errors.Trace(err)
+			}
+			for _, message := range future.Messages {
+				if err := w.statistics.RecordBatchExecution(func() (int, error) {
+					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
+						return 0, err
+					}
+					return message.GetRowsCount(), nil
+				}); err != nil {
+					return err
+				}
+			}
+			w.metricMQWorkerFlushDuration.Observe(time.Since(start).Seconds())
+		}
+	}
 }
 
 func (w *worker) close() {
