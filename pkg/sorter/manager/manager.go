@@ -129,6 +129,7 @@ func (f *EventSortEngineManager) startMetricsCollector() {
 	ticker := time.NewTicker(metricsCollectInterval)
 	go func() {
 		defer f.wg.Done()
+		defer ticker.Stop()
 		for {
 			select {
 			case <-f.closed:
