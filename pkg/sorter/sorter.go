@@ -67,7 +67,7 @@ type EventSortEngine interface {
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
-	// NOTE: It's only available if IsTableBased returns true.
+	// NOTE: It's only available if IsTableBased returns false.
 	CleanAllTables(upperBound Position) error
 
 	// Close closes the engine. All data written by this instance can be deleted.
