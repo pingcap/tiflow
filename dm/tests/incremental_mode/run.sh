@@ -283,11 +283,11 @@ function prepare_test_no_gtid() {
 	run_tidb_server 4000 $TIDB_PASSWORD
 
 	run_sql 'DROP DATABASE if exists incremental_mode;' $TIDB_PORT $TIDB_PASSWORD
-  run_sql 'DROP DATABASE if exists incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'DROP DATABASE if exists incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'use incremental_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql "CREATE TABLE incremental_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
-  run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 }
 
 function test_source_and_target_with_empty_gtid() {
