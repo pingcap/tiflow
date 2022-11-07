@@ -43,5 +43,23 @@ create table t7 (id int key);
 create table t8 (id int key, foreign key (id) references t5 (id) on delete restrict on update restrict);
 drop table t7, t8;
 
+-- Test for cascade delete.
+create table t9 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);
+insert into t9 values (1, 'boss', null), (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1);
+insert into t9 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10);
+insert into t9 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11);
+insert into t9 values (120, 'l2_c1', 12), (121, 'l2_c2', 12), (122, 'l2_c3', 12);
+insert into t9 values (1000,'l3_a1', 100);
+delete from t9 where id=1;
+
+-- Test ddl add foreign key.
+create table t10 (id int key, b int, index(b));
+create table t11 (id int key, b int);
+insert into t10 values (1,1),(2,2),(3,3);
+insert into t11 values (1,1),(2,2),(3,3);
+alter table t11 add foreign key (b) references t10(id) on delete cascade on update cascade;
+delete from t10 where id=1;
+update t10 set id=id+10 where id=2;
+
 create table finish_mark (id int PRIMARY KEY);
 
