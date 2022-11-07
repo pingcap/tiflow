@@ -36,9 +36,20 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
+<<<<<<< HEAD
 	Sink: &SinkConfig{},
 	Cyclic: &CyclicConfig{
 		Enable: false,
+=======
+	Sink: &SinkConfig{
+		CSVConfig: &CSVConfig{
+			Quote:      string(DoubleQuoteChar),
+			Delimiter:  string(Comma),
+			Terminator: string(LF),
+			NullString: NULL,
+		},
+		EncoderConcurrency: 16,
+>>>>>>> 0ad56ca659 (mq(ticdc): introduce encoder group and encode pipeline to improve mq throughput. (#7463))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

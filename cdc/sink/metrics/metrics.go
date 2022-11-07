@@ -14,6 +14,7 @@
 package metrics
 
 import (
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -129,4 +130,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
+	codec.InitMetrics(registry)
 }

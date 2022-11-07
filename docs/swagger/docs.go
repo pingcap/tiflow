@@ -756,6 +756,9 @@ var doc = `{
                         "$ref": "#/definitions/config.DispatchRule"
                     }
                 },
+                "encoder-concurrency": {
+                    "type": "integer"
+                },
                 "protocol": {
                     "type": "string"
                 },

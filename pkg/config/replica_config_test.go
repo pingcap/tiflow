@@ -118,3 +118,25 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.Equal(t, "p1", rules[1].PartitionRule)
 	require.Equal(t, "", rules[2].PartitionRule)
 }
+<<<<<<< HEAD
+=======
+
+func TestValidateAndAdjust(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	require.False(t, cfg.EnableSyncPoint)
+	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.EnableSyncPoint = true
+	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.SyncPointInterval = time.Second * 29
+	require.Error(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.SyncPointInterval = time.Second * 30
+	cfg.SyncPointRetention = time.Minute * 10
+	require.Error(t, cfg.ValidateAndAdjust(nil))
+
+	cfg.Sink.EncoderConcurrency = -1
+	require.Error(t, cfg.ValidateAndAdjust(nil))
+}
+>>>>>>> 0ad56ca659 (mq(ticdc): introduce encoder group and encode pipeline to improve mq throughput. (#7463))

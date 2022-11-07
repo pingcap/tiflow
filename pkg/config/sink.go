@@ -62,6 +62,7 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
+<<<<<<< HEAD
 	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
@@ -69,6 +70,71 @@ type SinkConfig struct {
 	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
 }
 
+=======
+	DispatchRules      []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	CSVConfig          *CSVConfig        `toml:"csv" json:"csv"`
+	Protocol           string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors    []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry     string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity       AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	EncoderConcurrency int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
+}
+
+// CSVConfig defines a series of configuration items for csv codec.
+type CSVConfig struct {
+	Delimiter       string `toml:"delimiter" json:"delimiter"`
+	Quote           string `toml:"quote" json:"quote"`
+	Terminator      string `toml:"terminator" json:"terminator"`
+	NullString      string `toml:"null" json:"null"`
+	DateSeparator   string `toml:"date-separator" json:"date-separator"`
+	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
+}
+
+// DateSeparator specifies the date separator in storage destination path
+type DateSeparator int
+
+// Enum types of DateSeparator
+const (
+	DateSeparatorNone DateSeparator = iota
+	DateSeparatorYear
+	DateSeparatorMonth
+	DateSeparatorDay
+)
+
+// FromString converts the separator from string to DateSeperator enum type.
+func (d *DateSeparator) FromString(separator string) error {
+	switch strings.ToLower(separator) {
+	case "none":
+		*d = DateSeparatorNone
+	case "year":
+		*d = DateSeparatorYear
+	case "month":
+		*d = DateSeparatorMonth
+	case "day":
+		*d = DateSeparatorDay
+	default:
+		return cerror.ErrStorageSinkInvalidDateSeparator.GenWithStackByArgs(separator)
+	}
+
+	return nil
+}
+
+func (d DateSeparator) String() string {
+	switch d {
+	case DateSeparatorNone:
+		return "none"
+	case DateSeparatorYear:
+		return "year"
+	case DateSeparatorMonth:
+		return "month"
+	case DateSeparatorDay:
+		return "day"
+	default:
+		return "unknown"
+	}
+}
+
+>>>>>>> 0ad56ca659 (mq(ticdc): introduce encoder group and encode pipeline to improve mq throughput. (#7463))
 // DispatchRule represents partition rule for a table.
 type DispatchRule struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
@@ -117,6 +183,63 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
+<<<<<<< HEAD
+=======
+	if s.EncoderConcurrency < 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
+	}
+
+	if s.CSVConfig != nil {
+		return s.validateAndAdjustCSVConfig()
+	}
+
+	return nil
+}
+
+func (s *SinkConfig) validateAndAdjustCSVConfig() error {
+	// validate quote
+	if len(s.CSVConfig.Quote) > 1 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote contains more than one character"))
+	}
+	if len(s.CSVConfig.Quote) == 1 {
+		quote := s.CSVConfig.Quote[0]
+		if quote == CR || quote == LF {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote cannot be line break character"))
+		}
+	}
+
+	// validate delimiter
+	if len(s.CSVConfig.Delimiter) == 0 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter cannot be empty"))
+	}
+	if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
+		strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter contains line break characters"))
+	}
+	if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	// validate terminator
+	if len(s.CSVConfig.Terminator) == 0 {
+		s.CSVConfig.Terminator = CRLF
+	}
+
+	// validate date separator
+	if len(s.CSVConfig.DateSeparator) > 0 {
+		var separator DateSeparator
+		if err := separator.FromString(s.CSVConfig.DateSeparator); err != nil {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+		}
+	}
+
+>>>>>>> 0ad56ca659 (mq(ticdc): introduce encoder group and encode pipeline to improve mq throughput. (#7463))
 	return nil
 }
 
