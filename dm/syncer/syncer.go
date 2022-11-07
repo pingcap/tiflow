@@ -799,6 +799,14 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 			}
 		}
 	}
+	for i, opt := range createStmt.Options {
+		if opt.Tp == ast.TableOptionPlacementPolicy {
+			// createStmt.Options is unordered
+			createStmt.Options[i] = createStmt.Options[len(createStmt.Options)-1]
+			createStmt.Options = createStmt.Options[:len(createStmt.Options)-1]
+			break
+		}
+	}
 
 	var newCreateSQLBuilder strings.Builder
 	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)

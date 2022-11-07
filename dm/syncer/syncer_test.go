@@ -1764,6 +1764,53 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	c.Assert(ti, DeepEquals, ti2)
 }
 
+func (s *testSyncerSuite) TestDownstreamTableHasPlacementRule(c *C) {
+	syncer := Syncer{}
+	ctx := context.Background()
+	tctx := tcontext.Background()
+
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	dbConn, err := db.Conn(ctx)
+	c.Assert(err, IsNil)
+	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
+	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
+	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
+	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	c.Assert(err, IsNil)
+
+	schemaName := "test"
+	tableName := "tbl"
+	table := &filter.Table{
+		Schema: "test",
+		Name:   "tbl",
+	}
+
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	// create table t (c bigint primary key auto_random);
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow(tableName, " CREATE TABLE `"+tableName+"` (\n  `c` bigint(20) NOT NULL,\n  PRIMARY KEY (`c`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin /*T![placement] PLACEMENT POLICY=`on_ssd` */"))
+
+	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(schemaName), IsNil)
+	c.Assert(syncer.trackTableInfoFromDownstream(tctx, table, table), IsNil)
+	ti, err := syncer.getTableInfo(tctx, table, table)
+	c.Assert(err, IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+
+	c.Assert(syncer.schemaTracker.DropTable(table), IsNil)
+	sql := "create table tbl (c bigint primary key);"
+	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, sql), IsNil)
+	ti2, err := syncer.getTableInfo(tctx, table, table)
+	c.Assert(err, IsNil)
+
+	ti.ID = ti2.ID
+	ti.UpdateTS = ti2.UpdateTS
+
+	c.Assert(ti, DeepEquals, ti2)
+}
+
 func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
