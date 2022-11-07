@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tidb/util/memory"
@@ -43,6 +44,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -430,7 +432,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 
-	s.grpcSrv = grpc.NewServer()
+	s.grpcSrv = grpc.NewServer(
+		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
+		grpc.ChainUnaryInterceptor(
+			grpcprometheus.UnaryServerInterceptor,
+			rpcutil.UnaryServerInterceptor,
+		),
+	)
 	err = s.startMsgService(ctx, wg)
 	if err != nil {
 		return err
