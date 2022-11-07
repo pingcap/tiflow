@@ -239,7 +239,7 @@ func (s *EventSorter) Close() error {
 
 // Next implements sorter.EventIterator.
 func (s *EventIter) Next() (event *model.PolymorphicEvent, pos sorter.Position, err error) {
-	var valid bool = s.iter != nil && s.iter.Valid()
+	bool := s.iter != nil && s.iter.Valid()
 	var value []byte = nil
 	for valid {
 		value, valid = s.iter.Value(), s.iter.Next()
