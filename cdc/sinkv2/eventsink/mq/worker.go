@@ -316,7 +316,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			metric.Set(float64(len(inputCh)))
 		case future, ok := <-inputCh:
 			if !ok {
-				log.Warn("MQ sink encode response promise channel closed",
+				log.Warn("MQ sink encode output channel closed",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
