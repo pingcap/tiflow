@@ -189,7 +189,7 @@ func TestExecutorTombstoneCleaned(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	_, err = group.GetExecutorClientB(ctx, "executor-1")
-	require.True(t, errors.Is(err, errors.ErrTombstoneExecutor))
+	require.True(t, errors.Is(err, errors.ErrExecutorNotFound))
 }
 
 func TestGetExecutorBCanceled(t *testing.T) {
