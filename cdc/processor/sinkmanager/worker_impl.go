@@ -83,13 +83,9 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			lastCommitTs := uint64(0)
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
-			// We have to get the latest barrier ts, this is because the barrier ts may be updated.
+			// We have to get the latest value, this is because the barrier ts or resolved ts may be updated.
 			// We always want to get the latest value.
-			currentBarrierTs := task.upperBarrierTs.Load()
-			upperBound := sorter.Position{
-				StartTs:  currentBarrierTs - 1,
-				CommitTs: currentBarrierTs,
-			}
+			upperBound := task.upperBarrierTsGetter()
 
 			// Two functions to simplify the code.
 			// It captures some variables in the outer scope.

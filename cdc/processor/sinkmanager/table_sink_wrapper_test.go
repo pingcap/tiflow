@@ -47,7 +47,7 @@ func createTableSinkWrapper() *tableSinkWrapper {
 		changefeedID,
 		tableID,
 		innerTableSink,
-		&tableState,
+		tableState,
 		100,
 	)
 	return wrapper
