@@ -106,7 +106,7 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 	return string(cfg), nil
 }
 
-// UnmarshalJSON unmarshal into *ReplicationConfig from json marshal byte slice
+// UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	// The purpose of casting ReplicaConfig to replicaConfig is to avoid recursive calls UnmarshalJSON,
 	// resulting in stack overflow

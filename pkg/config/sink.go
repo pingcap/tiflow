@@ -191,6 +191,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
+	if s.EncoderConcurrency < 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
+	}
+
 	if s.CSVConfig != nil {
 		return s.validateAndAdjustCSVConfig()
 	}
