@@ -102,7 +102,7 @@ type Position struct {
 
 // Valid indicates whether the position is valid or not.
 func (p Position) Valid() bool {
-	return p.StartTs != 0 && p.CommitTs != 0
+	return p.CommitTs != 0
 }
 
 // Next can only be called on a valid Position.
