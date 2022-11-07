@@ -267,14 +267,20 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
 func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
-	if cfg.IOBytesNumber != nil {
+	if cfg.IOTotalBytes != nil {
 		mysql.RegisterDialContext(cfg.UUID, func(ctx context.Context, addr string) (net.Conn, error) {
 			d := &net.Dialer{}
-			tcpConn, err := d.DialContext(ctx, "tcp", addr)
+			conn, err := d.DialContext(ctx, "tcp", addr)
 			if err != nil {
 				return nil, err
 			}
-			return NewTCPConnWithIOCounter(tcpConn, cfg.IOBytesNumber), nil
+			tcpConn := conn.(*net.TCPConn)
+			// try https://github.com/go-sql-driver/mysql/blob/bcc459a906419e2890a50fc2c99ea6dd927a88f2/connector.go#L56-L64
+			err = tcpConn.SetKeepAlive(true)
+			if err != nil {
+				tctx.L().Warn("set TCP keep alive failed", zap.Error(err))
+			}
+			return NewTCPConnWithIOCounter(tcpConn, cfg.IOTotalBytes), nil
 		})
 		dbCfg.Net = cfg.UUID
 	}

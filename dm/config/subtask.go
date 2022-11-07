@@ -294,7 +294,7 @@ type SubTaskConfig struct {
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
 	UUID            string                     `toml:"-" json:"-"`
-	IOBytesNumber   *atomic.Uint64             `toml:"-" json:"-"`
+	IOTotalBytes    *atomic.Uint64             `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.

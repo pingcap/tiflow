@@ -99,19 +99,17 @@ func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (
 	return value, nil
 }
 
-var _ net.Conn = &TCPConnWithIOCounter{}
-
 // TCPConnWithIOCounter is a wrapper of net.TCPConn with counter that accumulates
 // the bytes this connection reads/writes.
 type TCPConnWithIOCounter struct {
-	net.TCPConn
+	*net.TCPConn
 	c *atomic.Uint64
 }
 
 // NewTCPConnWithIOCounter creates a new TCPConnWithIOCounter.
-func NewTCPConnWithIOCounter(conn net.Conn, c *atomic.Uint64) net.Conn {
+func NewTCPConnWithIOCounter(conn *net.TCPConn, c *atomic.Uint64) net.Conn {
 	return &TCPConnWithIOCounter{
-		TCPConn: *conn.(*net.TCPConn),
+		TCPConn: conn,
 		c:       c,
 	}
 }
