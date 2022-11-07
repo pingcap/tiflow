@@ -132,6 +132,37 @@ func (m *FileManager) GetPersistedResource(
 	return desc, nil
 }
 
+// CleanOrRecreatePersistedResource cleans the s3 directory or recreates placeholder
+// file of the given resource.
+// Note that CleanOrRecreatePersistedResource will work on any executor for any persisted resource.
+func (m *FileManager) CleanOrRecreatePersistedResource(
+	ctx context.Context, ident internal.ResourceIdent,
+) (internal.ResourceDescriptor, error) {
+	desc, err := m.GetPersistedResource(ctx, ident)
+	if internal.ErrResourceFilesNotFound.Is(err) {
+		desc := newResourceDescriptor(ident, m.storageFactory)
+		storage, err := desc.ExternalStorage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := createPlaceholderFile(ctx, storage); err != nil {
+			return nil, err
+		}
+		return desc, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, true))
+	if err != nil {
+		return nil, err
+	}
+
+	return desc, nil
+}
+
 // RemoveTemporaryFiles removes all temporary resources (those that are not persisted).
 // It can only be used to clean up resources created by the local executor.
 func (m *FileManager) RemoveTemporaryFiles(
@@ -198,7 +229,7 @@ func (m *FileManager) RemoveResource(
 	log.Info("Removing resource",
 		zap.Any("ident", ident))
 
-	err := m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name))
+	err := m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, false))
 	if err != nil {
 		return err
 	}

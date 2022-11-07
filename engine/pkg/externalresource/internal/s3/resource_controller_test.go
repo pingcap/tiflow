@@ -118,7 +118,7 @@ func TestS3ResourceController(t *testing.T) {
 	checkWorker(workers[2], false)
 
 	// test GCExecutor
-	fm1 := newFileManagerForUTFromSharedStorageFactory("leader-controller", factory)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("leader-controller", factory)
 	controller := &resourceController{fm: fm1}
 	gcExecutor := func() {
 		err := controller.GCExecutor(ctx, persistedResMetas, MockExecutorID)
