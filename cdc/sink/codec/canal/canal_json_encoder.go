@@ -47,7 +47,7 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 		builder: newCanalEntryBuilder(),
 		messageHolder: &JSONMessage{
 			// for Data field, no matter event type, always be filled with only one item.
-			Data: make([]map[string]interface{}, 1),
+			Data: make([]map[string]string, 1),
 		},
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
@@ -68,11 +68,11 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, fillTypes bool) (map[string]interface{}, error) {
+	filling := func(columns []*model.Column, fillTypes bool) (map[string]string, error) {
 		if len(columns) == 0 {
 			return nil, nil
 		}
-		data := make(map[string]interface{}, len(columns))
+		data := make(map[string]string, len(columns))
 		for _, col := range columns {
 			if col != nil {
 				mysqlType := getMySQLType(col)
@@ -90,7 +90,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 				}
 
 				if col.Value == nil {
-					data[col.Name] = nil
+					data[col.Name] = ""
 				} else {
 					data[col.Name] = value
 				}
@@ -136,7 +136,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 		baseMessage.Data[0] = data
 	} else if e.IsUpdate() {
 		baseMessage.Data[0] = data
-		baseMessage.Old = []map[string]interface{}{oldData}
+		baseMessage.Old = []map[string]string{oldData}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
@@ -218,16 +218,28 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err := c.newJSONMessageForDML(e); err != nil {
 		return errors.Trace(err)
 	}
-
-	value, err := json.Marshal(c.messageHolder)
+	var value []byte
+	var err error
+	if !c.enableTiDBExtension {
+		value, err = c.messageHolder.(*JSONMessage).MarshalJSON()
+	} else {
+		value, err = c.messageHolder.(*canalJSONMessageWithTiDBExtension).MarshalJSON()
+	}
 	if err != nil {
 		log.Panic("JSONBatchEncoder", zap.Error(err))
 		return nil
 	}
-	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
-		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
+	m := &common.Message{
+		Key:      nil,
+		Value:    value,
+		Ts:       e.CommitTs,
+		Schema:   c.messageHolder.getSchema(),
+		Table:    c.messageHolder.getTable(),
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolCanalJSON,
+		Callback: callback,
+	}
 	m.IncRowsCount()
-	m.Callback = callback
 
 	c.messages = append(c.messages, m)
 	return nil

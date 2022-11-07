@@ -88,7 +88,6 @@ func NewResolvedMsg(proto config.Protocol, key, value []byte, ts uint64) *Messag
 }
 
 // NewMsg should be used when creating a Message struct.
-// It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMsg(
 	proto config.Protocol,
 	key []byte,
