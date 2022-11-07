@@ -53,6 +53,7 @@ type EventSorter struct {
 	tables     map[model.TableID]*tableState
 }
 
+// EventIter implements sorter.EventIterator.
 type EventIter struct {
 	tableID  model.TableID
 	iter     *pebble.Iterator
@@ -60,6 +61,7 @@ type EventIter struct {
 	serde    encoding.MsgPackGenSerde
 }
 
+// New creates an EventSorter instance.
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
@@ -77,10 +79,10 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 
 	for i := range eventSorter.dbs {
 		eventSorter.wg.Add(1)
-		go func() {
+		go func(x int) {
 			defer eventSorter.wg.Done()
-			eventSorter.handleEvents(i)
-		}()
+			eventSorter.handleEvents(dbs[x], channs[x].Out())
+		}(i)
 	}
 
 	return eventSorter
@@ -285,10 +287,7 @@ type tableState struct {
 	cleaned sorter.Position
 }
 
-func (s *EventSorter) handleEvents(offset int) {
-	db := s.dbs[offset]
-	inputCh := s.channs[offset].Out()
-
+func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
 	newResolved := make(map[model.TableID]model.Ts)

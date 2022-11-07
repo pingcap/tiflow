@@ -47,7 +47,7 @@ func TestTableOperations(t *testing.T) {
 	require.Panics(t, func() { s.RemoveTable(1) })
 }
 
-// TestNoResolvedTs tests resolved timestamps shouldn't be emited.
+// TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
 func TestNoResolvedTs(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
 	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
