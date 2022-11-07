@@ -68,6 +68,8 @@ type JSONMessage struct {
 	Old  []map[string]interface{} `json:"old"`
 	// Used internally by canalJSONBatchEncoder
 	tikvTs uint64
+
+	jsonData []byte
 }
 
 func (c *JSONMessage) getTikvTs() uint64 {
