@@ -321,6 +321,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
+			start := time.Now()
 			if err := future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
@@ -334,6 +335,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					return err
 				}
 			}
+			w.metricMQWorkerFlushDuration.Observe(float64(time.Since(start).Seconds()))
 		}
 	}
 }
