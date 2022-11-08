@@ -251,6 +251,12 @@ func (w *worker) group(
 ) map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
 	partitionedRows := make(map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
 	for _, event := range events {
+		// Skip this event when the table is stopping.
+		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+			event.rowEvent.Callback()
+			log.Debug("Skip event of stopped table", zap.Any("event", event.rowEvent))
+			continue
+		}
 		if _, ok := partitionedRows[event.key]; !ok {
 			partitionedRows[event.key] = make([]*eventsink.RowChangeCallbackableEvent, 0)
 		}
@@ -265,19 +271,11 @@ func (w *worker) asyncSend(
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
 ) error {
 	for key, events := range partitionedRows {
-		rowsCount := 0
 		for _, event := range events {
-			// Skip this event when the table is stopping.
-			if event.GetTableSinkState() != state.TableSinkSinking {
-				event.Callback()
-				log.Debug("Skip event of stopped table", zap.Any("event", event))
-				continue
-			}
 			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
 			if err != nil {
 				return err
 			}
-			rowsCount++
 			w.statistics.ObserveRows(event.Event)
 		}
 
