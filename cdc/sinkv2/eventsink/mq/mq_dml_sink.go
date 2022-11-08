@@ -23,7 +23,6 @@ import (
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
-	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -53,9 +52,6 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-
-	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.EncoderBuilder
 }
 
 func newSink(ctx context.Context,
@@ -63,6 +59,7 @@ func newSink(ctx context.Context,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
+	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -71,18 +68,16 @@ func newSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoder := encoderBuilder.Build()
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	w := newWorker(changefeedID, encoderConfig.Protocol, encoder, producer, statistics)
-
+	worker := newWorker(changefeedID, encoderConfig.Protocol,
+		encoderBuilder, encoderConcurrency, producer, statistics)
 	s := &dmlSink{
-		id:             changefeedID,
-		protocol:       encoderConfig.Protocol,
-		worker:         w,
-		eventRouter:    eventRouter,
-		topicManager:   topicManager,
-		encoderBuilder: encoderBuilder,
+		id:           changefeedID,
+		protocol:     encoderConfig.Protocol,
+		worker:       worker,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
@@ -93,9 +88,10 @@ func newSink(ctx context.Context,
 				return
 			case errCh <- err:
 			default:
-				log.Error("Error channel is full in DML sink", zap.Error(err),
+				log.Error("Error channel is full in DML sink",
 					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
+					zap.String("changefeed", changefeedID.ID),
+					zap.Error(err))
 			}
 		}
 	}()

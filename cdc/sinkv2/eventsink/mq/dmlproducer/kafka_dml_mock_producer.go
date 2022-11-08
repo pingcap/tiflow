@@ -55,6 +55,8 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 	}
 	m.events[key] = append(m.events[key], message)
 
+	message.Callback()
+
 	return nil
 }
 

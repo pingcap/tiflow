@@ -77,7 +77,7 @@ function run() {
 	echo "finish prepare_data"
 
 	# we will check metrics, so don't clean metrics
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/DontUnregister=return()'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/DontUnregister=return();github.com/pingcap/tiflow/dm/syncer/IOTotalBytes=return("uuid")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -98,10 +98,10 @@ function run() {
 		"\"estimateTotalRows\"" 1
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 499 501
+	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 $(($TABLE_NUM - 1)) $(($TABLE_NUM + 1))
 
 	run_sql_tidb "select count(*) from dm_meta.test_syncer_checkpoint"
-	check_contains "count(*): 501"
+	check_contains "count(*): $(($TABLE_NUM + 1))"
 
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004: Transaction is too large'
 
@@ -127,6 +127,8 @@ function run() {
 	echo "finish incremental_data"
 	echo "check diff 1" # to check data are synchronized after 'ALTER TABLE' command
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# should contain some lines have non-zero IOTotalBytes
+	grep 'IOTotal' $WORK_DIR/worker1/log/dm-worker.log | grep -v 'IOTotalBytes=0'
 
 	run_sql "INSERT INTO many_tables_db.t1 (i, j) VALUES (1, 1001);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql "INSERT INTO many_tables_db.t2 (i, j) VALUES (2, 2002);" $MYSQL_PORT1 $MYSQL_PASSWORD1
