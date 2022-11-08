@@ -61,13 +61,7 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
-	// builder is used to build encoders
-	builder codec.EncoderBuilder
-	// encoder is used to encode the messages.
-	encoder codec.EventBatchEncoder
-	// encoderGroup only support non batch encode protocol at the moment.
-	encoderGroup       codec.EncoderGroup
-	encoderConcurrency int
+	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
@@ -92,9 +86,7 @@ func newWorker(
 		protocol:                    protocol,
 		msgChan:                     chann.New[mqEvent](),
 		ticker:                      time.NewTicker(flushInterval),
-		builder:                     builder,
-		encoder:                     builder.Build(),
-		encoderConcurrency:          encoderConcurrency,
+		encoderGroup:                codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
@@ -114,16 +106,15 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("protocol", w.protocol.String()),
 		)
 	}()
-	if w.protocol.IsBatchEncode() {
-		return w.batchEncodeRun(ctx)
-	}
 
-	w.encoderGroup = codec.NewEncoderGroup(w.builder, w.encoderConcurrency, w.changeFeedID)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return w.encoderGroup.Run(ctx)
 	})
 	g.Go(func() error {
+		if w.protocol.IsBatchEncode() {
+			return w.batchEncodeRun(ctx)
+		}
 		return w.nonBatchEncodeRun(ctx)
 	})
 	g.Go(func() error {
@@ -158,7 +149,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.Any("event", event))
 				continue
 			}
-			if err := w.encoderGroup.AddEvent(ctx, event.key.Topic, event.key.Partition, event.rowEvent.Event, event.rowEvent.Callback); err != nil {
+			if err := w.encoderGroup.AddEvents(ctx, event.key.Topic, event.key.Partition, event.rowEvent); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -175,7 +166,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
-		start := time.Now()
+		//start := time.Now()
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
@@ -188,12 +179,11 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		msgs := eventsBuf[:endIndex]
 		partitionedRows := w.group(msgs)
 
-		err = w.asyncSend(ctx, partitionedRows)
-		if err != nil {
-			return errors.Trace(err)
+		for key, events := range partitionedRows {
+			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {
+				return errors.Trace(err)
+			}
 		}
-		duration := time.Since(start)
-		w.metricMQWorkerFlushDuration.Observe(duration.Seconds())
 	}
 }
 
@@ -263,37 +253,6 @@ func (w *worker) group(
 		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvent)
 	}
 	return partitionedRows
-}
-
-// asyncSend is responsible for sending messages to the DML producer.
-func (w *worker) asyncSend(
-	ctx context.Context,
-	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
-) error {
-	for key, events := range partitionedRows {
-		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
-			if err != nil {
-				return err
-			}
-			w.statistics.ObserveRows(event.Event)
-		}
-
-		for _, message := range w.encoder.Build() {
-			err := w.statistics.RecordBatchExecution(func() (int, error) {
-				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
-				if err != nil {
-					return 0, err
-				}
-				return message.GetRowsCount(), nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func (w *worker) sendMessages(ctx context.Context) error {

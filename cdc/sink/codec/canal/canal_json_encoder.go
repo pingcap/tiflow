@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -192,6 +193,10 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 		},
 		Extensions: &tidbExtension{WatermarkTs: ts},
 	}
+}
+
+func (c *JSONBatchEncoder) AppendBatchedRowChangedEvents(ctx context.Context, topic string, events []*eventsink.RowChangeCallbackableEvent) error {
+	return nil
 }
 
 // EncodeCheckpointEvent implements the EventJSONBatchEncoder interface
