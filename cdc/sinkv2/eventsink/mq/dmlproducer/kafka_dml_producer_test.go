@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"

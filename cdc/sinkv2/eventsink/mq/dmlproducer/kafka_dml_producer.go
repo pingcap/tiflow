@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

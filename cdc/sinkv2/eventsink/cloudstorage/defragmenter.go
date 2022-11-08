@@ -14,7 +14,7 @@ package cloudstorage
 
 import (
 	"github.com/google/btree"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 )
 
 // defragmenter is used to handle event fragments which can be registered

@@ -16,7 +16,7 @@ package producer
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 )
 
 // Producer is an interface of mq producer

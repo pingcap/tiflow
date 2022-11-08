@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/csv"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
