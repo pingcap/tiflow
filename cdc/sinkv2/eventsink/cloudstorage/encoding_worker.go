@@ -31,8 +31,9 @@ type encodingWorker struct {
 	changeFeedID model.ChangeFeedID
 	wg           sync.WaitGroup
 	encoder      codec.EventBatchEncoder
-	writer       *dmlWriter
 	isClosed     uint64
+	inputCh      *chann.Chann[eventFragment]
+	defragmenter *defragmenter
 	errCh        chan<- error
 }
 
@@ -40,19 +41,21 @@ func newEncodingWorker(
 	workerID int,
 	changefeedID model.ChangeFeedID,
 	encoder codec.EventBatchEncoder,
-	writer *dmlWriter,
+	inputCh *chann.Chann[eventFragment],
+	defragmenter *defragmenter,
 	errCh chan<- error,
 ) *encodingWorker {
 	return &encodingWorker{
 		id:           workerID,
 		changeFeedID: changefeedID,
 		encoder:      encoder,
-		writer:       writer,
+		inputCh:      inputCh,
+		defragmenter: defragmenter,
 		errCh:        errCh,
 	}
 }
 
-func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFragment]) {
+func (w *encodingWorker) run(ctx context.Context) {
 	w.wg.Add(1)
 	go func() {
 		log.Debug("encoding worker started", zap.Int("workerID", w.id),
@@ -63,7 +66,7 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 			select {
 			case <-ctx.Done():
 				return
-			case frag, ok := <-msgChan.Out():
+			case frag, ok := <-w.inputCh.Out():
 				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
 					return
 				}
@@ -97,7 +100,8 @@ func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) e
 
 	msgs := w.encoder.Build()
 	frag.encodedMsgs = msgs
-	w.writer.dispatchFragToDMLWorker(frag)
+	w.defragmenter.registerFrag(frag)
+
 	return nil
 }
 

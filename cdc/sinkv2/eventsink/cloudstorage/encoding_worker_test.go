@@ -18,18 +18,16 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
 
-func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
+func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, func()) {
 	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
@@ -42,19 +40,21 @@ func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
 	errCh := make(chan error, 10)
 	changefeedID := model.DefaultChangeFeedID("test-encode")
 
-	bs, err := storage.ParseBackend(uri, &storage.BackendOptions{})
-	require.Nil(t, err)
-	storage, err := storage.New(ctx, bs, nil)
-	require.Nil(t, err)
-	cfg := cloudstorage.NewConfig()
-	dmlWriter := newDMLWriter(ctx, changefeedID, storage, cfg, ".json", errCh)
-	worker := newEncodingWorker(1, changefeedID, encoder, dmlWriter, errCh)
-	return worker
+	msgCh := chann.New[eventFragment]()
+	defragmenter := newDefragmenter(ctx)
+	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter, errCh)
+	return worker, func() {
+		msgCh.Close()
+		for range msgCh.Out() {
+		}
+		defragmenter.close()
+	}
 }
 
 func TestEncodeEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	worker := testEncodingWorker(ctx, t)
+	worker, fn := testEncodingWorker(ctx, t)
+	defer fn()
 	err := worker.encodeEvents(ctx, eventFragment{
 		versionedTable: versionedTable{
 			TableName: model.TableName{
@@ -100,14 +100,13 @@ func TestEncodeEvents(t *testing.T) {
 	})
 	require.Nil(t, err)
 	cancel()
-	worker.writer.close()
 }
 
 func TestEncodingWorkerRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	worker := testEncodingWorker(ctx, t)
-	msgCh := chann.New[eventFragment]()
-	worker.run(ctx, msgCh)
+	worker, fn := testEncodingWorker(ctx, t)
+	defer fn()
+	worker.run(ctx)
 	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
@@ -144,13 +143,8 @@ func TestEncodingWorkerRun(t *testing.T) {
 				Event: event,
 			},
 		}
-		msgCh.In() <- frag
+		worker.inputCh.In() <- frag
 	}
 	cancel()
 	worker.close()
-	worker.writer.close()
-	msgCh.Close()
-	for range msgCh.Out() {
-		// drain the msgCh
-	}
 }

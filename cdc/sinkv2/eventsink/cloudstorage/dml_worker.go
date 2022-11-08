@@ -39,8 +39,8 @@ type dmlWorker struct {
 	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
-	// defragmenters maintains a mapping of <table, defragmenter>.
-	defragmenters sync.Map
+	// tableEvents maintains a mapping of <table, []eventFragment>.
+	tableEvents *tableEventsMap
 	// fileIndex maintains a mapping of <table, index number>.
 	fileIndex map[versionedTable]uint64
 	// fileSize maintains a mapping of <table, file size>.
@@ -49,6 +49,17 @@ type dmlWorker struct {
 	isClosed  uint64
 	errCh     chan<- error
 	extension string
+}
+
+type tableEventsMap struct {
+	mu        sync.Mutex
+	fragments map[versionedTable][]eventFragment
+}
+
+func newTableEventsMap() *tableEventsMap {
+	return &tableEventsMap{
+		fragments: make(map[versionedTable][]eventFragment),
+	}
 }
 
 // flushTask defines a task containing the tables to be flushed.
@@ -70,6 +81,7 @@ func newDMLWorker(
 		storage:       storage,
 		config:        config,
 		flushNotifyCh: make(chan flushTask, 1),
+		tableEvents:   newTableEventsMap(),
 		fileIndex:     make(map[versionedTable]uint64),
 		fileSize:      make(map[versionedTable]uint64),
 		extension:     extension,
@@ -82,7 +94,7 @@ func newDMLWorker(
 // run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	d.backgroundFlushMsgs(ctx)
-	d.backgroundDispatchMsgs(ctx, ch)
+	d.backgroundDispatchTasks(ctx, ch)
 }
 
 // backgroundFlushMsgs flush messages from active tables to cloud storage.
@@ -104,25 +116,20 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 				for _, table := range task.targetTables {
 					buf.Reset()
 					var callbacks []func()
-					v, ok := d.defragmenters.Load(table)
-					if !ok {
-						log.Panic("failed to load defragmenter for table",
-							zap.Int("workerID", d.id),
-							zap.String("namespace", d.changeFeedID.ID),
-							zap.String("changefeed", d.changeFeedID.ID),
-							zap.String("schema", table.Schema),
-							zap.String("table", table.Table),
-						)
-					}
-					defrag := v.(*defragmenter)
-					msgs := defrag.reassmebleFrag()
-					if len(msgs) == 0 {
+					d.tableEvents.mu.Lock()
+					events := d.tableEvents.fragments[table]
+					d.tableEvents.fragments[table] = d.tableEvents.fragments[table][:0]
+					d.tableEvents.mu.Unlock()
+					if len(events) == 0 {
 						continue
 					}
 
-					for _, msg := range msgs {
-						buf.Write(msg.Value)
-						callbacks = append(callbacks, msg.Callback)
+					for _, frag := range events {
+						msgs := frag.encodedMsgs
+						for _, msg := range msgs {
+							buf.Write(msg.Value)
+							callbacks = append(callbacks, msg.Callback)
+						}
 					}
 
 					path := d.generateCloudStoragePath(table)
@@ -150,9 +157,10 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 	}()
 }
 
-// backgroundDispatchMsgs dispatch eventFragment to each table's defragmenter,
-// and it periodically emits flush tasks.
-func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
+// backgroundDispatchTasks dispatches flush tasks in two conditions:
+// 1. the flush interval exceeds the upper limit.
+// 2. the file size exceeds the upper limit.
+func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	tableSet := make(map[versionedTable]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
@@ -197,13 +205,11 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 					return
 				}
 				table := frag.versionedTable
-				if _, ok := d.defragmenters.Load(table); !ok {
-					d.defragmenters.Store(table, newDefragmenter())
-				}
-				v, _ := d.defragmenters.Load(table)
-				defrag := v.(*defragmenter)
+				d.tableEvents.mu.Lock()
+				d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
+				d.tableEvents.mu.Unlock()
+
 				tableSet[table] = struct{}{}
-				defrag.registerFrag(frag)
 				for _, msg := range frag.encodedMsgs {
 					if msg.Value != nil {
 						d.fileSize[table] += uint64(len(msg.Value))

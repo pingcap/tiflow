@@ -29,7 +29,7 @@ import (
 )
 
 func TestDeframenter(t *testing.T) {
-	defrag := newDefragmenter()
+	defrag := newDefragmenter(context.Background())
 	uri := "file:///tmp/test"
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
@@ -52,53 +52,62 @@ func TestDeframenter(t *testing.T) {
 	})
 
 	for i := 0; i < txnCnt; i++ {
-		encoder := encoderBuilder.Build()
-		seq := seqNumbers[i]
-		frag := eventFragment{
-			versionedTable: versionedTable{
-				TableName: model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
+		go func(seq uint64) {
+			encoder := encoderBuilder.Build()
+			frag := eventFragment{
+				versionedTable: versionedTable{
+					TableName: model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 				},
-			},
-			seqNumber: seq,
-			event: &eventsink.TxnCallbackableEvent{
-				Event: &model.SingleTableTxn{},
-			},
-		}
-
-		rand.Seed(time.Now().UnixNano())
-		n := 1 + rand.Intn(1000)
-		for j := 0; j < n; j++ {
-			row := &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
-				},
-				Columns: []*model.Column{
-					{Name: "c1", Value: j + 1},
-					{Name: "c2", Value: "hello world"},
+				seqNumber: seq,
+				event: &eventsink.TxnCallbackableEvent{
+					Event: &model.SingleTableTxn{},
 				},
 			}
-			frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-			encoder.AppendRowChangedEvent(ctx, "", row, nil)
-		}
-		frag.encodedMsgs = encoder.Build()
 
-		for _, msg := range frag.encodedMsgs {
-			msg.Key = []byte(strconv.Itoa(int(seq)))
-		}
-		defrag.registerFrag(frag)
+			rand.Seed(time.Now().UnixNano())
+			n := 1 + rand.Intn(1000)
+			for j := 0; j < n; j++ {
+				row := &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
+					Columns: []*model.Column{
+						{Name: "c1", Value: j + 1},
+						{Name: "c2", Value: "hello world"},
+					},
+				}
+				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
+				encoder.AppendRowChangedEvent(ctx, "", row, nil)
+			}
+			frag.encodedMsgs = encoder.Build()
+
+			for _, msg := range frag.encodedMsgs {
+				msg.Key = []byte(strconv.Itoa(int(seq)))
+			}
+			defrag.registerFrag(frag)
+		}(uint64(i + 1))
 	}
 
-	msgs := defrag.reassmebleFrag()
 	prevSeq := 0
-	for _, msg := range msgs {
-		curSeq, err := strconv.Atoi(string(msg.Key))
-		require.Nil(t, err)
-		require.GreaterOrEqual(t, curSeq, prevSeq)
-		prevSeq = curSeq
+LOOP:
+	for {
+		select {
+		case frag := <-defrag.orderedOut().Out():
+			for _, msg := range frag.encodedMsgs {
+				curSeq, err := strconv.Atoi(string(msg.Key))
+				require.Nil(t, err)
+				require.GreaterOrEqual(t, curSeq, prevSeq)
+				prevSeq = curSeq
+			}
+		case <-time.After(5 * time.Second):
+			break LOOP
+		}
 	}
+	defrag.close()
 }
