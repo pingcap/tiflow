@@ -3,6 +3,7 @@
 # parameter 2: job config
 # parameter 3: tenant id
 # parameter 4: project id
+# parameter 5: selectors
 
 set -eu
 
@@ -10,6 +11,7 @@ job_type=${1}
 job_config=${2}
 tenant_id=""
 project_id=""
+selectors="[]"
 
 if [ $# -ge 3 ]; then
 	tenant_id=${3}
@@ -17,10 +19,14 @@ fi
 if [ $# -ge 4 ]; then
 	project_id=${4}
 fi
+if [ $# -ge 5 ]; then
+	selectors=${5}
+fi
 
 echo -e "\ncreate job using: $job_config \n" >/dev/stderr
 config=$(base64 -i ${job_config} | tr -d \\n)
-create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" '{ type: $TYPE, config: $CONFIG }')
+create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+	'{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
 echo -e "\ncreate_job_json: $create_job_json \n" >/dev/stderr
 
 job_id=""
