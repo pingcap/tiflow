@@ -34,6 +34,7 @@ const (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
+	MemoryQuota:        DefaultChangefeedMemoryQuota,
 	CaseSensitive:      true,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
@@ -49,7 +50,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Sink: &SinkConfig{
 		CSVConfig: &CSVConfig{
 			Quote:      string(DoubleQuoteChar),
-			Delimiter:  string(Comma),
+			Delimiter:  Comma,
 			Terminator: string(LF),
 			NullString: NULL,
 		},
@@ -84,6 +85,7 @@ func (d *Duration) UnmarshalText(text []byte) error {
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
+	MemoryQuota        uint64            `toml:"memory-quota" json:"memory-quota"`
 	CaseSensitive      bool              `toml:"case-sensitive" json:"case-sensitive"`
 	EnableOldValue     bool              `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate     bool              `toml:"force-replicate" json:"force-replicate"`
