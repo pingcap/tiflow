@@ -110,6 +110,14 @@ func init() {
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
+
+	// register dsg sink
+    sinkIniterMap["rowsocket"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+        filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+    ) (Sink, error) {
+        return dsg.NewDsgSink(ctx,opts,sinkURI,filter)
+    }
+    sinkIniterMap["rowsocket+ssl"] = sinkIniterMap["rowsocket"]
 }
 
 // New creates a new sink with the sink-uri
