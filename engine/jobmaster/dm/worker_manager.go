@@ -380,7 +380,6 @@ func (wm *WorkerManager) createWorker(
 					Unit:        unit,
 					Task:        taskID,
 					CreatedTime: time.Now(),
-					// we don't care about the Stage and CfgModRevision here
 				}
 			} else {
 				if status.Unit != unit {
