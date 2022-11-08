@@ -16,39 +16,47 @@ package csv
 import (
 	"bytes"
 	"context"
-	"errors"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
-	valueBuf    *bytes.Buffer
-	callbackBuf []func()
-	batchSize   int
-	csvConfig   *config.CSVConfig
+	valueBuf  *bytes.Buffer
+	callback  func()
+	batchSize int
+	csvConfig *config.CSVConfig
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
-func (b *BatchEncoder) AppendRowChangedEvent(_ context.Context, _ string, events []*interface{}) error {
+// AppendRowChangedEvents implements the EventBatchEncoder interface
+func (b *BatchEncoder) AppendRowChangedEvents(_ context.Context, _ string, events []*eventsink.RowChangeCallbackableEvent) error {
+	return nil
+}
+
+// AppendTxnEvent implements the EventBatchEncoder interface
+func (b *BatchEncoder) AppendTxnEvent(txn *eventsink.TxnCallbackableEvent) error {
 	if b.csvConfig == nil {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("no csv config provided"))
 	}
 
-	row, err := rowChangedEvent2CSVMsg(b.csvConfig, e)
-	if err != nil {
-		return err
+	for _, e := range txn.Event.Rows {
+		row, err := rowChangedEvent2CSVMsg(b.csvConfig, e)
+		if err != nil {
+			return err
+		}
+		b.valueBuf.Write(row.encode())
+		b.batchSize++
 	}
-	b.valueBuf.Write(row.encode())
-	b.batchSize++
-	if callback != nil {
-		b.callbackBuf = append(b.callbackBuf, callback)
-	}
+
+	b.callback = txn.Callback
+
 	return nil
 }
 
@@ -70,25 +78,16 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 
 	ret := common.NewMsg(config.ProtocolCsv, nil, b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(b.batchSize)
-	if len(b.callbackBuf) != 0 {
-		callbacks := b.callbackBuf
-		ret.Callback = func() {
-			for _, cb := range callbacks {
-				cb()
-			}
-		}
-		b.valueBuf.Reset()
-		b.callbackBuf = make([]func(), 0)
-	}
+	ret.Callback = b.callback
+	b.callback = nil
 	return []*common.Message{ret}
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.
 func newBatchEncoder(config *config.CSVConfig) codec.EventBatchEncoder {
 	return &BatchEncoder{
-		csvConfig:   config,
-		valueBuf:    &bytes.Buffer{},
-		callbackBuf: make([]func(), 0),
+		csvConfig: config,
+		valueBuf:  &bytes.Buffer{},
 	}
 }
 

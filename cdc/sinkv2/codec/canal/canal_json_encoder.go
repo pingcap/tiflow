@@ -235,6 +235,11 @@ func (c *JSONBatchEncoder) AppendRowChangedEvents(
 	return nil
 }
 
+// AppendTxnEvent is no-op for ow
+func (c *JSONBatchEncoder) AppendTxnEvent(txn *eventsink.TxnCallbackableEvent) error {
+	return nil
+}
+
 // Build implements the EventJSONBatchEncoder interface
 // Build should be called immediately after call AppendRowChangedEvent
 func (c *JSONBatchEncoder) Build() []*common.Message {

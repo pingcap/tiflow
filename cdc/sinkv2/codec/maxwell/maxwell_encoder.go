@@ -62,6 +62,11 @@ func (d *BatchEncoder) AppendRowChangedEvents(
 	return nil
 }
 
+// AppendTxnEvent is no-op for ow
+func (d *BatchEncoder) AppendTxnEvent(txn *eventsink.TxnCallbackableEvent) error {
+	return nil
+}
+
 // EncodeDDLEvent implements the EventBatchEncoder interface
 // DDL message unresolved tso
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {

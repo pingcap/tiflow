@@ -34,6 +34,8 @@ type EventBatchEncoder interface {
 	// AppendRowChangedEvents appends multiple messages to the encoder, should be called before
 	// call the build method to build message.
 	AppendRowChangedEvents(context.Context, string, []*eventsink.RowChangeCallbackableEvent) error
+	// AppendTxnEvent append a txn event to the encoder, should be called before build the message.
+	AppendTxnEvent(txn *eventsink.TxnCallbackableEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error)
 	// Build builds the batch and returns the bytes of key and value.
