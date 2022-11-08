@@ -53,6 +53,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Terminator: string(LF),
 			NullString: NULL,
 		},
+		EncoderConcurrency: 16,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
