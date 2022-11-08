@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
-	craft2 "github.com/pingcap/tiflow/cdc/sinkv2/codec/craft"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/craft"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
-	open2 "github.com/pingcap/tiflow/cdc/sinkv2/codec/open"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/open"
 	"github.com/pingcap/tiflow/proto/benchmark"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,7 @@ var (
 	codecPB1EncodedRowChanges   = []*common.Message{}
 	codecPB2EncodedRowChanges   = []*common.Message{}
 
-	codecTestSliceAllocator = craft2.NewSliceAllocator(512)
+	codecTestSliceAllocator = craft.NewSliceAllocator(512)
 )
 
 func checkCompressedSize(messages []*common.Message) (int, int) {
@@ -69,14 +69,14 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := craft2.NewBatchEncoder()
-		craftEncoder.(*craft2.BatchEncoder).MaxMessageBytes = 8192
-		craftEncoder.(*craft2.BatchEncoder).MaxBatchSize = 64
+		craftEncoder := craft.NewBatchEncoder()
+		craftEncoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+		craftEncoder.(*craft.BatchEncoder).MaxBatchSize = 64
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := open2.NewBatchEncoder()
-		jsonEncoder.(*open2.BatchEncoder).MaxMessageBytes = 8192
-		jsonEncoder.(*open2.BatchEncoder).MaxBatchSize = 64
+		jsonEncoder := open.NewBatchEncoder()
+		jsonEncoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+		jsonEncoder.(*open.BatchEncoder).MaxBatchSize = 64
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -115,7 +115,7 @@ func codecEncodeColumnPB(column *model.Column) *benchmark.Column {
 		Name:  column.Name,
 		Type:  uint32(column.Type),
 		Flag:  uint32(column.Flag),
-		Value: craft2.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value),
+		Value: craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value),
 	}
 }
 
@@ -186,7 +186,7 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 		converted.Name[i] = column.Name
 		converted.Type[i] = uint32(column.Type)
 		converted.Flag[i] = uint32(column.Flag)
-		converted.Value[i] = craft2.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value)
+		converted.Value[i] = craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value)
 	}
 	return converted
 }
@@ -220,16 +220,16 @@ func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChan
 
 func init() {
 	var err error
-	encoder := craft2.NewBatchEncoder()
-	encoder.(*craft2.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*craft2.BatchEncoder).MaxBatchSize = 64
+	encoder := craft.NewBatchEncoder()
+	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
 	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 
-	encoder = open2.NewBatchEncoder()
-	encoder.(*open2.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*open2.BatchEncoder).MaxBatchSize = 64
+	encoder = open.NewBatchEncoder()
+	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*open.BatchEncoder).MaxBatchSize = 64
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
@@ -238,19 +238,19 @@ func init() {
 }
 
 func BenchmarkCraftEncoding(b *testing.B) {
-	allocator := craft2.NewSliceAllocator(128)
-	encoder := craft2.NewBatchEncoderWithAllocator(allocator)
-	encoder.(*craft2.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*craft2.BatchEncoder).MaxBatchSize = 64
+	allocator := craft.NewSliceAllocator(128)
+	encoder := craft.NewBatchEncoderWithAllocator(allocator)
+	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	encoder := open2.NewBatchEncoder()
-	encoder.(*open2.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*open2.BatchEncoder).MaxBatchSize = 64
+	encoder := open.NewBatchEncoder()
+	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*open.BatchEncoder).MaxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
@@ -269,10 +269,10 @@ func BenchmarkProtobuf2Encoding(b *testing.B) {
 }
 
 func BenchmarkCraftDecoding(b *testing.B) {
-	allocator := craft2.NewSliceAllocator(128)
+	allocator := craft.NewSliceAllocator(128)
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecCraftEncodedRowChanges {
-			if decoder, err := craft2.NewBatchDecoderWithAllocator(
+			if decoder, err := craft.NewBatchDecoderWithAllocator(
 				message.Value, allocator); err != nil {
 				panic(err)
 			} else {
@@ -293,7 +293,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := open2.NewBatchDecoder(message.Key, message.Value); err != nil {
+			if decoder, err := open.NewBatchDecoder(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {
@@ -317,7 +317,7 @@ func codecDecodeRowChangedPB1(columns []*benchmark.Column) []*model.Column {
 
 	result := make([]*model.Column, len(columns))
 	for i, column := range columns {
-		value, _ := craft2.DecodeTiDBType(byte(column.Type), model.ColumnFlagType(column.Flag), column.Value)
+		value, _ := craft.DecodeTiDBType(byte(column.Type), model.ColumnFlagType(column.Flag), column.Value)
 		result[i] = &model.Column{
 			Name:  column.Name,
 			Type:  byte(column.Type),
@@ -368,7 +368,7 @@ func BenchmarkProtobuf1Decoding(b *testing.B) {
 func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) []*model.Column {
 	result := make([]*model.Column, len(columns.Value))
 	for i, value := range columns.Value {
-		v, _ := craft2.DecodeTiDBType(byte(columns.Type[i]), model.ColumnFlagType(columns.Flag[i]), value)
+		v, _ := craft.DecodeTiDBType(byte(columns.Type[i]), model.ColumnFlagType(columns.Flag[i]), value)
 		result[i] = &model.Column{
 			Name:  columns.Name[i],
 			Type:  byte(columns.Type[i]),

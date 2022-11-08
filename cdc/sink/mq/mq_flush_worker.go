@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -162,11 +163,15 @@ func (w *flushWorker) asyncSend(
 	partitionedRows map[TopicPartitionKey][]*model.RowChangedEvent,
 ) error {
 	for key, events := range partitionedRows {
+		callbackableEvents := make([]*eventsink.RowChangeCallbackableEvent, 0, len(events))
 		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvents(ctx, key.Topic, nil)
-			if err != nil {
-				return err
-			}
+			callbackableEvents = append(callbackableEvents, &eventsink.RowChangeCallbackableEvent{
+				Event:    event,
+				Callback: nil,
+			})
+		}
+		if err := w.encoder.AppendRowChangedEvents(ctx, key.Topic, callbackableEvents); err != nil {
+			return err
 		}
 
 		err := w.statistics.RecordBatchExecution(func() (int, error) {
