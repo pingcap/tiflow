@@ -279,30 +279,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
-			recordError = err
-			continue
-		}
-
-		// create success, record unit state
-		if err = wm.unitStore.ReadModifyWrite(ctx, func(state *metadata.UnitState) error {
-			status, ok := state.CurrentUnitStatus[taskID]
-			if !ok {
-				state.CurrentUnitStatus[taskID] = &metadata.TaskStatus{
-					Unit:        nextUnit,
-					Task:        taskID,
-					CreatedTime: time.Now(),
-					// we don't care about the Stage and CfgModRevision here
-				}
-			} else {
-				if status.Unit != nextUnit {
-					status.CreatedTime = time.Now()
-					status.Unit = nextUnit
-				}
-			}
-			return nil
-		}); err != nil {
-			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Error(err))
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -372,6 +349,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
+	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
@@ -392,6 +370,29 @@ func (wm *WorkerManager) createWorker(
 		//	We choose the second mechanism now.
 		//	If a worker is created but never receives a dispatch/online/offline event(2 ticker?), we should remove it.
 		wm.UpdateWorkerStatus(runtime.InitWorkerStatus(taskID, unit, workerID))
+
+		// create success, record unit state
+		if err := wm.unitStore.ReadModifyWrite(ctx, func(state *metadata.UnitState) error {
+			wm.logger.Debug("start to update current unit state", zap.String("task", taskID), zap.Stringer("unit", unit))
+			status, ok := state.CurrentUnitStatus[taskID]
+			if !ok {
+				state.CurrentUnitStatus[taskID] = &metadata.TaskStatus{
+					Unit:        unit,
+					Task:        taskID,
+					CreatedTime: time.Now(),
+					// we don't care about the Stage and CfgModRevision here
+				}
+			} else {
+				if status.Unit != unit {
+					status.CreatedTime = time.Now()
+					status.Unit = unit
+				}
+			}
+			return nil
+		}); err != nil {
+			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Error(err))
+			return err
+		}
 	}
 	return err
 }
