@@ -83,6 +83,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		return nil, err
 	}
 	unitState, existUnitState = state.(*metadata.UnitState)
+	if existUnitState {
+		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
+	}
 
 	for _, task := range tasks {
 		taskID := task
@@ -115,8 +118,8 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			}
 
 			if existUnitState {
-				if _, ok := unitState.CurrentUnitStatus[taskID]; ok {
-					createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
+				if status, ok := unitState.CurrentUnitStatus[taskID]; ok {
+					createdTime = status.CreatedTime
 				}
 			}
 
@@ -132,10 +135,6 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}()
 	}
 	wg.Wait()
-
-	if existUnitState {
-		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
-	}
 
 	return jobStatus, nil
 }

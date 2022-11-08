@@ -360,13 +360,13 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 		require.True(t.T(), ok)
 		return unitState.CurrentUnitStatus
 	}
-	var currenctStatus map[string]*metadata.UnitStatus
+	var currentStatus map[string]*metadata.UnitStatus
 
 	getTaskID := func() (string, string) {
-		if _, ok := currenctStatus[source1]; ok {
+		if _, ok := currentStatus[source1]; ok {
 			return source1, source2
 		}
-		if _, ok := currenctStatus[source2]; ok {
+		if _, ok := currentStatus[source2]; ok {
 			return source2, source1
 		}
 		return "", ""
@@ -379,10 +379,10 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	wokerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 1)
 
-	currenctStatus = getCurrentStatus()
+	currentStatus = getCurrentStatus()
 	taskID1, taskID2 := getTaskID()
-	require.Contains(t.T(), currenctStatus, taskID1)
-	require.True(t.T(), time.Since(currenctStatus[taskID1].CreatedTime).Seconds() < float64(time.Second))
+	require.Contains(t.T(), currentStatus, taskID1)
+	require.True(t.T(), time.Since(currentStatus[taskID1].CreatedTime).Seconds() < float64(time.Second))
 
 	// check again
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
@@ -394,9 +394,9 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	require.Contains(t.T(), wokerStatusMap, source2)
 	workerStatus1 := wokerStatusMap[source1]
 	workerStatus2 := wokerStatusMap[source2]
-	currenctStatus = getCurrentStatus()
-	require.Contains(t.T(), currenctStatus, taskID2)
-	require.True(t.T(), time.Since(currenctStatus[taskID2].CreatedTime).Seconds() < float64(time.Second))
+	currentStatus = getCurrentStatus()
+	require.Contains(t.T(), currentStatus, taskID2)
+	require.True(t.T(), time.Since(currentStatus[taskID2].CreatedTime).Seconds() < float64(time.Second))
 
 	// expected
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -425,10 +425,10 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	require.Contains(t.T(), wokerStatusMap, source2)
 	require.Equal(t.T(), wokerStatusMap[source1].ID, workerStatus3.ID)
 	require.Equal(t.T(), wokerStatusMap[source2].ID, workerStatus2.ID)
-	currenctStatus = getCurrentStatus()
-	require.Contains(t.T(), currenctStatus, source1)
-	require.True(t.T(), time.Since(currenctStatus[source1].CreatedTime).Seconds() < float64(time.Second))
-	require.Equal(t.T(), frameModel.WorkerDMLoad, currenctStatus[source1].Unit)
+	currentStatus = getCurrentStatus()
+	require.Contains(t.T(), currentStatus, source1)
+	require.True(t.T(), time.Since(currentStatus[source1].CreatedTime).Seconds() < float64(time.Second))
+	require.Equal(t.T(), frameModel.WorkerDMLoad, currentStatus[source1].Unit)
 
 	// unexpected
 	worker4 := "worker3"
