@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -40,64 +41,67 @@ type BatchEncoder struct {
 	MaxBatchSize    int
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) AppendRowChangedEvent(
+// AppendRowChangedEvents implements the EventBatchEncoder interface
+func (d *BatchEncoder) AppendRowChangedEvents(
 	_ context.Context,
 	_ string,
-	e *model.RowChangedEvent,
-	callback func(),
+	events []*eventsink.RowChangeCallbackableEvent,
 ) error {
-	keyMsg, valueMsg := rowChangeToMsg(e)
-	key, err := keyMsg.Encode()
-	if err != nil {
-		return errors.Trace(err)
+	for _, event := range events {
+		keyMsg, valueMsg := rowChangeToMsg(event.Event)
+		key, err := keyMsg.Encode()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		value, err := valueMsg.encode()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		var keyLenByte [8]byte
+		binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+		var valueLenByte [8]byte
+		binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+		// for single message that longer than max-message-size, do not send it.
+		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+		length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
+		if length > d.MaxMessageBytes {
+			log.Warn("Single message too large",
+				zap.Int("max-message-size", d.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", event.Event.Table))
+			return cerror.ErrOpenProtocolCodecRowTooLarge.GenWithStackByArgs()
+		}
+
+		if len(d.messageBuf) == 0 ||
+			d.curBatchSize >= d.MaxBatchSize ||
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.MaxMessageBytes {
+			// Before we create a new message, we should handle the previous callbacks.
+			d.tryBuildCallback()
+			versionHead := make([]byte, 8)
+			binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+			msg := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+			d.messageBuf = append(d.messageBuf, msg)
+			d.curBatchSize = 0
+		}
+
+		message := d.messageBuf[len(d.messageBuf)-1]
+		message.Key = append(message.Key, keyLenByte[:]...)
+		message.Key = append(message.Key, key...)
+		message.Value = append(message.Value, valueLenByte[:]...)
+		message.Value = append(message.Value, value...)
+		message.Ts = event.Event.CommitTs
+		message.Schema = &event.Event.Table.Schema
+		message.Table = &event.Event.Table.Table
+		message.IncRowsCount()
+
+		if event.Callback != nil {
+			d.callbackBuff = append(d.callbackBuff, event.Callback)
+		}
+
+		d.curBatchSize++
 	}
-	value, err := valueMsg.encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	// for single message that longer than max-message-size, do not send it.
-	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
-	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
-	if length > d.MaxMessageBytes {
-		log.Warn("Single message too large",
-			zap.Int("max-message-size", d.MaxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
-		return cerror.ErrOpenProtocolCodecRowTooLarge.GenWithStackByArgs()
-	}
-
-	if len(d.messageBuf) == 0 ||
-		d.curBatchSize >= d.MaxBatchSize ||
-		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.MaxMessageBytes {
-		// Before we create a new message, we should handle the previous callbacks.
-		d.tryBuildCallback()
-		versionHead := make([]byte, 8)
-		binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-		msg := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
-		d.messageBuf = append(d.messageBuf, msg)
-		d.curBatchSize = 0
-	}
-
-	message := d.messageBuf[len(d.messageBuf)-1]
-	message.Key = append(message.Key, keyLenByte[:]...)
-	message.Key = append(message.Key, key...)
-	message.Value = append(message.Value, valueLenByte[:]...)
-	message.Value = append(message.Value, value...)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
-	message.IncRowsCount()
-
-	if callback != nil {
-		d.callbackBuff = append(d.callbackBuff, callback)
-	}
-
-	d.curBatchSize++
 	return nil
 }
 

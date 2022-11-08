@@ -280,7 +280,7 @@ func (s *BatchTester) TestBatchCodec(
 		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 			require.Nil(t, err)
 		}
 

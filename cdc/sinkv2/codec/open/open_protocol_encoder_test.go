@@ -54,20 +54,20 @@ func TestMaxMessageBytes(t *testing.T) {
 	a := 88 + 44
 	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	encoder := NewBatchEncoderBuilder(config).Build()
-	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+	err := encoder.AppendRowChangedEvents(ctx, topic, nil)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = NewBatchEncoderBuilder(config).Build()
-	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+	err = encoder.AppendRowChangedEvents(ctx, topic, nil)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = NewBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+		err := encoder.AppendRowChangedEvents(ctx, topic, nil)
 		require.Nil(t, err)
 	}
 
@@ -94,7 +94,7 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 
@@ -187,7 +187,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

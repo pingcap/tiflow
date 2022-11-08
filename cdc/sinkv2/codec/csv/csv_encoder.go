@@ -34,12 +34,7 @@ type BatchEncoder struct {
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (b *BatchEncoder) AppendRowChangedEvent(
-	_ context.Context,
-	_ string,
-	e *model.RowChangedEvent,
-	callback func(),
-) error {
+func (b *BatchEncoder) AppendRowChangedEvent(_ context.Context, _ string, events []*interface{}) error {
 	if b.csvConfig == nil {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("no csv config provided"))

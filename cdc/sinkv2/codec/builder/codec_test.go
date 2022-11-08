@@ -206,7 +206,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 
 func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
 	for _, event := range events {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		if err != nil {
 			return nil, err
 		}

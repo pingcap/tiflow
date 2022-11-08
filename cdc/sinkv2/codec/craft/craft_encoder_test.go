@@ -42,7 +42,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 
@@ -69,7 +69,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 
@@ -165,7 +165,7 @@ func testBatchCodec(
 	for _, cs := range s.RowCases {
 		events := 0
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 			events++
 			require.Nil(t, err)
 		}
@@ -271,7 +271,7 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

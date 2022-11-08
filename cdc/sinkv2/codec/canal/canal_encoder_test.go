@@ -30,7 +30,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	for _, cs := range s.rowCases {
 		encoder := newBatchEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 			require.Nil(t, err)
 		}
 		res := encoder.Build()
@@ -133,7 +133,7 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

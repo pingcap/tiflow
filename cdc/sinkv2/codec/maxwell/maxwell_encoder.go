@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
@@ -40,22 +41,23 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return nil, nil
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) AppendRowChangedEvent(
+// AppendRowChangedEvents implements the EventBatchEncoder interface
+func (d *BatchEncoder) AppendRowChangedEvents(
 	_ context.Context,
 	_ string,
-	e *model.RowChangedEvent,
-	callback func(),
+	events []*eventsink.RowChangeCallbackableEvent,
 ) error {
-	_, valueMsg := rowChangeToMaxwellMsg(e)
-	value, err := valueMsg.encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	d.valueBuf.Write(value)
-	d.batchSize++
-	if callback != nil {
-		d.callbackBuf = append(d.callbackBuf, callback)
+	for _, event := range events {
+		_, valueMsg := rowChangeToMaxwellMsg(event.Event)
+		value, err := valueMsg.encode()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		d.valueBuf.Write(value)
+		d.batchSize++
+		if event.Callback != nil {
+			d.callbackBuf = append(d.callbackBuf, event.Callback)
+		}
 	}
 	return nil
 }

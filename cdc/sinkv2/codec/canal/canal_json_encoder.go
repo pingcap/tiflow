@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -208,39 +209,36 @@ func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, er
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
-// AppendRowChangedEvent implements the interface EventJSONBatchEncoder
-func (c *JSONBatchEncoder) AppendRowChangedEvent(
+// AppendRowChangedEvents implements the interface EventJSONBatchEncoder
+func (c *JSONBatchEncoder) AppendRowChangedEvents(
 	_ context.Context,
 	_ string,
-	e *model.RowChangedEvent,
-	callback func(),
+	events []*eventsink.RowChangeCallbackableEvent,
 ) error {
-	if err := c.newJSONMessageForDML(e); err != nil {
-		return errors.Trace(err)
-	}
+	for _, event := range events {
+		if err := c.newJSONMessageForDML(event.Event); err != nil {
+			return errors.Trace(err)
+		}
 
-	value, err := json.Marshal(c.messageHolder)
-	if err != nil {
-		log.Panic("JSONBatchEncoder", zap.Error(err))
-		return nil
-	}
-	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
-		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
-	m.IncRowsCount()
-	m.Callback = callback
+		value, err := json.Marshal(c.messageHolder)
+		if err != nil {
+			log.Panic("JSONBatchEncoder", zap.Error(err))
+			return nil
+		}
+		m := common.NewMsg(config.ProtocolCanalJSON, nil, value, event.Event.CommitTs,
+			model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
+		m.IncRowsCount()
+		m.Callback = event.Callback
 
-	c.messages = append(c.messages, m)
+		c.messages = append(c.messages, m)
+	}
 	return nil
 }
 
 // Build implements the EventJSONBatchEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
-	if len(c.messages) == 0 {
-		return nil
-	}
-
 	result := c.messages
-	c.messages = c.messages[:0]
+	c.messages = nil
 	return result
 }
 

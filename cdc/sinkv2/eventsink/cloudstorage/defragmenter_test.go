@@ -83,7 +83,7 @@ func TestDeframenter(t *testing.T) {
 				},
 			}
 			frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-			encoder.AppendRowChangedEvent(ctx, "", row, nil)
+			encoder.AppendRowChangedEvents(ctx, "", nil)
 		}
 		frag.encodedMsgs = encoder.Build()
 

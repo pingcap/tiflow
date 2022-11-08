@@ -132,8 +132,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				continue
 			}
 			start := time.Now()
-			err := w.encoder.AppendRowChangedEvent(ctx, event.key.Topic,
-				event.rowEvent.Event, event.rowEvent.Callback)
+			err := w.encoder.AppendRowChangedEvents(ctx, event.key.Topic, nil)
 			if err != nil {
 				return err
 			}
@@ -264,7 +263,7 @@ func (w *worker) asyncSend(
 				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
-			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
+			err := w.encoder.AppendRowChangedEvents(ctx, key.Topic, nil)
 			if err != nil {
 				return err
 			}

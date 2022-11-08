@@ -162,7 +162,7 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 
 		if i%100 == 0 {
@@ -366,7 +366,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

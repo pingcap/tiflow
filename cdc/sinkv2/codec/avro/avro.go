@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
@@ -56,77 +57,76 @@ type avroEncodeResult struct {
 	registryID int
 }
 
-// AppendRowChangedEvent appends a row change event to the encoder
-// NOTE: the encoder can only store one RowChangedEvent!
-func (a *BatchEncoder) AppendRowChangedEvent(
+// AppendRowChangedEvents appends a row change event to the encoder
+func (a *BatchEncoder) AppendRowChangedEvents(
 	ctx context.Context,
 	topic string,
-	e *model.RowChangedEvent,
-	callback func(),
+	events []*eventsink.RowChangeCallbackableEvent,
 ) error {
-	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
-	message := common.NewMsg(
-		config.ProtocolAvro,
-		nil,
-		nil,
-		e.CommitTs,
-		model.MessageTypeRow,
-		&e.Table.Schema,
-		&e.Table.Table,
-	)
-	message.Callback = callback
-	topic = sanitizeTopic(topic)
-
-	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, topic, false)
-		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		message.Value = evlp
-	} else {
-		message.Value = nil
-	}
-
-	res, err := a.avroEncode(ctx, e, topic, true)
-	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	if res != nil {
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-		message.Key = evlp
-	} else {
-		message.Key = nil
-	}
-	message.IncRowsCount()
-
-	if message.Length() > a.maxMessageBytes {
-		log.Error(
-			"Single message too large",
-			zap.Int(
-				"maxMessageBytes",
-				a.maxMessageBytes,
-			),
-			zap.Int("length", message.Length()),
-			zap.Any("table", e.Table),
+	for _, event := range events {
+		e := event.Event
+		message := common.NewMsg(
+			config.ProtocolAvro,
+			nil,
+			nil,
+			e.CommitTs,
+			model.MessageTypeRow,
+			&e.Table.Schema,
+			&e.Table.Table,
 		)
-		return cerror.ErrAvroEncodeFailed.GenWithStackByArgs()
-	}
+		message.Callback = event.Callback
+		topic = sanitizeTopic(topic)
 
-	a.resultBuf = append(a.resultBuf, message)
+		if !e.IsDelete() {
+			res, err := a.avroEncode(ctx, e, topic, false)
+			if err != nil {
+				log.Error("AppendRowChangedEvents: avro encoding failed", zap.Error(err))
+				return errors.Trace(err)
+			}
+
+			evlp, err := res.toEnvelope()
+			if err != nil {
+				log.Error("AppendRowChangedEvents: could not construct Avro envelope", zap.Error(err))
+				return errors.Trace(err)
+			}
+
+			message.Value = evlp
+		} else {
+			message.Value = nil
+		}
+
+		res, err := a.avroEncode(ctx, e, topic, true)
+		if err != nil {
+			log.Error("AppendRowChangedEvents: avro encoding failed", zap.Error(err))
+			return errors.Trace(err)
+		}
+
+		if res != nil {
+			evlp, err := res.toEnvelope()
+			if err != nil {
+				log.Error("AppendRowChangedEvents: could not construct Avro envelope", zap.Error(err))
+				return errors.Trace(err)
+			}
+			message.Key = evlp
+		} else {
+			message.Key = nil
+		}
+		message.IncRowsCount()
+
+		if message.Length() > a.maxMessageBytes {
+			log.Error(
+				"Single message too large",
+				zap.Int(
+					"maxMessageBytes",
+					a.maxMessageBytes,
+				),
+				zap.Int("length", message.Length()),
+				zap.Any("table", e.Table),
+			)
+			return cerror.ErrAvroEncodeFailed.GenWithStackByArgs()
+		}
+		a.resultBuf = append(a.resultBuf, message)
+	}
 
 	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
@@ -43,24 +44,26 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return nil, nil
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) AppendRowChangedEvent(
+// AppendRowChangedEvents implements the EventBatchEncoder interface
+func (d *BatchEncoder) AppendRowChangedEvents(
 	_ context.Context,
 	_ string,
-	e *model.RowChangedEvent,
-	callback func(),
+	events []*eventsink.RowChangeCallbackableEvent,
 ) error {
-	entry, err := d.entryBuilder.fromRowEvent(e)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	b, err := proto.Marshal(entry)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-	}
-	d.messages.Messages = append(d.messages.Messages, b)
-	if callback != nil {
-		d.callbackBuf = append(d.callbackBuf, callback)
+	for _, event := range events {
+		e := event.Event
+		entry, err := d.entryBuilder.fromRowEvent(e)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		b, err := proto.Marshal(entry)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+		}
+		d.messages.Messages = append(d.messages.Messages, b)
+		if event.Callback != nil {
+			d.callbackBuf = append(d.callbackBuf, event.Callback)
+		}
 	}
 	return nil
 }

@@ -86,9 +86,9 @@ func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) e
 		// we only append RowChangedEvent attached with a Callback to EventBatchEncoder for the
 		// last RowChangedEvent.
 		if idx != length-1 {
-			err = w.encoder.AppendRowChangedEvent(ctx, "", event, nil)
+			err = w.encoder.AppendRowChangedEvents(ctx, "", nil)
 		} else {
-			err = w.encoder.AppendRowChangedEvent(ctx, "", event, frag.event.Callback)
+			err = w.encoder.AppendRowChangedEvents(ctx, "", nil)
 		}
 		if err != nil {
 			return err
