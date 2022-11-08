@@ -94,6 +94,7 @@ func newWorker(
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:     mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
+		metricMQWorkerBatchDuration: mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
 	}
 
