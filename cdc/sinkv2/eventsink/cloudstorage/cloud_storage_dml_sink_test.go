@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
@@ -37,13 +40,13 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 
 	errCh := make(chan error, 5)
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
-	// assume we have a large transaction, and it is split into 10 small transactions
+	// assume we have a large transaction and it is splitted into 10 small transactions
 	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
 	var cnt uint64 = 0
 	batch := 100
@@ -69,6 +72,20 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
+				},
+
+				ColInfos: []rowcodec.ColInfo{
+					{
+						ID:            1,
+						IsPKHandle:    true,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeTiny),
+					}, {
+						ID:            2,
+						IsPKHandle:    false,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeVarchar),
+					},
 				},
 			}
 			txn.Event.Rows = append(txn.Event.Rows, row)
