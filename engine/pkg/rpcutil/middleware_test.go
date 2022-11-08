@@ -51,10 +51,21 @@ func TestToGRPCError(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(gerr))
 	st, ok = status.FromError(gerr)
 	require.True(t, ok)
-	require.Equal(t, err.Error(), st.Message())
+	require.Equal(t, "job job-1 is not found", st.Message())
 	require.Len(t, st.Details(), 1)
 	errInfo = st.Details()[0].(*errdetails.ErrorInfo)
 	require.Equal(t, errors.ErrJobNotFound.RFCCode(), perrors.RFCErrorCode(errInfo.Reason))
+
+	// create worker terminated
+	err = errors.ErrCreateWorkerTerminate.Wrap(perrors.New("invalid config")).GenWithStackByArgs()
+	gerr = ToGRPCError(err)
+	st, ok = status.FromError(gerr)
+	require.True(t, ok)
+	require.Equal(t, "create worker is terminated", st.Message())
+	require.Len(t, st.Details(), 1)
+	errInfo = st.Details()[0].(*errdetails.ErrorInfo)
+	require.Equal(t, errors.ErrCreateWorkerTerminate.RFCCode(), perrors.RFCErrorCode(errInfo.Reason))
+	require.Equal(t, "invalid config", errInfo.Metadata[metadataCauseKey])
 }
 
 func TestFromGRPCError(t *testing.T) {
@@ -72,4 +83,13 @@ func TestFromGRPCError(t *testing.T) {
 	clientErr := FromGRPCError(ToGRPCError(srvErr))
 	require.True(t, errors.Is(clientErr, errors.ErrJobNotFound))
 	require.Equal(t, srvErr.Error(), clientErr.Error())
+
+	// create worker terminated
+	srvErr = errors.ErrCreateWorkerTerminate.Wrap(perrors.New("invalid config")).GenWithStackByArgs()
+	clientErr = FromGRPCError(ToGRPCError(srvErr))
+	require.True(t, errors.Is(clientErr, errors.ErrCreateWorkerTerminate))
+	require.Equal(t, srvErr.Error(), clientErr.Error())
+	cause := errors.Cause(clientErr)
+	require.Error(t, cause)
+	require.Equal(t, "invalid config", cause.Error())
 }

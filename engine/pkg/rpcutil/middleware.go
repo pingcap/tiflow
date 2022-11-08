@@ -15,8 +15,6 @@ package rpcutil
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -28,6 +26,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const metadataCauseKey = "cause"
+
 // ToGRPCError converts an error to a gRPC error.
 func ToGRPCError(errIn error) error {
 	if errIn == nil {
@@ -36,17 +36,34 @@ func ToGRPCError(errIn error) error {
 	if _, ok := status.FromError(errIn); ok {
 		return errIn
 	}
-	code := errors.GRPCStatusCode(errIn)
-	rfcCode, ok := errors.RFCCode(errIn)
-	if !ok {
+
+	var (
+		normalizedErr *perrors.Error
+		metadata      map[string]string
+		rfcCode       perrors.RFCErrorCode
+		errMsg        string
+	)
+	if errors.As(errIn, &normalizedErr) {
+		rfcCode = normalizedErr.RFCCode()
+		if cause := normalizedErr.Cause(); cause != nil {
+			metadata = map[string]string{
+				metadataCauseKey: cause.Error(),
+			}
+		}
+		errMsg = normalizedErr.GetMsg()
+	} else {
 		rfcCode = errors.ErrUnknown.RFCCode()
+		errMsg = errIn.Error()
 	}
-	st, err := status.New(code, errIn.Error()).
+
+	code := errors.GRPCStatusCode(errIn)
+	st, err := status.New(code, errMsg).
 		WithDetails(&errdetails.ErrorInfo{
-			Reason: string(rfcCode),
+			Reason:   string(rfcCode),
+			Metadata: metadata,
 		})
 	if err != nil {
-		return status.New(code, errIn.Error()).Err()
+		return status.New(code, errMsg).Err()
 	}
 	return st.Err()
 }
@@ -70,8 +87,13 @@ func FromGRPCError(errIn error) error {
 	if errInfo == nil || errInfo.Reason == "" {
 		return errors.ErrUnknown.GenWithStack(st.Message())
 	}
-	msg := strings.TrimPrefix(st.Message(), fmt.Sprintf("[%s]", errInfo.Reason))
-	return perrors.Normalize(msg, perrors.RFCCodeText(errInfo.Reason)).GenWithStackByArgs()
+
+	normalizedErr := perrors.Normalize(st.Message(), perrors.RFCCodeText(errInfo.Reason))
+	if causeMsg := errInfo.Metadata[metadataCauseKey]; causeMsg != "" {
+		return normalizedErr.Wrap(perrors.New(causeMsg)).GenWithStackByArgs()
+	} else {
+		return normalizedErr.GenWithStackByArgs()
+	}
 }
 
 // UnaryServerInterceptor is a gRPC server-side interceptor that converts errors to gRPC errors and logs requests.

@@ -15,7 +15,9 @@ package openapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -43,7 +45,7 @@ func WriteHTTPError(w http.ResponseWriter, err error) {
 	}
 	httpErr := &HTTPError{
 		Code:    string(rfcCode),
-		Message: err.Error(),
+		Message: strings.TrimPrefix(err.Error(), fmt.Sprintf("[%s]", rfcCode)),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(errors.HTTPStatusCode(err))

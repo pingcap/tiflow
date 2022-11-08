@@ -697,8 +697,12 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		if errors.Is(result, errors.ErrCreateWorkerTerminate) {
+			errMsg := result.Error()
+			if cause := errors.Cause(result); cause != nil {
+				errMsg = cause.Error()
+			}
 			if err := jm.terminateJob(
-				context.Background(), result.Error(), worker.ID(), frameModel.MasterStateFailed,
+				context.Background(), errMsg, worker.ID(), frameModel.MasterStateFailed,
 			); err != nil {
 				return err
 			}
