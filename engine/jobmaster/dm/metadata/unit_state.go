@@ -32,7 +32,7 @@ type UnitState struct {
 
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
-	CurrentUnitStatus  map[string]*TaskStatus
+	CurrentUnitStatus  map[string]*UnitStatus
 }
 
 type UnitStateStore struct {
@@ -44,7 +44,7 @@ type UnitStateStore struct {
 func (f *UnitStateStore) createState() state {
 	return &UnitState{
 		FinishedUnitStatus: map[string][]*FinishedTaskStatus{},
-		CurrentUnitStatus:  map[string]*TaskStatus{},
+		CurrentUnitStatus:  map[string]*UnitStatus{},
 	}
 }
 
@@ -98,4 +98,11 @@ type FinishedTaskStatus struct {
 	TaskStatus
 	Result *pb.ProcessResult
 	Status json.RawMessage
+}
+
+// UnitStatus defines the unit status.
+type UnitStatus struct {
+	Unit        frameModel.WorkerType
+	Task        string
+	CreatedTime time.Time
 }

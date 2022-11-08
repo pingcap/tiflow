@@ -353,14 +353,14 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	checkpointError := errors.New("checkpoint error")
 	createError := errors.New("create error")
 
-	getCurrentStatus := func() map[string]*metadata.TaskStatus {
+	getCurrentStatus := func() map[string]*metadata.UnitStatus {
 		state, err := workerManager.unitStore.Get(context.Background())
 		require.NoError(t.T(), err)
 		unitState, ok := state.(*metadata.UnitState)
 		require.True(t.T(), ok)
 		return unitState.CurrentUnitStatus
 	}
-	var currenctStatus map[string]*metadata.TaskStatus
+	var currenctStatus map[string]*metadata.UnitStatus
 
 	getTaskID := func() (string, string) {
 		if _, ok := currenctStatus[source1]; ok {

@@ -376,7 +376,7 @@ func (wm *WorkerManager) createWorker(
 			wm.logger.Debug("start to update current unit state", zap.String("task", taskID), zap.Stringer("unit", unit))
 			status, ok := state.CurrentUnitStatus[taskID]
 			if !ok {
-				state.CurrentUnitStatus[taskID] = &metadata.TaskStatus{
+				state.CurrentUnitStatus[taskID] = &metadata.UnitStatus{
 					Unit:        unit,
 					Task:        taskID,
 					CreatedTime: time.Now(),

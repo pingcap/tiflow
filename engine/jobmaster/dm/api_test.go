@@ -113,7 +113,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
 		unitState          = &metadata.UnitState{
-			CurrentUnitStatus: map[string]*metadata.TaskStatus{
+			CurrentUnitStatus: map[string]*metadata.UnitStatus{
 				// worker not found
 				"task1": {CreatedTime: dumpTime},
 				// worker not found

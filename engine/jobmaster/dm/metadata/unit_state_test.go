@@ -37,7 +37,7 @@ func TestUnitStateStore(t *testing.T) {
 				Status: json.RawMessage("null"),
 			}},
 		},
-		CurrentUnitStatus: map[string]*TaskStatus{
+		CurrentUnitStatus: map[string]*UnitStatus{
 			"task": {},
 		},
 	}
