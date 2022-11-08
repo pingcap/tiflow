@@ -91,9 +91,8 @@ func FromGRPCError(errIn error) error {
 	normalizedErr := perrors.Normalize(st.Message(), perrors.RFCCodeText(errInfo.Reason))
 	if causeMsg := errInfo.Metadata[metadataCauseKey]; causeMsg != "" {
 		return normalizedErr.Wrap(perrors.New(causeMsg)).GenWithStackByArgs()
-	} else {
-		return normalizedErr.GenWithStackByArgs()
 	}
+	return normalizedErr.GenWithStackByArgs()
 }
 
 // UnaryServerInterceptor is a gRPC server-side interceptor that converts errors to gRPC errors and logs requests.
