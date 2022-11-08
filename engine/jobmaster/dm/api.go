@@ -128,11 +128,13 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 	unitState = state.(*metadata.UnitState)
 	for _, task := range tasks {
-		if _, ok := job.Tasks[task]; ok {
-			status := jobStatus.TaskStatus[task]
-			status.CreatedTime = unitState.CurrentUnitStatus[task].CreatedTime
-			jobStatus.TaskStatus[task] = status
+		status, ok1 := jobStatus.TaskStatus[task]
+		CurrentUnitStatus, ok2 := unitState.CurrentUnitStatus[task]
+		if !ok1 || !ok2 {
+			continue
 		}
+		status.CreatedTime = CurrentUnitStatus.CreatedTime
+		jobStatus.TaskStatus[task] = status
 	}
 	jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
 
