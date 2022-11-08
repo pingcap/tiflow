@@ -37,34 +37,20 @@ type JSONBatchEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 
-	// messageHolder is used to hold each message and will be reset after each message is encoded.
-	messageHolder canalJSONMessageInterface
-	messages      []*common.Message
+	messages []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
-		builder: newCanalEntryBuilder(),
-		messageHolder: &JSONMessage{
-			// for Data field, no matter event type, always be filled with only one item.
-			Data: make([]map[string]interface{}, 1),
-		},
+		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
 	}
-
-	if enableTiDBExtension {
-		encoder.messageHolder = &canalJSONMessageWithTiDBExtension{
-			JSONMessage: encoder.messageHolder.(*JSONMessage),
-			Extensions:  &tidbExtension{},
-		}
-	}
-
 	return encoder
 }
 
-func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error {
+func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
 	isDelete := e.IsDelete()
 	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
@@ -75,6 +61,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 			return nil
 		}
 		out.RawByte('[')
+		out.RawByte('{')
 		isFirst := true
 		for _, col := range columns {
 			if col != nil {
@@ -92,8 +79,6 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 				if err != nil {
 					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
-
-				out.RawByte('{')
 				out.String(col.Name)
 				out.RawByte(':')
 				if col.Value == nil {
@@ -101,18 +86,11 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 				} else {
 					out.String(value)
 				}
-				out.RawByte('}')
 			}
 		}
+		out.RawByte('}')
 		out.RawByte(']')
 		return nil
-	}
-
-	var baseMessage *JSONMessage
-	if !c.enableTiDBExtension {
-		baseMessage = c.messageHolder.(*JSONMessage)
-	} else {
-		baseMessage = c.messageHolder.(*canalJSONMessageWithTiDBExtension).JSONMessage
 	}
 
 	out := &jwriter.Writer{}
@@ -184,7 +162,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 				mysqlType := getMySQLType(col)
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				sqlTypeMap[col.Name] = int32(javaType)
 				mysqlTypeMap[col.Name] = mysqlType
@@ -238,23 +216,22 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := filling(e.PreColumns, out); err != nil {
-			return err
+			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := filling(e.Columns, out); err != nil {
-			return err
+			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
 		if err := filling(e.PreColumns, out); err != nil {
-			return err
+			return nil, err
 		}
-		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := filling(e.Columns, out); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
@@ -270,9 +247,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) error 
 	}
 	out.RawByte('}')
 
-	var err error
-	baseMessage.jsonData, err = out.BuildBytes()
-	return err
+	return out.BuildBytes()
 }
 
 func eventTypeString(e *model.RowChangedEvent) string {
@@ -295,7 +270,6 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 		ExecutionTime: convertToCanalTs(e.CommitTs),
 		BuildTime:     time.Now().UnixMilli(), // timestamp
 		Query:         e.Query,
-		tikvTs:        e.CommitTs,
 	}
 
 	if !c.enableTiDBExtension {
@@ -342,21 +316,16 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	if err := c.newJSONMessageForDML(e); err != nil {
+	value, err := c.newJSONMessageForDML(e)
+	if err != nil {
 		return errors.Trace(err)
-	}
-	var value []byte
-	if !c.enableTiDBExtension {
-		value = c.messageHolder.(*JSONMessage).jsonData
-	} else {
-		value = c.messageHolder.(*canalJSONMessageWithTiDBExtension).jsonData
 	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
 		Ts:       e.CommitTs,
-		Schema:   c.messageHolder.getSchema(),
-		Table:    c.messageHolder.getTable(),
+		Schema:   &e.Table.Schema,
+		Table:    &e.Table.Table,
 		Type:     model.MessageTypeRow,
 		Protocol: config.ProtocolCanalJSON,
 		Callback: callback,

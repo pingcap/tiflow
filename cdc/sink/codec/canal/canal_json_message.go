@@ -30,7 +30,6 @@ const tidbWaterMarkType = "TIDB_WATERMARK"
 // The TiCDC Canal-JSON implementation extend the official format with a TiDB extension field.
 // canalJSONMessageInterface is used to support this without affect the original format.
 type canalJSONMessageInterface interface {
-	getTikvTs() uint64
 	getSchema() *string
 	getTable() *string
 	getCommitTs() uint64
@@ -66,14 +65,6 @@ type JSONMessage struct {
 	// A Datum should be a string or nil
 	Data []map[string]interface{} `json:"data"`
 	Old  []map[string]interface{} `json:"old"`
-	// Used internally by canalJSONBatchEncoder
-	tikvTs uint64
-
-	jsonData []byte
-}
-
-func (c *JSONMessage) getTikvTs() uint64 {
-	return c.tikvTs
 }
 
 func (c *JSONMessage) getSchema() *string {
