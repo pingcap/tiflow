@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -66,10 +67,15 @@ func TestMaxMessageBytes(t *testing.T) {
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = NewBatchEncoderBuilder(config).Build()
+
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 10000)
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvents(ctx, topic, nil)
-		require.Nil(t, err)
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: testEvent,
+		})
 	}
+	err = encoder.AppendRowChangedEvents(ctx, topic, events)
+	require.NoError(t, err)
 
 	messages := encoder.Build()
 	for _, msg := range messages {
@@ -93,10 +99,15 @@ func TestMaxBatchSize(t *testing.T) {
 		}},
 	}
 
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 10000)
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: testEvent,
+		})
 	}
+
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 
 	messages := encoder.Build()
 	sum := 0
@@ -145,40 +156,14 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
+	for i := 1; i <= 5; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += i
 			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
+		})
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
@@ -186,10 +171,8 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
 	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()
