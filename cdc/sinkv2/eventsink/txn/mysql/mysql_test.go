@@ -144,7 +144,7 @@ func TestPrepareDML(t *testing.T) {
 			Event: &model.SingleTableTxn{Rows: tc.input},
 		}
 		ms.rows = len(tc.input)
-		dmls := ms.prepareDMLs()
+		dmls := ms.prepareBatchDMLs()
 		require.Equal(t, tc.expected, dmls)
 	}
 }
@@ -1182,7 +1182,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			Event: &model.SingleTableTxn{Rows: tc.input},
 		}
 		ms.rows = len(tc.input)
-		dmls := ms.prepareDMLs()
+		dmls := ms.prepareBatchDMLs()
 		require.Equal(t, tc.expected, dmls, tc.name)
 	}
 }

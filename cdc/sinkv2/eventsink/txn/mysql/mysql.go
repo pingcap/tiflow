@@ -18,6 +18,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"net/url"
 	"time"
 
@@ -139,7 +141,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 		s.statistics.ObserveRows(event.Event.Rows...)
 	}
 
-	dmls := s.prepareDMLs()
+	dmls := s.prepareBatchDMLs()
 	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
@@ -189,6 +191,187 @@ type preparedDMLs struct {
 	values    [][]interface{}
 	callbacks []eventsink.CallbackFunc
 	rowCount  int
+}
+
+// convert2RowChanges is a helper function that convert the row change representation
+// of CDC into a general one.
+func convert2RowChanges(row *model.RowChangedEvent, tableInfo *timodel.TableInfo) *sqlmodel.RowChange {
+
+	preValues := make([]interface{}, 0, len(row.PreColumns))
+	for _, col := range row.PreColumns {
+		if col == nil {
+			// will not use this value, just append a dummy value
+			preValues = append(preValues, "omitted value")
+			continue
+		}
+		preValues = append(preValues, col.Value)
+	}
+
+	postValues := make([]interface{}, 0, len(row.Columns))
+	for _, col := range row.Columns {
+		if col == nil {
+			postValues = append(postValues, "omitted value")
+			continue
+		}
+		postValues = append(postValues, col.Value)
+	}
+
+	return sqlmodel.NewRowChange(
+		row.Table,
+		nil,
+		preValues,
+		postValues,
+		tableInfo,
+		nil, nil)
+}
+
+// This is a POC of batch DMLs.
+func (s *mysqlBackend) prepareBatchDMLs() *preparedDMLs {
+	// TODO: use a sync.Pool to reduce allocations.
+	startTs := make([]uint64, 0, s.rows)
+	sqls := make([]string, 0, s.rows)
+	values := make([][]interface{}, 0, s.rows)
+	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
+	replaces := make(map[string][][]interface{})
+
+	// flushes the cached batch replace or insert DMLs,
+	// to keep the sequence of DMLs
+	flushCacheDMLs := func() {
+		if s.cfg.BatchReplaceEnabled && len(replaces) > 0 {
+			replaceSqls, replaceValues := reduceReplace(replaces, s.cfg.BatchReplaceSize)
+			sqls = append(sqls, replaceSqls...)
+			values = append(values, replaceValues...)
+			replaces = make(map[string][][]interface{})
+		}
+	}
+
+	// translateToInsert control the update and insert behavior
+	// we only translate into insert when old value is enabled and safe mode is disabled
+	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
+	for _, event := range s.events {
+		for _, row := range event.Event.Rows {
+			if !translateToInsert {
+				break
+			}
+			// A row can be translated in to INSERT, when it was committed after
+			// the table it belongs to been replicating by TiCDC, which means it must not be
+			// replicated before, and there is no such row in downstream MySQL.
+			translateToInsert = row.CommitTs > row.ReplicatingTs
+		}
+	}
+
+	rowCount := 0
+	for _, event := range s.events {
+		if len(event.Event.Rows) == 0 {
+			continue
+		}
+
+		firstRow := event.Event.Rows[0]
+		tableColumns := firstRow.Columns
+		if len(tableColumns) == 0 {
+			tableColumns = firstRow.PreColumns
+		}
+		// 1. covert tableInfo from the first row of the txn event.
+		tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+
+		if event.Callback != nil {
+			callbacks = append(callbacks, event.Callback)
+		}
+
+		for _, row := range event.Event.Rows {
+			// 2. convert row change from the row of the txn event.
+			rowChange := convert2RowChanges(row, tableInfo)
+
+			if len(startTs) == 0 || startTs[len(startTs)-1] != row.StartTs {
+				startTs = append(startTs, row.StartTs)
+			}
+
+			var query string
+			var args []interface{}
+			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
+
+			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
+			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+				flushCacheDMLs()
+
+				if !s.cfg.ForceReplicate && !rowChange.HasNotNullUniqueIdx() {
+					continue
+				}
+				query, args = rowChange.GenSQL(sqlmodel.DMLUpdate)
+
+				if query != "" {
+					sqls = append(sqls, query)
+					values = append(values, args)
+					rowCount++
+				}
+				continue
+			}
+
+			// Case for update event or delete event.
+			// For update event:
+			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+			// So we will prepare a DELETE SQL here.
+			// For delete event:
+			// It will be translated directly into a DELETE SQL.
+			if len(row.PreColumns) != 0 {
+				flushCacheDMLs()
+				if rowChange.HasNotNullUniqueIdx() || s.cfg.ForceReplicate {
+					query, args = rowChange.GenSQL(sqlmodel.DMLDelete)
+					if query != "" {
+						sqls = append(sqls, query)
+						values = append(values, args)
+						rowCount++
+					}
+				}
+			}
+
+			// Case for update event or insert event.
+			// For update event:
+			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+			// So we will prepare a REPLACE SQL here.
+			// For insert event:
+			// It will be translated directly into a
+			// INSERT(old value is enabled and not in safe mode)
+			// or REPLACE(old value is disabled or in safe mode) SQL.
+			if len(row.Columns) != 0 {
+				if s.cfg.BatchReplaceEnabled {
+					query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
+					if query != "" {
+						if _, ok := replaces[query]; !ok {
+							replaces[query] = make([][]interface{}, 0)
+						}
+						replaces[query] = append(replaces[query], args)
+						rowCount++
+					}
+				} else {
+					if translateToInsert {
+						query, args = rowChange.GenSQL(sqlmodel.DMLInsert)
+					} else {
+						query, args = rowChange.GenSQL(sqlmodel.DMLReplace)
+					}
+					if query != "" {
+						sqls = append(sqls, query)
+						values = append(values, args)
+						rowCount++
+					}
+				}
+			}
+		}
+	}
+	flushCacheDMLs()
+
+	if len(callbacks) == 0 {
+		callbacks = nil
+	}
+
+	return &preparedDMLs{
+		startTs:   startTs,
+		sqls:      sqls,
+		values:    values,
+		callbacks: callbacks,
+		rowCount:  rowCount,
+	}
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
