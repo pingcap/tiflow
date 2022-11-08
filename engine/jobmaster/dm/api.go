@@ -99,12 +99,10 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				if !ok {
 					// worker unscheduled
 					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
-				} else {
-					if workerStatus.Stage != runtime.WorkerFinished {
-						workerID = workerStatus.ID
-						cfgModRevision = workerStatus.CfgModRevision
-						queryStatusResp = jm.QueryStatus(ctx, taskID)
-					}
+				} else if workerStatus.Stage != runtime.WorkerFinished {
+					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
+					queryStatusResp = jm.QueryStatus(ctx, taskID)
 				}
 			}
 
