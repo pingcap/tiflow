@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/avro"
-	canal2 "github.com/pingcap/tiflow/cdc/sinkv2/codec/canal"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/craft"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/csv"
@@ -34,13 +34,13 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *common.Config) (codec.E
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return open.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return canal2.NewBatchEncoderBuilder(), nil
+		return canal.NewBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
 		return avro.NewBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
 		return maxwell.NewBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
-		return canal2.NewJSONBatchEncoderBuilder(c), nil
+		return canal.NewJSONBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCsv:

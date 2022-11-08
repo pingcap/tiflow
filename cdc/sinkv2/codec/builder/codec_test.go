@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/craft"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/open"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/proto/benchmark"
 	"github.com/stretchr/testify/require"
 )
@@ -205,11 +206,14 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 }
 
 func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
+	callbackedEvents := make([]*eventsink.RowChangeCallbackableEvent, 0, len(events))
 	for _, event := range events {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		if err != nil {
-			return nil, err
-		}
+		callbackedEvents = append(callbackedEvents, &eventsink.RowChangeCallbackableEvent{Event: event})
+	}
+
+	err := encoder.AppendRowChangedEvents(context.Background(), "", callbackedEvents)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(events) > 0 {

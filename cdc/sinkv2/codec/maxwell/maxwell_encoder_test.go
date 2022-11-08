@@ -20,6 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,10 +35,16 @@ func TestMaxwellBatchCodec(t *testing.T) {
 	}}, {}}
 	for _, cs := range rowCases {
 		encoder := newEncoder()
-		for _, row := range cs {
-			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-			require.Nil(t, err)
+
+		events := make([]*eventsink.RowChangeCallbackableEvent, 0, len(cs))
+		for _, c := range cs {
+			events = append(events, &eventsink.RowChangeCallbackableEvent{
+				Event: c,
+			})
 		}
+		err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+		require.NoError(t, err)
+		
 		messages := encoder.Build()
 		if len(cs) == 0 {
 			require.Nil(t, messages)
@@ -84,40 +91,14 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
+	for i := 1; i <= 5; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += i
 			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
+		})
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
@@ -125,10 +106,9 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
 	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
+
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()

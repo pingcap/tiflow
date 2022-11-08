@@ -10,6 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package internal
 
 import (
@@ -19,7 +20,8 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	codec2 "github.com/pingcap/tiflow/cdc/sinkv2/codec"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -226,10 +228,10 @@ func NewDefaultBatchTester() *BatchTester {
 // TestBatchCodec tests bunch of cases for EventBatchDecoder.
 func (s *BatchTester) TestBatchCodec(
 	t *testing.T,
-	encoderBuilder codec2.EncoderBuilder,
-	newDecoder func(key []byte, value []byte) (codec2.EventBatchDecoder, error),
+	encoderBuilder codec.EncoderBuilder,
+	newDecoder func(key []byte, value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec2.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -245,7 +247,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder codec2.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -260,7 +262,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder codec2.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -279,11 +281,13 @@ func (s *BatchTester) TestBatchCodec(
 	for _, cs := range s.RowCases {
 		encoder := encoderBuilder.Build()
 
+		events := make([]*eventsink.RowChangeCallbackableEvent, 0, len(cs))
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-			require.Nil(t, err)
+			events = append(events, &eventsink.RowChangeCallbackableEvent{Event: row})
 		}
-
+		err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+		require.NoError(t, err)
+		
 		if len(cs) > 0 {
 			res := encoder.Build()
 			require.Len(t, res, 1)

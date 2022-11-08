@@ -20,6 +20,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 )
@@ -28,11 +29,15 @@ func TestCanalBatchEncoder(t *testing.T) {
 	t.Parallel()
 	s := defaultCanalBatchTester
 	for _, cs := range s.rowCases {
-		encoder := newBatchEncoder()
+		callbackedEvents := make([]*eventsink.RowChangeCallbackableEvent, 0, len(cs))
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-			require.Nil(t, err)
+			callbackedEvents = append(callbackedEvents, &eventsink.RowChangeCallbackableEvent{
+				Event: row,
+			})
 		}
+		encoder := newBatchEncoder()
+		err := encoder.AppendRowChangedEvents(context.Background(), "", callbackedEvents)
+		require.NoError(t, err)
 		res := encoder.Build()
 
 		if len(cs) == 0 {
@@ -45,8 +50,8 @@ func TestCanalBatchEncoder(t *testing.T) {
 		require.Equal(t, len(cs), res[0].GetRowsCount())
 
 		packet := &canal.Packet{}
-		err := proto.Unmarshal(res[0].Value, packet)
-		require.Nil(t, err)
+		err = proto.Unmarshal(res[0].Value, packet)
+		require.NoError(t, err)
 		require.Equal(t, canal.PacketType_MESSAGES, packet.GetType())
 		messages := &canal.Messages{}
 		err = proto.Unmarshal(packet.GetBody(), messages)
@@ -91,40 +96,14 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
+	for i := 1; i <= 5; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += i
 			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
+		})
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
@@ -132,10 +111,9 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
 	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
+
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()
