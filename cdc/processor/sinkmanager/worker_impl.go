@@ -23,13 +23,14 @@ import (
 )
 
 const (
-	// defaultRequestMemSize is the default memory usage for a request.
-	defaultRequestMemSize = 10 * 1024 * 1024 // 10MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	maxUpdateIntervalSize = 1024 * 256 // 256KB
 	// Limit the maximum size of a group of one batch, if there is a big translation.
 	maxBigTxnBatchSize = maxUpdateIntervalSize * 20 // 5MB
 )
+
+// defaultRequestMemSize is the default memory usage for a request.
+var defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 
 // Assert that workerImpl implements worker.
 var _ worker = (*workerImpl)(nil)
@@ -48,7 +49,6 @@ type workerImpl struct {
 }
 
 // newWorker creates a new worker.
-// nolint:deadcode
 func newWorker(
 	changefeedID model.ChangeFeedID,
 	sortEngine sorter.EventSortEngine,
@@ -74,7 +74,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			return ctx.Err()
 		case task := <-taskChan:
 			// First time to run the task, we have initialized memory quota for the table.
-			availableMem := defaultRequestMemSize
+			availableMem := int(defaultRequestMemSize)
 			events := make([]*model.PolymorphicEvent, 0, 1024)
 
 			// Used to record the last written position.
@@ -131,7 +131,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 							return errors.Trace(err)
 						}
 					}
-					availableMem += defaultRequestMemSize
+					availableMem += int(defaultRequestMemSize)
 				}
 				availableMem -= e.Row.ApproximateBytes()
 				events = append(events, e)
