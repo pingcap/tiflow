@@ -68,6 +68,10 @@ type worker struct {
 	// metricMQWorkerFlushDuration is the metric of the flush duration.
 	// We record the flush duration for each batch.
 	metricMQWorkerFlushDuration prometheus.Observer
+	// metricMQWorkerBatchSize tracks each batch's size.
+	metricMQWorkerBatchSize prometheus.Observer
+	// metricMQWorkerBatchDuration tracks the time duration cost on batch messages.
+	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 }
@@ -89,6 +93,7 @@ func newWorker(
 		encoderGroup:                codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                    producer,
 		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
+		metricMQWorkerBatchSize:     mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		statistics:                  statistics,
 	}
 
@@ -123,7 +128,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	return g.Wait()
 }
 
-// Directly send the message to the producer.
+// nonBatchEncodeRun add events to the encoder group immediately.
 func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 	log.Info("MQ sink non batch worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
@@ -156,7 +161,8 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 	}
 }
 
-// Collect messages and send them to the producer in batches.
+// batchEncodeRun collect messages into batch and add them to the encoder group.
+// should only be used when the protocol is batch encode.
 func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	log.Info("MQ sink batch worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
@@ -166,7 +172,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
-		//start := time.Now()
+		start := time.Now()
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
@@ -177,8 +183,10 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		}
 
 		msgs := eventsBuf[:endIndex]
-		partitionedRows := w.group(msgs)
+		w.metricMQWorkerBatchSize.Observe(float64(len(msgs)))
+		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
 
+		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
 			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {
 				return errors.Trace(err)
@@ -305,4 +313,8 @@ func (w *worker) close() {
 		// Do nothing. We do not care about the data.
 	}
 	w.producer.Close()
+
+	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.WorkerFlushDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }
