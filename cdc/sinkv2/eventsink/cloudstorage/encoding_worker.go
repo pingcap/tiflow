@@ -68,7 +68,7 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
 					return
 				}
-				err := w.encodeEvents(ctx, frag)
+				err := w.encodeEvents(frag)
 				if err != nil {
 					w.errCh <- err
 					return
@@ -78,22 +78,9 @@ func (w *encodingWorker) run(ctx context.Context, msgChan *chann.Chann[eventFrag
 	}()
 }
 
-func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) error {
-	var err error
-	length := len(frag.event.Event.Rows)
-
-	for idx, event := range frag.event.Event.Rows {
-		// because each TxnCallbackableEvent contains one Callback and multiple RowChangedEvents,
-		// we only append RowChangedEvent attached with a Callback to EventBatchEncoder for the
-		// last RowChangedEvent.
-		if idx != length-1 {
-			err = w.encoder.AppendRowChangedEvents(ctx, "", nil)
-		} else {
-			err = w.encoder.AppendRowChangedEvents(ctx, "", nil)
-		}
-		if err != nil {
-			return err
-		}
+func (w *encodingWorker) encodeEvents(frag eventFragment) error {
+	if err := w.encoder.AppendTxnEvent(frag.event); err != nil {
+		return err
 	}
 
 	msgs := w.encoder.Build()

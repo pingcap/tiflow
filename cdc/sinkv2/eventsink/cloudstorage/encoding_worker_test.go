@@ -55,7 +55,7 @@ func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
 func TestEncodeEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := testEncodingWorker(ctx, t)
-	err := worker.encodeEvents(ctx, eventFragment{
+	err := worker.encodeEvents(eventFragment{
 		versionedTable: versionedTable{
 			TableName: model.TableName{
 				Schema:  "test",
