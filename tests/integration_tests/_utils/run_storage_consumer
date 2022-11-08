@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# parameter 1: work directory
+# parameter 2: sink_uri
+# parameter 3: consumer_replica_config
+
+set -eux
+
+workdir=$1
+sink_uri=$2
+consumer_replica_config=$3
+pwd=$(pwd)
+
+echo "[$(date)] <<<<<< START storage consumer in $TEST_NAME case >>>>>>"
+cd $workdir
+cdc_storage_consumer --log-file $workdir/cdc_storage_consumer.log --log-level debug --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/ --config $consumer_replica_config >>$workdir/cdc_storage_consumer_stdout.log 2>&1 &
+
+cd $pwd
+
+set +x

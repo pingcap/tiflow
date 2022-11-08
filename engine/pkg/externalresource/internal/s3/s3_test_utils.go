@@ -112,8 +112,9 @@ func NewFileManagerForUT(tempDir string, executorID resModel.ExecutorID) (*FileM
 	), factory
 }
 
-func newFileManagerForUTFromSharedStorageFactory(
+// NewFileManagerForUTFromSharedStorageFactory returns a file manager for UT.
+func NewFileManagerForUTFromSharedStorageFactory(
 	executorID model.ExecutorID, factory *mockExternalStorageFactory,
 ) *FileManager {
-	return NewFileManager(MockExecutorID, factory)
+	return NewFileManager(executorID, factory)
 }

@@ -77,9 +77,10 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	enableOldVlaue := false
-	result, err := convertRowChangedEvents(changefeedID, tableID, enableOldVlaue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldVlaue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
+	require.Equal(t, uint64(0), size)
 }
 
 func TestConvertEmptyRowChangedEvents(t *testing.T) {
@@ -98,9 +99,10 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	enableOldValue := false
-	result, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
+	require.Equal(t, uint64(0), size)
 }
 
 func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
@@ -135,15 +137,24 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+			Row: &model.RowChangedEvent{
+				CommitTs:   1,
+				Columns:    columns,
+				PreColumns: preColumns,
+				Table: &model.TableName{
+					Schema: "test",
+					Table:  "test",
+				},
+			},
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	enableOldValue := true
-	result, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
+	require.Equal(t, uint64(216), size)
 }
 
 func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
@@ -179,15 +190,24 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+			Row: &model.RowChangedEvent{
+				CommitTs:   1,
+				Columns:    columns,
+				PreColumns: preColumns,
+				Table: &model.TableName{
+					Schema: "test",
+					Table:  "test",
+				},
+			},
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	enableOldValue := false
-	result, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
+	require.Equal(t, uint64(216), size)
 
 	// Update non-handle key.
 	columns = []*model.Column{
@@ -219,10 +239,19 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+			Row: &model.RowChangedEvent{
+				CommitTs:   1,
+				Columns:    columns,
+				PreColumns: preColumns,
+				Table: &model.TableName{
+					Schema: "test",
+					Table:  "test",
+				},
+			},
 		},
 	}
-	result, err = convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err = convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
+	require.Equal(t, uint64(216), size)
 }
