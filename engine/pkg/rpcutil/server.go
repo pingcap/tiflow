@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -115,14 +114,6 @@ func (rl *rpcLimiter) Allow(methodName string) bool {
 	return rl.limiter.Allow()
 }
 
-// ErrMasterNotReady is returned when master is not ready.
-var ErrMasterNotReady = rpcerror.Normalize[MasterNotReadyError]()
-
-// MasterNotReadyError indicates that the master is not ready.
-type MasterNotReadyError struct {
-	rpcerror.Error[rpcerror.Retryable, rpcerror.Unavailable]
-}
-
 // FeatureChecker defines an interface that checks whether a feature is available
 // or under degradation.
 type FeatureChecker interface {
@@ -204,7 +195,7 @@ func (h preRPCHookImpl[T]) PreRPC(
 	}
 
 	if !h.featureChecker.Available(methodName) {
-		return true, ErrMasterNotReady.GenWithStack(&MasterNotReadyError{})
+		return true, errors.ErrMasterNotReady.GenWithStackByArgs()
 	}
 	return false, nil
 }

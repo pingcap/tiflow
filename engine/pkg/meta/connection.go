@@ -17,7 +17,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // NewClientConn new a client connection
@@ -29,6 +29,6 @@ func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, erro
 		return sqlkv.NewClientConnImpl(storeConf)
 	}
 
-	return nil, cerrors.ErrMetaClientTypeNotSupport.
+	return nil, errors.ErrMetaClientTypeNotSupport.
 		GenWithStackByArgs(metaModel.ToClientType(storeConf.StoreType))
 }

@@ -16,7 +16,7 @@ package etcdkv
 import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -39,7 +39,7 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 
 	etcdCli, ok := cli.(*clientv3.Client)
 	if !ok {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStack("invalid ClientConn type for etcd kvclient builder,"+
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack("invalid ClientConn type for etcd kvclient builder,"+
 			" conn type:%s", cc.StoreType())
 	}
 	impl, err := NewEtcdKVClientImpl(etcdCli)

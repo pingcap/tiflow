@@ -21,8 +21,8 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // state represents the state which need to be stored in metadata.

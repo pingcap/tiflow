@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/containers"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 )
 

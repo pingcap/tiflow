@@ -15,7 +15,6 @@ package orm
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -24,21 +23,21 @@ import (
 	"github.com/go-sql-driver/mysql"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIsNotFoundError(t *testing.T) {
-	b := IsNotFoundError(cerrors.ErrMetaEntryNotFound.GenWithStackByArgs("error"))
+	b := IsNotFoundError(errors.ErrMetaEntryNotFound.GenWithStackByArgs("error"))
 	require.True(t, b)
 
-	b = IsNotFoundError(cerrors.ErrMetaEntryNotFound.GenWithStack("err:%s", "error"))
+	b = IsNotFoundError(errors.ErrMetaEntryNotFound.GenWithStack("err:%s", "error"))
 	require.True(t, b)
 
-	b = IsNotFoundError(cerrors.ErrMetaEntryNotFound.Wrap(errors.New("error")))
+	b = IsNotFoundError(errors.ErrMetaEntryNotFound.Wrap(errors.New("error")))
 	require.True(t, b)
 
-	b = IsNotFoundError(cerrors.ErrMetaNewClientFail.Wrap(errors.New("error")))
+	b = IsNotFoundError(errors.ErrMetaNewClientFail.Wrap(errors.New("error")))
 	require.False(t, b)
 
 	b = IsNotFoundError(errors.New("error"))

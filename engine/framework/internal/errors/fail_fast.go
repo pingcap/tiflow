@@ -12,7 +12,9 @@
 
 package errors
 
-import gerrors "errors"
+import (
+	"github.com/pingcap/tiflow/pkg/errors"
+)
 
 // FailFastError is used internally in the framework to
 // mark the error has needing to fail the worker or master immediately.
@@ -36,6 +38,13 @@ func (e *FailFastError) Cause() error {
 	return e.cause
 }
 
+// Unwrap returns cause of the error.
+// It allows Error to work with errors.Is() and errors.As() from the Go
+// standard package.
+func (e *FailFastError) Unwrap() error {
+	return e.cause
+}
+
 func (e *FailFastError) Error() string {
 	return e.cause.Error()
 }
@@ -47,5 +56,5 @@ func IsFailFastError(errIn error) bool {
 	// We use `As` instead of `Is` because
 	// `Is` requires exact equalities instead
 	// of type matching.
-	return gerrors.As(errIn, &out)
+	return errors.As(errIn, &out)
 }

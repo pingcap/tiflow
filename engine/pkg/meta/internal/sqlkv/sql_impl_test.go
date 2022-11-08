@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/log"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 )

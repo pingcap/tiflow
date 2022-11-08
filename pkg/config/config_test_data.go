@@ -15,6 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -143,6 +144,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -195,6 +197,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,

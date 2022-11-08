@@ -159,7 +159,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 	// log.Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
 	if task.statusRateLimiter.Allow() {
 		err := task.BaseWorker.UpdateStatus(ctx, task.Status())
-		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
 			log.Warn("update status try again later", zap.String("id", task.ID()), zap.String("error", err.Error()))
 			return nil
 		}

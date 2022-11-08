@@ -17,8 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 )
@@ -51,7 +50,7 @@ func (m *messageSenderImpl) SendToNodeB(
 ) error {
 	client := m.router.GetClient(targetNodeID)
 	if client == nil {
-		return cerrors.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
+		return errors.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
 	}
 
 	// TODO: blocking send in p2p library may have performance issue
@@ -67,7 +66,7 @@ func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID,
 
 	_, err := client.TrySendMessage(ctx, topic, message)
 	if err != nil {
-		if cerrors.ErrPeerMessageSendTryAgain.Equal(err) {
+		if errors.Is(err, errors.ErrPeerMessageSendTryAgain) {
 			return false, nil
 		}
 		return false, errors.Trace(err)

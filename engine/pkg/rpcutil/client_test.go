@@ -17,8 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/errors"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -100,7 +99,7 @@ func TestValidLeaderAfterUpdateClients(t *testing.T) {
 	require.Nil(t, clients.GetLeaderClient())
 
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
-	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+	require.ErrorIs(t, err, errors.ErrNoRPCClient)
 }
 
 func mockDailWithAddrWithError(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
@@ -120,7 +119,7 @@ func TestFailToDialLeaderAfterwards(t *testing.T) {
 	require.Nil(t, clients.GetLeaderClient())
 	require.Equal(t, "", clients.leader)
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
-	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+	require.ErrorIs(t, err, errors.ErrNoRPCClient)
 	t.Log(err.Error())
 }
 

@@ -20,9 +20,9 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // QueryStatus implements the api of query status request.

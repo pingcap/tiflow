@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -30,6 +29,7 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
