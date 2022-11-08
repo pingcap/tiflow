@@ -287,7 +287,7 @@ func (s *BatchTester) TestBatchCodec(
 		}
 		err := encoder.AppendRowChangedEvents(context.Background(), "", events)
 		require.NoError(t, err)
-		
+
 		if len(cs) > 0 {
 			res := encoder.Build()
 			require.Len(t, res, 1)

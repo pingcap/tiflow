@@ -251,10 +251,17 @@ func (w *worker) group(
 ) map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
 	partitionedRows := make(map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
 	for _, event := range events {
+		// Skip this event when the table is stopping.
+		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+			event.rowEvent.Callback()
+			log.Debug("Skip event of stopped table", zap.Any("event", event))
+			continue
+		}
 		if _, ok := partitionedRows[event.key]; !ok {
 			partitionedRows[event.key] = make([]*eventsink.RowChangeCallbackableEvent, 0)
 		}
 		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvent)
+		w.statistics.ObserveRows(event.rowEvent.Event)
 	}
 	return partitionedRows
 }
@@ -265,22 +272,9 @@ func (w *worker) asyncSend(
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
 ) error {
 	for key, events := range partitionedRows {
-		rowsCount := 0
-		for _, event := range events {
-			// Skip this event when the table is stopping.
-			if event.GetTableSinkState() != state.TableSinkSinking {
-				event.Callback()
-				log.Debug("Skip event of stopped table", zap.Any("event", event))
-				continue
-			}
-			err := w.encoder.AppendRowChangedEvents(ctx, key.Topic, nil)
-			if err != nil {
-				return err
-			}
-			rowsCount++
-			w.statistics.ObserveRows(event.Event)
+		if err := w.encoder.AppendRowChangedEvents(ctx, key.Topic, events); err != nil {
+			return err
 		}
-
 		for _, message := range w.encoder.Build() {
 			err := w.statistics.RecordBatchExecution(func() (int, error) {
 				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)

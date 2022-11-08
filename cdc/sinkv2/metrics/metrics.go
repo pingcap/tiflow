@@ -45,7 +45,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 10), // 128K~128M
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecDDLHistogram records the exexution time of a DDL.
+	// ExecDDLHistogram records the execution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

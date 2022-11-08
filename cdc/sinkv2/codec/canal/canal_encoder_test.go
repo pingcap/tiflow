@@ -98,10 +98,11 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
 	for i := 1; i <= 5; i++ {
+		bit := i
 		events = append(events, &eventsink.RowChangeCallbackableEvent{
 			Event: row,
 			Callback: func() {
-				count += i
+				count += bit
 			},
 		})
 	}

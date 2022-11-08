@@ -43,7 +43,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
-	// assume we have a large transaction and it is splitted into 10 small transactions
+	// assume we have a large transaction, and it is split into 10 small transactions
 	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
 	var cnt uint64 = 0
 	batch := 100

@@ -14,13 +14,13 @@
 package csv
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -59,10 +59,20 @@ func TestCSVBatchCodec(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: true,
 		})
-		for _, row := range cs {
-			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-			require.Nil(t, err)
+
+		txn := &eventsink.TxnCallbackableEvent{
+			Event: &model.SingleTableTxn{
+				CommitTs:     100,
+				Table:        &model.TableName{Schema: "test", Table: "table1"},
+				TableVersion: 33,
+				Rows:         cs,
+			},
+			Callback: func() {},
 		}
+
+		err := encoder.AppendTxnEvent(txn)
+		require.NoError(t, err)
+
 		messages := encoder.Build()
 		if len(cs) == 0 {
 			require.Nil(t, messages)
@@ -95,45 +105,32 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeTiny),
 		}},
 	}
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
-			},
+
+	txn := &eventsink.TxnCallbackableEvent{
+		Event: &model.SingleTableTxn{
+			CommitTs:     100,
+			Table:        &model.TableName{Schema: "test", Table: "table1"},
+			TableVersion: 33,
 		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
+		Callback: func() {},
+	}
+
+	total := 0
+	for i := 0; i < 5; i++ {
+		txn.Event.Rows = append(txn.Event.Rows, row)
+		total += i
+	}
+
+	txn.Callback = func() {
+		count += total
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendTxnEvent(txn)
+	require.NoError(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()

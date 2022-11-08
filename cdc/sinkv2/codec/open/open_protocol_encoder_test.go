@@ -61,7 +61,8 @@ func TestMaxMessageBytes(t *testing.T) {
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = NewBatchEncoderBuilder(config).Build()
-	err = encoder.AppendRowChangedEvents(ctx, topic, nil)
+	err = encoder.AppendRowChangedEvents(ctx, topic,
+		[]*eventsink.RowChangeCallbackableEvent{{Event: testEvent}})
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
@@ -158,10 +159,11 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
 	for i := 1; i <= 5; i++ {
+		bit := i
 		events = append(events, &eventsink.RowChangeCallbackableEvent{
 			Event: row,
 			Callback: func() {
-				count += i
+				count += bit
 			},
 		})
 	}
