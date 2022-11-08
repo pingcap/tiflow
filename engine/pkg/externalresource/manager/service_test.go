@@ -22,14 +22,13 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc/codes"
 )
 
 type serviceTestSuite struct {
@@ -135,9 +134,7 @@ func TestServiceBasics(t *testing.T) {
 		CreatorWorkerId: "test-worker-4",
 	})
 	require.Error(t, err)
-	code, ok := rpcerror.GRPCStatusCode(err)
-	require.True(t, ok)
-	require.Equal(t, codes.AlreadyExists, code)
+	require.True(t, errors.Is(err, errors.ErrResourceAlreadyExists))
 
 	execID, ok, err := suite.service.GetPlacementConstraint(ctx,
 		resModel.ResourceKey{
@@ -212,18 +209,16 @@ func TestServiceBasics(t *testing.T) {
 			JobId: "test-job-1", ResourceId: "/local/test/2",
 		},
 	})
-	code, ok = rpcerror.GRPCStatusCode(err)
-	require.True(t, ok)
-	require.Equal(t, codes.NotFound, code)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.ErrResourceDoesNotExist))
 
 	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{
 		ResourceKey: &pb.ResourceKey{
 			JobId: "test-job-1", ResourceId: "/local/test/non-existent",
 		},
 	})
-	code, ok = rpcerror.GRPCStatusCode(err)
-	require.True(t, ok)
-	require.Equal(t, codes.NotFound, code)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.ErrResourceDoesNotExist))
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {

@@ -15,7 +15,6 @@ package integration
 
 import (
 	"context"
-	gerrors "errors"
 	"sync"
 	"testing"
 
@@ -30,6 +29,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -100,7 +100,7 @@ func (c *mockCluster) Start(t *testing.T) {
 
 		err := c.gcCoordinator.Run(ctx)
 		require.Error(t, err)
-		require.True(t, gerrors.Is(err, context.Canceled))
+		require.True(t, errors.Is(err, context.Canceled))
 	}()
 
 	c.wg.Add(1)
@@ -109,7 +109,7 @@ func (c *mockCluster) Start(t *testing.T) {
 
 		err := c.gcRunner.Run(ctx)
 		require.Error(t, err)
-		require.True(t, gerrors.Is(err, context.Canceled))
+		require.True(t, errors.Is(err, context.Canceled))
 	}()
 }
 

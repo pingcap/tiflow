@@ -15,10 +15,8 @@ package manager
 
 import (
 	"context"
-	gerrors "errors"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -26,6 +24,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 )
@@ -82,7 +81,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		jobReceiver.Close()
 		executorReceiver.Close()
 
-		if gerrors.Is(err, context.Canceled) || gerrors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return errors.Trace(err)
 		}
 

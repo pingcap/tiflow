@@ -20,10 +20,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 )
 
 type (
@@ -114,16 +113,7 @@ func (c *executorServiceClient) DispatchTask(
 		return nil
 	}
 
-	code, ok := rpcerror.GRPCStatusCode(err)
-	if !ok {
-		log.L().Warn("DispatchTask: received ignorable error", zap.Error(err))
-		// Not an grpc error
-		return nil
-	}
-
-	// TODO: We will use concrete error types once we modify the server to use
-	// pkg/rpcerror.
-	if code == codes.NotFound || code == codes.Aborted {
+	if errors.Is(err, errors.ErrRuntimeIncomingQueueFull) || errors.Is(err, errors.ErrDispatchTaskRequestIDNotFound) {
 		// Guaranteed to have failed.
 		return err
 	}
