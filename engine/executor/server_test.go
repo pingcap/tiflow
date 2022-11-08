@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -35,8 +34,9 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -253,11 +253,11 @@ func TestConvertMakeTaskError(t *testing.T) {
 	for _, tc := range testCases {
 		err := convertMakeTaskErrorToRPCError(register, tc.err, frameModel.FakeJobMaster)
 		require.Error(t, err)
-		errIn := rpcerror.FromGRPCError(err)
+		errIn := rpcutil.FromGRPCError(err)
 		if tc.isRetryable {
-			require.True(t, client.ErrCreateWorkerNonTerminate.Is(errIn))
+			require.True(t, errors.Is(errIn, errors.ErrCreateWorkerNonTerminate))
 		} else {
-			require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
+			require.True(t, errors.Is(errIn, errors.ErrCreateWorkerTerminate))
 		}
 	}
 }
@@ -311,6 +311,6 @@ func TestPrecheckMasterMeta(t *testing.T) {
 	require.Error(t, err)
 	require.EqualError(t, err, fakeJobErr.Error())
 	err = convertMakeTaskErrorToRPCError(register, err, frameModel.FakeJobMaster)
-	errIn := rpcerror.FromGRPCError(err)
-	require.True(t, client.ErrCreateWorkerTerminate.Is(errIn))
+	errIn := rpcutil.FromGRPCError(err)
+	require.True(t, errors.Is(errIn, errors.ErrCreateWorkerTerminate))
 }

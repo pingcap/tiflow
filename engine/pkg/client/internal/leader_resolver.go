@@ -21,9 +21,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal/endpoint"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"

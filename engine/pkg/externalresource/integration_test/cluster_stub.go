@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
 type resourceClientStub struct {
@@ -34,18 +33,14 @@ func (c *resourceClientStub) CreateResource(
 	req *pb.CreateResourceRequest,
 ) error {
 	_, err := c.service.CreateResource(ctx, req)
-	return rpcerror.ToGRPCError(err)
+	return err
 }
 
 func (c *resourceClientStub) QueryResource(
 	ctx context.Context,
 	req *pb.QueryResourceRequest,
 ) (*pb.QueryResourceResponse, error) {
-	resp, err := c.service.QueryResource(ctx, req)
-	if err != nil {
-		return nil, rpcerror.ToGRPCError(err)
-	}
-	return resp, nil
+	return c.service.QueryResource(ctx, req)
 }
 
 func (c *resourceClientStub) RemoveResource(
@@ -53,7 +48,7 @@ func (c *resourceClientStub) RemoveResource(
 	req *pb.RemoveResourceRequest,
 ) error {
 	_, err := c.service.RemoveResource(ctx, req)
-	return rpcerror.ToGRPCError(err)
+	return err
 }
 
 type executorClientStub struct {
@@ -70,5 +65,5 @@ func (c *executorClientStub) RemoveResource(
 		ResourceId: resourceID,
 		CreatorId:  creatorID,
 	})
-	return rpcerror.ToGRPCError(err)
+	return err
 }

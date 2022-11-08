@@ -17,9 +17,9 @@ import (
 	"context"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ClusterInfo represents the cluster info.

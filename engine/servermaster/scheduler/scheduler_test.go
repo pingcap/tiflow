@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,7 +114,7 @@ func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-3"}},
 	})
 	require.Error(t, err)
-	require.Regexp(t, "CapacityNotEnoughError", err)
+	require.True(t, errors.Is(err, errors.ErrCapacityNotEnough))
 }
 
 func TestSchedulerResourceNotFound(t *testing.T) {
@@ -127,9 +128,7 @@ func TestSchedulerResourceNotFound(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-blah"}},
 	})
 	require.Error(t, err)
-	info, ok := ErrResourceNotFound.Convert(err)
-	require.True(t, ok)
-	require.Equal(t, "resource-blah", info.ResourceID)
+	require.True(t, errors.Is(err, errors.ErrResourceDoesNotExist))
 }
 
 func TestSchedulerByCostNoCapacity(t *testing.T) {
@@ -142,7 +141,7 @@ func TestSchedulerByCostNoCapacity(t *testing.T) {
 		Cost: 50,
 	})
 	require.Error(t, err)
-	require.Regexp(t, "CapacityNotEnoughError", err)
+	require.True(t, errors.Is(err, errors.ErrCapacityNotEnough))
 }
 
 func TestSchedulerConstraintConflict(t *testing.T) {
@@ -164,5 +163,5 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	require.Regexp(t, "ResourceConflictError", err)
+	require.True(t, errors.Is(err, errors.ErrResourceConflict))
 }

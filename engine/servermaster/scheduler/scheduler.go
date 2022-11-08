@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Scheduler is a full set of scheduling management, containing capacity provider,
@@ -56,10 +57,7 @@ func (s *Scheduler) ScheduleTask(
 	}
 	executorID, ok := s.costScheduler.ScheduleByCost(request.Cost, candidates)
 	if !ok {
-		return nil, ErrCapacityNotEnough.GenWithStack(
-			&CapacityNotEnoughError{
-				FinalCandidates: candidates,
-			})
+		return nil, errors.ErrCapacityNotEnough.GenWithStackByArgs()
 	}
 	return &schedModel.SchedulerResponse{ExecutorID: executorID}, nil
 }
