@@ -210,6 +210,7 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					CommitTs: upperBoundTs,
 				}
 			}
+			// Only generate the table sink task if lower bound less or equal the upper bound.
 			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
 			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(defaultRequestMemSize) {
 				m.progressHeap.push(slowestTableProgress)

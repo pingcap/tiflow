@@ -48,7 +48,7 @@ const (
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
-	DefaultChangefeedMemoryQuota = 10 * 1024 * 1024 * 1024 // 10 GB
+	DefaultChangefeedMemoryQuota = 2 * 1024 * 1024 * 1024 // 2 GB
 )
 
 var (
