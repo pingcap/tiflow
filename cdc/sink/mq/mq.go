@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/builder"
-	common "github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

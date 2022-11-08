@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -162,7 +163,8 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
+		err := encoder.AppendRowChangedEvents(context.Background(), "",
+			[]*eventsink.RowChangeCallbackableEvent{{Event: &updateCase}})
 		require.Nil(t, err)
 
 		if i%100 == 0 {
@@ -324,51 +326,22 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
+	for i := 0; i <= 5; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += i
 			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
+		})
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()

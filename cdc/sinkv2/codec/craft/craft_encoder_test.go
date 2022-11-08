@@ -19,9 +19,10 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	codec2 "github.com/pingcap/tiflow/cdc/sinkv2/codec"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -41,10 +42,12 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 		}},
 	}
 
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 10000)
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
+		events = append(events, &eventsink.RowChangeCallbackableEvent{Event: testEvent})
 	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 
 	messages := encoder.Build()
 	for _, msg := range messages {
@@ -68,10 +71,12 @@ func TestCraftMaxBatchSize(t *testing.T) {
 		}},
 	}
 
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 10000)
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
+		events = append(events, &eventsink.RowChangeCallbackableEvent{Event: testEvent})
 	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 
 	messages := encoder.Build()
 	sum := 0
@@ -110,10 +115,10 @@ func TestBuildCraftBatchEncoder(t *testing.T) {
 
 func testBatchCodec(
 	t *testing.T,
-	encoderBuilder codec2.EncoderBuilder,
-	newDecoder func(value []byte) (codec2.EventBatchDecoder, error),
+	encoderBuilder codec.EncoderBuilder,
+	newDecoder func(value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec2.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -128,7 +133,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder codec2.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -143,7 +148,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder codec2.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -163,12 +168,13 @@ func testBatchCodec(
 	s := internal.NewDefaultBatchTester()
 
 	for _, cs := range s.RowCases {
-		events := 0
+		events := make([]*eventsink.RowChangeCallbackableEvent, 0, len(cs))
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-			events++
-			require.Nil(t, err)
+			events = append(events, &eventsink.RowChangeCallbackableEvent{Event: row})
 		}
+		err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+		require.NoError(t, err)
+
 		// test normal decode
 		if len(cs) > 0 {
 			res := encoder.Build()
@@ -229,51 +235,22 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 5)
+	for i := 1; i <= 5; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += i
 			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
+		})
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
-	}
+	err := encoder.AppendRowChangedEvents(context.Background(), "", events)
+	require.NoError(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()

@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/codec/builder"
-	common "github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +29,9 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		encoder := newJSONBatchEncoder(encodeEnable)
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvents(context.Background(), "", nil)
-		require.Nil(t, err)
+		err := encoder.AppendRowChangedEvents(context.Background(), "",
+			[]*eventsink.RowChangeCallbackableEvent{{Event: testCaseInsert}})
+		require.NoError(t, err)
 
 		messages := encoder.Build()
 		require.Equal(t, 1, len(messages))

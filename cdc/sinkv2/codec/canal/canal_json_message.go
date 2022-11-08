@@ -20,7 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	internal2 "github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
+	"github.com/pingcap/tiflow/cdc/sinkv2/codec/internal"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
 )
@@ -215,7 +215,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal2.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, internal2.JavaSQLType(javaType))
+		col := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, internal.JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {
