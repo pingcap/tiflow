@@ -29,7 +29,8 @@ import (
 )
 
 func TestDeframenter(t *testing.T) {
-	defrag := newDefragmenter(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defrag := newDefragmenter(ctx)
 	uri := "file:///tmp/test"
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
@@ -37,8 +38,6 @@ func TestDeframenter(t *testing.T) {
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCanalJSON,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	require.Nil(t, err)
 
@@ -109,5 +108,6 @@ LOOP:
 			break LOOP
 		}
 	}
+	cancel()
 	defrag.close()
 }

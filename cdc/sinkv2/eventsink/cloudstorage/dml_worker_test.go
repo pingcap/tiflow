@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -125,7 +124,7 @@ func TestDMLWorkerRun(t *testing.T) {
 
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
-	files, err := ioutil.ReadDir(table1Dir)
+	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
 	require.Len(t, files, 1)
 	require.Equal(t, "CDC000001.json", files[0].Name())
