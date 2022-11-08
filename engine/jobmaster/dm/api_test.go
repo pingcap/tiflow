@@ -185,7 +185,6 @@ func TestQueryStatusAPI(t *testing.T) {
 	messageAgent.On("SendRequest", mock.Anything, "task5", mock.Anything, mock.Anything).Return(loadStatusResp, nil).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
 	messageAgent.On("SendRequest", mock.Anything, "task6", mock.Anything, mock.Anything).Return(syncStatusResp, nil).Once()
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", frameModel.WorkerDMLoad, "worker7", runtime.WorkerFinished, 3))
 
 	err := jm.metadata.UnitStateStore().Put(ctx, unitState)
 	require.NoError(t, err)
@@ -338,7 +337,13 @@ func TestQueryStatusAPI(t *testing.T) {
 			"expected_stage": "Finished",
 			"worker_id": "",
 			"config_outdated": true,
-			"status": null,
+			"status": {
+				"error_message": "worker for task task7 not found",
+				"unit": "",
+				"stage": "",
+				"result": null,
+				"status": null
+			},
 			"created_time": "2022-11-04T20:47:57.43382274+08:00"
 		}
 	},
