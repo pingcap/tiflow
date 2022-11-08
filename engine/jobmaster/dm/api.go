@@ -74,8 +74,15 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			JobID:      jm.ID(),
 			TaskStatus: make(map[string]TaskStatus),
 		}
-		unitState *metadata.UnitState
+		unitState      *metadata.UnitState
+		existUnitState bool
 	)
+
+	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
+		return nil, err
+	}
+	unitState, existUnitState = state.(*metadata.UnitState)
 
 	for _, task := range tasks {
 		taskID := task
@@ -88,6 +95,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				workerID        string
 				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
+				createdTime     time.Time
 			)
 
 			// task not exist
@@ -106,36 +114,34 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				}
 			}
 
+			if existUnitState {
+				if _, ok := unitState.CurrentUnitStatus[taskID]; ok {
+					createdTime = unitState.CurrentUnitStatus[taskID].CreatedTime
+				}
+			}
+
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
 				ExpectedStage:  expectedStage,
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
 				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
+				CreatedTime:    createdTime,
 			}
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
 
-	state, err := jm.metadata.UnitStateStore().Get(ctx)
-	if err != nil {
-		if errors.Cause(err) == metadata.ErrStateNotFound {
-			return jobStatus, nil
-		}
-		return nil, err
-	}
-
-	unitState = state.(*metadata.UnitState)
-	for _, task := range tasks {
-		status, ok1 := jobStatus.TaskStatus[task]
-		CurrentUnitStatus, ok2 := unitState.CurrentUnitStatus[task]
-		if !ok1 || !ok2 {
-			continue
-		}
-		status.CreatedTime = CurrentUnitStatus.CreatedTime
-		jobStatus.TaskStatus[task] = status
-	}
+	// for _, task := range tasks {
+	// 	status, ok1 := jobStatus.TaskStatus[task]
+	// 	CurrentUnitStatus, ok2 := unitState.CurrentUnitStatus[task]
+	// 	if !ok1 || !ok2 {
+	// 		continue
+	// 	}
+	// 	status.CreatedTime = CurrentUnitStatus.CreatedTime
+	// 	jobStatus.TaskStatus[task] = status
+	// }
 	jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
 
 	return jobStatus, nil
