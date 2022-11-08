@@ -381,6 +381,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 
 	currentStatus = getCurrentStatus()
 	taskID1, taskID2 := getTaskID()
+	require.Len(t.T(), currentStatus, 1)
 	require.Contains(t.T(), currentStatus, taskID1)
 	require.True(t.T(), time.Since(currentStatus[taskID1].CreatedTime).Seconds() < float64(time.Second))
 
@@ -395,6 +396,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	workerStatus1 := wokerStatusMap[source1]
 	workerStatus2 := wokerStatusMap[source2]
 	currentStatus = getCurrentStatus()
+	require.Len(t.T(), currentStatus, 2)
 	require.Contains(t.T(), currentStatus, taskID2)
 	require.True(t.T(), time.Since(currentStatus[taskID2].CreatedTime).Seconds() < float64(time.Second))
 
