@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
@@ -93,7 +92,7 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
-		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+		return errors.ErrUnknownExecutor.GenWithStackByArgs(id)
 	}
 	addr := exec.Address
 	delete(e.executors, id)
@@ -139,7 +138,7 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		return nil, ErrUnknownExecutor.GenWithStack(&UnknownExecutorError{ExecutorID: string(execID)})
+		return nil, errors.ErrUnknownExecutor.GenWithStackByArgs(execID)
 	}
 	e.mu.Unlock()
 
@@ -208,7 +207,7 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 	// If any error occurs, client shouldn't use the executor.
 	// The executor in the map will be removed after the ttl expires.
 	if err := e.metaClient.CreateExecutor(ctx, executorMeta); err != nil {
-		return nil, perrors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	return executorMeta, nil
@@ -267,7 +266,7 @@ func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.status == model.Tombstone {
-		return ErrTombstoneExecutorError.GenWithStack(&TombstoneExecutorError{ExecutorID: string(e.ID)})
+		return errors.ErrTombstoneExecutor.GenWithStackByArgs(e.ID)
 	}
 	e.lastUpdateTime = time.Now()
 	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond
@@ -284,7 +283,7 @@ func (e *Executor) statusEqual(status model.ExecutorStatus) bool {
 // Run implements ExecutorManager.Run
 func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 	if err := e.resetExecutors(ctx); err != nil {
-		return perrors.Errorf("failed to reset executors: %v", err)
+		return errors.Errorf("failed to reset executors: %v", err)
 	}
 
 	ticker := time.NewTicker(e.keepAliveInterval)
@@ -296,7 +295,7 @@ func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			err := e.checkAliveImpl()
 			if err != nil {
@@ -355,7 +354,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 
 	executors, err := e.metaClient.QueryExecutors(ctx)
 	if err != nil {
-		return perrors.Trace(err)
+		return errors.Trace(err)
 	}
 	for _, executor := range executors {
 		e.registerExecLocked(executor)
@@ -365,7 +364,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 	// Clean up executors that are not in the meta.
 	for id := range orphanExecutorIDs {
 		if err := e.removeExecutorLocked(id); err != nil {
-			return perrors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
 

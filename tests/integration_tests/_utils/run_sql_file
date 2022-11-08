@@ -5,5 +5,8 @@
 
 set -eu
 
+prepare="set global tidb_enable_clustered_index = 'int_only';"
+
 echo "[$(date)] Executing SQL: $1" >"$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h$2 -P$3 --default-character-set utf8mb4 -E -e "${prepare}" >"$OUT_DIR/sql_res.$TEST_NAME.txt"
 mysql -uroot -h$2 -P$3 --default-character-set utf8mb4 -vv <"$1" >>"$OUT_DIR/sql_res.$TEST_NAME.txt"

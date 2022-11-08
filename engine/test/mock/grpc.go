@@ -15,11 +15,11 @@ package mock
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )

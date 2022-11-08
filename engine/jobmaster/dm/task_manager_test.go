@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"

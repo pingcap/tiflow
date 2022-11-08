@@ -30,12 +30,11 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -168,7 +167,7 @@ func createS3ResourceForWorker(
 	// create resource `resID` for worker `creator`
 	cli.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: fakeJobID, ResourceId: resID}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
+		Return((*pb.QueryResourceResponse)(nil), errors.ErrResourceDoesNotExist.GenWithStackByArgs(resID))
 	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, creator, fakeJobID, resID)
 	require.NoError(t, err)
 	require.Equal(t, resID, hdl.ID())
@@ -245,7 +244,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 
 	cli.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: fakeJobID, ResourceId: resID}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
+		Return((*pb.QueryResourceResponse)(nil), errors.ErrResourceDoesNotExist.GenWithStackByArgs(resID))
 	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", fakeJobID, resID)
 	require.NoError(t, err)
 	require.Equal(t, resID, hdl.ID())

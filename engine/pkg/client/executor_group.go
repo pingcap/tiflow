@@ -16,12 +16,12 @@ package client
 import (
 	"container/list"
 	"context"
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
@@ -138,29 +138,18 @@ func (g *DefaultExecutorGroup) GetExecutorClientB(ctx context.Context, id model.
 		for item := g.tombstoneList.Front(); item != nil; item = item.Next() {
 			tombstone := item.Value.(tombstoneEntry)
 			if tombstone.id == id {
-				return ErrExecutorNotFound.GenWithStack(
-					&ExecutorNotFoundErrInfo{
-						ExecutorID: id,
-						// Set IsTombstone to true to prevent retry
-						IsTombstone: true,
-					})
+				return errors.ErrTombstoneExecutor.GenWithStackByArgs(id)
 			}
 		}
-		return ErrExecutorNotFound.GenWithStack(&ExecutorNotFoundErrInfo{ExecutorID: id})
+		return errors.ErrExecutorNotFound.GenWithStackByArgs(id)
 	},
 		retry.WithBackoffMaxDelay(10),
 		retry.WithIsRetryableErr(func(err error) bool {
-			info, ok := ErrExecutorNotFound.Convert(err)
-			if !ok {
-				return false
-			}
-			// Do not retry on tombstones.
-			return !info.IsTombstone
+			return errors.Is(err, errors.ErrExecutorNotFound)
 		}))
 	if err != nil {
-		if errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
-			return nil, ErrExecutorNotFound.GenWithStack(&ExecutorNotFoundErrInfo{ExecutorID: id})
+		if errors.IsContextCanceledError(err) || errors.IsContextDeadlineExceededError(err) {
+			return nil, errors.ErrExecutorNotFound.GenWithStackByArgs(id)
 		}
 		return nil, err
 	}
@@ -222,9 +211,7 @@ func (g *DefaultExecutorGroup) AddExecutor(executorID model.ExecutorID, addr str
 	defer g.mu.Unlock()
 
 	if _, exists := g.clients[executorID]; exists {
-		return ErrExecutorAlreadyExists.GenWithStack(&ExecutorAlreadyExistsErrInfo{
-			ExecutorID: executorID,
-		})
+		return errors.ErrExecutorAlreadyExists.GenWithStackByArgs(executorID)
 	}
 
 	// NewExecutorClient should be non-blocking.
@@ -254,9 +241,7 @@ func (g *DefaultExecutorGroup) RemoveExecutor(executorID model.ExecutorID) error
 	if !exists {
 		g.logger.Info("trying to remove non-existent executor",
 			zap.String("executor-id", string(executorID)))
-		return ErrExecutorNotFound.GenWithStack(&ExecutorNotFoundErrInfo{
-			ExecutorID: executorID,
-		})
+		return errors.ErrExecutorNotFound.GenWithStackByArgs(executorID)
 	}
 
 	client.Close()

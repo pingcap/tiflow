@@ -13,9 +13,43 @@
 
 package openapi
 
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+)
+
 // JobAPIPrefix is the prefix of the job API.
 const JobAPIPrefix = "/api/v1/jobs/"
 
 // JobDetailAPIFormat is the path format for job detail status
 // the entire path is: /api/v1/jobs/${jobID}/status
 const JobDetailAPIFormat = JobAPIPrefix + "%s/status"
+
+// HTTPError is the error format for http response.
+type HTTPError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// WriteHTTPError writes error to http response with normalized error format.
+func WriteHTTPError(w http.ResponseWriter, err error) {
+	rfcCode, ok := errors.RFCCode(err)
+	if !ok {
+		rfcCode = errors.ErrUnknown.RFCCode()
+	}
+	httpErr := &HTTPError{
+		Code:    string(rfcCode),
+		Message: strings.TrimPrefix(err.Error(), fmt.Sprintf("[%s]", rfcCode)),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(errors.HTTPStatusCode(err))
+	if err := json.NewEncoder(w).Encode(httpErr); err != nil {
+		log.Warn("Failed to write error response", zap.Error(err))
+	}
+}

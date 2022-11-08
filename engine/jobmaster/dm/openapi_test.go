@@ -24,7 +24,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -35,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	tmock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

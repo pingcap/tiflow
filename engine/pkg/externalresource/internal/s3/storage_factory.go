@@ -18,10 +18,9 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ExternalStorageFactory represents a factory used to create
@@ -98,7 +97,7 @@ func GetExternalStorageFromURI(
 	// TODO: use proper retry policy.
 	ret, err := brStorage.New(ctx, backEnd, &brStorage.ExternalStorageOptions{})
 	if err != nil {
-		retErr := derrors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
+		retErr := errors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
 		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for s3")
 	}
 	return ret, nil
