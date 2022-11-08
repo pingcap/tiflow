@@ -1276,9 +1276,9 @@ error = '''
 0-length response with status code: %d
 '''
 
-["DFLOW:ErrBuildJobFailed"]
+["DFLOW:ErrCapacityNotEnough"]
 error = '''
-build job failed
+capacity not enough
 '''
 
 ["DFLOW:ErrCleaningLocalTempFiles"]
@@ -1296,9 +1296,14 @@ error = '''
 creating local file resource directory failed
 '''
 
-["DFLOW:ErrDatasetEntryNotFound"]
+["DFLOW:ErrCreateWorkerNonTerminate"]
 error = '''
-dataset entry not found. Key: %s
+create worker is not terminated
+'''
+
+["DFLOW:ErrCreateWorkerTerminate"]
+error = '''
+create worker is terminated
 '''
 
 ["DFLOW:ErrDecodeEtcdKeyFail"]
@@ -1306,14 +1311,29 @@ error = '''
 failed to decode etcd key: %s
 '''
 
+["DFLOW:ErrDispatchTaskRequestIDNotFound"]
+error = '''
+dispatch task request id %s not found
+'''
+
 ["DFLOW:ErrDuplicateResourceID"]
 error = '''
 duplicate resource ID: %s
 '''
 
+["DFLOW:ErrElectionRecordConflict"]
+error = '''
+election record conflict
+'''
+
 ["DFLOW:ErrEtcdAPIError"]
 error = '''
 etcd api returns error
+'''
+
+["DFLOW:ErrExecutorAlreadyExists"]
+error = '''
+executor %s already exists
 '''
 
 ["DFLOW:ErrExecutorConfigUnknownItem"]
@@ -1324,6 +1344,11 @@ master config contains unknown configuration options: %s
 ["DFLOW:ErrExecutorDecodeConfigFile"]
 error = '''
 decode config file failed
+'''
+
+["DFLOW:ErrExecutorNotFound"]
+error = '''
+executor %s not found
 '''
 
 ["DFLOW:ErrExecutorNotFoundForMessage"]
@@ -1341,6 +1366,11 @@ error = '''
 failed to create external storage
 '''
 
+["DFLOW:ErrFilterNoResult"]
+error = '''
+filter % returns no result
+'''
+
 ["DFLOW:ErrGrpcBuildConn"]
 error = '''
 dial grpc connection to %s failed
@@ -1354,6 +1384,16 @@ heartbeat error type: %s
 ["DFLOW:ErrIllegalResourcePath"]
 error = '''
 resource path is illegal: %s
+'''
+
+["DFLOW:ErrIncompatibleSchedulerRequest"]
+error = '''
+incompatible scheduler request: %s
+'''
+
+["DFLOW:ErrInvalidArgument"]
+error = '''
+invalid argument: %s
 '''
 
 ["DFLOW:ErrInvalidCliParameter"]
@@ -1373,7 +1413,12 @@ using an invalid resource handle
 
 ["DFLOW:ErrJobAlreadyCanceled"]
 error = '''
-job is already canceled: %s
+job %s is already canceled
+'''
+
+["DFLOW:ErrJobAlreadyExists"]
+error = '''
+job %s already exists
 '''
 
 ["DFLOW:ErrJobManagerGetJobDetailFail"]
@@ -1394,6 +1439,21 @@ get job detail response status code is 404
 ["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
 error = '''
 get job detail response status code is not 2XX
+'''
+
+["DFLOW:ErrJobNotFound"]
+error = '''
+job %s is not found
+'''
+
+["DFLOW:ErrJobNotRunning"]
+error = '''
+job %s is not running
+'''
+
+["DFLOW:ErrJobNotTerminated"]
+error = '''
+job %s is not terminated
 '''
 
 ["DFLOW:ErrLocalFileDirNotWritable"]
@@ -1451,9 +1511,9 @@ error = '''
 master is not found: master ID %s
 '''
 
-["DFLOW:ErrMasterNotInitialized"]
+["DFLOW:ErrMasterNotReady"]
 error = '''
-master is not initialized
+master is not ready
 '''
 
 ["DFLOW:ErrMasterRPCNotForward"]
@@ -1521,6 +1581,11 @@ error = '''
 metastore id duplicated
 '''
 
+["DFLOW:ErrMetaStoreNotExists"]
+error = '''
+metastore %s does not exist
+'''
+
 ["DFLOW:ErrNoRPCClient"]
 error = '''
 no available RPC client
@@ -1536,9 +1601,29 @@ error = '''
 removing a local resource file directory has failed
 '''
 
+["DFLOW:ErrResourceAlreadyExists"]
+error = '''
+resource %s already exists
+'''
+
+["DFLOW:ErrResourceConflict"]
+error = '''
+resource % on executor %s conflicts with resource %s on executor %s
+'''
+
 ["DFLOW:ErrResourceDoesNotExist"]
 error = '''
 resource does not exists: %s
+'''
+
+["DFLOW:ErrResourceFilesNotFound"]
+error = '''
+resource files not found
+'''
+
+["DFLOW:ErrResourceMetastoreError"]
+error = '''
+resource metastore error
 '''
 
 ["DFLOW:ErrRuntimeClosed"]
@@ -1561,19 +1646,19 @@ error = '''
 runtime has been closed
 '''
 
+["DFLOW:ErrSelectorUnsatisfied"]
+error = '''
+selector %v is not satisfied
+'''
+
 ["DFLOW:ErrSendingMessageToTombstone"]
 error = '''
 trying to send message to a tombstone worker handle: %s
 '''
 
-["DFLOW:ErrSubJobFailed"]
-error = '''
-executor %s job %d
-'''
-
 ["DFLOW:ErrTombstoneExecutor"]
 error = '''
-executor %s has been dead
+tombstone executor: %s
 '''
 
 ["DFLOW:ErrTooManyStatusUpdates"]
@@ -1581,9 +1666,14 @@ error = '''
 there are too many pending worker status updates: %d
 '''
 
-["DFLOW:ErrUnknownExecutorID"]
+["DFLOW:ErrUnknown"]
 error = '''
-cannot find executor ID: %s
+unknown error
+'''
+
+["DFLOW:ErrUnknownExecutor"]
+error = '''
+unknown executor: %s
 '''
 
 ["DFLOW:ErrWorkerCancel"]

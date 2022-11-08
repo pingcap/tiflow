@@ -32,26 +32,19 @@ import (
 
 // all dataflow engine errors
 var (
-	// This happens when a unknown executor send requests to master.
-	ErrUnknownExecutorID = errors.Normalize(
-		"cannot find executor ID: %s",
-		errors.RFCCodeText("DFLOW:ErrUnknownExecutorID"),
+	// general errors
+	ErrUnknown = errors.Normalize(
+		"unknown error",
+		errors.RFCCodeText("DFLOW:ErrUnknown"),
 	)
-	ErrTombstoneExecutor = errors.Normalize(
-		"executor %s has been dead",
-		errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"),
+	ErrInvalidArgument = errors.Normalize(
+		"invalid argument: %s",
+		errors.RFCCodeText("DFLOW:ErrInvalidArgument"),
 	)
-	ErrSubJobFailed = errors.Normalize(
-		"executor %s job %d",
-		errors.RFCCodeText("DFLOW:ErrSubJobFailed"),
-	)
+
 	ErrClusterResourceNotEnough = errors.Normalize(
 		"cluster resource is not enough, please scale out the cluster",
 		errors.RFCCodeText("DFLOW:ErrClusterResourceNotEnough"),
-	)
-	ErrBuildJobFailed = errors.Normalize(
-		"build job failed",
-		errors.RFCCodeText("DFLOW:ErrBuildJobFailed"),
 	)
 
 	ErrGrpcBuildConn = errors.Normalize(
@@ -72,6 +65,10 @@ var (
 	)
 
 	// master related errors
+	ErrMasterNotReady = errors.Normalize(
+		"master is not ready",
+		errors.RFCCodeText("DFLOW:ErrMasterNotReady"),
+	)
 	ErrMasterDecodeConfigFile = errors.Normalize(
 		"decode config file failed",
 		errors.RFCCodeText("DFLOW:ErrMasterDecodeConfigFile"),
@@ -115,10 +112,6 @@ var (
 	ErrSendingMessageToTombstone = errors.Normalize(
 		"trying to send message to a tombstone worker handle: %s",
 		errors.RFCCodeText("DFLOW:ErrSendingMessageToTombstone"),
-	)
-	ErrMasterNotInitialized = errors.Normalize(
-		"master is not initialized",
-		errors.RFCCodeText("DFLOW:ErrMasterNotInitialized"),
 	)
 	ErrMasterInterfaceNotFound = errors.Normalize(
 		"basemaster interface not found",
@@ -170,6 +163,17 @@ var (
 		"the worker is in half-exited state",
 		errors.RFCCodeText("DFLOW:ErrWorkerHalfExit"),
 	)
+	// ErrCreateWorkerNonTerminate indicates the job can be re-created.
+	ErrCreateWorkerNonTerminate = errors.Normalize(
+		"create worker is not terminated",
+		errors.RFCCodeText("DFLOW:ErrCreateWorkerNonTerminate"),
+	)
+	// ErrCreateWorkerTerminate indicates the job should be terminated permanently
+	// from the perspective of business logic.
+	ErrCreateWorkerTerminate = errors.Normalize(
+		"create worker is terminated",
+		errors.RFCCodeText("DFLOW:ErrCreateWorkerTerminate"),
+	)
 
 	// job manager related errors
 	ErrJobManagerGetJobDetailFail = errors.Normalize(
@@ -199,6 +203,22 @@ var (
 	)
 
 	// executor related errors
+	ErrUnknownExecutor = errors.Normalize(
+		"unknown executor: %s",
+		errors.RFCCodeText("DFLOW:ErrUnknownExecutor"),
+	)
+	ErrTombstoneExecutor = errors.Normalize(
+		"tombstone executor: %s",
+		errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"),
+	)
+	ErrExecutorNotFound = errors.Normalize(
+		"executor %s not found",
+		errors.RFCCodeText("DFLOW:ErrExecutorNotFound"),
+	)
+	ErrExecutorAlreadyExists = errors.Normalize(
+		"executor %s already exists",
+		errors.RFCCodeText("DFLOW:ErrExecutorAlreadyExists"),
+	)
 	ErrExecutorDecodeConfigFile = errors.Normalize(
 		"decode config file failed",
 		errors.RFCCodeText("DFLOW:ErrExecutorDecodeConfigFile"),
@@ -282,16 +302,14 @@ var (
 		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
 	)
 
-	// DataSet errors
-	ErrDatasetEntryNotFound = errors.Normalize(
-		"dataset entry not found. Key: %s",
-		errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"),
-	)
-
 	// Resource related errors
 	ErrDuplicateResourceID = errors.Normalize(
 		"duplicate resource ID: %s",
 		errors.RFCCodeText("DFLOW:ErrDuplicateResourceID"),
+	)
+	ErrResourceAlreadyExists = errors.Normalize(
+		"resource %s already exists",
+		errors.RFCCodeText("DFLOW:ErrResourceAlreadyExists"),
 	)
 	ErrIllegalResourcePath = errors.Normalize(
 		"resource path is illegal: %s",
@@ -300,6 +318,10 @@ var (
 	ErrResourceDoesNotExist = errors.Normalize(
 		"resource does not exists: %s",
 		errors.RFCCodeText("DFLOW:ErrResourceDoesNotExist"),
+	)
+	ErrResourceConflict = errors.Normalize(
+		"resource % on executor %s conflicts with resource %s on executor %s",
+		errors.RFCCodeText("DFLOW:ErrResourceConflict"),
 	)
 	ErrReadLocalFileDirectoryFailed = errors.Normalize(
 		"reading local file resource directory failed",
@@ -329,16 +351,71 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+	ErrFilterNoResult = errors.Normalize(
+		"filter % returns no result",
+		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),
+	)
+	ErrCapacityNotEnough = errors.Normalize(
+		"capacity not enough",
+		errors.RFCCodeText("DFLOW:ErrCapacityNotEnough"),
+	)
+	ErrSelectorUnsatisfied = errors.Normalize(
+		"selector %v is not satisfied",
+		errors.RFCCodeText("DFLOW:ErrSelectorUnsatisfied"),
+	)
+	ErrResourceFilesNotFound = errors.Normalize(
+		"resource files not found",
+		errors.RFCCodeText("DFLOW:ErrResourceFilesNotFound"),
+	)
+	ErrResourceMetastoreError = errors.Normalize(
+		"resource metastore error",
+		errors.RFCCodeText("DFLOW:ErrResourceMetastoreError"),
+	)
 
-	// JobOps related error
+	// Job related error
+	ErrJobNotFound = errors.Normalize(
+		"job %s is not found",
+		errors.RFCCodeText("DFLOW:ErrJobNotFound"),
+	)
+	ErrJobAlreadyExists = errors.Normalize(
+		"job %s already exists",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyExists"),
+	)
 	ErrJobAlreadyCanceled = errors.Normalize(
-		"job is already canceled: %s",
+		"job %s is already canceled",
 		errors.RFCCodeText("DFLOW:ErrJobAlreadyCanceled"),
+	)
+	ErrJobNotTerminated = errors.Normalize(
+		"job %s is not terminated",
+		errors.RFCCodeText("DFLOW:ErrJobNotTerminated"),
+	)
+	ErrJobNotRunning = errors.Normalize(
+		"job %s is not running",
+		errors.RFCCodeText("DFLOW:ErrJobNotRunning"),
+	)
+
+	// metastore related errors
+	ErrMetaStoreNotExists = errors.Normalize(
+		"metastore %s does not exist",
+		errors.RFCCodeText("DFLOW:ErrMetaStoreNotExists"),
 	)
 
 	// cli related errors
 	ErrInvalidCliParameter = errors.Normalize(
 		"invalid cli parameters",
 		errors.RFCCodeText("DFLOW:ErrInvalidCliParameter"),
+	)
+
+	ErrIncompatibleSchedulerRequest = errors.Normalize(
+		"incompatible scheduler request: %s",
+		errors.RFCCodeText("DFLOW:ErrIncompatibleSchedulerRequest"),
+	)
+	ErrDispatchTaskRequestIDNotFound = errors.Normalize(
+		"dispatch task request id %s not found",
+		errors.RFCCodeText("DFLOW:ErrDispatchTaskRequestIDNotFound"),
+	)
+	ErrElectionRecordConflict = errors.Normalize(
+		"election record conflict",
+		errors.RFCCodeText("DFLOW:ErrElectionRecordConflict"),
 	)
 )
