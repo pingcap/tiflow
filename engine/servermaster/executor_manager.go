@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
@@ -42,8 +41,7 @@ type ExecutorManager interface {
 	HasExecutor(executorID string) bool
 	ListExecutors() []*ormModel.Executor
 	GetAddr(executorID model.ExecutorID) (string, bool)
-	Start(ctx context.Context) error
-	Stop()
+	Run(ctx context.Context) error
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -94,7 +92,7 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
-		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+		return errors.ErrUnknownExecutor.GenWithStackByArgs(id)
 	}
 	addr := exec.Address
 	delete(e.executors, id)
@@ -140,7 +138,7 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		return nil, ErrUnknownExecutor.GenWithStack(&UnknownExecutorError{ExecutorID: string(execID)})
+		return nil, errors.ErrUnknownExecutor.GenWithStackByArgs(execID)
 	}
 	e.mu.Unlock()
 
@@ -209,7 +207,7 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 	// If any error occurs, client shouldn't use the executor.
 	// The executor in the map will be removed after the ttl expires.
 	if err := e.metaClient.CreateExecutor(ctx, executorMeta); err != nil {
-		return nil, perrors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	return executorMeta, nil
@@ -268,7 +266,7 @@ func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.status == model.Tombstone {
-		return ErrTombstoneExecutorError.GenWithStack(&TombstoneExecutorError{ExecutorID: string(e.ID)})
+		return errors.ErrTombstoneExecutor.GenWithStackByArgs(e.ID)
 	}
 	e.lastUpdateTime = time.Now()
 	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond
@@ -282,41 +280,29 @@ func (e *Executor) statusEqual(status model.ExecutorStatus) bool {
 	return e.status == status
 }
 
-// Start implements ExecutorManager.Start. It starts a background goroutine to
-// check whether all executors are alive periodically.
-func (e *ExecutorManagerImpl) Start(ctx context.Context) error {
+// Run implements ExecutorManager.Run
+func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 	if err := e.resetExecutors(ctx); err != nil {
-		return perrors.Errorf("failed to reset executors: %v", err)
+		return errors.Errorf("failed to reset executors: %v", err)
 	}
 
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
-		ticker := time.NewTicker(e.keepAliveInterval)
-		defer func() {
-			ticker.Stop()
-			log.Info("check executor alive finished")
-		}()
-		for {
-			select {
-			case <-ticker.C:
-				err := e.checkAliveImpl()
-				if err != nil {
-					log.Info("check alive meet error", zap.Error(err))
-				}
-			case <-ctx.Done():
-				return
+	ticker := time.NewTicker(e.keepAliveInterval)
+	defer func() {
+		ticker.Stop()
+		e.notifier.Close()
+		log.Info("executor manager exited")
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			err := e.checkAliveImpl()
+			if err != nil {
+				log.Info("check alive meet error", zap.Error(err))
 			}
 		}
-	}()
-
-	return nil
-}
-
-// Stop implements ExecutorManager.Stop
-func (e *ExecutorManagerImpl) Stop() {
-	e.wg.Wait()
-	e.notifier.Close()
+	}
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {
@@ -368,7 +354,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 
 	executors, err := e.metaClient.QueryExecutors(ctx)
 	if err != nil {
-		return perrors.Trace(err)
+		return errors.Trace(err)
 	}
 	for _, executor := range executors {
 		e.registerExecLocked(executor)
@@ -378,7 +364,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 	// Clean up executors that are not in the meta.
 	for id := range orphanExecutorIDs {
 		if err := e.removeExecutorLocked(id); err != nil {
-			return perrors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
 

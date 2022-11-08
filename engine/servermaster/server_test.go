@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -27,15 +28,13 @@ import (
 	"github.com/phayes/freeport"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
-	spb "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func init() {
@@ -161,7 +160,7 @@ func (m *mockJobManager) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb
 			}
 		}
 	}
-	return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+	return nil, errors.ErrJobNotFound.GenWithStackByArgs(req.GetId())
 }
 
 func (m *mockJobManager) JobCount(status pb.Job_State) int {
@@ -174,9 +173,6 @@ type mockExecutorManager struct {
 	ExecutorManager
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
-}
-
-func (m *mockExecutorManager) Stop() {
 }
 
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
@@ -232,7 +228,6 @@ func TestCollectMetric(t *testing.T) {
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
@@ -313,14 +308,11 @@ func TestHTTPErrorHandler(t *testing.T) {
 	err = resp.Body.Close()
 	require.NoError(t, err)
 
-	var pbStatus spb.Status
-	err = protojson.Unmarshal(body, &pbStatus)
+	var httpErr openapi.HTTPError
+	err = json.Unmarshal(body, &httpErr)
 	require.NoError(t, err)
-
-	rpcErr := rpcerror.FromGRPCError(status.FromProto(&pbStatus).Err())
-	require.True(t, ErrJobNotFound.Is(rpcErr))
+	require.Equal(t, string(errors.ErrJobNotFound.RFCCode()), httpErr.Code)
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }

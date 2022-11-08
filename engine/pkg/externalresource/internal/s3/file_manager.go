@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -119,14 +119,41 @@ func (m *FileManager) GetPersistedResource(
 
 	ok, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return nil, derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("check placeholder file")
+		return nil, errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("check placeholder file")
 	}
 	if !ok {
-		return nil, internal.ErrResourceFilesNotFound.GenWithStack(
-			&internal.ResourceFilesNotFoundError{
-				Ident: ident,
-				URI:   desc.URI(),
-			})
+		return nil, errors.ErrResourceFilesNotFound.GenWithStackByArgs()
+	}
+
+	return desc, nil
+}
+
+// CleanOrRecreatePersistedResource cleans the s3 directory or recreates placeholder
+// file of the given resource.
+// Note that CleanOrRecreatePersistedResource will work on any executor for any persisted resource.
+func (m *FileManager) CleanOrRecreatePersistedResource(
+	ctx context.Context, ident internal.ResourceIdent,
+) (internal.ResourceDescriptor, error) {
+	desc, err := m.GetPersistedResource(ctx, ident)
+	if errors.Is(err, errors.ErrResourceFilesNotFound) {
+		desc := newResourceDescriptor(ident, m.storageFactory)
+		storage, err := desc.ExternalStorage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := createPlaceholderFile(ctx, storage); err != nil {
+			return nil, err
+		}
+		return desc, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, true))
+	if err != nil {
+		return nil, err
 	}
 
 	return desc, nil
@@ -198,7 +225,7 @@ func (m *FileManager) RemoveResource(
 	log.Info("Removing resource",
 		zap.Any("ident", ident))
 
-	err := m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name))
+	err := m.removeFilesIf(ctx, ident.Scope(), getPathPredByName(ident.Name, false))
 	if err != nil {
 		return err
 	}
@@ -266,7 +293,7 @@ func (m *FileManager) removeFilesIf(
 		return nil
 	})
 	if err != nil {
-		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("RemoveTemporaryFiles")
+		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("RemoveTemporaryFiles")
 	}
 
 	log.Info("Removing resources",
@@ -275,7 +302,7 @@ func (m *FileManager) removeFilesIf(
 
 	for _, path := range toRemoveFiles {
 		if err := storage.DeleteFile(ctx, path); err != nil {
-			return derrors.ErrS3StorageAPI.Wrap(err)
+			return errors.ErrS3StorageAPI.Wrap(err)
 		}
 	}
 	return nil
@@ -284,25 +311,25 @@ func (m *FileManager) removeFilesIf(
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
 	exists, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")
+		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")
 	}
 	if exists {
 		// This should not happen in production. Unless the caller of the FileManager has a bug.
-		return derrors.ErrS3StorageAPI.GenWithStackByArgs("resource already exists")
+		return errors.ErrS3StorageAPI.GenWithStackByArgs("resource already exists")
 	}
 
 	writer, err := storage.Create(ctx, placeholderFileName)
 	if err != nil {
-		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("creating placeholder file")
+		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("creating placeholder file")
 	}
 
 	_, err = writer.Write(ctx, []byte("placeholder"))
 	if err != nil {
-		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("writing placeholder file")
+		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("writing placeholder file")
 	}
 
 	if err := writer.Close(ctx); err != nil {
-		return derrors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("closing placeholder file")
+		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("closing placeholder file")
 	}
 	return nil
 }

@@ -16,7 +16,7 @@ package fake
 import (
 	"testing"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

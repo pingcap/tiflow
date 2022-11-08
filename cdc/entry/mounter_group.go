@@ -99,6 +99,7 @@ func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	metrics := mounterGroupInputChanSizeGauge.
 		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))
 	ticker := time.NewTicker(defaultMetricInterval)
+	defer ticker.Stop()
 	for {
 		var pEvent *model.PolymorphicEvent
 		select {

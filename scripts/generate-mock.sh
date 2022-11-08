@@ -47,5 +47,6 @@ fi
 "$MOCKGEN" -package mock -destination engine/pkg/election/mock/storage_mock.go github.com/pingcap/tiflow/engine/pkg/election Storage
 "$MOCKGEN" -package mock -destination engine/pkg/orm/mock/client_mock.go github.com/pingcap/tiflow/engine/pkg/orm Client
 "$MOCKGEN" -package mock -destination engine/servermaster/jobop/mock/backoffmanager_mock.go github.com/pingcap/tiflow/engine/servermaster/jobop BackoffManager
+"$MOCKGEN" -package mock -destination engine/pkg/rpcutil/mock/featurechecker_mock.go github.com/pingcap/tiflow/engine/pkg/rpcutil FeatureChecker
 "$MOCKGEN" -package client -self_package github.com/pingcap/tiflow/engine/pkg/client \
 	-destination engine/pkg/client/client_mock.go github.com/pingcap/tiflow/engine/pkg/client ExecutorClient,ServerMasterClient

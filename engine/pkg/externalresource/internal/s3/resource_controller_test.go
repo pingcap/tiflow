@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,7 +108,7 @@ func TestS3ResourceController(t *testing.T) {
 				Name:          tempResName,
 			})
 			if removed {
-				require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+				require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 			} else {
 				require.NoError(t, err)
 			}
@@ -118,7 +119,7 @@ func TestS3ResourceController(t *testing.T) {
 	checkWorker(workers[2], false)
 
 	// test GCExecutor
-	fm1 := newFileManagerForUTFromSharedStorageFactory("leader-controller", factory)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("leader-controller", factory)
 	controller := &resourceController{fm: fm1}
 	gcExecutor := func() {
 		err := controller.GCExecutor(ctx, persistedResMetas, MockExecutorID)
@@ -147,11 +148,11 @@ func TestS3ResourceController(t *testing.T) {
 
 		require.NoError(t, controller.GCSingleResource(ctx, res))
 		_, err = fm.GetPersistedResource(ctx, ident)
-		require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+		require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 
 		// test for idempotency
 		require.NoError(t, controller.GCSingleResource(ctx, res))
 		_, err = fm.GetPersistedResource(ctx, ident)
-		require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+		require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 	}
 }

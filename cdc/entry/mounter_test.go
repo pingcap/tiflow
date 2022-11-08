@@ -14,6 +14,7 @@
 package entry
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -21,13 +22,19 @@ import (
 
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/executor"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
@@ -1086,4 +1093,73 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		require.True(t, ok)
 		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	}
+}
+
+func TestBuildTableInfo(t *testing.T) {
+	cases := []struct {
+		origin    string
+		recovered string
+	}{
+		{
+			"CREATE TABLE t1 (c INT PRIMARY KEY)",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" c3 BIT(10) NOT NULL," +
+				" UNIQUE KEY (c2, c3)" +
+				")",
+			// CDC discards field length.
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) unsigned DEFAULT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" gen INT AS (c+1) VIRTUAL," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" gen2 INT AS (c+2) STORED," +
+				" c3 BIT(10) NOT NULL," +
+				" PRIMARY KEY (c, c2)" +
+				")",
+			// CDC discards virtual generated column, and generating expression of stored generated column.
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) unsigned NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `gen2` int(0) GENERATED ALWAYS AS (pass_generated_check) STORED,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+	}
+	p := parser.New()
+	for _, c := range cases {
+		stmt, err := p.ParseOneStmt(c.origin, "", "")
+		require.NoError(t, err)
+		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		require.NoError(t, err)
+		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
+		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		require.NoError(t, err)
+		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
+	}
+}
+
+var tiCtx = mock.NewContext()
+
+func showCreateTable(t *testing.T, ti *timodel.TableInfo) string {
+	result := bytes.NewBuffer(make([]byte, 0, 512))
+	err := executor.ConstructResultOfShowCreateTable(tiCtx, ti, autoid.Allocators{}, result)
+	require.NoError(t, err)
+	return result.String()
 }
