@@ -35,5 +35,5 @@ type Manager interface {
 	// GetTableStats returns the state of the table.
 	GetTableStats(tableID model.TableID) (pipeline.Stats, error)
 	// Close closes all workers.
-	Close()
+	Close() error
 }

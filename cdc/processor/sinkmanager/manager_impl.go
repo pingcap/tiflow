@@ -329,7 +329,13 @@ func (m *ManagerImpl) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 }
 
 // Close closes all workers.
-func (m *ManagerImpl) Close() {
+func (m *ManagerImpl) Close() error {
 	m.cancel()
+	m.memQuota.close()
+	err := m.sinkFactory.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	m.wg.Wait()
+	return nil
 }
