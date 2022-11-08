@@ -80,12 +80,13 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig       *CSVConfig        `toml:"csv" json:"csv"`
-	Protocol        string            `toml:"protocol" json:"protocol"`
-	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	DispatchRules      []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	CSVConfig          *CSVConfig        `toml:"csv" json:"csv"`
+	Protocol           string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors    []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry     string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity       AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	EncoderConcurrency int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -98,10 +99,10 @@ type CSVConfig struct {
 	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
 }
 
-// DateSeparator sepecifies the date separator in storage destination path
+// DateSeparator specifies the date separator in storage destination path
 type DateSeparator int
 
-// Enum types of DateSeperator
+// Enum types of DateSeparator
 const (
 	DateSeparatorNone DateSeparator = iota
 	DateSeparatorYear
@@ -188,6 +189,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 			rule.PartitionRule = rule.DispatcherRule
 			rule.DispatcherRule = ""
 		}
+	}
+
+	if s.EncoderConcurrency < 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
 
 	if s.CSVConfig != nil {

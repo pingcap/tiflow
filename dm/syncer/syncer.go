@@ -335,6 +335,18 @@ func (s *Syncer) Type() pb.UnitType {
 // if fail, it should not call s.Close.
 // some check may move to checker later.
 func (s *Syncer) Init(ctx context.Context) (err error) {
+	failpoint.Inject("IOTotalBytes", func(val failpoint.Value) {
+		c := atomic.NewUint64(0)
+		s.cfg.UUID = val.(string)
+		s.cfg.IOTotalBytes = c
+
+		go func() {
+			for {
+				s.tctx.L().Debug("IOTotalBytes", zap.Uint64("IOTotalBytes", s.cfg.IOTotalBytes.Load()))
+				time.Sleep(10 * time.Second)
+			}
+		}()
+	})
 	rollbackHolder := fr.NewRollbackHolder("syncer")
 	defer func() {
 		if err != nil {

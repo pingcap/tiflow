@@ -189,7 +189,7 @@ func TestApplyParameter(t *testing.T) {
 	}
 }
 
-func TestValidateAndAdjuctCSVConfig(t *testing.T) {
+func TestValidateAndAdjustCSVConfig(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  *CSVConfig
