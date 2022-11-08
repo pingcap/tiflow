@@ -52,7 +52,6 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
 	isDelete := e.IsDelete()
-	sqlTypeMap := make(map[string]int32, len(e.Columns))
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
 	filling := func(columns []*model.Column, out *jwriter.Writer) error {
@@ -157,43 +156,38 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		if !isDelete {
 			columns = e.Columns
 		}
+		const prefix string = ",\"sqlType\":"
+		out.RawString(prefix)
+		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
+				if emptyColumn {
+					out.RawByte('{')
+					emptyColumn = false
+				} else {
+					out.RawByte(',')
+				}
 				mysqlType := getMySQLType(col)
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
-				sqlTypeMap[col.Name] = int32(javaType)
+				out.String(col.Name)
+				out.RawByte(':')
+				out.Int32(int32(javaType))
 				mysqlTypeMap[col.Name] = mysqlType
 			}
 		}
-	}
-	{
-		const prefix string = ",\"sqlType\":"
-		out.RawString(prefix)
-		if sqlTypeMap == nil && (out.Flags&jwriter.NilMapAsEmpty) == 0 {
+		if emptyColumn {
 			out.RawString(`null`)
 		} else {
-			out.RawByte('{')
-			isFirst := true
-			for typeKey, typeValue := range sqlTypeMap {
-				if isFirst {
-					isFirst = false
-				} else {
-					out.RawByte(',')
-				}
-				out.String(typeKey)
-				out.RawByte(':')
-				out.Int32(typeValue)
-			}
 			out.RawByte('}')
 		}
 	}
 	{
 		const prefix string = ",\"mysqlType\":"
 		out.RawString(prefix)
-		if mysqlTypeMap == nil && (out.Flags&jwriter.NilMapAsEmpty) == 0 {
+		if mysqlTypeMap == nil {
 			out.RawString(`null`)
 		} else {
 			out.RawByte('{')
