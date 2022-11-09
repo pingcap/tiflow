@@ -45,6 +45,7 @@ var clientConfig4Testing = &MessageClientConfig{
 
 type serverConfigOpt = func(config *MessageServerConfig)
 
+//nolint:unparam
 func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts ...serverConfigOpt) (server *MessageServer, addr string, cancel func()) {
 	port := freeport.GetPort()
 	addr = fmt.Sprintf("127.0.0.1:%d", port)

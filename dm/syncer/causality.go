@@ -202,7 +202,6 @@ func (m *causalityRelation) gc(flushJobSeq int64) {
 		return
 	}
 
-	// nolint:ifshort
 	idx := 0
 	for i, d := range m.groups {
 		if d.prevFlushJobSeq <= flushJobSeq {
