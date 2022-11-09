@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +63,7 @@ func TestCSVBatchDecoder(t *testing.T) {
 			},
 		},
 	}
-	decoder, err := NewBatchDecoder(ctx, &config.CSVConfig{
+	decoder, err := NewBatchDecoder(ctx, &common.CSVConfig{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",

@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -52,6 +53,7 @@ var (
 	configFile       string
 	logFile          string
 	logLevel         string
+	codecConfig      *common.Config
 	flushInterval    time.Duration
 )
 
@@ -216,6 +218,7 @@ type fileIndexRange struct {
 type consumer struct {
 	sink            sink.Sink
 	replicationCfg  *config.ReplicaConfig
+	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
 	// tableIdxMap maintains a map of <dmlPathKey, max file index>
 	tableIdxMap map[dmlPathKey]uint64
@@ -238,9 +241,23 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	if replicaConfig.Sink.Protocol != config.ProtocolCsv.String() {
+	switch replicaConfig.Sink.Protocol {
+	case config.ProtocolCsv.String():
+	case config.ProtocolCanalJSON.String():
+	default:
 		return nil, fmt.Errorf("data encoded in protocol %s is not supported yet",
 			replicaConfig.Sink.Protocol)
+	}
+
+	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := common.NewConfig(protocol)
+	err = cfg.Apply(upstreamURI, replicaConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	bs, err := storage.ParseBackend(upstreamURIStr, nil)
@@ -328,7 +345,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			return nil
 		}
 
-		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.CSVConfig.DateSeparator, path)
+		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
 		if err != nil {
 			log.Error("failed to parse dml file path", zap.Error(err))
 			// skip handling this file
@@ -380,7 +397,7 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 		return errors.Trace(err)
 	}
 
-	decoder, err := csv.NewBatchDecoder(ctx, c.replicationCfg.Sink.CSVConfig, tableInfo, content)
+	decoder, err := csv.NewBatchDecoder(ctx, c.codecCfg.CSVConfig, tableInfo, content)
 	if err != nil {
 		return errors.Trace(err)
 	}

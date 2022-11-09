@@ -91,7 +91,7 @@ func (c *Config) Apply(
 		return err
 	}
 
-	c.DateSeparator = replicaConfig.Sink.CSVConfig.DateSeparator
+	c.DateSeparator = replicaConfig.Sink.DateSeparator
 
 	return nil
 }

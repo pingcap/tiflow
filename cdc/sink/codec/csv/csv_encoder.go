@@ -30,7 +30,7 @@ type BatchEncoder struct {
 	valueBuf    *bytes.Buffer
 	callbackBuf []func()
 	batchSize   int
-	csvConfig   *config.CSVConfig
+	csvConfig   *common.CSVConfig
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -89,7 +89,7 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.
-func newBatchEncoder(config *config.CSVConfig) codec.EventBatchEncoder {
+func newBatchEncoder(config *common.CSVConfig) codec.EventBatchEncoder {
 	return &BatchEncoder{
 		csvConfig:   config,
 		valueBuf:    &bytes.Buffer{},

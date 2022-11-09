@@ -23,14 +23,14 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/worker"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const defaultIOConcurrency = 1
 
 type batchDecoder struct {
-	csvConfig *config.CSVConfig
+	csvConfig *common.CSVConfig
 	parser    *mydump.CSVParser
 	data      []byte
 	msg       *csvMessage
@@ -40,7 +40,7 @@ type batchDecoder struct {
 
 // NewBatchDecoder creates a new BatchDecoder
 func NewBatchDecoder(ctx context.Context,
-	csvConfig *config.CSVConfig,
+	csvConfig *common.CSVConfig,
 	tableInfo *model.TableInfo,
 	value []byte,
 ) (codec.EventBatchDecoder, error) {

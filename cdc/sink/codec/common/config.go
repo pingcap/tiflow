@@ -25,6 +25,14 @@ import (
 // defaultMaxBatchSize sets the default value for max-batch-size
 const defaultMaxBatchSize int = 16
 
+type CSVConfig struct {
+	Delimiter       string
+	Quote           string
+	Terminator      string
+	NullString      string
+	IncludeCommitTs bool
+}
+
 // Config use to create the encoder
 type Config struct {
 	Protocol config.Protocol
@@ -42,7 +50,7 @@ type Config struct {
 	AvroBigintUnsignedHandlingMode string
 
 	// csv only
-	CSVConfig *config.CSVConfig
+	CSVConfig *CSVConfig
 }
 
 // NewConfig return a Config for codec
@@ -120,7 +128,13 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 	}
 
 	if config.Sink != nil && config.Sink.CSVConfig != nil {
-		c.CSVConfig = config.Sink.CSVConfig
+		c.CSVConfig = &CSVConfig{
+			Quote:           config.Sink.CSVConfig.Quote,
+			Delimiter:       config.Sink.CSVConfig.Delimiter,
+			Terminator:      config.Sink.Terminator,
+			NullString:      config.Sink.CSVConfig.NullString,
+			IncludeCommitTs: config.Sink.CSVConfig.IncludeCommitTs,
+		}
 	}
 
 	return nil

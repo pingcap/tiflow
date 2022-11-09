@@ -181,12 +181,13 @@ const (
     "csv": {
       "delimiter": ",",
       "quote": "\"",
-      "terminator": "",
       "null": "\\N",
-      "date-separator": "month",
       "include-commit-ts": true
     },
-    "transaction-atomicity": ""
+    "transaction-atomicity": "",
+    "terminator": "",
+    "date-separator": "month",
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",
@@ -232,11 +233,12 @@ const (
     "csv": {
       "delimiter": ",",
       "quote": "\"",
-      "terminator": "",
       "null": "\\N",
-      "date-separator": "month",
       "include-commit-ts": true
-    }
+    },
+    "terminator": "",
+    "date-separator": "month",
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",

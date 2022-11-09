@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -73,7 +74,7 @@ func (o *operation) FromString(op string) error {
 
 type csvMessage struct {
 	// csvConfig hold the csv configuration items.
-	csvConfig *config.CSVConfig
+	csvConfig *common.CSVConfig
 	// opType denotes the specific operation type.
 	opType     operation
 	tableName  string
@@ -84,7 +85,7 @@ type csvMessage struct {
 	newRecord bool
 }
 
-func newCSVMessage(config *config.CSVConfig) *csvMessage {
+func newCSVMessage(config *common.CSVConfig) *csvMessage {
 	return &csvMessage{
 		csvConfig: config,
 		newRecord: true,
@@ -305,7 +306,7 @@ func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
 }
 
 // rowChangedEvent2CSVMsg converts a RowChangedEvent to a csv record.
-func rowChangedEvent2CSVMsg(csvConfig *config.CSVConfig, e *model.RowChangedEvent) (*csvMessage, error) {
+func rowChangedEvent2CSVMsg(csvConfig *common.CSVConfig, e *model.RowChangedEvent) (*csvMessage, error) {
 	var err error
 
 	csvMsg := &csvMessage{
