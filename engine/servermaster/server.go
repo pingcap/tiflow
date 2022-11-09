@@ -47,7 +47,6 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
-	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -112,9 +111,6 @@ type Server struct {
 	metaStoreManager MetaStoreManager
 
 	leaderDegrader *featureDegrader
-
-	// mocked server for test
-	mockGrpcServer mock.GrpcServer
 
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client

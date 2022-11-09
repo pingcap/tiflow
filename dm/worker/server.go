@@ -829,7 +829,6 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
 	}
 	w.RLock()
-	// nolint:ifshort
 	sourceID := w.cfg.SourceID
 	w.RUnlock()
 	if req.Source != sourceID {

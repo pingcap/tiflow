@@ -52,6 +52,7 @@ func (m *mockPuller) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error)
 	return entry.ParseDDLJob(nil, rawKV, 0)
 }
 
+//nolint:unparam
 func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {
 	return &mockPuller{
 		t:          t,
