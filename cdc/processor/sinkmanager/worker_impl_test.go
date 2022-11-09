@@ -32,6 +32,8 @@ func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn boo
 	return newWorker(changefeedID, sorterEngine, nil, quota, splitTxn, false)
 }
 
+// nolint:unparam
+// It is ok to use the same tableID in test.
 func addEventsToSorterEngine(t *testing.T, events []*model.PolymorphicEvent, sorterEngine sorter.EventSortEngine, tableID model.TableID) {
 	sorterEngine.AddTable(tableID)
 	for _, event := range events {
@@ -40,6 +42,8 @@ func addEventsToSorterEngine(t *testing.T, events []*model.PolymorphicEvent, sor
 	}
 }
 
+// It is ok to use the same tableID in test.
+//
 //nolint:unparam
 func genRowChangedEvent(startTs, commitTs uint64, tableID model.TableID) *model.RowChangedEvent {
 	return &model.RowChangedEvent{
