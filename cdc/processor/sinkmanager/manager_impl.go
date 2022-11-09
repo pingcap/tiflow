@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -293,7 +294,9 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	}
 	err := tableSink.(*tableSinkWrapper).close(m.ctx)
 	if err != nil {
-		return errors.Trace(err)
+		if !cerror.Is(err, cerror.ErrTableProcessorStoppedSafely) {
+			return errors.Trace(err)
+		}
 	}
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is not in the map, we will not add it back to the heap.
