@@ -19,9 +19,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,8 +38,9 @@ const (
 type EncoderGroup interface {
 	// Run start the group
 	Run(ctx context.Context) error
-	// AddEvent add an event into the group, handled by one of the encoders
-	AddEvent(ctx context.Context, topic string, partition int32, event *model.RowChangedEvent, callback func()) error
+	// AddEvents add events into the group, handled by one of the encoders
+	// all input events should belong to the same topic and partition, this should be guaranteed by the caller
+	AddEvents(ctx context.Context, topic string, partition int32, events ...*eventsink.RowChangeCallbackableEvent) error
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -107,8 +110,11 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ticker.C:
 			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
-			if err := encoder.AppendRowChangedEvent(ctx, future.Topic, future.Event, future.Callback); err != nil {
-				return err
+			for _, event := range future.events {
+				err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 			future.Messages = encoder.Build()
 			close(future.done)
@@ -116,8 +122,13 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	}
 }
 
-func (g *encoderGroup) AddEvent(ctx context.Context, topic string, partition int32, event *model.RowChangedEvent, callback func()) error {
-	future := newFuture(topic, partition, event, callback)
+func (g *encoderGroup) AddEvents(
+	ctx context.Context,
+	topic string,
+	partition int32,
+	events ...*eventsink.RowChangeCallbackableEvent,
+) error {
+	future := newFuture(topic, partition, events...)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
 	select {
 	case <-ctx.Done():
@@ -141,20 +152,17 @@ func (g *encoderGroup) Output() <-chan *future {
 type future struct {
 	Topic     string
 	Partition int32
-	Event     *model.RowChangedEvent
-	Callback  func()
-
-	Messages []*common.Message
+	events    []*eventsink.RowChangeCallbackableEvent
+	Messages  []*common.Message
 
 	done chan struct{}
 }
 
-func newFuture(topic string, partition int32, event *model.RowChangedEvent, callback func()) *future {
+func newFuture(topic string, partition int32, events ...*eventsink.RowChangeCallbackableEvent) *future {
 	return &future{
 		Topic:     topic,
 		Partition: partition,
-		Event:     event,
-		Callback:  callback,
+		events:    events,
 
 		done: make(chan struct{}),
 	}
