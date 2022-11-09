@@ -647,23 +647,9 @@ function run() {
 }
 
 function prepare_test_empty_gtid() {
-	cleanup_process
-
-	# clean test dir
-	rm -rf $WORK_DIR
-	mkdir $WORK_DIR
-
-	# kill the old tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	# restart tidb
-	run_tidb_server 4000 $TIDB_PASSWORD
-
 	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
 	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
-	run_sql 'use all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql "CREATE TABLE all_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -713,7 +699,7 @@ function test_source_and_target_with_empty_gtid() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"unit\": \"Sync\"" 1\
+		"\"unit\": \"Sync\"" 1 \
 		"\"stage\": \"Running\"" 2
 
 	echo "check data"
