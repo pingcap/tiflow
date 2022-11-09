@@ -109,9 +109,9 @@ func (jm *JobMaster) initComponents() error {
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
+	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger())
 	return err
 }
 
@@ -130,7 +130,10 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
+		return err
+	}
+	return jm.ddlCoordinator.Reset(ctx)
 }
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
@@ -140,7 +143,10 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	if err := jm.initComponents(); err != nil {
 		return err
 	}
-	return jm.bootstrap(ctx)
+	if err := jm.bootstrap(ctx); err != nil {
+		return err
+	}
+	return jm.ddlCoordinator.Reset(ctx)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -302,6 +308,9 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
+	}
+	if err := jm.ddlCoordinator.Clear(ctx); err != nil {
+		jm.Logger().Error("failed to clear ddl metadata", zap.Error(err))
 	}
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))

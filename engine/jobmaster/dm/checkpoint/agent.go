@@ -181,6 +181,20 @@ func (c *AgentImpl) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (m
 
 	for _, upstream := range cfg.Upstreams {
 		up := upstream
+		// filter/route in errgroup will cause data race.
+		baList, err := filter.New(up.CaseSensitive, cfg.BAList[up.BAListName])
+		if err != nil {
+			return result, err
+		}
+		routeRules := make([]*router.TableRule, 0, len(up.RouteRules))
+		for _, ruleName := range up.RouteRules {
+			routeRules = append(routeRules, cfg.Routes[ruleName])
+		}
+		router, err := regexprrouter.NewRegExprRouter(up.CaseSensitive, routeRules)
+		if err != nil {
+			return result, err
+		}
+
 		g.Go(func() error {
 			db, err := conn.DefaultDBProvider.Apply(up.DBCfg)
 			if err != nil {
@@ -189,24 +203,11 @@ func (c *AgentImpl) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (m
 			defer db.Close()
 
 			// fetch all do tables
-			baList, err := filter.New(up.CaseSensitive, cfg.BAList[up.BAListName])
-			if err != nil {
-				return err
-			}
 			sourceTables, err := utils.FetchAllDoTables(gCtx, db.DB, baList)
 			if err != nil {
 				return err
 			}
 
-			// route tables
-			routeRules := make([]*router.TableRule, 0, len(up.RouteRules))
-			for _, ruleName := range up.RouteRules {
-				routeRules = append(routeRules, cfg.Routes[ruleName])
-			}
-			router, err := regexprrouter.NewRegExprRouter(up.CaseSensitive, routeRules)
-			if err != nil {
-				return err
-			}
 			for schema, tables := range sourceTables {
 				for _, table := range tables {
 					targetSchema, targetTable, err := router.Route(schema, table)

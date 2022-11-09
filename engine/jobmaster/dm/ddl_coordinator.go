@@ -34,6 +34,96 @@ import (
 	"go.uber.org/zap"
 )
 
+// Workflow:
+//
+// Worker1                    Jobmaster                    DDLCoordinator                        TiDB
+//   │                            │                              │                                │
+//   │                            │ Init                         │                                │
+//   │                            ├─────────────────────────────►│ Reset                          │
+//   │                            │                              ├───────────────────────────────►│
+//   │                            │                              │ FetchAllDoTables               │
+//   │ DDLCoordinateRequest       │                              │                                │
+//   ├───────────────────────────►│ Coordinate                   │                                │
+//   │ AlterTableDropColumn       ├─────────────────────────────►│ CreateShardGroup               │
+//   │                            │                              ├───────────────────────────────►│
+//   │                            │                              │ FetchAllDoTables               │
+//   │                            │                              │                                │
+//   │                            │                              ├───┐                            │
+//   │                            │                              │   │ Handle                     │
+//   │                            │                              │   │                            │
+//   │                            │                              │   │ AddDroppedColumn           │
+//   │                            │ Response                     │◄──┘                            │
+//   │ DDLCoordinateResponse      │◄─────────────────────────────┤                                │
+//   │◄───────────────────────────┤ Skip                         │                                │
+//   │ Skip                       │                              │                                │
+//   │                            │                              │                                │
+//   │                            │                              │                                │
+//   │ DDLCoordinateRequest       │                              │                                │
+//   ├───────────────────────────►│ Coordinate                   │                                │
+//   │ AlterTableDropColumn       ├─────────────────────────────►│                                │
+//   │                            │                              ├───┐                            │
+//   │                            │                              │   │ Handle                     │
+//   │                            │                              │   │                            │
+//   │                            │                              │   │ AddDroppedColumn           │
+//   │                            │ Response                     │◄──┘                            │
+//   │ DDLCoordinateResponse      │◄─────────────────────────────┤                                │
+//   │◄───────────────────────────┤ Execute                      │                                │
+//   │ Execute                    │                              │                                │
+//   │                            │                              │                                │
+//   │                            │                              │                                │
+//   │ DDLCoordinateRequest       │                              │                                │
+//   ├───────────────────────────►│                              │                                │
+//   │ AlterTableRenameColumn     │ Coordinate                   │                                │
+//   │                            ├─────────────────────────────►│                                │
+//   │                            │                              ├───┐                            │
+//   │                            │                              │   │ GCDroppedColumn            │
+//   │                            │                              │   ├───────────────────────────►│
+//   │                            │                              │   │                            │
+//   │                            │                              │   │ Handle                     │
+//   │                            │ Response                     │◄──┘                            │
+//   │                            │◄─────────────────────────────┤                                │
+//   │ DDLCoordinateResponse      │ SkipAndWaitRedirect          │                                │
+//   │◄───────────────────────────┤                              │                                │
+//   │ SkipAndWaitRedirect        │                              │                                │
+//   │                            │                              │                                │
+//   │                            ├───┐                          │                                │
+//   │                            │   │ Jobmaster failover       │                                │
+//   │                            │   │                          │                                │
+//   │                            │   │ Recover                  │                                │
+//   │                            │   ├─────────────────────────►│ Reset                          │
+//   │                            │   │                          ├───────────────────────────────►│
+//   │ RestartAllWorkers          │◄──┘                          │ FetchAllDoTables               │
+//   │◄───────────────────────────┤                              │                                │
+//   │                            │                              │                                │
+//   ├───┐                        │                              │                                │
+//   │   │ Restart From Checkpoint│                              │                                │
+//   │◄──┘                        │                              │                                │
+//   │                            │                              │                                │
+//   │ DDLCoordinateRequest       │                              │                                │
+//   ├───────────────────────────►│ Coordinate                   │                                │
+//   │ AlterTableRenameColumn     ├─────────────────────────────►│                                │
+//   │                            │                              ├───┐                            │
+//   │                            │                              │   │ Handle                     │
+//   │                            │ Response                     │◄──┘                            │
+//   │                            │◄─────────────────────────────┤                                │
+//   │ DDLCoordinateResponse      │ SkipAndWaitRedirect          │                                │
+//   │◄───────────────────────────┤                              │                                │
+//   │ SkipAndWaitRedirect        │                              │                                │
+//   │                            │                              │                                │
+//   │                            │                              │ Worker2 Rename Column          │
+//   │                            │                              │◄────────────────────────────   │
+//   │  DDLRedirectRequest        │                              │                                │
+//   │◄───────────────────────────┼──────────────────────────────┤                                │
+//   │────────────────────────────┼─────────────────────────────►│                                │
+//   │  DDLRedirectResponse       │                              │                                │
+//   │                            │                              │                                │
+//   ├────┐                       │                              │                                │
+//   │    │                       │                              │                                │
+//   │    │ Redirect              │                              │                                │
+//   │    │                       │                              │                                │
+//   │◄───┘                       │                              │                                │
+//   │                            │                              │                                │
+
 type tableType int
 
 const (
@@ -82,7 +172,7 @@ func (c *DDLCoordinator) Clear(ctx context.Context) error {
 	// wait all pending ddls coordinated.
 	c.pendings.Wait()
 
-	return metadata.DelAllDropColumns(ctx, c.kvClient)
+	return metadata.DelAllDroppedColumns(ctx, c.kvClient)
 }
 
 // Reset resets the shard group.
@@ -200,24 +290,24 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 }
 
 type shardGroup struct {
-	mu               sync.Mutex
-	normalTables     map[metadata.SourceTable]string
-	conflictTables   map[metadata.SourceTable]string
-	tableAgent       TableAgent
-	dropColumnsStore *metadata.DropColumnsStore
-	id               frameModel.MasterID
-	cfg              *config.JobCfg
-	deleted          bool
+	mu                  sync.Mutex
+	normalTables        map[metadata.SourceTable]string
+	conflictTables      map[metadata.SourceTable]string
+	tableAgent          TableAgent
+	droppedColumnsStore *metadata.DroppedColumnsStore
+	id                  frameModel.MasterID
+	cfg                 *config.JobCfg
+	deleted             bool
 }
 
 func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg, targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{}, kvClient metaModel.KVClient, tableAgent TableAgent) (*shardGroup, error) {
 	g := &shardGroup{
-		tableAgent:       tableAgent,
-		normalTables:     make(map[metadata.SourceTable]string),
-		conflictTables:   make(map[metadata.SourceTable]string),
-		dropColumnsStore: metadata.NewDropColumnsStore(kvClient, targetTable),
-		id:               id,
-		cfg:              cfg,
+		tableAgent:          tableAgent,
+		normalTables:        make(map[metadata.SourceTable]string),
+		conflictTables:      make(map[metadata.SourceTable]string),
+		droppedColumnsStore: metadata.NewDroppedColumnsStore(kvClient, targetTable),
+		id:                  id,
+		cfg:                 cfg,
 	}
 	for sourceTable := range sourceTables {
 		stmt, err := g.tableAgent.FetchTableStmt(ctx, id, cfg, sourceTable)
@@ -243,7 +333,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 	}
 
 	// nolint:errcheck
-	g.gcDropColumns(ctx)
+	g.gcDroppedColumns(ctx)
 
 	var (
 		ddls          []string
@@ -254,7 +344,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 
 	switch item.Type {
 	case metadata.CreateTable:
-		g.handleCreateTable(ctx, item)
+		g.handleCreateTable(item)
 		ddls = append(ddls, item.DDLs...)
 	case metadata.DropTable:
 		needDeleted = g.handleDropTable(ctx, item)
@@ -270,7 +360,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 
 // handleCreateTable handles create table ddl.
 // add new source table to shard group.
-func (g *shardGroup) handleCreateTable(ctx context.Context, item *metadata.DDLItem) {
+func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 	stmt, ok := g.normalTables[item.SourceTable]
 	if ok && stmt != "" {
 		log.L().Warn("create table already exists", zap.Any("source table", item.SourceTable))
@@ -291,6 +381,8 @@ func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem
 
 	delete(g.normalTables, item.SourceTable)
 	delete(g.conflictTables, item.SourceTable)
+	// nolint:errcheck
+	g.droppedColumnsStore.DelDroppedColumnForTable(ctx, item.SourceTable)
 	if len(g.normalTables) == 0 {
 		g.deleted = true
 		return true
@@ -319,7 +411,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 		case optimism.ConflictSkipWaitRedirect:
 			return newDDLs, optimism.ConflictSkipWaitRedirect, nil
 		case optimism.ConflictNone:
-			if col, err := g.checkAddDropColumn(ctx, item.SourceTable, ddl, prevTableStmt, postTableStmt, dropCols); err != nil {
+			if col, err := g.checkAddDroppedColumn(ctx, item.SourceTable, ddl, prevTableStmt, postTableStmt, dropCols); err != nil {
 				return nil, optimism.ConflictError, err
 			} else if len(col) != 0 {
 				dropCols = append(dropCols, col)
@@ -332,7 +424,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 	}
 
 	if len(dropCols) > 0 {
-		if err := g.dropColumnsStore.AddDropColumns(ctx, dropCols, item.SourceTable); err != nil {
+		if err := g.droppedColumnsStore.AddDroppedColumns(ctx, dropCols, item.SourceTable); err != nil {
 			return nil, optimism.ConflictError, err
 		}
 	}
@@ -412,55 +504,6 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 	}
 	log.L().Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, optimism.ConflictSkipWaitRedirect
-}
-
-func (g *shardGroup) checkAddDropColumn(ctx context.Context, sourceTable metadata.SourceTable, ddl string, prevTableStmt, postTableStmt string, newDropColumns []string) (string, error) {
-	currTable := g.normalTables[sourceTable]
-	defer func() {
-		g.normalTables[sourceTable] = currTable
-	}()
-
-	g.normalTables[sourceTable] = prevTableStmt
-	oldJoined, err := g.joinTables(normal)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	postTable := genCmpTable(postTableStmt)
-	g.normalTables[sourceTable] = postTableStmt
-	newJoined, err := g.joinTables(normal)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	cmp, err := oldJoined.Compare(newJoined)
-	if err != nil {
-		// nolint:nilerr
-		return "", nil
-	}
-
-	if cmp <= 0 {
-		if col, err2 := optimism.AddDifferentFieldLenColumns("", ddl, oldJoined, newJoined); err2 != nil {
-			// check for add column with a larger field len
-			return "", err2
-		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
-			// check for add column with a smaller field len
-			return "", err2
-		} else if len(col) > 0 && (g.isDroppedColumn(ctx, col, sourceTable) || contains(newDropColumns, col)) {
-			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
-		}
-	}
-
-	if cmp >= 0 {
-		if col, err2 := optimism.GetColumnName("", ddl, ast.AlterTableDropColumn); err2 != nil {
-			return "", err2
-		} else if len(col) > 0 {
-			return col, nil
-		}
-	}
-	return "", nil
 }
 
 // joinTables join tables by tableType.
@@ -593,6 +636,7 @@ func (g *shardGroup) resolveTables() {
 		g.normalTables[sourceTable] = conflictStmt
 	}
 	g.conflictTables = make(map[metadata.SourceTable]string)
+	// TODO: redirect for conflict worker.
 }
 
 func (g *shardGroup) getTableForOneDDL(item *metadata.DDLItem, idx int) (string, string) {
@@ -618,22 +662,57 @@ func (g *shardGroup) getTableBySourceTable(st metadata.SourceTable, tp tableType
 	return stmt, ok
 }
 
-func (g *shardGroup) isDroppedColumn(ctx context.Context, col string, sourceTable metadata.SourceTable) bool {
-	state, err := g.dropColumnsStore.Get(ctx)
+func (g *shardGroup) checkAddDroppedColumn(ctx context.Context, sourceTable metadata.SourceTable, ddl string, prevTableStmt, postTableStmt string, newDroppedColumns []string) (string, error) {
+	currTable := g.normalTables[sourceTable]
+	defer func() {
+		g.normalTables[sourceTable] = currTable
+	}()
+
+	g.normalTables[sourceTable] = prevTableStmt
+	oldJoined, err := g.joinTables(normal)
 	if err != nil {
-		return false
+		// nolint:nilerr
+		return "", nil
 	}
-	dropColumns := state.(*metadata.DropColumns)
-	if tbs, ok := dropColumns.Cols[col]; ok {
-		if _, ok := tbs[sourceTable]; ok {
-			return true
+
+	postTable := genCmpTable(postTableStmt)
+	g.normalTables[sourceTable] = postTableStmt
+	newJoined, err := g.joinTables(normal)
+	if err != nil {
+		// nolint:nilerr
+		return "", nil
+	}
+
+	cmp, err := oldJoined.Compare(newJoined)
+	if err != nil {
+		// nolint:nilerr
+		return "", nil
+	}
+
+	if cmp <= 0 {
+		if col, err2 := optimism.AddDifferentFieldLenColumns("", ddl, oldJoined, newJoined); err2 != nil {
+			// check for add column with a larger field len
+			return "", err2
+		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
+			// check for add column with a smaller field len
+			return "", err2
+		} else if len(col) > 0 && (g.droppedColumnsStore.HasDroppedColumn(ctx, col, sourceTable) || contains(newDroppedColumns, col)) {
+			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
 		}
 	}
-	return false
+
+	if cmp >= 0 {
+		if col, err2 := optimism.GetColumnName("", ddl, ast.AlterTableDropColumn); err2 != nil {
+			return "", err2
+		} else if len(col) > 0 {
+			return col, nil
+		}
+	}
+	return "", nil
 }
 
-func (g *shardGroup) gcDropColumns(ctx context.Context) error {
-	state, err := g.dropColumnsStore.Get(ctx)
+func (g *shardGroup) gcDroppedColumns(ctx context.Context) error {
+	state, err := g.droppedColumnsStore.Get(ctx)
 	if err != nil {
 		if errors.Cause(err) == metadata.ErrStateNotFound {
 			return nil
@@ -641,12 +720,12 @@ func (g *shardGroup) gcDropColumns(ctx context.Context) error {
 		return err
 	}
 
-	dropColumns := state.(*metadata.DropColumns)
+	droppedColumns := state.(*metadata.DroppedColumns)
+	cacheStmts := make(map[metadata.SourceTable]string)
 OutLoop:
-	for col, sourceTables := range dropColumns.Cols {
-		for sourceTable := range sourceTables {
-			tbStmt, ok := g.normalTables[sourceTable]
-			if !ok || tbStmt == "" {
+	for col := range droppedColumns.Cols {
+		for _, tbStmt := range g.normalTables {
+			if tbStmt == "" {
 				continue
 			}
 			if cols := getColumnNames(tbStmt); contains(cols, col) {
@@ -654,19 +733,23 @@ OutLoop:
 			}
 		}
 
-		for sourceTable := range sourceTables {
-			tbStmt, err := g.tableAgent.FetchTableStmt(ctx, g.id, g.cfg, sourceTable)
-			if err != nil {
-				if strings.HasPrefix(err.Error(), "table info not found") {
-					continue
+		for sourceTable := range g.normalTables {
+			tbStmt, ok := cacheStmts[sourceTable]
+			if !ok {
+				tbStmt, err = g.tableAgent.FetchTableStmt(ctx, g.id, g.cfg, sourceTable)
+				if err != nil {
+					if strings.HasPrefix(err.Error(), "table info not found") {
+						continue
+					}
+					return err
 				}
-				return err
 			}
+
 			if cols := getColumnNames(tbStmt); contains(cols, col) {
 				continue OutLoop
 			}
 		}
-		if err := g.dropColumnsStore.DelDropColumn(ctx, col); err != nil {
+		if err := g.droppedColumnsStore.DelDroppedColumn(ctx, col); err != nil {
 			return err
 		}
 	}
@@ -677,7 +760,7 @@ func (g *shardGroup) isResolved(ctx context.Context) bool {
 	if len(g.conflictTables) != 0 {
 		return false
 	}
-	if _, err := g.dropColumnsStore.Get(ctx); err == nil || errors.Cause(err) != metadata.ErrStateNotFound {
+	if _, err := g.droppedColumnsStore.Get(ctx); err == nil || errors.Cause(err) != metadata.ErrStateNotFound {
 		return false
 	}
 
@@ -701,7 +784,7 @@ func (g *shardGroup) isResolved(ctx context.Context) bool {
 }
 
 func (g *shardGroup) clear(ctx context.Context) error {
-	return g.dropColumnsStore.Delete(ctx)
+	return g.droppedColumnsStore.Delete(ctx)
 }
 
 func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
@@ -714,7 +797,7 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 			Pending: g.conflictTables[sourceTable],
 		}
 	}
-	// show drop columns if needed.
+	// show dropped columns if needed.
 	return tables
 }
 

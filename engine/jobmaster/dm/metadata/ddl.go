@@ -79,70 +79,86 @@ type DDLItem struct {
 	Type        DDLType
 }
 
-// DropColumns represents the state of drop columns
-type DropColumns struct {
+// DroppedColumns represents the state of dropped columns
+type DroppedColumns struct {
 	state
 	// column -> source table
 	Cols map[string]map[SourceTable]struct{}
 }
 
-// DropColumnsStore manages the drop columns state
-type DropColumnsStore struct {
+// DroppedColumnsStore manages the dropped columns state
+type DroppedColumnsStore struct {
 	*frameworkMetaStore
 
 	mu          sync.Mutex
 	targetTable TargetTable
 }
 
-// NewDropColumnsStore returns a new DropColumnsStore instance
-func NewDropColumnsStore(kvClient metaModel.KVClient, targetTable TargetTable) *DropColumnsStore {
-	dropColumnStore := &DropColumnsStore{
+// NewDroppedColumnsStore returns a new DroppedColumnsStore instance
+func NewDroppedColumnsStore(kvClient metaModel.KVClient, targetTable TargetTable) *DroppedColumnsStore {
+	droppedColumnStore := &DroppedColumnsStore{
 		frameworkMetaStore: newJSONFrameworkMetaStore(kvClient),
+		targetTable:        targetTable,
 	}
-	dropColumnStore.frameworkMetaStore.stateFactory = dropColumnStore
-	return dropColumnStore
+	droppedColumnStore.frameworkMetaStore.stateFactory = droppedColumnStore
+	return droppedColumnStore
 }
 
-// CreateState creates an empty DropColumns object
-func (s *DropColumnsStore) createState() state {
-	return &DropColumns{}
+// CreateState creates an empty DroppedColumns object
+func (s *DroppedColumnsStore) createState() state {
+	return &DroppedColumns{}
 }
 
-// Key returns encoded key of DropColumns state store
-func (s *DropColumnsStore) key() string {
+// Key returns encoded key of DroppedColumns state store
+func (s *DroppedColumnsStore) key() string {
 	// nolint:errcheck
 	bs, _ := json.Marshal(s.targetTable)
-	return adapter.DMDropColumnsKeyAdapter.Encode(string(bs))
+	return adapter.DMDroppedColumnsKeyAdapter.Encode(string(bs))
 }
 
-// AddDropColumns adds drop columns to the state
-func (s *DropColumnsStore) AddDropColumns(ctx context.Context, cols []string, sourceTable SourceTable) error {
+// HasDroppedColumn returns whether the column is dropped before
+func (s *DroppedColumnsStore) HasDroppedColumn(ctx context.Context, col string, sourceTable SourceTable) bool {
+	state, err := s.Get(ctx)
+	if err != nil {
+		return false
+	}
+	droppedColumns := state.(*DroppedColumns)
+	if tbs, ok := droppedColumns.Cols[col]; ok {
+		if _, ok := tbs[sourceTable]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// AddDroppedColumns adds dropped columns to the state
+func (s *DroppedColumnsStore) AddDroppedColumns(ctx context.Context, cols []string, sourceTable SourceTable) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.frameworkMetaStore.Get(ctx)
-	dropColumns := &DropColumns{}
+	droppedColumns := &DroppedColumns{}
 	if err != nil {
 		if errors.Cause(err) == ErrStateNotFound {
-			dropColumns = &DropColumns{
+			droppedColumns = &DroppedColumns{
 				Cols: make(map[string]map[SourceTable]struct{}),
 			}
 		} else {
 			return err
 		}
 	} else {
-		dropColumns = state.(*DropColumns)
+		droppedColumns = state.(*DroppedColumns)
 	}
 	for _, col := range cols {
-		if _, ok := dropColumns.Cols[col]; !ok {
-			dropColumns.Cols[col] = make(map[SourceTable]struct{})
+		if _, ok := droppedColumns.Cols[col]; !ok {
+			droppedColumns.Cols[col] = make(map[SourceTable]struct{})
 		}
-		dropColumns.Cols[col][sourceTable] = struct{}{}
+		droppedColumns.Cols[col][sourceTable] = struct{}{}
 	}
-	return s.frameworkMetaStore.Put(ctx, dropColumns)
+	return s.frameworkMetaStore.Put(ctx, droppedColumns)
 }
 
-// DelDropColumn deletes drop column from the state
-func (s *DropColumnsStore) DelDropColumn(ctx context.Context, col string) error {
+// DelDroppedColumn deletes dropped column from the state
+func (s *DroppedColumnsStore) DelDroppedColumn(ctx context.Context, col string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.frameworkMetaStore.Get(ctx)
@@ -152,17 +168,42 @@ func (s *DropColumnsStore) DelDropColumn(ctx context.Context, col string) error 
 		}
 		return err
 	}
-	dropColumns := state.(*DropColumns)
-	delete(dropColumns.Cols, col)
+	droppedColumns := state.(*DroppedColumns)
+	delete(droppedColumns.Cols, col)
 
-	if len(dropColumns.Cols) == 0 {
+	if len(droppedColumns.Cols) == 0 {
 		return s.frameworkMetaStore.Delete(ctx)
 	}
-	return s.frameworkMetaStore.Put(ctx, dropColumns)
+	return s.frameworkMetaStore.Put(ctx, droppedColumns)
 }
 
-// DelAllDropColumns deletes all drop columns in metadata.
-func DelAllDropColumns(ctx context.Context, kvClient metaModel.KVClient) error {
-	_, err := kvClient.Delete(ctx, adapter.DMDropColumnsKeyAdapter.Encode(""), metaModel.WithPrefix())
+// DelDroppedColumnForTable deletes dropped column for one source table
+func (s *DroppedColumnsStore) DelDroppedColumnForTable(ctx context.Context, sourceTable SourceTable) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.frameworkMetaStore.Get(ctx)
+	if err != nil {
+		if errors.Cause(err) == ErrStateNotFound {
+			return nil
+		}
+		return err
+	}
+	droppedColumns := state.(*DroppedColumns)
+	for col := range droppedColumns.Cols {
+		delete(droppedColumns.Cols[col], sourceTable)
+		if len(droppedColumns.Cols[col]) == 0 {
+			delete(droppedColumns.Cols, col)
+		}
+	}
+
+	if len(droppedColumns.Cols) == 0 {
+		return s.frameworkMetaStore.Delete(ctx)
+	}
+	return s.frameworkMetaStore.Put(ctx, droppedColumns)
+}
+
+// DelAllDroppedColumns deletes all dropped columns in metadata.
+func DelAllDroppedColumns(ctx context.Context, kvClient metaModel.KVClient) error {
+	_, err := kvClient.Delete(ctx, adapter.DMDroppedColumnsKeyAdapter.Path(), metaModel.WithPrefix())
 	return err
 }

@@ -36,6 +36,9 @@ import (
 type mockDBProvider struct {
 	verDB *sql.DB // verDB user for show version.
 	db    *sql.DB
+	// customDB defines a db that will never be close
+	// TODO: we should use customDB for all mock.
+	customDB *sql.DB
 }
 
 // Apply will build BaseDB with DBConfig.
@@ -44,6 +47,12 @@ func (d *mockDBProvider) Apply(config *config.DBConfig) (*BaseDB, error) {
 		if err := d.verDB.Ping(); err == nil {
 			// nolint:nilerr
 			return NewBaseDB(d.verDB), nil
+		}
+	}
+	if d.customDB != nil {
+		if err := d.customDB.Ping(); err == nil {
+			// nolint:nilerr
+			return NewMockDB(d.customDB), nil
 		}
 	}
 	return NewBaseDB(d.db), nil
@@ -96,6 +105,19 @@ func InitMockDBFull() (*sql.DB, sqlmock.Sqlmock, error) {
 		mdbp.db = db
 	} else {
 		DefaultDBProvider = &mockDBProvider{db: db}
+	}
+	return db, mock, err
+}
+
+func InitMockDBNotClose() (*sql.DB, sqlmock.Sqlmock, error) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		return nil, nil, err
+	}
+	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
+		mdbp.customDB = db
+	} else {
+		DefaultDBProvider = &mockDBProvider{customDB: db}
 	}
 	return db, mock, err
 }
