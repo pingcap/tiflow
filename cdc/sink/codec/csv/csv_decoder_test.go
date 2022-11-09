@@ -63,7 +63,7 @@ func TestCSVBatchDecoder(t *testing.T) {
 			},
 		},
 	}
-	decoder, err := NewBatchDecoder(ctx, &common.CSVConfig{
+	decoder, err := NewBatchDecoder(ctx, &common.Config{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",

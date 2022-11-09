@@ -180,24 +180,24 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 		var csvConfig *config.CSVConfig
 		if c.Sink.CSVConfig != nil {
 			csvConfig = &config.CSVConfig{
-				Delimiter:  c.Sink.CSVConfig.Delimiter,
-				Quote:      c.Sink.CSVConfig.Quote,
-				NullString: c.Sink.CSVConfig.NullString,
-
+				Delimiter:       c.Sink.CSVConfig.Delimiter,
+				Quote:           c.Sink.CSVConfig.Quote,
+				NullString:      c.Sink.CSVConfig.NullString,
 				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
 
 		res.Sink = &config.SinkConfig{
-			DispatchRules:      dispatchRules,
-			Protocol:           c.Sink.Protocol,
-			CSVConfig:          csvConfig,
-			TxnAtomicity:       config.AtomicityLevel(c.Sink.TxnAtomicity),
-			ColumnSelectors:    columnSelectors,
-			SchemaRegistry:     c.Sink.SchemaRegistry,
-			EncoderConcurrency: c.Sink.EncoderConcurrency,
-			Terminator:         c.Sink.Terminator,
-			DateSeparator:      c.Sink.DateSeparator,
+			DispatchRules:            dispatchRules,
+			Protocol:                 c.Sink.Protocol,
+			CSVConfig:                csvConfig,
+			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
+			ColumnSelectors:          columnSelectors,
+			SchemaRegistry:           c.Sink.SchemaRegistry,
+			EncoderConcurrency:       c.Sink.EncoderConcurrency,
+			Terminator:               c.Sink.Terminator,
+			DateSeparator:            c.Sink.DateSeparator,
+			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 		}
 	}
 	return res
@@ -285,15 +285,16 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Sink = &SinkConfig{
-			Protocol:           cloned.Sink.Protocol,
-			SchemaRegistry:     cloned.Sink.SchemaRegistry,
-			DispatchRules:      dispatchRules,
-			CSVConfig:          csvConfig,
-			ColumnSelectors:    columnSelectors,
-			TxnAtomicity:       string(cloned.Sink.TxnAtomicity),
-			EncoderConcurrency: cloned.Sink.EncoderConcurrency,
-			Terminator:         cloned.Sink.Terminator,
-			DateSeparator:      cloned.Sink.DateSeparator,
+			Protocol:                 cloned.Sink.Protocol,
+			SchemaRegistry:           cloned.Sink.SchemaRegistry,
+			DispatchRules:            dispatchRules,
+			CSVConfig:                csvConfig,
+			ColumnSelectors:          columnSelectors,
+			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
+			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
+			Terminator:               cloned.Sink.Terminator,
+			DateSeparator:            cloned.Sink.DateSeparator,
+			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -419,15 +420,16 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol           string            `json:"protocol"`
-	SchemaRegistry     string            `json:"schema_registry"`
-	CSVConfig          *CSVConfig        `json:"csv"`
-	DispatchRules      []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors    []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity       string            `json:"transaction_atomicity"`
-	EncoderConcurrency int               `json:"encoder_concurrency"`
-	Terminator         string            `json:"terminator"`
-	DateSeparator      string            `json:"date_separator"`
+	Protocol                 string            `json:"protocol"`
+	SchemaRegistry           string            `json:"schema_registry"`
+	CSVConfig                *CSVConfig        `json:"csv"`
+	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity             string            `json:"transaction_atomicity"`
+	EncoderConcurrency       int               `json:"encoder_concurrency"`
+	Terminator               string            `json:"terminator"`
+	DateSeparator            string            `json:"date_separator"`
+	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 }
 
 // CSVConfig denotes the csv config

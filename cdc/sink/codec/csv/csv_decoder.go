@@ -30,7 +30,7 @@ import (
 const defaultIOConcurrency = 1
 
 type batchDecoder struct {
-	csvConfig *common.CSVConfig
+	csvConfig *common.Config
 	parser    *mydump.CSVParser
 	data      []byte
 	msg       *csvMessage
@@ -40,7 +40,7 @@ type batchDecoder struct {
 
 // NewBatchDecoder creates a new BatchDecoder
 func NewBatchDecoder(ctx context.Context,
-	csvConfig *common.CSVConfig,
+	csvConfig *common.Config,
 	tableInfo *model.TableInfo,
 	value []byte,
 ) (codec.EventBatchDecoder, error) {

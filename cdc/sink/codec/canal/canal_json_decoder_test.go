@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +26,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := newJSONBatchEncoder(encodeEnable)
+		encoder := newJSONBatchEncoder(encodeEnable, config.CRLF)
 		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)

@@ -49,10 +49,11 @@ const (
 
 // Config is the configuration for cloud storage sink.
 type Config struct {
-	WorkerCount   int
-	FlushInterval time.Duration
-	FileSize      int
-	DateSeparator string
+	WorkerCount              int
+	FlushInterval            time.Duration
+	FileSize                 int
+	DateSeparator            string
+	EnablePartitionSeparator bool
 }
 
 // NewConfig returns the default cloud storage sink config.
@@ -92,6 +93,7 @@ func (c *Config) Apply(
 	}
 
 	c.DateSeparator = replicaConfig.Sink.DateSeparator
+	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
 
 	return nil
 }

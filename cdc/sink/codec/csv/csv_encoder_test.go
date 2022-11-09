@@ -52,7 +52,7 @@ func TestCSVBatchCodec(t *testing.T) {
 	}, {}}
 
 	for _, cs := range testCases {
-		encoder := newBatchEncoder(&common.CSVConfig{
+		encoder := newBatchEncoder(&common.Config{
 			Delimiter:       ",",
 			Quote:           "\"",
 			Terminator:      "\n",
@@ -74,7 +74,7 @@ func TestCSVBatchCodec(t *testing.T) {
 }
 
 func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newBatchEncoder(&common.CSVConfig{
+	encoder := newBatchEncoder(&common.Config{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",

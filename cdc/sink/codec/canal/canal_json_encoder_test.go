@@ -44,7 +44,7 @@ func TestBuildJSONBatchEncoder(t *testing.T) {
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
-	e := newJSONBatchEncoder(false)
+	e := newJSONBatchEncoder(false, config.CRLF)
 	require.NotNil(t, e)
 
 	encoder, ok := e.(*JSONBatchEncoder)
@@ -107,7 +107,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
-	e = newJSONBatchEncoder(true)
+	e = newJSONBatchEncoder(true, config.CRLF)
 	require.NotNil(t, e)
 
 	encoder, ok = e.(*JSONBatchEncoder)
@@ -155,7 +155,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 func TestBatching(t *testing.T) {
 	t.Parallel()
-	encoder := newJSONBatchEncoder(false)
+	encoder := newJSONBatchEncoder(false, config.CRLF)
 	require.NotNil(t, encoder)
 
 	updateCase := *testCaseUpdate
@@ -309,7 +309,7 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newJSONBatchEncoder(true)
+	encoder := newJSONBatchEncoder(true, config.CRLF)
 	require.NotNil(t, encoder)
 
 	count := 0

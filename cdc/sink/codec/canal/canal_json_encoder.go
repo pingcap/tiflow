@@ -35,6 +35,8 @@ type JSONBatchEncoder struct {
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
+	// the symbol separating two lines
+	terminator string
 
 	// messageHolder is used to hold each message and will be reset after each message is encoded.
 	messageHolder canalJSONMessageInterface
@@ -42,7 +44,7 @@ type JSONBatchEncoder struct {
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
+func newJSONBatchEncoder(enableTiDBExtension bool, terminator string) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
 		builder: newCanalEntryBuilder(),
 		messageHolder: &JSONMessage{
@@ -51,6 +53,7 @@ func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
 		},
 		enableTiDBExtension: enableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
+		terminator:          terminator,
 	}
 
 	if enableTiDBExtension {
@@ -224,6 +227,9 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		log.Panic("JSONBatchEncoder", zap.Error(err))
 		return nil
 	}
+	if len(c.terminator) > 0 {
+		value = append(value, []byte(c.terminator)...)
+	}
 	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
 		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
 	m.IncRowsCount()
@@ -266,5 +272,5 @@ func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 
 // Build a `JSONBatchEncoder`
 func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newJSONBatchEncoder(b.config.EnableTiDBExtension)
+	return newJSONBatchEncoder(b.config.EnableTiDBExtension, b.config.Terminator)
 }
