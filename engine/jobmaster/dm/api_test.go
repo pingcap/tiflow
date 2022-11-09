@@ -109,7 +109,21 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
-		finishedTaskState  = &metadata.FinishedState{
+		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
+		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
+		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
+		unitState          = &metadata.UnitState{
+			CurrentUnitStatus: map[string]*metadata.UnitStatus{
+				// task1's worker not found, and current unit status is not stored
+				// task2's worker not found
+				"task2": {CreatedTime: syncTime},
+				"task3": {CreatedTime: dumpTime},
+				"task4": {CreatedTime: dumpTime},
+				"task5": {CreatedTime: loadTime},
+				"task6": {CreatedTime: syncTime},
+				// task7's worker not found
+				"task7": {CreatedTime: syncTime},
+			},
 			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
 				"task2": {
 					&metadata.FinishedTaskStatus{
@@ -119,7 +133,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
 						},
-						Status: dumpStatusBytes,
+						Status:      dumpStatusBytes,
+						CreatedTime: dumpTime,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -128,7 +143,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
 						},
-						Status: loadStatusBytes,
+						Status:      loadStatusBytes,
+						CreatedTime: loadTime,
 					},
 				},
 				"task7": {
@@ -139,7 +155,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
 						},
-						Status: dumpStatusBytes,
+						Status:      dumpStatusBytes,
+						CreatedTime: dumpTime,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -148,7 +165,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
 						},
-						Status: loadStatusBytes,
+						Status:      loadStatusBytes,
+						CreatedTime: loadTime,
 					},
 				},
 			},
@@ -156,7 +174,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger(), false)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
 	messageAgent.On("SendRequest", mock.Anything, "task3", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
@@ -167,7 +185,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", frameModel.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
 	messageAgent.On("SendRequest", mock.Anything, "task6", mock.Anything, mock.Anything).Return(syncStatusResp, nil).Once()
 
-	err := jm.metadata.FinishedStateStore().Put(ctx, finishedTaskState)
+	err := jm.metadata.UnitStateStore().Put(ctx, unitState)
 	require.NoError(t, err)
 
 	// no job
@@ -204,7 +222,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "0001-01-01T00:00:00Z"
 		},
 		"task2": {
 			"expected_stage": "Finished",
@@ -216,7 +235,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "2022-11-04T20:47:57.43382274+08:00"
 		},
 		"task3": {
 			"expected_stage": "Finished",
@@ -228,7 +248,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task4": {
 			"expected_stage": "Running",
@@ -248,7 +269,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"bps": 1000,
 					"progress": "20.00 %"
 				}
-			}
+			},
+			"created_time": "2022-11-04T18:47:57.43382274+08:00"
 		},
 		"task5": {
 			"expected_stage": "Running",
@@ -269,7 +291,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
 				}
-			}
+			},
+			"created_time": "2022-11-04T19:47:57.43382274+08:00"
 		},
 		"task6": {
 			"expected_stage": "Running",
@@ -306,7 +329,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalRps": 10,
 					"recentRps": 10
 				}
-			}
+			},
+			"created_time": "2022-11-04T20:47:57.43382274+08:00"
 		},
 		"task7": {
 			"expected_stage": "Finished",
@@ -318,7 +342,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"stage": "",
 				"result": null,
 				"status": null
-			}
+			},
+			"created_time": "2022-11-04T20:47:57.43382274+08:00"
 		}
 	},
 	"finished_unit_status": {
@@ -337,7 +362,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"estimateTotalRows": 1000,
 					"bps": 1000,
 					"progress": "20.00 %"
-				}
+				},
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
 			},
 			{
 				"Unit": "DMLoadTask",
@@ -352,7 +378,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlog": "mysql-bin.000002, 8",
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
-				}
+				},
+				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
 			}
 		],
 		"task7": [
@@ -370,7 +397,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"estimateTotalRows": 1000,
 					"bps": 1000,
 					"progress": "20.00 %"
-				}
+				},
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
 			},
 			{
 				"Unit": "DMLoadTask",
@@ -385,7 +413,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlog": "mysql-bin.000002, 8",
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
-				}
+				},
+				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
 			}
 		]
 	}
@@ -428,14 +457,14 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(metaKVClient, log.L())
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
+			metadata:        metadata.NewMetaData(metaKVClient, log.L()),
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {
