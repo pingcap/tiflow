@@ -14,11 +14,10 @@
 package fake
 
 import (
-	libErrors "errors"
 	"fmt"
 	"regexp"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // JobUnRetryableError is used in fake job and unit test only
@@ -49,7 +48,7 @@ var fakeJobErrorRegexp = regexp.MustCompile(fakeJobErrorFormat)
 // ToFakeJobError tries best to construct a fake job error from an error object
 func ToFakeJobError(err error) error {
 	var errOut *JobUnRetryableError
-	if libErrors.As(err, &errOut) {
+	if errors.As(err, &errOut) {
 		return err
 	}
 

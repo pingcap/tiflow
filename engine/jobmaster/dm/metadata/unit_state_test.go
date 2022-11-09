@@ -22,20 +22,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFinishedStateStore(t *testing.T) {
+func TestUnitStateStore(t *testing.T) {
 	t.Parallel()
 
-	s := NewFinishedStateStore(mock.NewMetaMock())
+	s := NewUnitStateStore(mock.NewMetaMock())
 	ctx := context.Background()
 	state, err := s.Get(ctx)
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, state)
 
-	state = &FinishedState{
+	state = &UnitState{
 		FinishedUnitStatus: map[string][]*FinishedTaskStatus{
 			"task": {&FinishedTaskStatus{
 				Status: json.RawMessage("null"),
 			}},
+		},
+		CurrentUnitStatus: map[string]*UnitStatus{
+			"task": {},
 		},
 	}
 	err = s.Put(ctx, state)

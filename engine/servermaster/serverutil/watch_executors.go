@@ -17,12 +17,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -82,12 +80,12 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		}
 
 		if !ok {
-			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
+			return errors.ErrExecutorWatcherClosed.GenWithStackByArgs()
 		}
 		if change.Tp == model.EventExecutorOnline {
 			err := user.AddExecutor(change.ID, change.Addr)
 			if err != nil {
-				if pkgClient.ErrExecutorAlreadyExists.Is(err) {
+				if errors.Is(err, errors.ErrExecutorAlreadyExists) {
 					log.Warn("unexpected EventExecutorOnline",
 						zap.Error(err))
 					continue
@@ -100,7 +98,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		} else if change.Tp == model.EventExecutorOffline {
 			err := user.RemoveExecutor(change.ID)
 			if err != nil {
-				if pkgClient.ErrExecutorNotFound.Is(err) {
+				if errors.Is(err, errors.ErrExecutorNotFound) || errors.Is(err, errors.ErrTombstoneExecutor) {
 					log.Warn("unexpected EventExecutorOffline",
 						zap.Error(err))
 					continue
