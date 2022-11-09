@@ -177,15 +177,13 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		if endIndex == 0 {
 			continue
 		}
 
-		msgs := eventsBuf[:endIndex]
-		w.metricMQWorkerBatchSize.Observe(float64(len(msgs)))
+		w.metricMQWorkerBatchSize.Observe(float64(endIndex))
 		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
-
+		msgs := eventsBuf[:endIndex]
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
 			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {

@@ -44,7 +44,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "mq_worker_batch_duration",
 			Help:      "Batch duration for MQ worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 10),
+			Buckets:   prometheus.ExponentialBuckets(0.004, 2, 10), // 4ms ~ 2s
 		}, []string{"namespace", "changefeed"})
 )
 
