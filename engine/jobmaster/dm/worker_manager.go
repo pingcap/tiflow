@@ -389,7 +389,7 @@ func (wm *WorkerManager) createWorker(
 			}
 			return nil
 		}); err != nil {
-			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Error(err))
+			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Stringer("unit", unit), zap.Error(err))
 			return err
 		}
 	}
