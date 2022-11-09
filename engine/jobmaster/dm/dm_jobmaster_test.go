@@ -430,26 +430,38 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	err := jm.initComponents()
 	require.NoError(t, err)
-	state := &metadata.UnitState{FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
-		"task2": {
-			&metadata.FinishedTaskStatus{
-				TaskStatus: metadata.TaskStatus{
-					Unit:           frameModel.WorkerDMDump,
-					Task:           "task2",
-					Stage:          metadata.StageFinished,
-					CfgModRevision: 3,
-				},
-			},
-			&metadata.FinishedTaskStatus{
-				TaskStatus: metadata.TaskStatus{
-					Unit:           frameModel.WorkerDMLoad,
-					Task:           "task2",
-					Stage:          metadata.StageFinished,
-					CfgModRevision: 3,
-				},
+	dumpTime, _ := time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
+	loadTime, _ := time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
+	state := &metadata.UnitState{
+		CurrentUnitStatus: map[string]*metadata.UnitStatus{
+			"task2": {
+				Unit:        frameModel.WorkerDMLoad,
+				Task:        "task2",
+				CreatedTime: loadTime,
 			},
 		},
-	}}
+		FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
+			"task2": {
+				&metadata.FinishedTaskStatus{
+					TaskStatus: metadata.TaskStatus{
+						Unit:           frameModel.WorkerDMDump,
+						Task:           "task2",
+						Stage:          metadata.StageFinished,
+						CfgModRevision: 3,
+					},
+					CreatedTime: dumpTime,
+				},
+				&metadata.FinishedTaskStatus{
+					TaskStatus: metadata.TaskStatus{
+						Unit:           frameModel.WorkerDMLoad,
+						Task:           "task2",
+						Stage:          metadata.StageFinished,
+						CfgModRevision: 3,
+					},
+					CreatedTime: loadTime,
+				},
+			},
+		}}
 	err = jm.metadata.UnitStateStore().Put(ctx, state)
 	require.NoError(t, err)
 
@@ -473,6 +485,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 	require.Equal(t, 2, len(state2.FinishedUnitStatus["task2"]))
 	require.Equal(t, frameModel.WorkerDMLoad, state2.FinishedUnitStatus["task2"][1].Unit)
 	require.Equal(t, uint64(4), state2.FinishedUnitStatus["task2"][1].CfgModRevision)
+	require.Equal(t, loadTime, state2.FinishedUnitStatus["task2"][1].CreatedTime)
 }
 
 // TODO: move to separate file

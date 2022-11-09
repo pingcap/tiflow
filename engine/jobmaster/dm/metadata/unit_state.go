@@ -89,15 +89,15 @@ type TaskStatus struct {
 	Task           string
 	Stage          TaskStage
 	CfgModRevision uint64
-	CreatedTime    time.Time
 }
 
 // FinishedTaskStatus wraps the TaskStatus with FinishedStatus.
 // It only used when a task is finished.
 type FinishedTaskStatus struct {
 	TaskStatus
-	Result *pb.ProcessResult
-	Status json.RawMessage
+	Result      *pb.ProcessResult
+	Status      json.RawMessage
+	CreatedTime time.Time
 }
 
 // UnitStatus defines the unit status.

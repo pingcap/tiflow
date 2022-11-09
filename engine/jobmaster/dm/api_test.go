@@ -132,9 +132,9 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task2",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
-							CreatedTime:    dumpTime,
 						},
-						Status: dumpStatusBytes,
+						Status:      dumpStatusBytes,
+						CreatedTime: dumpTime,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -142,9 +142,9 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task2",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
-							CreatedTime:    loadTime,
 						},
-						Status: loadStatusBytes,
+						Status:      loadStatusBytes,
+						CreatedTime: loadTime,
 					},
 				},
 				"task7": {
@@ -154,9 +154,9 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task7",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
-							CreatedTime:    dumpTime,
 						},
-						Status: dumpStatusBytes,
+						Status:      dumpStatusBytes,
+						CreatedTime: dumpTime,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -164,9 +164,9 @@ func TestQueryStatusAPI(t *testing.T) {
 							Task:           "task7",
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
-							CreatedTime:    loadTime,
 						},
-						Status: loadStatusBytes,
+						Status:      loadStatusBytes,
+						CreatedTime: loadTime,
 					},
 				},
 			},
@@ -353,7 +353,6 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
-				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -363,14 +362,14 @@ func TestQueryStatusAPI(t *testing.T) {
 					"estimateTotalRows": 1000,
 					"bps": 1000,
 					"progress": "20.00 %"
-				}
+				},
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
 			},
 			{
 				"Unit": "DMLoadTask",
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
-				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -379,7 +378,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlog": "mysql-bin.000002, 8",
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
-				}
+				},
+				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
 			}
 		],
 		"task7": [
@@ -388,7 +388,6 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
-				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -398,14 +397,14 @@ func TestQueryStatusAPI(t *testing.T) {
 					"estimateTotalRows": 1000,
 					"bps": 1000,
 					"progress": "20.00 %"
-				}
+				},
+				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
 			},
 			{
 				"Unit": "DMLoadTask",
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
-				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -414,7 +413,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlog": "mysql-bin.000002, 8",
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
-				}
+				},
+				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
 			}
 		]
 	}
