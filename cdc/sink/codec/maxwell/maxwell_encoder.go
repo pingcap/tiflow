@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
@@ -57,15 +56,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	d.batchSize++
 	if callback != nil {
 		d.callbackBuf = append(d.callbackBuf, callback)
-	}
-	return nil
-}
-
-func (d *BatchEncoder) AppendBatchedRowChangedEvents(ctx context.Context, topic string, events []*eventsink.RowChangeCallbackableEvent) error {
-	for _, event := range events {
-		if err := d.AppendRowChangedEvent(ctx, topic, event.Event, event.Callback); err != nil {
-			return errors.Trace(err)
-		}
 	}
 	return nil
 }

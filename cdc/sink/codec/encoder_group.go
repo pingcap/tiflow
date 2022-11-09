@@ -112,7 +112,8 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
 			for _, event := range future.events {
-				if err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback); err != nil {
+				err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback)
+				if err != nil {
 					return errors.Trace(err)
 				}
 			}

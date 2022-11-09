@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
@@ -129,11 +128,6 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	a.resultBuf = append(a.resultBuf, message)
 
-	return nil
-}
-
-// AppendBatchedRowChangedEvents is no-op
-func (a *BatchEncoder) AppendBatchedRowChangedEvents(ctx context.Context, topic string, events []*eventsink.RowChangeCallbackableEvent) error {
 	return nil
 }
 
