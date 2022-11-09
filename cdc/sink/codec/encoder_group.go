@@ -103,7 +103,6 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		WithLabelValues(g.changefeedID.Namespace, g.changefeedID.ID, strconv.Itoa(idx))
 	ticker := time.NewTicker(defaultMetricInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,7 +122,12 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	}
 }
 
-func (g *encoderGroup) AddEvents(ctx context.Context, topic string, partition int32, events ...*eventsink.RowChangeCallbackableEvent) error {
+func (g *encoderGroup) AddEvents(
+	ctx context.Context,
+	topic string,
+	partition int32,
+	events ...*eventsink.RowChangeCallbackableEvent,
+) error {
 	future := newFuture(topic, partition, events...)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
 	select {

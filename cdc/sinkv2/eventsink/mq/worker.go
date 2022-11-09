@@ -163,7 +163,6 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 }
 
 // batchEncodeRun collect messages into batch and add them to the encoder group.
-// should only be used when the protocol is batch encode.
 func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	log.Info("MQ sink batch worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
