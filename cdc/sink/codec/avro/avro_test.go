@@ -78,6 +78,7 @@ func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
 	return ft
 }
 
+//nolint:unparam
 func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
 	ft.SetFlag(flag)
 	return ft

@@ -41,6 +41,7 @@ func (o *applyRedoOptions) addFlags(cmd *cobra.Command) {
 	cmd.MarkFlagRequired("sink-uri") //nolint:errcheck
 }
 
+//nolint:unparam
 func (o *applyRedoOptions) complete(cmd *cobra.Command) error {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(o.sinkURI)

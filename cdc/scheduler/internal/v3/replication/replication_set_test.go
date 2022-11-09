@@ -769,6 +769,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.False(t, r.hasRole(RoleSecondary))
 }
 
+//nolint:tparallel
 func TestReplicationSetCaptureShutdown(t *testing.T) {
 	t.Parallel()
 
