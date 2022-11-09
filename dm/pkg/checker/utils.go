@@ -150,6 +150,7 @@ func markCheckErrorFromParser(result *Result, err error) {
 	}
 }
 
+//nolint:unparam
 func isMySQLError(err error, code uint16) bool {
 	err = errors.Cause(err)
 	e, ok := err.(*mysql.MySQLError)

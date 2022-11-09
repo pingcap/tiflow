@@ -35,7 +35,7 @@ type checker struct {
 	db *sql.DB
 }
 
-// nolint:deadcode, will be used in next pr
+// nolint:unused
 func newChecker(db *sql.DB) *checker {
 	return &checker{
 		db: db,

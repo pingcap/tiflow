@@ -39,6 +39,7 @@ func addEventsToSorterEngine(t *testing.T, events []*model.PolymorphicEvent, sor
 	}
 }
 
+//nolint:unparam
 func genRowChangedEvent(startTs, commitTs uint64, tableID model.TableID) *model.RowChangedEvent {
 	return &model.RowChangedEvent{
 		StartTs:  startTs,
