@@ -2739,7 +2739,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		}
 	}
 	// skip getTable before in above loop
-	// nolint:ifshort
 	start := 1
 	if shouldTableExistNum > start {
 		start = shouldTableExistNum

@@ -15,12 +15,12 @@ package orm
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gorm.io/gorm"
