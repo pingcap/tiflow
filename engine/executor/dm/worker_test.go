@@ -16,7 +16,6 @@ package dm
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -37,7 +36,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 )
@@ -158,7 +157,7 @@ func TestWorker(t *testing.T) {
 	// Finished
 	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Times(3)
 	unitHolder.On("Status").Return(&pb.DumpStatus{}).Once()
-	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+	require.True(t, errors.Is(dmWorker.Tick(context.Background()), errors.ErrWorkerFinish))
 
 	unitHolder.AssertExpectations(t)
 }

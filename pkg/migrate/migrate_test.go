@@ -494,6 +494,7 @@ func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
+//nolint:unparam
 func newMockPDClient(normal bool) *mockPDClient {
 	mock := &mockPDClient{}
 	status := http.StatusOK

@@ -220,7 +220,7 @@ func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound sorter
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var iter *EventIter = &EventIter{}
+	iter := &EventIter{}
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
 		log.Panic("fetch unresolved events", zap.Int64("tableID", tableID))
 	}

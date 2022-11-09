@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -31,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -353,7 +352,7 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 		}
 		// update status via framework provided API
 		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
-		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
 			log.Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
@@ -439,7 +438,7 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	delete(m.bStatus.status, worker.ID())
 	m.bStatus.Unlock()
 
-	if cerrors.ErrWorkerFinish.Equal(reason) || cerrors.ErrWorkerCancel.Equal(reason) {
+	if errors.Is(reason, errors.ErrWorkerFinish) || errors.Is(reason, errors.ErrWorkerCancel) {
 		log.Info("FakeMaster: OnWorkerOffline",
 			zap.String("worker-id", worker.ID()), zap.String("reason", reason.Error()))
 		m.finishedSet[worker.ID()] = businessID
