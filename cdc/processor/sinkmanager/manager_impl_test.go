@@ -51,6 +51,8 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 	}
 }
 
+// nolint:unparam
+// It is ok to use the same tableID in test.
 func addTableAndAddEventsToSorterEngine(
 	t *testing.T,
 	engine sorter.EventSortEngine,
