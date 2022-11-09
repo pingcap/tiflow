@@ -461,7 +461,8 @@ func TestDuplicateFinishedState(t *testing.T) {
 					CreatedTime: loadTime,
 				},
 			},
-		}}
+		},
+	}
 	err = jm.metadata.UnitStateStore().Put(ctx, state)
 	require.NoError(t, err)
 
