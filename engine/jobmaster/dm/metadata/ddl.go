@@ -20,7 +20,7 @@ import (
 // DDL represents the state of ddls.
 // TODO: implement DDL
 type DDL struct {
-	state
+	state //nolint:unused
 }
 
 // DDLStore manages the state of ddls.

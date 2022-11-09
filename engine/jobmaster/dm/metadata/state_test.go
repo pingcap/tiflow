@@ -24,8 +24,8 @@ import (
 )
 
 type DummyState struct {
-	state
-	I int
+	state //nolint:unused
+	I     int
 }
 
 func (ds *DummyState) String() string {
@@ -45,9 +45,9 @@ func (ds *DummyStore) key() string {
 }
 
 type FailedState struct {
-	state
-	I int
-	i int
+	state //nolint:unused
+	I     int
+	i     int
 }
 
 type FailedStore struct {
