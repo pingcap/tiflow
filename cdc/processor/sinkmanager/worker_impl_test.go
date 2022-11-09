@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/sorter/memory"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) worker {
@@ -58,8 +59,26 @@ func genRowChangedEvent(startTs, commitTs uint64, tableID model.TableID) *model.
 	}
 }
 
+type workerSuite struct {
+	suite.Suite
+}
+
+func (suite *workerSuite) SetupSuite() {
+	requestMemSize = 218
+	// For one batch size.
+	maxBigTxnBatchSize = 218 * 2
+	// Advance table sink per 2 events.
+	maxUpdateIntervalSize = 218 * 2
+}
+
+func (suite *workerSuite) TearDownSuite() {
+	requestMemSize = defaultRequestMemSize
+	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
+	maxBigTxnBatchSize = defaultMaxBigTxnBatchSize
+}
+
 // Test the case that the worker will stop when no memory quota and meet the txn boundary.
-func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *testing.T) {
+func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,7 +86,6 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *t
 	// Only for three events.
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
 	eventSize := uint64(218 * 2)
-	defaultRequestMemSize = 218
 
 	events := []*model.PolymorphicEvent{
 		{
@@ -120,7 +138,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *t
 	}
 
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *tableSinkTask)
 	var wg sync.WaitGroup
@@ -128,7 +146,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *t
 	go func() {
 		defer wg.Done()
 		err := w.receiveTableSinkTask(ctx, taskChan)
-		require.Equal(t, context.Canceled, err)
+		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -143,11 +161,11 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *t
 		}
 	}
 	callback := func(lastWritePos sorter.Position) {
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -161,11 +179,11 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished(t *t
 		callback:             callback,
 	}
 	wg.Wait()
-	require.Len(t, sink.events, 3)
+	require.Len(suite.T(), sink.events, 3)
 }
 
 // Test the case that worker will block when no memory quota until the mem quota is aborted.
-func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.T) {
+func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -173,7 +191,6 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 	// Only for three events.
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
 	eventSize := uint64(218 * 2)
-	defaultRequestMemSize = 218
 
 	events := []*model.PolymorphicEvent{
 		{
@@ -235,7 +252,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *tableSinkTask)
 	var wg sync.WaitGroup
@@ -243,7 +260,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 	go func() {
 		defer wg.Done()
 		err := w.receiveTableSinkTask(ctx, taskChan)
-		require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -258,11 +275,11 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 		}
 	}
 	callback := func(lastWritePos sorter.Position) {
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -278,11 +295,11 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 	// Abort the task when no memory quota and blocked.
 	w.(*workerImpl).memQuota.close()
 	wg.Wait()
-	require.Len(t, sink.events, 1, "Only one txn should be sent to sink before abort")
+	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
 }
 
 // Test the case that worker will advance the table sink only when it reaches the batch size.
-func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize(t *testing.T) {
+func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -290,9 +307,6 @@ func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatc
 	// For five events.
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
 	eventSize := uint64(218 * 4)
-	defaultRequestMemSize = 218
-	// For one batch size.
-	maxBigTxnBatchSize = 218 * 2
 
 	events := []*model.PolymorphicEvent{
 		{
@@ -364,7 +378,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatc
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *tableSinkTask)
 	var wg sync.WaitGroup
@@ -372,7 +386,7 @@ func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatc
 	go func() {
 		defer wg.Done()
 		err := w.receiveTableSinkTask(ctx, taskChan)
-		require.ErrorIs(t, err, context.Canceled)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -387,11 +401,11 @@ func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatc
 		}
 	}
 	callback := func(lastWritePos sorter.Position) {
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -405,12 +419,12 @@ func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatc
 		callback:             callback,
 	}
 	wg.Wait()
-	require.Len(t, sink.events, 5, "All events should be sent to sink")
-	require.Equal(t, 3, sink.writeTimes, "Three txn batch should be sent to sink")
+	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
+	require.Equal(suite.T(), 3, sink.writeTimes, "Three txn batch should be sent to sink")
 }
 
 // Test the case that the worker will force consume only one Txn when the memory quota is not enough.
-func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *testing.T) {
+func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -418,7 +432,6 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 	// Only for three events.
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
 	eventSize := uint64(218 * 2)
-	defaultRequestMemSize = 218
 
 	events := []*model.PolymorphicEvent{
 		{
@@ -490,7 +503,7 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *tableSinkTask)
 	var wg sync.WaitGroup
@@ -498,7 +511,7 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 	go func() {
 		defer wg.Done()
 		err := w.receiveTableSinkTask(ctx, taskChan)
-		require.Equal(t, context.Canceled, err)
+		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -513,11 +526,11 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 		}
 	}
 	callback := func(lastWritePos sorter.Position) {
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -531,11 +544,11 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 		callback:             callback,
 	}
 	wg.Wait()
-	require.Len(t, sink.events, 5, "All events should be sent to sink")
+	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
 }
 
 // Test the case that the worker will advance the table sink only when it reaches the max update interval size.
-func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize(t *testing.T) {
+func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -543,9 +556,6 @@ func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpda
 	// Only for three events.
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
 	eventSize := uint64(218 * 2)
-	defaultRequestMemSize = 218
-	// Advance table sink per 2 events.
-	maxUpdateIntervalSize = 218 * 2
 
 	events := []*model.PolymorphicEvent{
 		{
@@ -617,7 +627,7 @@ func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpda
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *tableSinkTask)
 	var wg sync.WaitGroup
@@ -625,7 +635,7 @@ func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpda
 	go func() {
 		defer wg.Done()
 		err := w.receiveTableSinkTask(ctx, taskChan)
-		require.Equal(t, context.Canceled, err)
+		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -640,11 +650,11 @@ func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpda
 		}
 	}
 	callback := func(lastWritePos sorter.Position) {
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(t, sorter.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -658,6 +668,10 @@ func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpda
 		callback:             callback,
 	}
 	wg.Wait()
-	require.Len(t, sink.events, 5, "All events should be sent to sink")
-	require.Equal(t, 2, sink.writeTimes, "Only two times write to sink")
+	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
+	require.Equal(suite.T(), 2, sink.writeTimes, "Only two times write to sink")
+}
+
+func TestWorkerSuite(t *testing.T) {
+	suite.Run(t, new(workerSuite))
 }

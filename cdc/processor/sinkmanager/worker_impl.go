@@ -22,13 +22,20 @@ import (
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
 
-var (
+const (
 	// defaultRequestMemSize is the default memory usage for a request.
 	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
-	maxUpdateIntervalSize = uint64(1024 * 256) // 256KB
+	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
 	// Limit the maximum size of a group of one batch, if there is a big translation.
-	maxBigTxnBatchSize = maxUpdateIntervalSize * 20 // 5MB
+	defaultMaxBigTxnBatchSize = defaultMaxUpdateIntervalSize * 20 // 5MB
+)
+
+// Make these values be variables, so that we can mock them in unit tests.
+var (
+	requestMemSize        = defaultRequestMemSize
+	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
+	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
 )
 
 // Assert that workerImpl implements worker.
@@ -73,7 +80,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			return ctx.Err()
 		case task := <-taskChan:
 			// First time to run the task, we have initialized memory quota for the table.
-			availableMem := int(defaultRequestMemSize)
+			availableMem := int(requestMemSize)
 			events := make([]*model.PolymorphicEvent, 0, 1024)
 
 			// Used to record the last written position.
@@ -123,14 +130,14 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 						// The worst case is all workers are exceeding the memory quota.
 						// It will cause out of memory. But it is acceptable for now.
 						// Because we split the transaction by default.
-						w.memQuota.forceAcquire(defaultRequestMemSize)
+						w.memQuota.forceAcquire(requestMemSize)
 					} else {
-						err := w.memQuota.blockAcquire(defaultRequestMemSize)
+						err := w.memQuota.blockAcquire(requestMemSize)
 						if err != nil {
 							return errors.Trace(err)
 						}
 					}
-					availableMem += int(defaultRequestMemSize)
+					availableMem += int(requestMemSize)
 				}
 				eventSize := e.Row.ApproximateBytes()
 				availableMem -= eventSize
@@ -159,7 +166,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 					// If no more available memory, we should put the table
 					// back to the SinkManager and wait for the next round.
-					if !w.memQuota.hasAvailable(defaultRequestMemSize) {
+					if !w.memQuota.hasAvailable(requestMemSize) {
 						break
 					}
 				} else {
