@@ -95,9 +95,9 @@ type TaskStatus struct {
 // It only used when a task is finished.
 type FinishedTaskStatus struct {
 	TaskStatus
-	Result      *pb.ProcessResult
-	Status      json.RawMessage
-	CreatedTime time.Time
+	Result   *pb.ProcessResult
+	Status   json.RawMessage
+	Duration time.Duration
 }
 
 // UnitStatus defines the unit status.
