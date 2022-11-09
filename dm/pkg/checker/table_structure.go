@@ -77,11 +77,14 @@ func (o *incompatibilityOption) String() string {
 type TablesChecker struct {
 	upstreamDBs  map[string]*sql.DB
 	downstreamDB *sql.DB
-	tableMap     map[string]map[filter.Table][]filter.Table // sourceID -> downstream table -> upstream tables
-	reMu         sync.Mutex
-	inCh         chan *checkItem
-	optCh        chan *incompatibilityOption
-	dumpThreads  int
+	// sourceID -> downstream table -> upstream tables
+	tableMap map[string]map[filter.Table][]filter.Table
+	// downstream table -> extended column names
+	extendedColumnPerTable map[filter.Table][]string
+	reMu                   sync.Mutex
+	inCh                   chan *checkItem
+	optCh                  chan *incompatibilityOption
+	dumpThreads            int
 	// a simple cache for downstream table structure
 	// filter.Table -> *ast.CreateTableStmt
 	// if the value is nil, it means the downstream table is not created yet
@@ -93,16 +96,18 @@ func NewTablesChecker(
 	upstreamDBs map[string]*sql.DB,
 	downstreamDB *sql.DB,
 	tableMap map[string]map[filter.Table][]filter.Table,
+	extendedColumnPerTable map[filter.Table][]string,
 	dumpThreads int,
 ) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
 	c := &TablesChecker{
-		upstreamDBs:  upstreamDBs,
-		downstreamDB: downstreamDB,
-		tableMap:     tableMap,
-		dumpThreads:  dumpThreads,
+		upstreamDBs:            upstreamDBs,
+		downstreamDB:           downstreamDB,
+		tableMap:               tableMap,
+		extendedColumnPerTable: extendedColumnPerTable,
+		dumpThreads:            dumpThreads,
 	}
 	log.L().Logger.Debug("check table structure", zap.Int("channel pool size", dumpThreads))
 	c.inCh = make(chan *checkItem, dumpThreads)
@@ -311,6 +316,7 @@ func (c *TablesChecker) checkAST(upstreamStmt *ast.CreateTableStmt, downstreamSt
 		})
 	}
 
+	// extended column must have downstream table?
 	if downstreamStmt == nil {
 		return options
 	}
