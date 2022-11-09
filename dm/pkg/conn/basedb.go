@@ -282,9 +282,3 @@ func (d *BaseDB) Close() error {
 
 	return err
 }
-
-// CloseMockDB release *BaseDB resource for mock.
-func (d *BaseDB) CloseMockDB() error {
-	d.doNotClose = true
-	return d.Close()
-}
