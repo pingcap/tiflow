@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/mock"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,7 +97,7 @@ func TestExecutorManager(t *testing.T) {
 	// test late heartbeat request after executor is offline
 	_, err = mgr.HandleHeartbeat(newHeartbeatReq())
 	require.Error(t, err)
-	require.True(t, ErrUnknownExecutor.Is(err))
+	require.True(t, errors.Is(err, errors.ErrUnknownExecutor))
 
 	cancel()
 	wg.Wait()

@@ -136,7 +136,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 		log.Warn("Table consumed memory records not found.",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("table", tableID))
+			zap.Int64("tableID", tableID))
 		return
 	}
 	records := m.tableMemory[tableID]

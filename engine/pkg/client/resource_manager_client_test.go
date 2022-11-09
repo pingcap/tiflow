@@ -20,9 +20,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/enginepb/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func TestCreateResource(t *testing.T) {
@@ -42,11 +41,11 @@ func TestCreateResource(t *testing.T) {
 	require.NoError(t, resourceCli.CreateResource(context.Background(), req))
 
 	mockCli.EXPECT().CreateResource(gomock.Any(), gomock.Eq(req)).
-		Return(nil, status.Error(codes.InvalidArgument, "invalid args")).Times(1)
-	require.ErrorContains(t, resourceCli.CreateResource(context.Background(), req), "invalid args")
+		Return(nil, errors.ErrInvalidArgument.GenWithStackByArgs("resource-id")).Times(1)
+	require.True(t, errors.Is(resourceCli.CreateResource(context.Background(), req), errors.ErrInvalidArgument))
 
 	mockCli.EXPECT().CreateResource(gomock.Any(), gomock.Eq(req)).
-		Return(nil, status.Error(codes.AlreadyExists, "already exists")).Times(1)
+		Return(nil, errors.ErrResourceAlreadyExists.GenWithStackByArgs(req.ResourceId)).Times(1)
 	mockCli.EXPECT().QueryResource(gomock.Any(), gomock.Eq(&enginepb.QueryResourceRequest{
 		ResourceKey: &enginepb.ResourceKey{
 			JobId:      "job-1",
@@ -60,7 +59,7 @@ func TestCreateResource(t *testing.T) {
 	require.NoError(t, resourceCli.CreateResource(context.Background(), req))
 
 	mockCli.EXPECT().CreateResource(gomock.Any(), gomock.Eq(req)).
-		Return(nil, status.Error(codes.AlreadyExists, "already exists")).Times(1)
+		Return(nil, errors.ErrResourceAlreadyExists.GenWithStackByArgs(req.ResourceId)).Times(1)
 	mockCli.EXPECT().QueryResource(gomock.Any(), gomock.Eq(&enginepb.QueryResourceRequest{
 		ResourceKey: &enginepb.ResourceKey{
 			JobId:      "job-1",
@@ -89,6 +88,6 @@ func TestRemoveResource(t *testing.T) {
 	require.NoError(t, resourceCli.RemoveResource(context.Background(), req))
 
 	mockCli.EXPECT().RemoveResource(gomock.Any(), gomock.Eq(req)).
-		Return(nil, status.Error(codes.NotFound, "not found")).Times(1)
+		Return(nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs("/local/resource-1")).Times(1)
 	require.NoError(t, resourceCli.RemoveResource(context.Background(), req))
 }

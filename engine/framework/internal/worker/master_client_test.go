@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +26,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormMock "github.com/pingcap/tiflow/engine/pkg/orm/mock"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

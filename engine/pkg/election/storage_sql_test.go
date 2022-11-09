@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/election"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -125,7 +125,7 @@ func TestSQLStorageUpdateRecord(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE leader_election SET version = ?, record = ? WHERE id = ? AND version = ?")).
 		WithArgs(int64(2), recordBytes, 1, int64(1)).WillReturnResult(sqlmock.NewResult(0, 0))
 	err = s.Update(context.Background(), record)
-	require.Equal(t, election.ErrRecordConflict, errors.Cause(err))
+	require.True(t, errors.Is(err, errors.ErrElectionRecordConflict))
 
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE leader_election SET version = ?, record = ? WHERE id = ? AND version = ?")).
 		WithArgs(int64(2), recordBytes, 1, int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))

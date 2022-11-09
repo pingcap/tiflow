@@ -15,7 +15,6 @@ package model
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gsql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

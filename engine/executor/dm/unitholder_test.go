@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
