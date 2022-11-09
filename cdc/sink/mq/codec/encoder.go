@@ -32,7 +32,12 @@ type EventBatchEncoder interface {
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
+<<<<<<< HEAD:cdc/sink/mq/codec/encoder.go
 	Build() []*MQMessage
+=======
+	// Should be called after `AppendRowChangedEvent`
+	Build() []*common.Message
+>>>>>>> 66ad0364da (mq(ticdc): encoder group support batch encode protocol (#7546)):cdc/sink/codec/encoder.go
 }
 
 // EncoderBuilder builds encoder with context.
