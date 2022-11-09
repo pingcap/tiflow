@@ -343,8 +343,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		},
 	)
 
-	w.startBackgroundTasks()
-
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -357,6 +355,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 }
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
+	w.startBackgroundTasks()
+
 	// Upsert the worker to ensure we have created the worker info
 	if err := w.frameMetaClient.UpsertWorker(ctx, w.workerStatus); err != nil {
 		return errors.Trace(err)
