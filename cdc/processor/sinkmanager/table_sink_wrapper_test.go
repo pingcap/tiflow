@@ -48,6 +48,7 @@ func (m *mockSink) Close() error {
 	return nil
 }
 
+//nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStateReplicating
 	sink := newMockSink()

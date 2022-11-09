@@ -242,7 +242,7 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 	// Make sure the retry delay is less than the deadline, otherwise the retry has no chance to execute.
 	backoffMaxDelayInMs := int64(e.config.RenewDeadline/time.Millisecond) / 2
 	if deadline, ok := ctx.Deadline(); ok {
-		maxDelayForCtx := int64(deadline.Sub(time.Now())/time.Millisecond) / 2
+		maxDelayForCtx := int64(time.Until(deadline)/time.Millisecond) / 2
 		if maxDelayForCtx < backoffMaxDelayInMs {
 			backoffMaxDelayInMs = maxDelayForCtx
 		}
