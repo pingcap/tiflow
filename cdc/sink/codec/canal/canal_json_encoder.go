@@ -195,11 +195,21 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 	}
 }
 
-func (c *JSONBatchEncoder) AppendBatchedRowChangedEvents(ctx context.Context, topic string, events []*eventsink.RowChangeCallbackableEvent) error {
+// AppendBatchedRowChangedEvents implements the EventBatchEncoder interface
+func (c *JSONBatchEncoder) AppendBatchedRowChangedEvents(
+	ctx context.Context,
+	topic string,
+	events []*eventsink.RowChangeCallbackableEvent,
+) error {
+	for _, event := range events {
+		if err := c.AppendRowChangedEvent(ctx, topic, event.Event, event.Callback); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// EncodeCheckpointEvent implements the EventJSONBatchEncoder interface
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
@@ -238,8 +248,8 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// Build implements the EventJSONBatchEncoder interface
-// Build should be called immediately after call AppendRowChangedEvent
+// Build implements the EventBatchEncoder interface
+// any one of append event(s) related method should be called before call the build.
 func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil

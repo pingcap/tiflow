@@ -104,7 +104,6 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 	ticker := time.NewTicker(defaultMetricInterval)
 	defer ticker.Stop()
 
-	var err error
 	for {
 		select {
 		case <-ctx.Done():
@@ -112,13 +111,10 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 		case <-ticker.C:
 			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
-			if len(future.events) == 1 {
-				err = encoder.AppendRowChangedEvent(ctx, future.Topic, future.events[0].Event, future.events[0].Callback)
-			} else {
-				err = encoder.AppendBatchedRowChangedEvents(ctx, future.Topic, future.events)
-			}
-			if err != nil {
-				return errors.Trace(err)
+			for _, event := range future.events {
+				if err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback); err != nil {
+					return errors.Trace(err)
+				}
 			}
 			future.Messages = encoder.Build()
 			close(future.done)
