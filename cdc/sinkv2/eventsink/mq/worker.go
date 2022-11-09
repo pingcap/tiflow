@@ -65,9 +65,9 @@ type worker struct {
 
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
-	// metricMQWorkerFlushDuration is the metric of the flush duration.
-	// We record the flush duration for each batch.
-	metricMQWorkerFlushDuration prometheus.Observer
+
+	// metricMQWorkerSendMessageDuration tracks the time duration cost on send messages.
+	metricMQWorkerSendMessageDuration prometheus.Observer
 	// metricMQWorkerBatchSize tracks each batch's size.
 	metricMQWorkerBatchSize prometheus.Observer
 	// metricMQWorkerBatchDuration tracks the time duration cost on batch messages.
@@ -86,16 +86,16 @@ func newWorker(
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
-		changeFeedID:                id,
-		protocol:                    protocol,
-		msgChan:                     chann.New[mqEvent](),
-		ticker:                      time.NewTicker(flushInterval),
-		encoderGroup:                codec.NewEncoderGroup(builder, encoderConcurrency, id),
-		producer:                    producer,
-		metricMQWorkerFlushDuration: mq.WorkerFlushDuration.WithLabelValues(id.Namespace, id.ID),
-		metricMQWorkerBatchSize:     mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
-		metricMQWorkerBatchDuration: mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
-		statistics:                  statistics,
+		changeFeedID:                      id,
+		protocol:                          protocol,
+		msgChan:                           chann.New[mqEvent](),
+		ticker:                            time.NewTicker(flushInterval),
+		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
+		producer:                          producer,
+		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
+		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
+		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
+		statistics:                        statistics,
 	}
 
 	return w
@@ -297,8 +297,8 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				}); err != nil {
 					return err
 				}
+				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
-			w.metricMQWorkerFlushDuration.Observe(time.Since(start).Seconds())
 		}
 	}
 }
@@ -313,6 +313,6 @@ func (w *worker) close() {
 	w.producer.Close()
 
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-	mq.WorkerFlushDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }
