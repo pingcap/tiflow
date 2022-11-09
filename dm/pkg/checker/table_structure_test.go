@@ -177,6 +177,7 @@ func TestTablesChecker(t *testing.T) {
 				},
 			},
 		},
+		nil,
 		1)
 	result := checker.Check(ctx)
 	require.Equal(t, StateSuccess, result.State)
@@ -209,6 +210,7 @@ func TestTablesChecker(t *testing.T) {
 				},
 			},
 		},
+		nil,
 		1)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
@@ -248,6 +250,7 @@ func TestTablesChecker(t *testing.T) {
 				},
 			},
 		},
+		nil,
 		1)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
@@ -287,6 +290,7 @@ func TestTablesChecker(t *testing.T) {
 				},
 			},
 		},
+		nil,
 		1)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
@@ -460,6 +464,7 @@ func TestUnknownCharsetCollation(t *testing.T) {
 				},
 			},
 		},
+		nil,
 		1)
 	result := checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)

@@ -273,7 +273,15 @@ func (c *TablesChecker) startWorker(ctx context.Context) error {
 				c.downstreamTables.Store(checkItem.downstreamTable, downstreamStmt)
 			}
 
-			opts := c.checkAST(upstreamStmt, downstreamStmt.(*ast.CreateTableStmt))
+			downstreamTable := filter.Table{
+				Schema: checkItem.downstreamTable.Schema,
+				Name:   checkItem.downstreamTable.Name,
+			}
+			opts := c.checkAST(
+				upstreamStmt,
+				downstreamStmt.(*ast.CreateTableStmt),
+				c.extendedColumnPerTable[downstreamTable],
+			)
 			for _, opt := range opts {
 				opt.tableID = table.String()
 				c.optCh <- opt
@@ -283,7 +291,11 @@ func (c *TablesChecker) startWorker(ctx context.Context) error {
 	}
 }
 
-func (c *TablesChecker) checkAST(upstreamStmt *ast.CreateTableStmt, downstreamStmt *ast.CreateTableStmt) []*incompatibilityOption {
+func (c *TablesChecker) checkAST(
+	upstreamStmt *ast.CreateTableStmt,
+	downstreamStmt *ast.CreateTableStmt,
+	extendedCols []string,
+) []*incompatibilityOption {
 	var options []*incompatibilityOption
 
 	// check columns
@@ -316,12 +328,18 @@ func (c *TablesChecker) checkAST(upstreamStmt *ast.CreateTableStmt, downstreamSt
 		})
 	}
 
-	// extended column must have downstream table?
 	if downstreamStmt == nil {
+		if len(extendedCols) > 0 {
+			options = append(options, &incompatibilityOption{
+				state:       StateFailure,
+				instruction: "extended column feature needs the table to be created with extended columns before replication",
+				errMessage:  fmt.Sprintf("table %s who has extended columns does not exist in downstream table", downstreamStmt.Table.Name),
+			})
+		}
 		return options
 	}
 
-	options = append(options, c.checkTableStructurePair(upstreamStmt, downstreamStmt)...)
+	options = append(options, c.checkTableStructurePair(upstreamStmt, downstreamStmt, extendedCols)...)
 	return options
 }
 
@@ -349,7 +367,11 @@ func (c *TablesChecker) checkUnique(cst *ast.Constraint) bool {
 	return false
 }
 
-func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.CreateTableStmt) []*incompatibilityOption {
+func (c *TablesChecker) checkTableStructurePair(
+	upstream *ast.CreateTableStmt,
+	downstream *ast.CreateTableStmt,
+	extendedCols []string,
+) []*incompatibilityOption {
 	//nolint: prealloc
 	var options []*incompatibilityOption
 
@@ -411,13 +433,30 @@ func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.Create
 	// check columns
 	upstreamCols := getColumnsAndIgnorable(upstream)
 	downstreamCols := getColumnsAndIgnorable(downstream)
-	// TODO: handle extended column
 	for col := range upstreamCols {
 		if _, ok := downstreamCols[col]; ok {
 			delete(upstreamCols, col)
 			delete(downstreamCols, col)
 		}
 	}
+	for _, col := range extendedCols {
+		if _, ok := upstreamCols[col]; ok {
+			options = append(options, &incompatibilityOption{
+				state:       StateFailure,
+				instruction: "values of extended columns will be automatically filled by DM, please remove these columns or change configuration",
+				errMessage:  fmt.Sprintf("upstream table should not contain extended column %s", col),
+			})
+		}
+		if _, ok := downstreamCols[col]; !ok {
+			options = append(options, &incompatibilityOption{
+				state:       StateFailure,
+				instruction: "please manually add extended column to downstream table",
+				errMessage:  fmt.Sprintf("downstream table should create extended column in advance %s", col),
+			})
+		}
+		delete(upstreamCols, col)
+	}
+
 	if len(upstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
 			state: StateWarning,
