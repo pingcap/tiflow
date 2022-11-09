@@ -672,6 +672,7 @@ function prepare_test_empty_gtid() {
 function test_source_and_target_with_empty_gtid() {
 	prepare_test_empty_gtid
 
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/dm-master.toml $WORK_DIR/
 	cp $cur/conf/dm-worker1.toml $WORK_DIR/
 	cp $cur/conf/dm-task-no-gtid.yaml $WORK_DIR/
