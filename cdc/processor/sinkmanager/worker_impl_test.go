@@ -281,6 +281,134 @@ func TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(t *testing.
 	require.Len(t, sink.events, 1, "Only one txn should be sent to sink before abort")
 }
 
+// Test the case that worker will advance the table sink only when it reaches the batch size.
+func TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize(t *testing.T) {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// For five events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 4)
+	defaultRequestMemSize = 218
+	// For one batch size.
+	maxBigTxnBatchSize = 218 * 2
+
+	events := []*model.PolymorphicEvent{
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 3, tableID),
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   4,
+			},
+		},
+	}
+	w := createWorker(changefeedID, eventSize, true)
+	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+
+	taskChan := make(chan *tableSinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.receiveTableSinkTask(ctx, taskChan)
+		require.ErrorIs(t, err, context.Canceled)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := sorter.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func() sorter.Position {
+		return sorter.Position{
+			StartTs:  1,
+			CommitTs: 2,
+		}
+	}
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(t, sorter.Position{
+			StartTs:  1,
+			CommitTs: 2,
+		}, lastWritePos)
+		require.Equal(t, sorter.Position{
+			StartTs:  2,
+			CommitTs: 2,
+		}, lastWritePos.Next())
+		cancel()
+	}
+	taskChan <- &tableSinkTask{
+		tableID:              tableID,
+		lowerBound:           lowerBoundPos,
+		upperBarrierTsGetter: upperBoundGetter,
+		tableSink:            wrapper,
+		callback:             callback,
+	}
+	wg.Wait()
+	require.Len(t, sink.events, 5, "All events should be sent to sink")
+	require.Equal(t, 3, sink.writeTimes, "Three txn batch should be sent to sink")
+}
+
 // Test the case that the worker will force consume only one Txn when the memory quota is not enough.
 func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
@@ -404,4 +532,132 @@ func TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume(t *
 	}
 	wg.Wait()
 	require.Len(t, sink.events, 5, "All events should be sent to sink")
+}
+
+// Test the case that the worker will advance the table sink only when it reaches the max update interval size.
+func TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize(t *testing.T) {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Only for three events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 2)
+	defaultRequestMemSize = 218
+	// Advance table sink per 2 events.
+	maxUpdateIntervalSize = 218 * 2
+
+	events := []*model.PolymorphicEvent{
+		{
+			StartTs: 1,
+			CRTs:    1,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    1,
+			},
+			Row: genRowChangedEvent(1, 1, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 3, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 3, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 3, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    4,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    4,
+			},
+			Row: genRowChangedEvent(1, 4, tableID),
+		},
+		{
+			CRTs: 5,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   5,
+			},
+		},
+	}
+	w := createWorker(changefeedID, eventSize, false)
+	addEventsToSorterEngine(t, events, w.(*workerImpl).sortEngine, tableID)
+
+	taskChan := make(chan *tableSinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.receiveTableSinkTask(ctx, taskChan)
+		require.Equal(t, context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := sorter.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func() sorter.Position {
+		return sorter.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}
+	}
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(t, sorter.Position{
+			StartTs:  1,
+			CommitTs: 3,
+		}, lastWritePos)
+		require.Equal(t, sorter.Position{
+			StartTs:  2,
+			CommitTs: 3,
+		}, lastWritePos.Next())
+		cancel()
+	}
+	taskChan <- &tableSinkTask{
+		tableID:              tableID,
+		lowerBound:           lowerBoundPos,
+		upperBarrierTsGetter: upperBoundGetter,
+		tableSink:            wrapper,
+		callback:             callback,
+	}
+	wg.Wait()
+	require.Len(t, sink.events, 5, "All events should be sent to sink")
+	require.Equal(t, 2, sink.writeTimes, "Only two times write to sink")
 }

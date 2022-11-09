@@ -22,15 +22,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/sorter"
 )
 
-const (
+var (
+	// defaultRequestMemSize is the default memory usage for a request.
+	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
-	maxUpdateIntervalSize = 1024 * 256 // 256KB
+	maxUpdateIntervalSize = uint64(1024 * 256) // 256KB
 	// Limit the maximum size of a group of one batch, if there is a big translation.
 	maxBigTxnBatchSize = maxUpdateIntervalSize * 20 // 5MB
 )
-
-// defaultRequestMemSize is the default memory usage for a request.
-var defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 
 // Assert that workerImpl implements worker.
 var _ worker = (*workerImpl)(nil)
@@ -133,7 +132,8 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 					availableMem += int(defaultRequestMemSize)
 				}
-				availableMem -= e.Row.ApproximateBytes()
+				eventSize := e.Row.ApproximateBytes()
+				availableMem -= eventSize
 				events = append(events, e)
 				lastCommitTs = e.CRTs
 				// We meet a finished transaction.
@@ -143,9 +143,6 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					// Whatever splitTxn is true or false, we should emit the events to the sink as soon as possible.
 					if err := appendEventsAndRecordCurrentSize(); err != nil {
 						return errors.Trace(err)
-					}
-					if w.splitTxn {
-						batchID = 1
 					}
 					// 1) If we need to split the transaction into multiple batches,
 					// 	  we have to update the resolved ts as soon as possible.
@@ -157,6 +154,9 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 							return errors.Trace(err)
 						}
 					}
+					if w.splitTxn {
+						batchID = 1
+					}
 					// If no more available memory, we should put the table
 					// back to the SinkManager and wait for the next round.
 					if !w.memQuota.hasAvailable(defaultRequestMemSize) {
@@ -164,11 +164,11 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 				} else {
 					if w.splitTxn {
+						if err := appendEventsAndRecordCurrentSize(); err != nil {
+							return errors.Trace(err)
+						}
 						// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
 						if currentTotalSize >= maxBigTxnBatchSize {
-							if err := appendEventsAndRecordCurrentSize(); err != nil {
-								return errors.Trace(err)
-							}
 							if err := advanceTableSinkAndResetCurrentSize(); err != nil {
 								return errors.Trace(err)
 							}
