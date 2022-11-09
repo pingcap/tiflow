@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // TaskStatus represents status of a task
@@ -33,6 +33,7 @@ type TaskStatus struct {
 	WorkerID       frameModel.WorkerID        `json:"worker_id"`
 	ConfigOutdated bool                       `json:"config_outdated"`
 	Status         *dmpkg.QueryStatusResponse `json:"status"`
+	CreatedTime    time.Time                  `json:"created_time"`
 }
 
 // JobStatus represents status of a job
@@ -64,11 +65,11 @@ type ShowDDLLocksResponse struct {
 
 // QueryJobStatus is the api of query job status.
 func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
-	state, err := jm.metadata.JobStore().Get(ctx)
+	jobState, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	job := state.(*metadata.Job)
+	job := jobState.(*metadata.Job)
 
 	if len(tasks) == 0 {
 		for task := range job.Tasks {
@@ -90,7 +91,18 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			JobID:      jm.ID(),
 			TaskStatus: make(map[string]TaskStatus),
 		}
+		unitState      *metadata.UnitState
+		existUnitState bool
 	)
+
+	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
+		return nil, err
+	}
+	unitState, existUnitState = state.(*metadata.UnitState)
+	if existUnitState {
+		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
+	}
 
 	for _, task := range tasks {
 		taskID := task
@@ -103,6 +115,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				workerID        string
 				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
+				createdTime     time.Time
 			)
 
 			// task not exist
@@ -121,28 +134,25 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				}
 			}
 
+			if existUnitState {
+				if status, ok := unitState.CurrentUnitStatus[taskID]; ok {
+					createdTime = status.CreatedTime
+				}
+			}
+
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
 				ExpectedStage:  expectedStage,
 				WorkerID:       workerID,
 				Status:         queryStatusResp,
 				ConfigOutdated: cfgModRevision != expectedCfgModRevision,
+				CreatedTime:    createdTime,
 			}
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
 
-	s, err := jm.metadata.FinishedStateStore().Get(ctx)
-	if err != nil {
-		if errors.Cause(err) == metadata.ErrStateNotFound {
-			return jobStatus, nil
-		}
-		return nil, err
-	}
-	if state, ok := s.(*metadata.FinishedState); ok {
-		jobStatus.FinishedUnitStatus = state.FinishedUnitStatus
-	}
 	return jobStatus, nil
 }
 

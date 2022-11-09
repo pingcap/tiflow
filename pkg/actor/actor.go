@@ -141,10 +141,12 @@ func (m *mailbox[T]) Receive() (message.Message[T], bool) {
 	return message.Message[T]{}, false
 }
 
+//nolint:unused
 func (m *mailbox[T]) len() int {
 	return len(m.msgCh)
 }
 
+//nolint:unused
 func (m *mailbox[T]) close() {
 	if atomic.CompareAndSwapUint64(&m.state, mailboxStateRunning, mailboxStateClosed) {
 		close(m.closeCh)

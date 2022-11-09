@@ -15,15 +15,14 @@ package registry
 
 import (
 	"encoding/json"
-	libErrors "errors"
 	"reflect"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // WorkerFactory is an interface that should be implemented by the author of
@@ -93,5 +92,5 @@ func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (Worke
 // IsRetryableError implements WorkerFactory.IsRetryableError
 func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
 	var errOut *fake.JobUnRetryableError
-	return !libErrors.As(err, &errOut)
+	return !errors.As(err, &errOut)
 }

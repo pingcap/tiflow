@@ -17,12 +17,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Defines topics here

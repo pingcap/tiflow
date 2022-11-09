@@ -650,7 +650,6 @@ func (k *ShardingGroupKeeper) ResolveShardingDDL(targetTable *filter.Table) (boo
 
 // ActiveDDLFirstLocation returns the binlog position of active DDL.
 func (k *ShardingGroupKeeper) ActiveDDLFirstLocation(targetTable *filter.Table) (binlog.Location, error) {
-	// nolint:ifshort
 	group := k.Group(targetTable)
 	k.Lock()
 	defer k.Unlock()

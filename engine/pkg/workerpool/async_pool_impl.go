@@ -31,7 +31,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 

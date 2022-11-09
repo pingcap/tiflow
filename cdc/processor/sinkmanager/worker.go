@@ -15,7 +15,6 @@ package sinkmanager
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sorter"
@@ -24,6 +23,9 @@ import (
 // Used to record the progress of the table.
 type writeSuccessCallback func(lastWrittenPos sorter.Position)
 
+// Used to get the upper bound of the table task.
+type tableTaskUpperBoundGetter func() sorter.Position
+
 // tableSinkTask is a task for a table sink.
 // It only considers how to control the table sink.
 type tableSinkTask struct {
@@ -31,12 +33,12 @@ type tableSinkTask struct {
 	// lowerBound indicates the lower bound of the table sink.
 	// It is a closed interval.
 	lowerBound sorter.Position
-	// upperBarrierTs indicates the upper bound of the table sink.
+	// upperBarrierTsGetter indicates the upper bound of the table sink.
 	// It is a closed interval.
-	// Use atomic pointer to get the latest value.
-	upperBarrierTs *atomic.Uint64
-	tableSink      *tableSinkWrapper
-	callback       writeSuccessCallback
+	// Use a method to get the latest value, because the upper bound may change(only can increase).
+	upperBarrierTsGetter tableTaskUpperBoundGetter
+	tableSink            *tableSinkWrapper
+	callback             writeSuccessCallback
 }
 
 type worker interface {

@@ -26,7 +26,6 @@ import (
 
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -43,14 +42,12 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
-	"github.com/pingcap/tiflow/engine/test/mock"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
@@ -114,9 +111,6 @@ type Server struct {
 	metaStoreManager MetaStoreManager
 
 	leaderDegrader *featureDegrader
-
-	// mocked server for test
-	mockGrpcServer mock.GrpcServer
 
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
@@ -325,7 +319,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		return nil, rpcerror.ToGRPCError(err)
+		return nil, err
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
@@ -333,8 +327,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		log.Warn("Executor is gone, RPC call needs retry",
 			zap.Any("request", req),
 			zap.String("executor-id", string(schedulerResp.ExecutorID)))
-		errOut := cerrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
-		return nil, status.Error(codes.Internal, errOut.Error())
+		return nil, errors.ErrUnknownExecutor.GenWithStackByArgs(string(schedulerResp.ExecutorID))
 	}
 
 	return &pb.ScheduleTaskResponse{
@@ -358,7 +351,7 @@ func (s *Server) QueryMetaStore(
 	getStore := func(storeID string) (*pb.QueryMetaStoreResponse, error) {
 		store := s.metaStoreManager.GetMetaStore(storeID)
 		if store == nil {
-			return nil, ErrMetaStoreNotExists.GenWithStack(&MetaStoreNotExistsError{StoreID: storeID})
+			return nil, errors.ErrMetaStoreNotExists.GenWithStackByArgs(storeID)
 		}
 		b, err := json.Marshal(store)
 		if err != nil {
@@ -585,7 +578,10 @@ func (s *Server) serve(ctx context.Context) error {
 func (s *Server) createGRPCServer() *grpc.Server {
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
-		grpc.ChainUnaryInterceptor(grpcprometheus.UnaryServerInterceptor, rpcerror.UnaryServerInterceptor),
+		grpc.ChainUnaryInterceptor(
+			grpcprometheus.UnaryServerInterceptor,
+			rpcutil.UnaryServerInterceptor,
+		),
 	)
 	pb.RegisterDiscoveryServer(grpcServer, s)
 	pb.RegisterTaskSchedulerServer(grpcServer, s)
@@ -602,14 +598,11 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 			UnmarshalOptions: protojson.UnmarshalOptions{},
 		}),
 		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux,
-			marshaler runtime.Marshaler, writer http.ResponseWriter, request *http.Request, err error,
+			_ runtime.Marshaler, writer http.ResponseWriter, _ *http.Request, err error,
 		) {
-			errOut := rpcerror.ToGRPCError(err)
-			st, ok := status.FromError(errOut)
-			if !ok {
-				st = status.FromContextError(err)
-			}
-			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, writer, request, st.Err())
+			// Since request may be forwarded to other servers through grpc, we should try
+			// to extract the error from gRPC error first, and then convert it to HTTP error.
+			openapi.WriteHTTPError(writer, rpcutil.FromGRPCError(err))
 		}),
 	)
 	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
@@ -630,21 +623,7 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 
 func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 	if err := s.handleForwardJobAPI(w, r); err != nil {
-		// using normalized error to construct grpc.status if possible
-		// NOTE: normalized error should have 'message' to keep the same as normal error
-		st, ok := status.FromError(rpcerror.ToGRPCError(err))
-		if !ok {
-			st = status.FromContextError(err)
-		}
-		payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(st.Proto())
-		if err != nil {
-			log.Warn("failed to marshal grpc status", zap.Error(err))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(runtime.HTTPStatusFromCode(st.Code()))
-		if _, err := w.Write(payload); err != nil {
-			log.Warn("failed to write response", zap.Error(err))
-		}
+		openapi.WriteHTTPError(w, err)
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

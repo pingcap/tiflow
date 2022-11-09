@@ -25,7 +25,7 @@ import (
 var (
 	DMJobKeyAdapter            KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job")
 	DMInfoKeyAdapter           KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/info")
-	DMFinishedStateAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/finished-state")
+	DMUnitStateAdapter         KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/unit-state")
 	DMDroppedColumnsKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/dropped-columns/")
 )
 

@@ -16,7 +16,6 @@ package broker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -87,7 +87,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 
 	cli.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: resID}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
+		Return((*pb.QueryResourceResponse)(nil), errors.ErrResourceDoesNotExist.GenWithStackByArgs(resID)).Once()
 	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", "job-1", resID)
 	require.NoError(t, err)
 	require.Equal(t, resID, hdl.ID())
@@ -128,7 +128,7 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	require.NoError(t, err)
 	cli.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: resID}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error")).Once()
+		Return((*pb.QueryResourceResponse)(nil), errors.ErrResourceDoesNotExist.GenWithStackByArgs(resID)).Once()
 	cli.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
 		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      resID,
