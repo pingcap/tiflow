@@ -264,7 +264,6 @@ function run() {
 	fi
 
 	export GO_FAILPOINTS=''
-
 }
 
 cleanup_data $TEST_NAME

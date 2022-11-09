@@ -693,8 +693,8 @@ function test_source_and_target_with_empty_gtid() {
 		"list-member" \
 		"\"alive\": true" 1
 
-  # check current master gtid is empty
-  # len indicates the number of non-empty fields
+	# check current master gtid is empty
+	# len indicates the number of non-empty fields
 	len=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P3306 | awk 'FNR == 2 {print NF}' )
 	if [ "$len" = 2 ]; then
   		echo "gtid is empty"
