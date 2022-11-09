@@ -114,15 +114,14 @@ func TestQueryStatusAPI(t *testing.T) {
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
 		unitState          = &metadata.UnitState{
 			CurrentUnitStatus: map[string]*metadata.UnitStatus{
-				// worker not found
-				"task1": {CreatedTime: dumpTime},
-				// worker not found
+				// task1's worker not found, and current unit status is not stored
+				// task2's worker not found
 				"task2": {CreatedTime: syncTime},
 				"task3": {CreatedTime: dumpTime},
 				"task4": {CreatedTime: dumpTime},
 				"task5": {CreatedTime: loadTime},
 				"task6": {CreatedTime: syncTime},
-				// worker not found
+				// task7's worker not found
 				"task7": {CreatedTime: syncTime},
 			},
 			FinishedUnitStatus: map[string][]*metadata.FinishedTaskStatus{
@@ -224,7 +223,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "2022-11-04T18:47:57.43382274+08:00"
+			"created_time": "0001-01-01T00:00:00Z"
 		},
 		"task2": {
 			"expected_stage": "Finished",
