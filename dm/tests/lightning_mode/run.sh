@@ -70,7 +70,6 @@ function run() {
 	killall -9 tikv-server 2>/dev/null || true
 	killall -9 pd-server 2>/dev/null || true
 	rm -rf /tmp/tidb || true
-	rm -rf /tmp/1000_tidb || true
 	run_tidb_server 4000 $TIDB_PASSWORD
 }
 
