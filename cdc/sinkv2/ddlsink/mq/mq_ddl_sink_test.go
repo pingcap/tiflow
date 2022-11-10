@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:unparam
 func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(t, 1)

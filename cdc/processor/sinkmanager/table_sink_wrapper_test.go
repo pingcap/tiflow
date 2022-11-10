@@ -28,7 +28,8 @@ import (
 )
 
 type mockSink struct {
-	events []*eventsink.CallbackableEvent[*model.RowChangedEvent]
+	events     []*eventsink.CallbackableEvent[*model.RowChangedEvent]
+	writeTimes int
 }
 
 func newMockSink() *mockSink {
@@ -38,6 +39,7 @@ func newMockSink() *mockSink {
 }
 
 func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+	m.writeTimes++
 	m.events = append(m.events, events...)
 	return nil
 }
@@ -46,6 +48,7 @@ func (m *mockSink) Close() error {
 	return nil
 }
 
+//nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStateReplicating
 	sink := newMockSink()

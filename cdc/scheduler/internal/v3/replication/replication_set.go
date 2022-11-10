@@ -313,6 +313,7 @@ func (r *ReplicationSet) clearPrimary() {
 	r.Primary = ""
 }
 
+//nolint:unparam
 func (r *ReplicationSet) inconsistentError(
 	input *tablepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
@@ -425,6 +426,7 @@ func (r *ReplicationSet) poll(
 	return msgBuf, nil
 }
 
+//nolint:unparam
 func (r *ReplicationSet) pollOnAbsent(
 	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
@@ -700,6 +702,7 @@ func (r *ReplicationSet) pollOnCommit(
 	return nil, false, nil
 }
 
+//nolint:unparam
 func (r *ReplicationSet) pollOnReplicating(
 	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
@@ -738,6 +741,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	return nil, false, nil
 }
 
+//nolint:unparam
 func (r *ReplicationSet) pollOnRemoving(
 	input *tablepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
