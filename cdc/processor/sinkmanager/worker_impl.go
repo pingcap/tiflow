@@ -38,15 +38,17 @@ var (
 	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
 )
 
-// Assert that workerImpl implements worker.
-var _ worker = (*workerImpl)(nil)
+// Some type assertions.
+var (
+	_ sinkWorker = (*sinkWorkerImpl)(nil)
+	_ redoWorker = (*redoWorkerImpl)(nil)
+)
 
-type workerImpl struct {
+type sinkWorkerImpl struct {
 	changefeedID model.ChangeFeedID
 	sortEngine   sorter.EventSortEngine
-	// redoManager only has value when the redo log is enabled.
-	redoManager redo.LogManager
-	memQuota    *memQuota
+	memQuota     *memQuota
+	eventCache   *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -55,26 +57,27 @@ type workerImpl struct {
 }
 
 // newWorker creates a new worker.
-func newWorker(
+func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sortEngine sorter.EventSortEngine,
-	redoManager redo.LogManager,
 	quota *memQuota,
+	eventCache *redoEventCache,
 	splitTxn bool,
 	enableOldValue bool,
-) worker {
-	return &workerImpl{
+) sinkWorker {
+	return &sinkWorkerImpl{
 		changefeedID:   changefeedID,
 		sortEngine:     sortEngine,
-		redoManager:    redoManager,
 		memQuota:       quota,
+		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
 	}
 }
 
-func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *tableSinkTask) error {
+func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
 	for {
+	Select:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -83,15 +86,31 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 			availableMem := int(requestMemSize)
 			events := make([]*model.PolymorphicEvent, 0, 1024)
 
+			lowerBound := task.lowerBound
+			upperBound := task.getUpperBound()
+
+			if w.eventCache != nil {
+				rows, size, pos := w.eventCache.pop(task.tableID)
+				if len(rows) > 0 {
+					task.tableSink.appendRowChangedEvents(rows...)
+					w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
+					err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
+					if err != nil {
+						return errors.Trace(err)
+					}
+					lowerBound = pos.Next()
+					if lowerBound.Compare(upperBound) > 0 {
+						break Select
+					}
+				}
+			}
+
 			// Used to record the last written position.
 			// We need to use it to update the lower bound of the table sink.
 			var lastPos sorter.Position
 			lastCommitTs := uint64(0)
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
-			// We have to get the latest value, this is because the barrier ts or resolved ts may be updated.
-			// We always want to get the latest value.
-			upperBound := task.upperBarrierTsGetter()
 
 			// Two functions to simplify the code.
 			// It captures some variables in the outer scope.
@@ -203,7 +222,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 	}
 }
 
-func (w *workerImpl) appendEventsToTableSink(t *tableSinkTask, events []*model.PolymorphicEvent) (uint64, error) {
+func (w *sinkWorkerImpl) appendEventsToTableSink(t *sinkTask, events []*model.PolymorphicEvent) (uint64, error) {
 	rowChangedEvents, size, err := convertRowChangedEvents(w.changefeedID, t.tableID, w.enableOldValue, events...)
 	if err != nil {
 		return 0, err
@@ -212,7 +231,7 @@ func (w *workerImpl) appendEventsToTableSink(t *tableSinkTask, events []*model.P
 	return size, nil
 }
 
-func (w *workerImpl) advanceTableSink(t *tableSinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
 	resolvedTs := model.NewResolvedTs(commitTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode
@@ -220,4 +239,116 @@ func (w *workerImpl) advanceTableSink(t *tableSinkTask, commitTs model.Ts, size 
 	}
 	w.memQuota.record(t.tableID, resolvedTs, size)
 	return t.tableSink.updateResolvedTs(resolvedTs)
+}
+
+type redoWorkerImpl struct {
+	changefeedID   model.ChangeFeedID
+	sortEngine     sorter.EventSortEngine
+	memQuota       *memQuota
+	redoManager    redo.LogManager
+	eventCache     *redoEventCache
+	splitTxn       bool
+	enableOldValue bool
+}
+
+func newRedoWorker(
+	changefeedID model.ChangeFeedID,
+	sortEngine sorter.EventSortEngine,
+	quota *memQuota,
+	redoManager redo.LogManager,
+	eventCache *redoEventCache,
+	splitTxn bool,
+	enableOldValue bool,
+) redoWorker {
+	return &redoWorkerImpl{
+		changefeedID:   changefeedID,
+		sortEngine:     sortEngine,
+		memQuota:       quota,
+		redoManager:    redoManager,
+		eventCache:     eventCache,
+		splitTxn:       splitTxn,
+		enableOldValue: enableOldValue,
+	}
+}
+
+func (w *redoWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *redoTask) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case task := <-taskChan:
+			rows := make([]*model.RowChangedEvent, 0, 1024)
+			batchSize := uint64(0)
+			cache := w.eventCache.getAppender(task.tableID)
+			cachedSize := uint64(0)
+			memAllocated := true
+
+			var lastPos sorter.Position
+			var maybeEmitBatchEvents = func(allFinished, txnFinished bool) error {
+				if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
+					return nil
+				}
+
+				releaseMem := func() { w.memQuota.refund(batchSize - cachedSize) }
+				err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if lastPos.Valid() {
+					err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+
+				rows = rows[0:]
+				if cap(rows) > 1024 {
+					rows = make([]*model.RowChangedEvent, 0, 1024)
+				}
+				batchSize = 0
+				cachedSize = 0
+
+				if !allFinished {
+					if !txnFinished {
+						w.memQuota.forceAcquire(requestMemSize)
+					} else {
+						memAllocated = w.memQuota.tryAcquire(requestMemSize)
+					}
+				}
+				return nil
+			}
+
+			// lowerBound and upperBound are both closed intervals.
+			iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound())
+			defer iter.Close()
+			for memAllocated {
+				e, pos, err := iter.Next()
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if e == nil {
+					// There is no more data.
+					maybeEmitBatchEvents(true, true)
+					return nil
+				}
+				if pos.Valid() {
+					lastPos = pos
+				}
+
+				x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				rows = append(rows, x...)
+				batchSize += size
+				if cache.push(x[0], size, pos.Valid()) {
+					cachedSize += size
+				}
+				maybeEmitBatchEvents(false, pos.Valid())
+			}
+			// Can't allocate memory.
+			task.callback(lastPos)
+		}
+	}
 }
