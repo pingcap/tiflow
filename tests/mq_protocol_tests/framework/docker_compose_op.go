@@ -134,9 +134,10 @@ func execInController(controller, shellCmd string) ([]byte, error) {
 	log.Info("Start executing in the Controller container",
 		zap.String("shellCmd", shellCmd), zap.String("container", controller))
 	cmd := exec.Command("docker", "exec", controller, "sh", "-c", shellCmd)
+	output, err := cmd.Output()
 	defer log.Info("Finished executing in the Controller container",
-		zap.String("shellCmd", shellCmd), zap.String("container", controller))
-	return cmd.Output()
+		zap.String("shellCmd", shellCmd), zap.String("container", controller), zap.ByteString("output", output))
+	return output, err
 }
 
 // DumpStdout dumps all container logs
