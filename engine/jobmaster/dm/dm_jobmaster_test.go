@@ -430,8 +430,9 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	err := jm.initComponents()
 	require.NoError(t, err)
-	dumpTime, _ := time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 	loadTime, _ := time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
+	dumpDuration := time.Hour
+	loadDuration := time.Hour
 	state := &metadata.UnitState{
 		CurrentUnitStatus: map[string]*metadata.UnitStatus{
 			"task2": {
@@ -449,7 +450,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 						Stage:          metadata.StageFinished,
 						CfgModRevision: 3,
 					},
-					CreatedTime: dumpTime,
+					Duration: dumpDuration,
 				},
 				&metadata.FinishedTaskStatus{
 					TaskStatus: metadata.TaskStatus{
@@ -458,7 +459,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 						Stage:          metadata.StageFinished,
 						CfgModRevision: 3,
 					},
-					CreatedTime: loadTime,
+					Duration: loadDuration,
 				},
 			},
 		},
@@ -486,7 +487,8 @@ func TestDuplicateFinishedState(t *testing.T) {
 	require.Equal(t, 2, len(state2.FinishedUnitStatus["task2"]))
 	require.Equal(t, frameModel.WorkerDMLoad, state2.FinishedUnitStatus["task2"][1].Unit)
 	require.Equal(t, uint64(4), state2.FinishedUnitStatus["task2"][1].CfgModRevision)
-	require.Equal(t, loadTime, state2.FinishedUnitStatus["task2"][1].CreatedTime)
+	// the correct duration is that from loadTime to now
+	require.NotEqual(t, loadDuration, state2.FinishedUnitStatus["task2"][1].Duration)
 }
 
 // TODO: move to separate file
