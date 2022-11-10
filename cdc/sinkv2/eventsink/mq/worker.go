@@ -284,11 +284,11 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			start := time.Now()
 			if err := future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
+				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
