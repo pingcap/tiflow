@@ -66,8 +66,6 @@ type worker struct {
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
 
-	// metricMQWorkerFutureWaitDuration tracks the time duration cost on wait for the future become ready.
-	metricMQWorkerFutureWaitDuration prometheus.Observer
 	// metricMQWorkerSendMessageDuration tracks the time duration cost on send messages.
 	metricMQWorkerSendMessageDuration prometheus.Observer
 	// metricMQWorkerBatchSize tracks each batch's size.
@@ -94,7 +92,6 @@ func newWorker(
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
-		metricMQWorkerFutureWaitDuration:  mq.WorkerFutureWaitDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -287,11 +284,9 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			start := time.Now()
 			if err := future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			w.metricMQWorkerFutureWaitDuration.Observe(time.Since(start).Seconds())
 			for _, message := range future.Messages {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
@@ -317,7 +312,6 @@ func (w *worker) close() {
 	}
 	w.producer.Close()
 
-	mq.WorkerFutureWaitDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

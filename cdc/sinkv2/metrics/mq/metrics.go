@@ -19,15 +19,6 @@ import (
 )
 
 var (
-	// WorkerFutureWaitDuration records the duration of wait for future ready
-	WorkerFutureWaitDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "mq_worker_future_wait_duration",
-			Help:      "Future wait duration(s) for MQ worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms~2s
-		}, []string{"namespace", "changefeed"})
 	// WorkerSendMessageDuration records the duration of flushing a group messages.
 	WorkerSendMessageDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -59,7 +50,6 @@ var (
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(WorkerFutureWaitDuration)
 	registry.MustRegister(WorkerSendMessageDuration)
 	registry.MustRegister(WorkerBatchSize)
 	registry.MustRegister(WorkerBatchDuration)
