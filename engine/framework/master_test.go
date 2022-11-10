@@ -162,7 +162,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		epoch+3,
 	)
 
-	workerID, err := master.CreateWorkerV2(
+	workerID, err := master.CreateWorker(
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
 		CreateWorkerWithCost(100),
@@ -275,7 +275,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 			close(done)
 		})
 
-	_, err = master.CreateWorkerV2(workerTypePlaceholder, &dummyConfig{param: 1}, CreateWorkerWithCost(100))
+	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, CreateWorkerWithCost(100))
 	require.NoError(t, err)
 
 	for {

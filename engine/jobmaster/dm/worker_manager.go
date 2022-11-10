@@ -41,7 +41,7 @@ var (
 // WorkerAgent defines an interface for create worker.
 type WorkerAgent interface {
 	// for create worker
-	CreateWorkerV2(
+	CreateWorker(
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
 		opts ...framework.CreateWorkerOpt,
@@ -354,7 +354,7 @@ func (wm *WorkerManager) createWorker(
 	resources ...resModel.ResourceID,
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
-	workerID, err := wm.workerAgent.CreateWorkerV2(unit, taskCfg,
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg,
 		framework.CreateWorkerWithCost(1),
 		framework.CreateWorkerWithResourceRequirements(resources...))
 	if err != nil {

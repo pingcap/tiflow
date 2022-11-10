@@ -252,8 +252,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// tick
 	worker1 := "worker1"
 	worker2 := "worker2"
-	mockBaseJobmaster.On("CreateWorkerV2", mock.Anything, mock.Anything, mock.Anything).Return(worker1, nil).Once()
-	mockBaseJobmaster.On("CreateWorkerV2", mock.Anything, mock.Anything, mock.Anything).Return(worker2, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker1, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker2, nil).Once()
 	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(6)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	require.NoError(t.T(), jm.Tick(context.Background()))
@@ -299,7 +299,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.OnWorkerOnline(workerHandle1)
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
-	mockBaseJobmaster.On("CreateWorkerV2", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
 	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
@@ -314,7 +314,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	worker4 := "worker4"
-	mockBaseJobmaster.On("CreateWorkerV2", mock.Anything, mock.Anything, mock.Anything).Return(worker4, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker4, nil).Once()
 	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
@@ -332,7 +332,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), err)
 	worker5 := "worker5"
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
-	mockBaseJobmaster.On("CreateWorkerV2", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
 	jm.OnWorkerOffline(workerHandle1, nil)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// worker5 online
@@ -516,7 +516,7 @@ func (m *MockBaseJobmaster) MetaKVClient() metaModel.KVClient {
 	return args.Get(0).(metaModel.KVClient)
 }
 
-func (m *MockBaseJobmaster) CreateWorkerV2(workerType framework.WorkerType,
+func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType,
 	config framework.WorkerConfig, opts ...framework.CreateWorkerOpt) (frameModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -122,7 +122,7 @@ type mockBaseMasterCreateWorkerFailed struct {
 	*framework.MockMasterImpl
 }
 
-func (m *mockBaseMasterCreateWorkerFailed) CreateWorkerV2(
+func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
 	workerType framework.WorkerType,
 	config framework.WorkerConfig,
 	opts ...framework.CreateWorkerOpt,

@@ -53,10 +53,10 @@ type BaseJobMaster interface {
 	// the method for sending message to specific worker
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 
-	// CreateWorkerV2 requires the framework to dispatch a new worker.
+	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources, it must pass
 	// resource ID via CreateWorkerOpt
-	CreateWorkerV2(
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -298,13 +298,13 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	return d.worker.masterClient.WaitClosed(ctx)
 }
 
-// CreateWorkerV2 implements BaseJobMaster.CreateWorkerV2
-func (d *DefaultBaseJobMaster) CreateWorkerV2(
+// CreateWorker implements BaseJobMaster.CreateWorker
+func (d *DefaultBaseJobMaster) CreateWorker(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
-	return d.master.CreateWorkerV2(workerType, config, opts...)
+	return d.master.CreateWorker(workerType, config, opts...)
 }
 
 // UpdateStatus delegates the UpdateStatus of inner worker
