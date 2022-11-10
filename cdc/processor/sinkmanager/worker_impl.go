@@ -17,9 +17,11 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/pkg/sorter"
+	"go.uber.org/zap"
 )
 
 const (
@@ -115,7 +117,7 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 
 			// lowerBound and upperBound are both closed intervals.
 			iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound)
-			for {
+			for !task.isCanceled() {
 				e, pos, err := iter.Next()
 				if err != nil {
 					return errors.Trace(err)
@@ -131,11 +133,28 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 						// It will cause out of memory. But it is acceptable for now.
 						// Because we split the transaction by default.
 						w.memQuota.forceAcquire(requestMemSize)
+						log.Debug("MemoryQuotaTracing: Force acquire memory for table sink task",
+							zap.String("namespace", w.changefeedID.Namespace),
+							zap.String("changefeed", w.changefeedID.ID),
+							zap.Int64("tableID", task.tableID),
+							zap.Uint64("memory", requestMemSize),
+						)
 					} else {
+						// Probably we have to wait for the memory quota.
+						// It is OK to block here, there are two scenarios:
+						// 1. The task is not canceled, so we can just continue to process the data.
+						// 2. The task is canceled, it's also OK to block here, because we will refund the memory quota
+						//    after breaking the loop.
 						err := w.memQuota.blockAcquire(requestMemSize)
 						if err != nil {
 							return errors.Trace(err)
 						}
+						log.Debug("MemoryQuotaTracing: Block acquire memory for table sink task",
+							zap.String("namespace", w.changefeedID.Namespace),
+							zap.String("changefeed", w.changefeedID.ID),
+							zap.Int64("tableID", task.tableID),
+							zap.Uint64("memory", requestMemSize),
+						)
 					}
 					availableMem += int(requestMemSize)
 				}
@@ -184,18 +203,49 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 					}
 				}
 			}
-			// This means that we append all the events to the table sink.
-			// But we have not updated the resolved ts.
-			// Because we do not reach the maxUpdateIntervalSize.
-			if currentTotalSize != 0 {
-				if err := advanceTableSinkAndResetCurrentSize(); err != nil {
-					return errors.Trace(err)
-				}
-			}
-			// Do not forget to refund the useless memory quota.
+			// Do not forget to refund the unused memory quota.
 			w.memQuota.refund(uint64(availableMem))
-			// Add table back.
-			task.callback(lastPos)
+			log.Debug("MemoryQuotaTracing: Refund unused memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", uint64(availableMem)),
+			)
+			if task.isCanceled() {
+				// NOTICE: Maybe we have some txn already in the sink, but we do not care about it.
+				// Because canceling a task means the whole table sink is closed.
+				if currentTotalSize != 0 {
+					w.memQuota.refund(currentTotalSize)
+					log.Debug("MemoryQuotaTracing: Refund memory for table sink task when canceling",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("memory", currentTotalSize),
+					)
+				}
+				log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when canceling",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+				)
+				// Clean up the memory quota.
+				// This could happen when the table sink is closed.
+				// But the table sink task is still processing the data.
+				// If the last time we advance the table sink, then we generate a record in the memory quota.
+				// So we need to clean up it.
+				w.memQuota.clean(task.tableID)
+			} else {
+				// This means that we append all the events to the table sink.
+				// But we have not updated the resolved ts.
+				// Because we do not reach the maxUpdateIntervalSize.
+				if currentTotalSize != 0 {
+					if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+						return errors.Trace(err)
+					}
+				}
+				// Add table back.
+				task.callback(lastPos)
+			}
 			if err := iter.Close(); err != nil {
 				return errors.Trace(err)
 			}

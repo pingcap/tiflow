@@ -122,6 +122,10 @@ func TestAddTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(tableID)
@@ -146,17 +150,30 @@ func TestRemoveTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
+	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
+	manager.UpdateBarrierTs(4)
+	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+
+	// Check all the events are sent to sink and record the memory usage.
+	require.Eventually(t, func() bool {
+		return manager.memQuota.getUsedBytes() == 872
+	}, 5*time.Second, 10*time.Millisecond)
 
 	err := manager.RemoveTable(tableID)
 	require.NoError(t, err)
 
 	_, ok = manager.tableSinks.Load(tableID)
 	require.False(t, ok)
+	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
@@ -167,6 +184,10 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	manager.UpdateBarrierTs(100)
 	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
 	manager.UpdateBarrierTs(50)
@@ -181,6 +202,10 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
@@ -204,6 +229,10 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
@@ -229,6 +258,10 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
