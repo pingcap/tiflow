@@ -517,7 +517,8 @@ func (m *MockBaseJobmaster) MetaKVClient() metaModel.KVClient {
 }
 
 func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType,
-	config framework.WorkerConfig, opts ...framework.CreateWorkerOpt) (frameModel.WorkerID, error) {
+	config framework.WorkerConfig, opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
