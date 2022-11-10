@@ -25,9 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
@@ -232,12 +230,12 @@ func (t *testDMJobmasterSuite) TestCreateWorker() {
 	task1 := jobCfg.Upstreams[0].SourceID
 	worker1 := "worker1"
 	createError := errors.New("create error")
-	mockAgent.On("CreateWorker").Return("", createError).Once()
+	mockAgent.On("CreateWorkerV2").Return("", createError).Once()
 	require.EqualError(t.T(), workerManager.createWorker(context.Background(), task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	workerStatus1 := runtime.InitWorkerStatus(task1, frameModel.WorkerDMDump, worker1)
-	mockAgent.On("CreateWorker").Return(worker1, createError).Once()
+	mockAgent.On("CreateWorkerV2").Return(worker1, createError).Once()
 	require.EqualError(t.T(), workerManager.createWorker(context.Background(), task1, frameModel.WorkerDMDump, taskCfgs[task1]), createError.Error())
 	workerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 1)
@@ -247,7 +245,7 @@ func (t *testDMJobmasterSuite) TestCreateWorker() {
 	task2 := jobCfg.Upstreams[1].SourceID
 	worker2 := "worker2"
 	workerStatus2 := runtime.InitWorkerStatus(task2, frameModel.WorkerDMLoad, worker2)
-	mockAgent.On("CreateWorker").Return(worker2, nil).Once()
+	mockAgent.On("CreateWorkerV2").Return(worker2, nil).Once()
 	require.NoError(t.T(), workerManager.createWorker(context.Background(), task2, frameModel.WorkerDMLoad, taskCfgs[task2]))
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
@@ -374,7 +372,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, checkpointError).Once()
-	workerAgent.On("CreateWorker").Return(worker1, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker1, nil).Once()
 	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), checkpointError.Error())
 	wokerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 1)
@@ -387,7 +385,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 
 	// check again
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
-	workerAgent.On("CreateWorker").Return(worker2, createError).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker2, createError).Once()
 	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), createError.Error())
 	wokerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 2)
@@ -419,7 +417,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	workerStatus3 := runtime.InitWorkerStatus(source1, frameModel.WorkerDMLoad, worker3)
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerStatus1.Stage = runtime.WorkerFinished
-	workerAgent.On("CreateWorker").Return(worker3, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker3, nil).Once()
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 2)
@@ -437,7 +435,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	workerStatus3.Stage = runtime.WorkerOffline
 	workerStatus4 := runtime.InitWorkerStatus(source1, frameModel.WorkerDMLoad, worker4)
 	workerManager.UpdateWorkerStatus(workerStatus3)
-	workerAgent.On("CreateWorker").Return(worker4, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker4, nil).Once()
 	require.NoError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job))
 	wokerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 2)
@@ -483,9 +481,9 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, checkpointError).Once()
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(6)
 	createError := errors.New("create error")
-	workerAgent.On("CreateWorker").Return(worker1, nil).Once()
-	workerAgent.On("CreateWorker").Return("", createError).Once()
-	workerAgent.On("CreateWorker").Return(worker2, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker1, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return("", createError).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker2, nil).Once()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -534,7 +532,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerManager.SetNextCheckTime(time.Now())
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
-	workerAgent.On("CreateWorker").Return(worker3, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker3, nil).Once()
 
 	// scheduled eventually
 	require.Eventually(t.T(), func() bool {
@@ -563,7 +561,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 
 	// task1 eventually restarts
 	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
-	workerAgent.On("CreateWorker").Return(worker1, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker1, nil).Once()
 	workerManager.SetNextCheckTime(time.Now())
 	require.Eventually(t.T(), func() bool {
 		return len(workerManager.WorkerStatus()) == 1
@@ -574,7 +572,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerStatus := workerManager.WorkerStatus()[source1]
 	workerStatus.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus)
-	workerAgent.On("CreateWorker").Return(worker4, nil).Once()
+	workerAgent.On("CreateWorkerV2").Return(worker4, nil).Once()
 	// check by finished
 	workerManager.SetNextCheckTime(time.Now())
 	// scheduled eventually
@@ -617,7 +615,10 @@ type MockWorkerAgent struct {
 	mock.Mock
 }
 
-func (mockAgent *MockWorkerAgent) CreateWorker(workerType framework.WorkerType, taskCfg interface{}, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error) {
+func (mockAgent *MockWorkerAgent) CreateWorkerV2(
+	workerType framework.WorkerType, taskCfg interface{},
+	opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	args := mockAgent.Called()

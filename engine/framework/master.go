@@ -211,18 +211,10 @@ type BaseMaster interface {
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
-	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(
-		workerType WorkerType,
-		config WorkerConfig,
-		cost model.RescUnit,
-		resources ...resModel.ResourceID,
-	) (frameModel.WorkerID, error)
-
 	// CreateWorkerV2 is the latest version of CreateWorker, but with
 	// a more flexible way of passing options.
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
 	CreateWorkerV2(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
@@ -694,24 +686,6 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 		workerID = m.uuidGen.NewString()
 	}
 	return
-}
-
-// CreateWorker implements BaseMaster.CreateWorker
-func (m *DefaultBaseMaster) CreateWorker(
-	workerType frameModel.WorkerType,
-	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	m.Logger().Info("CreateWorker",
-		zap.Stringer("worker-type", workerType),
-		zap.Any("worker-config", config),
-		zap.Int("cost", int(cost)),
-		zap.Any("resources", resources),
-		zap.String("master-id", m.id))
-
-	return m.CreateWorkerV2(workerType, config,
-		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
 }
 
 // CreateWorkerV2 implements BaseMaster.CreateWorkerV2

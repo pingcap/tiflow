@@ -51,7 +51,8 @@ type exampleMaster struct {
 func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
 	log.Info("InitImpl")
 	e.worker.mu.Lock()
-	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg, exampleWorkerCost)
+	e.worker.id, err = e.CreateWorkerV2(exampleWorkerType, exampleWorkerCfg,
+		framework.CreateWorkerWithCost(exampleWorkerCost))
 	e.worker.mu.Unlock()
 	return
 }

@@ -617,8 +617,8 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 			if !jm.JobBackoffMgr.Allow(job.ID) {
 				return "", errors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
-			return jm.BaseMaster.CreateWorker(
-				job.Type, job, defaultJobMasterCost)
+			return jm.BaseMaster.CreateWorkerV2(
+				job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 		})
 	if _, err = filterQuotaError(err); err != nil {
 		return err
@@ -644,8 +644,8 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 		}
 		err = jm.JobFsm.IterWaitAckJobs(
 			func(job *frameModel.MasterMeta) (string, error) {
-				return jm.BaseMaster.CreateWorker(
-					job.Type, job, defaultJobMasterCost)
+				return jm.BaseMaster.CreateWorkerV2(
+					job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 			})
 		exceedQuota, err := filterQuotaError(err)
 		if err != nil {

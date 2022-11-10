@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -54,13 +53,9 @@ type BaseJobMaster interface {
 	// the method for sending message to specific worker
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 
-	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
-	// a more flexible way of passing options.
+	// CreateWorkerV2 requires the framework to dispatch a new worker.
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
 	CreateWorkerV2(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
@@ -301,16 +296,6 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 
 	d.Logger().Info("worker start exiting", zap.NamedError("cause", errIn))
 	return d.worker.masterClient.WaitClosed(ctx)
-}
-
-// CreateWorker implements BaseJobMaster.CreateWorker
-func (d *DefaultBaseJobMaster) CreateWorker(
-	workerType WorkerType,
-	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return d.master.CreateWorker(workerType, config, cost, resources...)
 }
 
 // CreateWorkerV2 implements BaseJobMaster.CreateWorkerV2
