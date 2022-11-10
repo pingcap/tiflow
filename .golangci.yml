@@ -51,7 +51,7 @@ linters-settings:
       - name: unreachable-code
 
   depguard:
-    list-type: blacklist
+    list-type: denylist
     include-go-root: true
     packages:
       - log
@@ -60,6 +60,18 @@ linters-settings:
       # specify an error message to output when a blacklisted package is used
       - log: "logging is allowed only by pingcap/log"
       - github.com/juju/errors: "error handling is allowed only by pingcap/errors"
+    additional-guards:
+      - list-type: denylist
+        include-go-root: true
+        packages:
+          - errors
+          - github.com/pingcap/errors
+        packages-with-error-message:
+          - errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
+          - github.com/pingcap/errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
+        ignore-file-rules:
+          - "!**/tiflow/engine/**"
+          - "**/engine/pkg/rpcutil/*.go"
   staticcheck:
     checks:
       [

@@ -95,8 +95,6 @@ func (ts *TaskStage) UnmarshalJSON(b []byte) error {
 
 // Job represents the state of a job.
 type Job struct {
-	state
-
 	// taskID -> task
 	Tasks map[string]*Task
 
