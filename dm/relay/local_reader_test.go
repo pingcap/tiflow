@@ -1234,6 +1234,10 @@ func (m *mockFileWriterForActiveTest) Close() error {
 	panic("should be used")
 }
 
+func (m *mockFileWriterForActiveTest) Flush() error {
+	panic("should be used")
+}
+
 func (m *mockFileWriterForActiveTest) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 	panic("should be used")
 }

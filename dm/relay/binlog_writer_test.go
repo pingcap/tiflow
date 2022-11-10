@@ -73,6 +73,8 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 
 		err = w.Write(data1)
 		c.Assert(err, IsNil)
+		err = w.Flush()
+		c.Assert(err, IsNil)
 		allData.Write(data1)
 
 		fwStatus := w.Status()
@@ -85,7 +87,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		c.Assert(err, IsNil)
 		allData.Write(data2)
 
-		c.Assert(w.offset.Load(), Equals, int64(allData.Len()))
+		c.Assert(w.offset.Load(), LessEqual, int64(allData.Len()))
 
 		err = w.Close()
 		c.Assert(err, IsNil)
