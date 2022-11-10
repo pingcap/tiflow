@@ -28,8 +28,6 @@ import (
 
 // UnitState represents the state of units.
 type UnitState struct {
-	state //nolint:unused
-
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
 	CurrentUnitStatus  map[string]*UnitStatus

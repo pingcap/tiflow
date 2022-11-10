@@ -19,9 +19,7 @@ import (
 
 // DDL represents the state of ddls.
 // TODO: implement DDL
-type DDL struct {
-	state //nolint:unused
-}
+type DDL struct{}
 
 // DDLStore manages the state of ddls.
 // Write by DDLCoordinator.

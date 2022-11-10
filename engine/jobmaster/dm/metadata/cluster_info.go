@@ -24,8 +24,6 @@ import (
 
 // ClusterInfo represents the cluster info.
 type ClusterInfo struct {
-	state //nolint:unused
-
 	Version semver.Version
 }
 
