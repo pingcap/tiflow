@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -31,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -122,6 +121,7 @@ type Master struct {
 	ctx         context.Context
 	clocker     clock.Clock
 	initialized *atomic.Bool
+	canceling   *atomic.Bool
 }
 
 type businessStatus struct {
@@ -132,11 +132,11 @@ type businessStatus struct {
 // OnCancel implements JobMasterImpl.OnCancel
 func (m *Master) OnCancel(ctx context.Context) error {
 	log.Info("FakeMaster: OnCancel")
-	return m.cancelWorkers(ctx)
+	m.canceling.Store(true)
+	return nil
 }
 
 func (m *Master) cancelWorkers(ctx context.Context) error {
-	m.setState(frameModel.WorkerStateStopped)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	for _, worker := range m.workerList {
@@ -352,22 +352,19 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 		}
 		// update status via framework provided API
 		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
-		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
 			log.Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
 		return err
 	}
 
-	// check for special worker status
-	if m.getState() == frameModel.WorkerStateStopped {
-		log.Info("FakeMaster: received pause command, stop now")
-		m.setState(frameModel.WorkerStateStopped)
-		return m.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("FakeMaster: received pause command"))
-	}
-
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
+		if m.canceling.Load() {
+			m.setState(frameModel.WorkerStateStopped)
+			return m.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("fake master is canceled"))
+		}
 		m.setState(frameModel.WorkerStateFinished)
 		return m.Exit(ctx, framework.ExitReasonFinished, nil, []byte("all workers have been finished"))
 	}
@@ -377,6 +374,11 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 
 // Tick implements MasterImpl.Tick
 func (m *Master) Tick(ctx context.Context) error {
+	if m.canceling.Load() {
+		if err := m.cancelWorkers(ctx); err != nil {
+			log.Warn("cancel workers met error", zap.Error(err))
+		}
+	}
 	if err := m.tickedCheckWorkers(ctx); err != nil {
 		return err
 	}
@@ -436,8 +438,9 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	delete(m.bStatus.status, worker.ID())
 	m.bStatus.Unlock()
 
-	if cerrors.ErrWorkerFinish.Equal(reason) {
-		log.Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
+	if errors.Is(reason, errors.ErrWorkerFinish) || errors.Is(reason, errors.ErrWorkerCancel) {
+		log.Info("FakeMaster: OnWorkerOffline",
+			zap.String("worker-id", worker.ID()), zap.String("reason", reason.Error()))
 		m.finishedSet[worker.ID()] = businessID
 		return nil
 	}
@@ -617,6 +620,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),
 		initialized:         atomic.NewBool(false),
+		canceling:           atomic.NewBool(false),
 		cachedCheckpoint:    ckpt,
 	}
 	ret.setState(frameModel.WorkerStateNormal)

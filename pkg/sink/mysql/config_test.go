@@ -173,12 +173,12 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.MaxTxnRow = 20
 	expected.BatchReplaceEnabled = true
 	expected.BatchReplaceSize = 50
-	expected.SafeMode = true
+	expected.SafeMode = false
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
 	expected.EnableOldValue = true
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
-		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
+		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
 		"&tidb-txn-mode=pessimistic"
 	uri, err := url.Parse(uriStr)
 	require.Nil(t, err)

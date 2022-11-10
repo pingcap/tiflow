@@ -53,6 +53,20 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClient)(nil).Close))
 }
 
+// CreateExecutor mocks base method.
+func (m *MockClient) CreateExecutor(arg0 context.Context, arg1 *model2.Executor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateExecutor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateExecutor indicates an expected call of CreateExecutor.
+func (mr *MockClientMockRecorder) CreateExecutor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateExecutor", reflect.TypeOf((*MockClient)(nil).CreateExecutor), arg0, arg1)
+}
+
 // CreateProject mocks base method.
 func (m *MockClient) CreateProject(arg0 context.Context, arg1 *model2.ProjectInfo) error {
 	m.ctrl.T.Helper()
@@ -93,6 +107,20 @@ func (m *MockClient) CreateResource(arg0 context.Context, arg1 *model1.ResourceM
 func (mr *MockClientMockRecorder) CreateResource(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateResource", reflect.TypeOf((*MockClient)(nil).CreateResource), arg0, arg1)
+}
+
+// DeleteExecutor mocks base method.
+func (m *MockClient) DeleteExecutor(arg0 context.Context, arg1 model0.DeployNodeID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExecutor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteExecutor indicates an expected call of DeleteExecutor.
+func (mr *MockClientMockRecorder) DeleteExecutor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecutor", reflect.TypeOf((*MockClient)(nil).DeleteExecutor), arg0, arg1)
 }
 
 // DeleteJob mocks base method.
@@ -276,6 +304,21 @@ func (m *MockClient) InsertJob(arg0 context.Context, arg1 *model.MasterMeta) err
 func (mr *MockClientMockRecorder) InsertJob(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertJob", reflect.TypeOf((*MockClient)(nil).InsertJob), arg0, arg1)
+}
+
+// QueryExecutors mocks base method.
+func (m *MockClient) QueryExecutors(arg0 context.Context) ([]*model2.Executor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryExecutors", arg0)
+	ret0, _ := ret[0].([]*model2.Executor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryExecutors indicates an expected call of QueryExecutors.
+func (mr *MockClientMockRecorder) QueryExecutors(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryExecutors", reflect.TypeOf((*MockClient)(nil).QueryExecutors), arg0)
 }
 
 // QueryJobOp mocks base method.
@@ -540,6 +583,20 @@ func (m *MockClient) SetJobNoop(arg0 context.Context, arg1 string) (orm.Result, 
 func (mr *MockClientMockRecorder) SetJobNoop(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetJobNoop", reflect.TypeOf((*MockClient)(nil).SetJobNoop), arg0, arg1)
+}
+
+// UpdateExecutor mocks base method.
+func (m *MockClient) UpdateExecutor(arg0 context.Context, arg1 *model2.Executor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateExecutor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateExecutor indicates an expected call of UpdateExecutor.
+func (mr *MockClientMockRecorder) UpdateExecutor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateExecutor", reflect.TypeOf((*MockClient)(nil).UpdateExecutor), arg0, arg1)
 }
 
 // UpdateJob mocks base method.

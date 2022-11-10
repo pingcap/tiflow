@@ -18,8 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-	"google.golang.org/grpc/codes"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceManagerClient is a client to the service ResourceManager, which
@@ -48,11 +47,7 @@ func (c *resourceManagerClient) CreateResource(
 		return nil
 	}
 
-	code, ok := rpcerror.GRPCStatusCode(err)
-	if !ok {
-		return err
-	}
-	if code != codes.AlreadyExists {
+	if !errors.Is(err, errors.ErrResourceAlreadyExists) {
 		return err
 	}
 
@@ -90,18 +85,9 @@ func (c *resourceManagerClient) RemoveResource(
 ) error {
 	call := internal.NewCall(c.cli.RemoveResource, request)
 	_, err := call.Do(ctx)
-	if err == nil {
-		return nil
-	}
-	code, ok := rpcerror.GRPCStatusCode(err)
-	if !ok {
-		return err
-	}
-	if code != codes.NotFound {
-		return err
-	}
 
-	// If code == codes.NotFound, we should regard this
-	// operation has succeeded.
+	if err != nil && !errors.Is(err, errors.ErrResourceDoesNotExist) {
+		return err
+	}
 	return nil
 }

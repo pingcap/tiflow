@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -442,6 +443,97 @@ type RedoColumn struct {
 	Flag   uint64  `msg:"flag"`
 }
 
+// BuildTiDBTableInfo builds a TiDB TableInfo from given information.
+func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
+	ret := &model.TableInfo{}
+	// nowhere will use this field, so we set a debug message
+	ret.Name = model.NewCIStr("BuildTiDBTableInfo")
+
+	for i, col := range columns {
+		columnInfo := &model.ColumnInfo{
+			Offset: i,
+			State:  model.StatePublic,
+		}
+		if col == nil {
+			// by referring to datum2Column, nil is happened when
+			// - !IsColCDCVisible, which means the column is a virtual generated
+			//   column
+			// - !exist && !fillWithDefaultValue, which means upstream does not
+			//   send the column value
+			// just mock for the first case
+			columnInfo.Name = model.NewCIStr("omitted")
+			columnInfo.GeneratedExprString = "pass_generated_check"
+			columnInfo.GeneratedStored = false
+			ret.Columns = append(ret.Columns, columnInfo)
+			continue
+		}
+		columnInfo.Name = model.NewCIStr(col.Name)
+		columnInfo.SetType(col.Type)
+		// TiKV always use utf8mb4 to store, and collation is not recorded by CDC
+		columnInfo.SetCharset(mysql.UTF8MB4Charset)
+		columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+
+		// inverse initColumnsFlag
+		flag := col.Flag
+		if flag.IsBinary() {
+			columnInfo.SetCharset("binary")
+		}
+		if flag.IsGeneratedColumn() {
+			// we do not use this field, so we set it to any non-empty string
+			columnInfo.GeneratedExprString = "pass_generated_check"
+			columnInfo.GeneratedStored = true
+		}
+		if flag.IsHandleKey() {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+			ret.IsCommonHandle = true
+		} else if flag.IsPrimaryKey() {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+		}
+		if flag.IsUniqueKey() {
+			columnInfo.AddFlag(mysql.UniqueKeyFlag)
+		}
+		if !flag.IsNullable() {
+			columnInfo.AddFlag(mysql.NotNullFlag)
+		}
+		if flag.IsMultipleKey() {
+			columnInfo.AddFlag(mysql.MultipleKeyFlag)
+		}
+		if flag.IsUnsigned() {
+			columnInfo.AddFlag(mysql.UnsignedFlag)
+		}
+		ret.Columns = append(ret.Columns, columnInfo)
+	}
+
+	for i, colOffsets := range indexColumns {
+		indexInfo := &model.IndexInfo{
+			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
+			State: model.StatePublic,
+		}
+		firstCol := columns[colOffsets[0]]
+		if firstCol.Flag.IsPrimaryKey() {
+			indexInfo.Primary = true
+		}
+		if firstCol.Flag.IsUniqueKey() {
+			indexInfo.Unique = true
+		}
+
+		for _, offset := range colOffsets {
+			col := ret.Columns[offset]
+
+			indexCol := &model.IndexColumn{}
+			indexCol.Name = col.Name
+			indexCol.Offset = offset
+			indexInfo.Columns = append(indexInfo.Columns, indexCol)
+		}
+
+		// TODO: revert the "all column set index related flag" to "only the
+		// first column set index related flag" if needed
+
+		ret.Indices = append(ret.Indices, indexInfo)
+	}
+	return ret
+}
+
 // ColumnValueString returns the string representation of the column value
 func ColumnValueString(c interface{}) string {
 	var data string
@@ -560,10 +652,11 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table    *TableName
-	StartTs  uint64
-	CommitTs uint64
-	Rows     []*RowChangedEvent
+	Table        *TableName
+	TableVersion uint64
+	StartTs      uint64
+	CommitTs     uint64
+	Rows         []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

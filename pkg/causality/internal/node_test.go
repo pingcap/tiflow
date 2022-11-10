@@ -54,7 +54,7 @@ func TestNodeDependOn(t *testing.T) {
 	nodeA := NewNode()
 	nodeB := NewNode()
 
-	nodeA.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB})
+	nodeA.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB}, 999)
 	require.Equal(t, nodeA.dependerCount(), 0)
 	require.Equal(t, nodeB.dependerCount(), 1)
 }
@@ -62,14 +62,24 @@ func TestNodeDependOn(t *testing.T) {
 func TestNodeSingleDependency(t *testing.T) {
 	t.Parallel()
 
+	// Node B depends on A, without any other resolved dependencies.
 	nodeA := NewNode()
-
 	nodeB := NewNode()
-	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA})
-
+	nodeB.RandWorkerID = func() workerID { return 100 }
+	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
 	require.True(t, nodeA.assignTo(1))
 	require.Equal(t, workerID(1), nodeA.assignedWorkerID())
 	require.Equal(t, workerID(1), nodeB.assignedWorkerID())
+
+	// Node D depends on C, with some other resolved dependencies.
+	nodeC := NewNode()
+	nodeD := NewNode()
+	nodeD.RandWorkerID = func() workerID { return 100 }
+	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
+	require.True(t, nodeC.assignTo(2))
+	require.Equal(t, workerID(2), nodeC.assignedWorkerID())
+	nodeC.Remove()
+	require.Equal(t, workerID(100), nodeD.assignedWorkerID())
 }
 
 func TestNodeMultipleDependencies(t *testing.T) {
@@ -84,7 +94,7 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeB := NewNode()
 	nodeC := NewNode()
 
-	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB})
+	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
 	nodeC.RandWorkerID = func() workerID { return 100 }
 
 	require.True(t, nodeA.assignTo(1))
@@ -100,10 +110,29 @@ func TestNodeMultipleDependencies(t *testing.T) {
 func TestNodeResolveImmediately(t *testing.T) {
 	t.Parallel()
 
+	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
 	nodeA := NewNode()
 	nodeA.RandWorkerID = func() workerID { return workerID(100) }
-	nodeA.DependOn(nil)
+	nodeA.DependOn(nil, 999)
 	require.Equal(t, workerID(100), nodeA.assignedWorkerID())
+
+	// Node D depends on B and C, all of them are assigned to 1.
+	nodeB := NewNode()
+	require.True(t, nodeB.assignTo(1))
+	nodeC := NewNode()
+	require.True(t, nodeC.assignTo(1))
+	nodeD := NewNode()
+	nodeD.RandWorkerID = func() workerID { return workerID(100) }
+	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
+	require.Equal(t, workerID(1), nodeD.assignedWorkerID())
+
+	// Node E depends on B and C and some other resolved dependencies.
+	nodeB.Remove()
+	nodeC.Remove()
+	nodeE := NewNode()
+	nodeE.RandWorkerID = func() workerID { return workerID(100) }
+	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
+	require.Equal(t, workerID(100), nodeE.assignedWorkerID())
 }
 
 func TestNodeDependOnSelf(t *testing.T) {
@@ -111,7 +140,7 @@ func TestNodeDependOnSelf(t *testing.T) {
 
 	nodeA := NewNode()
 	require.Panics(t, func() {
-		nodeA.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA})
+		nodeA.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 999)
 	})
 }
 

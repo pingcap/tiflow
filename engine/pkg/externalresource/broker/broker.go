@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
@@ -27,9 +26,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -76,7 +74,7 @@ func NewBroker(
 	client client.ServerMasterClient,
 ) (*DefaultBroker, error) {
 	resp, err := client.QueryStorageConfig(ctx, &pb.QueryStorageConfigRequest{})
-	if err != nil || resp.Err != nil {
+	if err != nil {
 		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
 	}
 	var storageConfig resModel.Config
@@ -170,8 +168,10 @@ func (b *DefaultBroker) OpenStorage(
 	var desc internal.ResourceDescriptor
 	if !exists {
 		desc, err = b.createResource(ctx, fm, projectInfo, workerID, resName)
+	} else if !options.cleanBeforeOpen {
+		desc, err = b.getPersistResource(ctx, fm, record, resName)
 	} else {
-		desc, err = b.getPersistResource(ctx, fm, record, resName, options)
+		desc, err = b.cleanOrRecreatePersistResource(ctx, fm, record, resName)
 	}
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (b *DefaultBroker) RemoveResource(
 	}
 	err = fm.RemoveResource(ctx, ident)
 	if err != nil {
-		if derrors.ErrResourceDoesNotExist.Equal(err) {
+		if errors.Is(err, errors.ErrResourceDoesNotExist) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
 		return nil, status.Error(codes.Unknown, err.Error())
@@ -311,26 +311,16 @@ func (b *DefaultBroker) checkForExistingResource(
 		}, true, nil
 	}
 
-	code, ok := rpcerror.GRPCStatusCode(err)
-	if !ok {
-		// If the error is not derived from a grpc status, we should throw it.
-		return nil, false, errors.Trace(err)
+	if errors.Is(err, errors.ErrResourceDoesNotExist) {
+		err = nil
 	}
-
-	switch code {
-	case codes.NotFound:
-		// Indicates that there is no existing resource with the same name.
-		return nil, false, nil
-	default:
-		return nil, false, errors.Trace(err)
-	}
+	return nil, false, err
 }
 
 func (b *DefaultBroker) getPersistResource(
 	ctx context.Context, fm internal.FileManager,
 	record *resModel.ResourceMeta,
 	resName resModel.ResourceName,
-	options *openStorageOptions,
 ) (internal.ResourceDescriptor, error) {
 	ident := internal.ResourceIdent{
 		Name: resName,
@@ -340,23 +330,27 @@ func (b *DefaultBroker) getPersistResource(
 			WorkerID:    record.Worker,   /* creator id*/
 		},
 	}
-	var desc internal.ResourceDescriptor
-
-	if options.cleanBeforeOpen {
-		err := fm.RemoveResource(ctx, ident)
-		// LocalFileManager may return ErrResourceDoesNotExist, which can be
-		// ignored because the resource no longer exists.
-		if err != nil && !derrors.ErrResourceDoesNotExist.Equal(err) {
-			return nil, err
-		}
-		desc, err = fm.CreateResource(ctx, ident)
-		if err != nil {
-			return nil, err
-		}
-		return desc, nil
-	}
-
 	desc, err := fm.GetPersistedResource(ctx, ident)
+	if err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func (b *DefaultBroker) cleanOrRecreatePersistResource(
+	ctx context.Context, fm internal.FileManager,
+	record *resModel.ResourceMeta,
+	resName resModel.ResourceName,
+) (internal.ResourceDescriptor, error) {
+	ident := internal.ResourceIdent{
+		Name: resName,
+		ResourceScope: internal.ResourceScope{
+			ProjectInfo: tenant.NewProjectInfo("", record.ProjectID),
+			Executor:    record.Executor, /* executor id where the resource is persisted */
+			WorkerID:    record.Worker,   /* creator id*/
+		},
+	}
+	desc, err := fm.CleanOrRecreatePersistedResource(ctx, ident)
 	if err != nil {
 		return nil, err
 	}

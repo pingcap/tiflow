@@ -15,7 +15,6 @@ package servermaster
 
 import (
 	"context"
-	gerrors "errors"
 	"testing"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -107,7 +105,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 		},
 	}
 	_, err = mgr.CreateJob(ctx, req)
-	require.True(t, ErrJobAlreadyExists.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobAlreadyExists))
 
 	// delete a finished job, re-create job with the same id will meet error
 	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
@@ -119,7 +117,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{Id: job.Id})
 	require.NoError(t, err)
 	_, err = mgr.CreateJob(ctx, req)
-	require.True(t, ErrJobAlreadyExists.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobAlreadyExists))
 }
 
 type mockBaseMasterCreateWorkerFailed struct {
@@ -215,7 +213,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	req.Id = cancelWorkerID + "-unknown"
 	_, err = mgr.CancelJob(ctx, req)
 	require.Error(t, err)
-	require.True(t, ErrJobNotFound.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobNotFound))
 }
 
 func TestJobManagerDeleteJob(t *testing.T) {
@@ -507,7 +505,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Type:   pb.Job_FakeJob,
 		State:  pb.Job_Running,
 		Detail: []byte("detail test"),
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -530,7 +528,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error_message",
 		},
 	}, job))
@@ -546,14 +544,14 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mockJobClient.EXPECT().GetJobDetail(ctx, "123.123.12.1:234", "new-job").Return(nil, gerrors.New("error test")).Times(1)
+	mockJobClient.EXPECT().GetJobDetail(ctx, "123.123.12.1:234", "new-job").Return(nil, errors.New("error test")).Times(1)
 	job, err = mgr.GetJob(ctx, &pb.GetJobRequest{Id: "new-job"})
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
 		Id:    "new-job",
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: "error test",
 		},
 	}, job))
@@ -596,7 +594,7 @@ func TestSetDetailToMasterMeta(t *testing.T) {
 		{
 			name:   "NO404Error",
 			detail: nil,
-			err:    gerrors.New("some error"),
+			err:    errors.New("some error"),
 			expectMasterMeta: &frameModel.MasterMeta{
 				ErrorMsg: "some error",
 				Detail:   []byte("original job detail"),
@@ -628,10 +626,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
 	errorMsg := "unit test fast fail error"
 	mockHandle := &framework.MockHandle{WorkerID: masterID}
-	nerr := pkgClient.ErrCreateWorkerTerminate.Gen(
-		&pkgClient.CreateWorkerTerminateError{
-			Details: errorMsg,
-		})
+	nerr := errors.ErrCreateWorkerTerminate.GenWithStack(errorMsg)
 	// OnWorkerDispatched callback on job manager, a terminated error will make
 	// job fast fail.
 	err := mgr.OnWorkerDispatched(mockHandle, nerr)
@@ -640,7 +635,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 		mockMaster.MasterMeta().ProjectID, int(frameModel.MasterStateFailed))
 	require.NoError(t, err)
 	require.Len(t, meta, 1)
-	require.Equal(t, errorMsg, meta[0].ErrorMsg)
+	require.Equal(t, nerr.Error(), meta[0].ErrorMsg)
 }
 
 func TestJobOperatorBgLoop(t *testing.T) {
@@ -766,4 +761,110 @@ func TestIsJobTerminated(t *testing.T) {
 	require.True(t, isJobTerminated(frameModel.MasterStateFinished))
 	require.True(t, isJobTerminated(frameModel.MasterStateFailed))
 	require.True(t, isJobTerminated(frameModel.MasterStateStopped))
+}
+
+func TestBuildPBJob(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		masterMeta    *frameModel.MasterMeta
+		includeConfig bool
+		job           *pb.Job
+	}{
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-1",
+				Type:   frameModel.CvsJobMaster,
+				State:  frameModel.MasterStateUninit,
+				Config: []byte("job-1-config"),
+				Detail: []byte("job-1-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-1",
+				Type:   pb.Job_CVSDemo,
+				State:  pb.Job_Created,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-1-config"),
+				Detail: []byte("job-1-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-2",
+				Type:   frameModel.DMJobMaster,
+				State:  frameModel.MasterStateInit,
+				Config: []byte("job-2-config"),
+				Detail: []byte("job-2-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-2",
+				Type:   pb.Job_DM,
+				State:  pb.Job_Running,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-2-config"),
+				Detail: []byte("job-2-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-3",
+				Type:   frameModel.CdcJobMaster,
+				State:  frameModel.MasterStateStopped,
+				Config: []byte("job-3-config"),
+				Detail: []byte("job-3-detail"),
+			},
+			includeConfig: true,
+			job: &pb.Job{
+				Id:     "job-3",
+				Type:   pb.Job_CDC,
+				State:  pb.Job_Canceled,
+				Error:  &pb.Job_Error{},
+				Config: []byte("job-3-config"),
+				Detail: []byte("job-3-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:     "job-4",
+				Type:   frameModel.FakeJobMaster,
+				State:  frameModel.MasterStateFinished,
+				Config: []byte("job-4-config"),
+				Detail: []byte("job-4-detail"),
+			},
+			job: &pb.Job{
+				Id:     "job-4",
+				Type:   pb.Job_FakeJob,
+				State:  pb.Job_Finished,
+				Error:  &pb.Job_Error{},
+				Detail: []byte("job-4-detail"),
+			},
+		},
+		{
+			masterMeta: &frameModel.MasterMeta{
+				ID:       "job-5",
+				Type:     frameModel.FakeJobMaster,
+				State:    frameModel.MasterStateFailed,
+				Config:   []byte("job-5-config"),
+				Detail:   []byte("job-5-detail"),
+				ErrorMsg: "job-5-error",
+			},
+			job: &pb.Job{
+				Id:    "job-5",
+				Type:  pb.Job_FakeJob,
+				State: pb.Job_Failed,
+				Error: &pb.Job_Error{
+					Message: "job-5-error",
+				},
+				Detail: []byte("job-5-detail"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		job, err := buildPBJob(tc.masterMeta, tc.includeConfig)
+		require.NoError(t, err)
+		require.True(t, proto.Equal(tc.job, job))
+	}
 }

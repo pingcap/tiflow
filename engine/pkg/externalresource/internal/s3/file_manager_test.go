@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -188,8 +189,8 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 
 	ctx := context.Background()
 	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
-	fm1 := newFileManagerForUTFromSharedStorageFactory("executor-1", factory)
-	fm2 := newFileManagerForUTFromSharedStorageFactory("executor-2", factory)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
+	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
 
 	ident := internal.ResourceIdent{
 		ResourceScope: internal.ResourceScope{
@@ -210,7 +211,7 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	// TODO: Open the test here after using the contents of the placeholder
 	// to indicate the persistent state.
 	// _, err = fm2.GetPersistedResource(ctx, ident)
-	// require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+	// require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 
 	err = fm1.SetPersisted(ctx, ident)
 	require.NoError(t, err)
@@ -229,5 +230,68 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fm2.GetPersistedResource(ctx, ident)
-	require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+	require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
+}
+
+func TestFileManagerCleanOrRecreatePersistedResource(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
+	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
+	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
+
+	ident := internal.ResourceIdent{
+		ResourceScope: internal.ResourceScope{
+			Executor: "executor-1",
+			WorkerID: "worker-1",
+		},
+		Name: "resource-1",
+	}
+	desc, err := fm1.CreateResource(ctx, ident)
+	require.NoError(t, err)
+	storage, err := desc.ExternalStorage(ctx)
+	require.NoError(t, err)
+	err = fm1.SetPersisted(ctx, ident)
+	require.NoError(t, err)
+
+	// clean from creator
+	err = storage.WriteFile(ctx, "file-1", []byte("test-content"))
+	require.NoError(t, err)
+	_, err = fm1.CleanOrRecreatePersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err := storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	err = storage.WriteFile(ctx, "file-1", []byte("test-content"))
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// clean from other node
+	_, err = fm2.CleanOrRecreatePersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = storage.FileExists(ctx, "file-1")
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// clean non-existent resources from other nodes
+	err = fm1.RemoveResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.False(t, ok)
+	_, err = fm2.CleanOrRecreatePersistedResource(ctx, ident)
+	require.NoError(t, err)
+	ok, err = storage.FileExists(ctx, placeholderFileName)
+	require.NoError(t, err)
+	require.True(t, ok)
 }

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
@@ -31,7 +30,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -131,6 +130,7 @@ type JobMasterImpl interface {
 	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
+	// TODO: when it returns error, framework should close this jobmaster.
 	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
 	// instance, the business logic should only register the OpenAPI handler in it.
@@ -191,6 +191,7 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -236,7 +237,7 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if err := d.worker.doPoll(ctx); err != nil {
-		if derror.ErrWorkerHalfExit.NotEqual(err) {
+		if !errors.Is(err, errors.ErrWorkerHalfExit) {
 			return errors.Trace(err)
 		}
 		return nil

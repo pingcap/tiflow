@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -89,8 +90,14 @@ type captureImpl struct {
 	election election
 
 	EtcdClient       etcd.CDCEtcdClient
-	sorterSystem     *ssystem.System
 	tableActorSystem *system.System
+
+	// useEventSortEngine indicates whether to use the new pull based sort engine or
+	// the old push based sorter system. the latter will be removed after all sorter
+	// have been transformed into pull based sort engine.
+	useEventSortEngine bool
+	sorterSystem       *ssystem.System
+	sortEngineManager  *sortmgr.EventSortEngineManager
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -122,8 +129,9 @@ type captureImpl struct {
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
-	sorterSystem *ssystem.System,
 	tableActorSystem *system.System,
+	sortEngineManager *sortmgr.EventSortEngineManager,
+	sorterSystem *ssystem.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -133,11 +141,14 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
-		sorterSystem:        sorterSystem,
 		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
+
+		useEventSortEngine: sortEngineManager != nil,
+		sortEngineManager:  sortEngineManager,
+		sorterSystem:       sorterSystem,
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
@@ -303,9 +314,11 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
 		TableActorSystem: c.tableActorSystem,
-		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
+
+		SorterSystem:      c.sorterSystem,
+		SortEngineManager: c.sortEngineManager,
 	})
 
 	g.Go(func() error {

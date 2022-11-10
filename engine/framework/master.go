@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
@@ -43,7 +42,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -394,10 +393,9 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	// Don't cancel this context until it meets first error. In this way this
-	// context can be used in business logic and leaves a robust way to cancel
-	// business logic from runtime.(If business uses context correctly)
-	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
+	// Note this context must not be held in any resident goroutine.
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -555,7 +553,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 	select {
 	case <-m.closeCh:
-		return derror.ErrMasterClosed.GenWithStackByArgs()
+		return errors.ErrMasterClosed.GenWithStackByArgs()
 	default:
 	}
 
@@ -675,7 +673,7 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 	case frameModel.CvsJobMaster, frameModel.FakeJobMaster, frameModel.DMJobMaster:
 		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
-			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			err = errors.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
 		rawConfig = masterMeta.Config
@@ -737,7 +735,7 @@ func (m *DefaultBaseMaster) CreateWorkerV2(
 	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
-		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
+		return "", errors.WrapError(errors.ErrMasterConcurrencyExceeded, err)
 	}
 
 	go func() {
@@ -774,7 +772,7 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 	// keep the original error in errCenter if possible
 	defer func() {
 		if err == nil {
-			err = derror.ErrWorkerFinish.FastGenByArgs()
+			err = errors.ErrWorkerFinish.FastGenByArgs()
 		}
 		m.errCenter.OnError(err)
 	}()

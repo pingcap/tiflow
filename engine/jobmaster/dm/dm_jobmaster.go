@@ -20,7 +20,6 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -38,6 +37,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -108,7 +108,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(),
+	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err
 }
@@ -211,8 +211,9 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	taskStatus := finishedTaskStatus.TaskStatus
 
-	finishedStateStore := jm.metadata.FinishedStateStore()
-	err := finishedStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.FinishedState) error {
+	unitStateStore := jm.metadata.UnitStateStore()
+	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
+		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
 		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
 			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
 			if status.Unit == taskStatus.Unit {
@@ -412,6 +413,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
+		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
@@ -419,9 +421,11 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
+			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
+			return ctx.Err()
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
+				jm.Logger().Info("all worker are offline, will exit")
 				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())

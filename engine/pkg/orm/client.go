@@ -16,7 +16,6 @@ package orm
 import (
 	"context"
 	"database/sql"
-	gerrors "errors"
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -24,7 +23,6 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -38,7 +36,7 @@ var globalModels = []interface{}{
 	&resModel.ResourceMeta{},
 	&model.LogicEpoch{},
 	&model.JobOp{},
-	&execModel.Executor{},
+	&model.Executor{},
 }
 
 // TODO: retry and idempotent??
@@ -62,18 +60,20 @@ type TimeRange struct {
 // and resource
 type Client interface {
 	metaModel.Client
-	// project
+	// ProjectClient is the interface to operate project.
 	ProjectClient
-	// project operation
+	// ProjectOperationClient is the client to operate project operation.
 	ProjectOperationClient
-	// job info
+	// JobClient is the interface to operate job info.
 	JobClient
-	// worker status
+	// WorkerClient is the client to operate worker info.
 	WorkerClient
-	// resource meta
+	// ResourceClient is the interface to operate resource.
 	ResourceClient
-	// job ops
+	// JobOpClient is the client to operate job operation.
 	JobOpClient
+	// ExecutorClient is the client to operate executor info.
+	ExecutorClient
 }
 
 // ProjectClient defines interface that manages project in metastore
@@ -143,6 +143,14 @@ type JobOpClient interface {
 	SetJobCanceled(ctx context.Context, jobID string) (Result, error)
 	QueryJobOp(ctx context.Context, jobID string) (*model.JobOp, error)
 	QueryJobOpsByStatus(ctx context.Context, op model.JobOpStatus) ([]*model.JobOp, error)
+}
+
+// ExecutorClient defines interface that manages executor information in metastore.
+type ExecutorClient interface {
+	CreateExecutor(ctx context.Context, executor *model.Executor) error
+	UpdateExecutor(ctx context.Context, executor *model.Executor) error
+	DeleteExecutor(ctx context.Context, executorID engineModel.ExecutorID) error
+	QueryExecutors(ctx context.Context) ([]*model.Executor, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -657,7 +665,7 @@ func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resModel.Reso
 		Where("gc_pending = true").
 		First(&ret).Error
 	if err != nil {
-		if gerrors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.ErrMetaEntryNotFound.Wrap(err)
 		}
 		return nil, errors.ErrMetaOpFail.Wrap(err)
@@ -769,6 +777,46 @@ func (c *metaOpsClient) QueryJobOpsByStatus(
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 	return ops, nil
+}
+
+// CreateExecutor creates an executor in the metastore.
+func (c *metaOpsClient) CreateExecutor(ctx context.Context, executor *model.Executor) error {
+	if err := c.db.WithContext(ctx).
+		Create(executor).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+	return nil
+}
+
+// UpdateExecutor updates an executor in the metastore.
+func (c *metaOpsClient) UpdateExecutor(ctx context.Context, executor *model.Executor) error {
+	if err := c.db.WithContext(ctx).
+		Model(&model.Executor{}).
+		Where("id = ?", executor.ID).
+		Updates(executor.Map()).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+	return nil
+}
+
+// DeleteExecutor deletes an executor in the metastore.
+func (c *metaOpsClient) DeleteExecutor(ctx context.Context, executorID engineModel.ExecutorID) error {
+	if err := c.db.WithContext(ctx).
+		Where("id = ?", executorID).
+		Delete(&model.Executor{}).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+	return nil
+}
+
+// QueryExecutors query all executors in the metastore.
+func (c *metaOpsClient) QueryExecutors(ctx context.Context) ([]*model.Executor, error) {
+	var executors []*model.Executor
+	if err := c.db.WithContext(ctx).
+		Find(&executors).Error; err != nil {
+		return nil, errors.ErrMetaOpFail.Wrap(err)
+	}
+	return executors, nil
 }
 
 // Result defines a query result interface

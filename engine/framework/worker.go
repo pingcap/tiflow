@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -40,7 +39,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/dig"
@@ -251,6 +250,7 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -301,8 +301,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 			retErr = frameErrors.FailFast(retErr)
 		}
 	}()
-	// TODO refine this part
-	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	// poolCtx will be held in background goroutines, and it won't be canceled
+	// until DefaultBaseWorker.Close is called.
+	poolCtx, cancelPool := context.WithCancel(context.Background())
 	w.cancelMu.Lock()
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
@@ -338,7 +339,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(ctx, topic, msg)
+			return w.Impl.OnMasterMessage(poolCtx, topic, msg)
 		},
 	)
 
@@ -529,7 +530,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 	defer func() {
 		// keep the original error or ErrWorkerFinish in error center
 		if err == nil {
-			err = derror.ErrWorkerFinish.FastGenByArgs()
+			err = errors.ErrWorkerFinish.FastGenByArgs()
 		}
 		w.onError(err)
 	}()
@@ -608,7 +609,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			errOut := derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
+			errOut := errors.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
 			return errOut
 		}
 	}
@@ -653,7 +654,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg, ok := value.(*frameModel.StatusChangeRequest)
 			if !ok {
-				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
+				return errors.ErrInvalidMasterMessage.GenWithStackByArgs(value)
 			}
 			w.messageRouter.AppendMessage(topic, msg)
 			return nil

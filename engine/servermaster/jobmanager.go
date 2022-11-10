@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/cvs"
@@ -28,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -40,7 +38,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/notify"
@@ -109,12 +107,12 @@ func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobReques
 	meta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+			return nil, errors.ErrJobNotFound.GenWithStackByArgs(req.Id)
 		}
 		return nil, err
 	}
 
-	pbJob, err := buildPBJob(meta)
+	pbJob, err := buildPBJob(meta, false /* includeConfig */)
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +133,9 @@ func (jm *JobManagerImpl) SendCancelJobMessage(ctx context.Context, jobID string
 	job := jm.JobFsm.QueryOnlineJob(jobID)
 	if job == nil {
 		if _, err := jm.frameMetaClient.GetJobByID(ctx, jobID); pkgOrm.IsNotFoundError(err) {
-			return ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: jobID})
+			return errors.ErrJobNotFound.GenWithStackByArgs(jobID)
 		}
-		return ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+		return errors.ErrJobNotRunning.GenWithStackByArgs(jobID)
 	}
 
 	topic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle().ID())
@@ -149,7 +147,7 @@ func (jm *JobManagerImpl) SendCancelJobMessage(ctx context.Context, jobID string
 	}
 	handle := job.WorkerHandle().Unwrap()
 	if handle == nil {
-		return ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+		return errors.ErrJobNotRunning.GenWithStackByArgs(jobID)
 	}
 	return handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
 }
@@ -159,14 +157,14 @@ func (jm *JobManagerImpl) DeleteJob(ctx context.Context, req *pb.DeleteJobReques
 	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+			return nil, errors.ErrJobNotFound.GenWithStackByArgs(req.Id)
 		}
 		return nil, err
 	}
 
 	// Only terminated jobs can be deleted.
 	if !isJobTerminated(masterMeta.State) {
-		return nil, ErrJobNotTerminated.GenWithStack(&JobNotTerminatedError{JobID: req.Id})
+		return nil, errors.ErrJobNotTerminated.GenWithStackByArgs(req.Id)
 	}
 
 	if err := jm.deleteJobMeta(ctx, req.Id); err != nil {
@@ -219,7 +217,7 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+			return nil, errors.ErrJobNotFound.GenWithStackByArgs(req.Id)
 		}
 		return nil, err
 	}
@@ -230,7 +228,7 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 		setDetailToMasterMeta(masterMeta, detail, err)
 	}
 
-	return buildPBJob(masterMeta)
+	return buildPBJob(masterMeta, req.IncludeConfig)
 }
 
 // CreateJob implements JobManagerServer.CreateJob.
@@ -283,7 +281,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	// create job master metadata before creating it.
 	if err := jm.frameMetaClient.InsertJob(ctx, meta); err != nil {
 		if pkgOrm.IsDuplicateEntryError(err) {
-			return nil, ErrJobAlreadyExists.GenWithStack(&JobAlreadyExistsError{JobID: job.Id})
+			return nil, errors.ErrJobAlreadyExists.GenWithStackByArgs(job.Id)
 		}
 		return nil, err
 	}
@@ -322,7 +320,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 	}
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
 
-	return buildPBJob(meta)
+	return buildPBJob(meta, false /* includeConfig */)
 }
 
 func validateCreateJobRequest(req *pb.CreateJobRequest) error {
@@ -388,7 +386,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 			setDetailToMasterMeta(masterMetas[i], detail, errJob)
 		}
 
-		job, err = buildPBJob(masterMetas[i])
+		job, err = buildPBJob(masterMetas[i], req.IncludeConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -406,7 +404,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 func setDetailToMasterMeta(masterMeta *frameModel.MasterMeta, detail []byte, errJob error) {
 	if errJob != nil {
 		// Currently, we simply ignore 404 error
-		if derrors.ErrJobManagerRespStatusCode404.Equal(errJob) {
+		if errors.Is(errJob, errors.ErrJobManagerRespStatusCode404) {
 			log.Warn("get job detail from jobmaster fail", zap.Error(errJob))
 			return
 		}
@@ -420,7 +418,7 @@ func setDetailToMasterMeta(masterMeta *frameModel.MasterMeta, detail []byte, err
 	}
 }
 
-func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
+func buildPBJob(masterMeta *frameModel.MasterMeta, includeConfig bool) (*pb.Job, error) {
 	var jobType pb.Job_Type
 	switch tp := framework.MustConvertWorkerType2JobType(masterMeta.Type); tp {
 	case engineModel.JobTypeCVSDemo:
@@ -435,20 +433,20 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.Type)
 	}
 
-	var jobStatus pb.Job_State
+	var jobState pb.Job_State
 	switch masterMeta.State {
 	case frameModel.MasterStateUninit:
-		jobStatus = pb.Job_Created
+		jobState = pb.Job_Created
 	case frameModel.MasterStateInit:
-		jobStatus = pb.Job_Running
+		jobState = pb.Job_Running
 	case frameModel.MasterStateFinished:
-		jobStatus = pb.Job_Finished
+		jobState = pb.Job_Finished
 	case frameModel.MasterStateStopped:
-		jobStatus = pb.Job_Canceled
+		jobState = pb.Job_Canceled
 	case frameModel.MasterStateFailed:
-		jobStatus = pb.Job_Failed
+		jobState = pb.Job_Failed
 	default:
-		return nil, errors.Errorf("job %s has unknown type %v", masterMeta.ID, masterMeta.State)
+		return nil, errors.Errorf("job %s has unknown state %v", masterMeta.ID, masterMeta.State)
 	}
 
 	var selectors []*pb.Selector
@@ -459,17 +457,20 @@ func buildPBJob(masterMeta *frameModel.MasterMeta) (*pb.Job, error) {
 		}
 		selectors = append(selectors, pbSel)
 	}
-	return &pb.Job{
+	job := &pb.Job{
 		Id:     masterMeta.ID,
 		Type:   jobType,
-		State:  jobStatus,
-		Config: masterMeta.Config,
+		State:  jobState,
 		Detail: masterMeta.Detail,
-		Error: &pb.Error{
+		Error: &pb.Job_Error{
 			Message: masterMeta.ErrorMsg,
 		},
 		Selectors: selectors,
-	}, nil
+	}
+	if includeConfig {
+		job.Config = masterMeta.Config
+	}
+	return job, nil
 }
 
 // GetJobMasterForwardAddress implements JobManager.GetJobMasterForwardAddress.
@@ -478,12 +479,12 @@ func (jm *JobManagerImpl) GetJobMasterForwardAddress(ctx context.Context, jobID 
 	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, jobID)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return "", ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: jobID})
+			return "", errors.ErrJobNotFound.GenWithStackByArgs(jobID)
 		}
 		return "", err
 	}
 	if masterMeta.State != frameModel.MasterStateInit || jm.JobFsm.QueryOnlineJob(jobID) == nil {
-		return "", ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+		return "", errors.ErrJobNotRunning.GenWithStackByArgs(jobID)
 	}
 	return masterMeta.Addr, nil
 }
@@ -593,7 +594,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 		if err == nil {
 			return false, nil
 		}
-		if derrors.ErrMasterConcurrencyExceeded.Equal(err) {
+		if errors.Is(err, errors.ErrMasterConcurrencyExceeded) {
 			log.Warn("create worker exceeds quota, retry later", zap.Error(err))
 			return true, nil
 		}
@@ -611,10 +612,10 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 				if err := jm.terminateJob(ctx, job.ErrorMsg, job.ID, state); err != nil {
 					return "", err
 				}
-				return "", derrors.ErrMasterCreateWorkerTerminate.FastGenByArgs()
+				return "", errors.ErrMasterCreateWorkerTerminate.FastGenByArgs()
 			}
 			if !jm.JobBackoffMgr.Allow(job.ID) {
-				return "", derrors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
+				return "", errors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
 			return jm.BaseMaster.CreateWorker(
 				job.Type, job, defaultJobMasterCost)
@@ -637,7 +638,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 			// mark non-tombstone workers as online
 			err := jm.JobFsm.JobOnline(worker)
 			// ignore worker that is not in WaitAck list
-			if err != nil && derrors.ErrWorkerNotFound.NotEqual(err) {
+			if err != nil && !errors.Is(err, errors.ErrWorkerNotFound) {
 				return err
 			}
 		}
@@ -673,7 +674,7 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 	})
 	if !ok {
 		log.Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
-		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
+		return errors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
 	}
 	impl.InitProjectInfosAfterRecover(jobs)
 
@@ -695,9 +696,13 @@ func (jm *JobManagerImpl) OnMasterRecovered(ctx context.Context) error {
 // OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImpl) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
-		if errIn, ok := pkgClient.ErrCreateWorkerTerminate.Convert(result); ok {
+		if errors.Is(result, errors.ErrCreateWorkerTerminate) {
+			errMsg := result.Error()
+			if cause := errors.Cause(result); cause != nil {
+				errMsg = cause.Error()
+			}
 			if err := jm.terminateJob(
-				context.Background(), errIn.Details, worker.ID(), frameModel.MasterStateFailed,
+				context.Background(), errMsg, worker.ID(), frameModel.MasterStateFailed,
 			); err != nil {
 				return err
 			}
@@ -721,14 +726,14 @@ func (jm *JobManagerImpl) OnWorkerOnline(worker framework.WorkerHandle) error {
 // OnWorkerOffline implements frame.MasterImpl.OnWorkerOffline
 func (jm *JobManagerImpl) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	needFailover := true
-	if derrors.ErrWorkerFinish.Equal(reason) {
+	if errors.Is(reason, errors.ErrWorkerFinish) {
 		log.Info("job master finished", zap.String("id", worker.ID()))
 		needFailover = false
-	} else if derrors.ErrWorkerCancel.Equal(reason) {
+	} else if errors.Is(reason, errors.ErrWorkerCancel) {
 		log.Info("job master canceled", zap.String("id", worker.ID()))
 		needFailover = false
 		jm.jobOperatorNotifier.Notify()
-	} else if derrors.ErrWorkerFailed.Equal(reason) {
+	} else if errors.Is(reason, errors.ErrWorkerFailed) {
 		log.Info("job master failed permanently", zap.String("id", worker.ID()))
 		needFailover = false
 	} else {
