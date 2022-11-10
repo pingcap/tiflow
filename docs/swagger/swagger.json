@@ -727,9 +727,6 @@
         "config.CSVConfig": {
             "type": "object",
             "properties": {
-                "date-separator": {
-                    "type": "string"
-                },
                 "delimiter": {
                     "type": "string"
                 },
@@ -740,9 +737,6 @@
                     "type": "string"
                 },
                 "quote": {
-                    "type": "string"
-                },
-                "terminator": {
                     "type": "string"
                 }
             }
@@ -798,11 +792,17 @@
                 "csv": {
                     "$ref": "#/definitions/config.CSVConfig"
                 },
+                "date-separator": {
+                    "type": "string"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
                     }
+                },
+                "enable-partition-separator": {
+                    "type": "boolean"
                 },
                 "encoder-concurrency": {
                     "type": "integer"
@@ -811,6 +811,9 @@
                     "type": "string"
                 },
                 "schema-registry": {
+                    "type": "string"
+                },
+                "terminator": {
                     "type": "string"
                 },
                 "transaction-atomicity": {

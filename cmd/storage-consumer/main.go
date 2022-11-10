@@ -35,8 +35,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
+	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
+
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -53,7 +57,6 @@ var (
 	configFile       string
 	logFile          string
 	logLevel         string
-	codecConfig      *common.Config
 	flushInterval    time.Duration
 )
 
@@ -134,7 +137,7 @@ type dmlPathKey struct {
 	date         string
 }
 
-func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
+func (d *dmlPathKey) generateDMLFilePath(idx uint64, extension string) string {
 	var elems []string
 
 	elems = append(elems, d.schema)
@@ -147,7 +150,7 @@ func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
 	if len(d.date) != 0 {
 		elems = append(elems, d.date)
 	}
-	elems = append(elems, fmt.Sprintf("CDC%06d.csv", idx))
+	elems = append(elems, fmt.Sprintf("CDC%06d%s", idx, extension))
 
 	return strings.Join(elems, "/")
 }
@@ -220,6 +223,7 @@ type consumer struct {
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
+	fileExtension   string
 	// tableIdxMap maintains a map of <dmlPathKey, max file index>
 	tableIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <dmlPathKey, max commit ts>
@@ -254,12 +258,13 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	cfg := common.NewConfig(protocol)
-	err = cfg.Apply(upstreamURI, replicaConfig)
+	codecConfig := common.NewConfig(protocol)
+	err = codecConfig.Apply(upstreamURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}
 
+	extension := sinkutil.GetFileExtension(protocol)
 	bs, err := storage.ParseBackend(upstreamURIStr, nil)
 	if err != nil {
 		log.Error("failed to parse storage backend", zap.Error(err))
@@ -286,7 +291,9 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	return &consumer{
 		sink:            s,
 		replicationCfg:  replicaConfig,
+		codecCfg:        codecConfig,
 		externalStorage: storage,
+		fileExtension:   extension,
 		tableIdxMap:     make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[dmlPathKey]uint64),
 		tableIDGenerator: &fakeTableIDGenerator{
@@ -296,7 +303,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func (c *consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -373,14 +380,18 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		}
 	}
 
-	m = c.diffTwoMaps(c.tableIdxMap, origTableMap)
+	m = c.difference(c.tableIdxMap, origTableMap)
 	return m, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
 func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
-	var events []*model.RowChangedEvent
-	var tableDetail cloudstorage.TableDetail
+	var (
+		events      []*model.RowChangedEvent
+		tableDetail cloudstorage.TableDetail
+		decoder     codec.EventBatchDecoder
+		err         error
+	)
 
 	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
 	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
@@ -397,9 +408,14 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 		return errors.Trace(err)
 	}
 
-	decoder, err := csv.NewBatchDecoder(ctx, c.codecCfg.CSVConfig, tableInfo, content)
-	if err != nil {
-		return errors.Trace(err)
+	switch c.codecCfg.Protocol {
+	case config.ProtocolCsv:
+		decoder, err = csv.NewBatchDecoder(ctx, c.codecCfg, tableInfo, content)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case config.ProtocolCanalJSON:
+		decoder = canal.NewBatchDecoder(content, false, c.codecCfg.Terminator)
 	}
 
 	cnt := 0
@@ -483,7 +499,7 @@ func (c *consumer) run(ctx context.Context) error {
 		for _, k := range keys {
 			fileRange := fileMap[k]
 			for i := fileRange.start; i <= fileRange.end; i++ {
-				filePath := k.generateDMLFilePath(i)
+				filePath := k.generateDMLFilePath(i, c.fileExtension)
 				content, err := c.externalStorage.ReadFile(ctx, filePath)
 				if err != nil {
 					return errors.Trace(err)

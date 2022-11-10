@@ -1,8 +1,6 @@
 definitions:
   config.CSVConfig:
     properties:
-      date-separator:
-        type: string
       delimiter:
         type: string
       include-commit-ts:
@@ -10,8 +8,6 @@ definitions:
       "null":
         type: string
       quote:
-        type: string
-      terminator:
         type: string
     type: object
   config.ColumnSelector:
@@ -50,15 +46,21 @@ definitions:
         type: array
       csv:
         $ref: '#/definitions/config.CSVConfig'
+      date-separator:
+        type: string
       dispatchers:
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
+      enable-partition-separator:
+        type: boolean
       encoder-concurrency:
         type: integer
       protocol:
         type: string
       schema-registry:
+        type: string
+      terminator:
         type: string
       transaction-atomicity:
         type: string
