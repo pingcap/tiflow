@@ -86,12 +86,6 @@ func (f *resourceFilter) getExecutor(
 		// Note the performance.
 		executorID, hasConstraint, err := f.constrainer.GetPlacementConstraint(ctx, resource)
 		if err != nil {
-			if errors.ErrResourceDoesNotExist.Equal(err) {
-				return noExecutorConstraint, ErrResourceNotFound.GenWithStack(&ResourceNotFoundError{
-					ResourceID: resourceID,
-					Details:    err.Error(),
-				})
-			}
 			return noExecutorConstraint, err
 		}
 		if !hasConstraint {
@@ -110,14 +104,8 @@ func (f *resourceFilter) getExecutor(
 			// two different executors, which is impossible.
 			log.Warn("Conflicting resource constraints",
 				zap.Any("resources", request.ExternalResources))
-			return noExecutorConstraint, ErrResourceConflict.GenWithStack(&ResourceConflictError{
-				ConflictingResources: [2]resModel.ResourceID{
-					resourceID, lastResourceID,
-				},
-				AssignedExecutors: [2]model.ExecutorID{
-					executorID, ret,
-				},
-			})
+			return noExecutorConstraint, errors.ErrResourceConflict.
+				GenWithStackByArgs(resourceID, lastResourceID, ret, executorID)
 		}
 		ret = executorID
 		lastResourceID = resourceID
@@ -146,10 +134,7 @@ func (f *resourceFilter) GetEligibleExecutors(
 
 	// Check that finalCandidate is found in the input candidates.
 	if slices.Index(candidates, finalCandidate) == -1 {
-		return nil, ErrFilterNoResult.GenWithStack(&FilterNoResultError{
-			FilterName:      "resource",
-			InputCandidates: candidates,
-		})
+		return nil, errors.ErrFilterNoResult.GenWithStackByArgs("resource")
 	}
 	return []model.ExecutorID{finalCandidate}, nil
 }

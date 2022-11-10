@@ -16,10 +16,12 @@ package errors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 )
 
 func TestWrapError(t *testing.T) {
@@ -42,17 +44,6 @@ func TestWrapError(t *testing.T) {
 			{
 				ErrWriteTsConflict, err, false,
 				"[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil,
-			},
-			{ErrBuildJobFailed, nil, true, "", []interface{}{}},
-			{
-				ErrBuildJobFailed, err, false,
-				"[DFLOW:ErrBuildJobFailed]build job failed: cause error",
-				[]interface{}{},
-			},
-			{
-				ErrSubJobFailed, err, false,
-				"[DFLOW:ErrSubJobFailed]executor e-1 job 2: cause error",
-				[]interface{}{"e-1", 2},
 			},
 		}
 	)
@@ -200,5 +191,28 @@ func TestIsCliUnprintableError(t *testing.T) {
 	for _, tt := range tests {
 		ret := IsCliUnprintableError(tt.err)
 		require.Equal(t, ret, tt.want, "case:%s", tt.name)
+	}
+}
+
+func TestHTTPStatusCode(t *testing.T) {
+	require.Equal(t, http.StatusOK, HTTPStatusCode(nil))
+	require.Equal(t, 499, HTTPStatusCode(context.Canceled))
+	require.Equal(t, http.StatusGatewayTimeout, HTTPStatusCode(context.DeadlineExceeded))
+	require.Equal(t, http.StatusInternalServerError, HTTPStatusCode(errors.New("unknown error")))
+	for rfcCode, httpCode := range httpStatusCodeMapping {
+		err := errors.Normalize(string(rfcCode), errors.RFCCodeText(string(rfcCode)))
+		require.Equal(t, httpCode, HTTPStatusCode(err))
+	}
+}
+
+func TestGRPCStatusCode(t *testing.T) {
+	require.Equal(t, codes.OK, GRPCStatusCode(nil))
+	require.Equal(t, codes.Canceled, GRPCStatusCode(context.Canceled))
+	require.Equal(t, codes.DeadlineExceeded, GRPCStatusCode(context.DeadlineExceeded))
+	require.Equal(t, codes.Unknown, GRPCStatusCode(errors.New("unknown error")))
+	require.Equal(t, codes.Internal, GRPCStatusCode(errors.Normalize("internal error", errors.RFCCodeText("TEST:ErrInternal"))))
+	for rfcCode, gRPCCode := range gRPCStatusCodeMapping {
+		err := errors.Normalize(string(rfcCode), errors.RFCCodeText(string(rfcCode)))
+		require.Equal(t, gRPCCode, GRPCStatusCode(err))
 	}
 }

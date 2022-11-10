@@ -107,7 +107,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		for {
 			err := master.Poll(ctx)
 			if err != nil {
-				if errors.ErrMasterClosed.Equal(err) {
+				if errors.Is(err, errors.ErrMasterClosed) {
 					return
 				}
 			}

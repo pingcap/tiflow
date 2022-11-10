@@ -16,11 +16,11 @@ package metadata
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 

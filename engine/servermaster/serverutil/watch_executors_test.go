@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -164,7 +163,7 @@ func TestWatchExecutorFailed(t *testing.T) {
 	watcher.On("WatchExecutors", mock.Anything).
 		Return(map[model.ExecutorID]string(nil),
 			(*notifier.Receiver[model.ExecutorStatusChange])(nil),
-			perrors.New("test error"),
+			errors.New("test error"),
 		).Times(1)
 
 	err := WatchExecutors(ctx, watcher, user)

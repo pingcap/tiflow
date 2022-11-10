@@ -34,7 +34,7 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknown commandTp = iota //nolint:varcheck,deadcode
+	commandTpUnknown commandTp = iota
 	commandTpClose
 	commandTpWriteDebugInfo
 	// Query the number of tables in the manager.

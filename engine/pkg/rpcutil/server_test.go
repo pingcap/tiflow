@@ -15,7 +15,6 @@ package rpcutil
 
 import (
 	"context"
-	gerrors "errors"
 	"sync"
 	"testing"
 	"time"
@@ -92,7 +91,7 @@ type mockRPCClientImpl struct {
 
 func (m *mockRPCClientImpl) MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error) {
 	if m.fail {
-		return nil, gerrors.New("mock failed")
+		return nil, errors.New("mock failed")
 	}
 	return &mockRPCResp{2}, nil
 }
@@ -151,20 +150,20 @@ func TestForwardToLeader(t *testing.T) {
 
 	s.hook.leader = &atomic.Value{}
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// the server is not leader, and cluster has no leader
 
 	s.hook.leader.Store(&Member{})
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// the server is not leader, cluster has a leader but the forwarding client is empty due to network problems
 
 	s.hook.leader.Store(&Member{Name: "another"})
 	s.hook.leaderCli.inner = nil
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// forwarding returns error
 	cli = &mockRPCClientImpl{fail: true}
@@ -185,7 +184,7 @@ func TestFeatureChecker(t *testing.T) {
 
 	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(false)
 	_, err := s.MockRPC(ctx, req)
-	require.True(t, ErrMasterNotReady.Is(err))
+	require.True(t, errors.Is(err, errors.ErrMasterNotReady))
 
 	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true)
 	_, err = s.MockRPC(ctx, req)
