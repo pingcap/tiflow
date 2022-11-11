@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -29,8 +30,9 @@ import (
 )
 
 const (
-	bufferSize = 1024 * 1024 // 1MB
+	bufferSize = 1 * 1024 * 1024 // 1MB
 	chanSize   = 1024
+	waitTime   = 10 * time.Millisecond
 )
 
 // BinlogWriter is a binlog event writer which writes binlog events to a file.
@@ -111,25 +113,32 @@ func (w *BinlogWriter) run() {
 		buf.Reset()
 	}
 
-	for bs := range w.input {
-		if errOccurs {
-			continue
+	for {
+		select {
+		case bs, ok := <-w.input:
+			if !ok {
+				if !errOccurs {
+					writeToFile()
+				}
+				return
+			}
+			if errOccurs {
+				continue
+			}
+			if bs != nil {
+				buf.Write(bs)
+			}
+			if bs == nil || buf.Len() > bufferSize {
+				writeToFile()
+			}
+			if bs == nil {
+				w.flushWg.Done()
+			}
+		case <-time.After(waitTime):
+			if !errOccurs {
+				writeToFile()
+			}
 		}
-
-		if len(bs) != 0 {
-			buf.Write(bs)
-		}
-
-		if len(bs) == 0 || buf.Len() > bufferSize || len(w.input) == 0 {
-			writeToFile()
-		}
-
-		if len(bs) == 0 {
-			w.flushWg.Done()
-		}
-	}
-	if !errOccurs {
-		writeToFile()
 	}
 }
 
