@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"net/url"
@@ -236,12 +237,27 @@ func convert2RowChanges(row *model.RowChangedEvent, tableInfo *timodel.TableInfo
 		nil, nil)
 }
 
+func convertBinaryToString(row *model.RowChangedEvent) {
+	for i, col := range row.Columns {
+		if col == nil {
+			continue
+		}
+		if col.Charset != "" && col.Charset != charset.CharsetBin {
+			colValBytes, ok := col.Value.([]byte)
+			if ok {
+				row.Columns[i].Value = string(colValBytes)
+			}
+		}
+	}
+}
+
 // 对 delete event 在这里做一些特殊判断 如 id<? and id>? 这种条件的sql语句
 func groupRowsByType(
 	event *eventsink.TxnCallbackableEvent,
 	tableInfo *timodel.TableInfo,
 ) (insertRows, updateRows, deleteRows []*sqlmodel.RowChange) {
 	for _, row := range event.Event.Rows {
+		convertBinaryToString(row)
 		if row.IsInsert() {
 			insertRows = append(insertRows, convert2RowChanges(row, tableInfo))
 		} else if row.IsDelete() {
