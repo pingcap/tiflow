@@ -62,7 +62,7 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
-	defaultBatchDMLEnable = false
+	defaultBatchDMLEnable = true
 )
 
 // Config is the configs for MySQL backend.
