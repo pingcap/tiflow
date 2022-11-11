@@ -196,7 +196,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 
 // This function is not thread safe, it must be called with m.workerListMu locked
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
-	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg, 1)
+	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg, framework.CreateWorkerWithCost(1))
 	if err != nil {
 		return errors.Trace(err)
 	}
