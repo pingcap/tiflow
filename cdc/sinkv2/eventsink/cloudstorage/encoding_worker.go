@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +31,7 @@ type encodingWorker struct {
 	wg           sync.WaitGroup
 	encoder      codec.EventBatchEncoder
 	isClosed     uint64
-	inputCh      *chann.Chann[eventFragment]
+	inputCh      chan eventFragment
 	defragmenter *defragmenter
 	errCh        chan<- error
 }
@@ -41,7 +40,7 @@ func newEncodingWorker(
 	workerID int,
 	changefeedID model.ChangeFeedID,
 	encoder codec.EventBatchEncoder,
-	inputCh *chann.Chann[eventFragment],
+	inputCh chan eventFragment,
 	defragmenter *defragmenter,
 	errCh chan<- error,
 ) *encodingWorker {
@@ -66,7 +65,7 @@ func (w *encodingWorker) run(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case frag, ok := <-w.inputCh.Out():
+			case frag, ok := <-w.inputCh:
 				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
 					return
 				}

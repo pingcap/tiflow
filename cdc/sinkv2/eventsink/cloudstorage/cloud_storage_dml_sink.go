@@ -28,13 +28,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
-const defaultEncodingConcurrency = 8
+const (
+	defaultEncodingConcurrency = 8
+	defaultChannelSize         = 1024
+)
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -63,8 +65,8 @@ type eventFragment struct {
 // sink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type sink struct {
-	// msgCh is a unbounded channel to hold eventFragment.
-	msgCh *chann.Chann[eventFragment]
+	// msgCh is a channel to hold eventFragment.
+	msgCh chan eventFragment
 	// encodingWorkers defines a group of workers for encoding events.
 	encodingWorkers []*encodingWorker
 	// defragmenter is used to defragment the out-of-order encoded messages.
@@ -125,7 +127,7 @@ func NewCloudStorageSink(ctx context.Context,
 	}
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	s.msgCh = chann.New[eventFragment]()
+	s.msgCh = make(chan eventFragment, defaultChannelSize)
 	s.defragmenter = newDefragmenter(ctx)
 	orderedCh := s.defragmenter.orderedOut()
 	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, orderedCh, errCh)
@@ -159,7 +161,7 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.msgCh.In() <- eventFragment{
+		s.msgCh <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,
@@ -171,10 +173,6 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 
 // Close closes the cloud storage sink.
 func (s *sink) Close() error {
-	s.msgCh.Close()
-	for range s.msgCh.Out() {
-		// drain the msgChan
-	}
 	s.defragmenter.close()
 	for _, w := range s.encodingWorkers {
 		w.close()

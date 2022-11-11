@@ -97,7 +97,7 @@ func TestDeframenter(t *testing.T) {
 LOOP:
 	for {
 		select {
-		case frag := <-defrag.orderedOut().Out():
+		case frag := <-defrag.orderedOut():
 			for _, msg := range frag.encodedMsgs {
 				curSeq, err := strconv.Atoi(string(msg.Key))
 				require.Nil(t, err)

@@ -33,7 +33,7 @@ type dmlWriter struct {
 	config         *cloudstorage.Config
 	extension      string
 	wg             sync.WaitGroup
-	inputCh        *chann.Chann[eventFragment]
+	inputCh        <-chan eventFragment
 	errCh          chan<- error
 }
 
@@ -42,7 +42,7 @@ func newDMLWriter(ctx context.Context,
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
-	inputCh *chann.Chann[eventFragment],
+	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
 	w := &dmlWriter{
@@ -76,7 +76,7 @@ func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case frag, ok := <-d.inputCh.Out():
+		case frag, ok := <-d.inputCh:
 			if !ok {
 				return
 			}

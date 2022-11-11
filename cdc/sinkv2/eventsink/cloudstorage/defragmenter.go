@@ -15,8 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"sync"
-
-	"github.com/pingcap/tiflow/pkg/chann"
 )
 
 // defragmenter is used to handle event fragments which can be registered
@@ -25,15 +23,15 @@ type defragmenter struct {
 	lastWritten uint64
 	future      map[uint64]eventFragment
 	wg          sync.WaitGroup
-	inputCh     *chann.Chann[eventFragment]
-	outputCh    *chann.Chann[eventFragment]
+	inputCh     chan eventFragment
+	outputCh    chan eventFragment
 }
 
 func newDefragmenter(ctx context.Context) *defragmenter {
 	d := &defragmenter{
 		future:   make(map[uint64]eventFragment),
-		inputCh:  chann.New[eventFragment](),
-		outputCh: chann.New[eventFragment](),
+		inputCh:  make(chan eventFragment, defaultChannelSize),
+		outputCh: make(chan eventFragment, defaultChannelSize),
 	}
 	d.wg.Add(1)
 	go func() {
@@ -44,10 +42,10 @@ func newDefragmenter(ctx context.Context) *defragmenter {
 }
 
 func (d *defragmenter) registerFrag(frag eventFragment) {
-	d.inputCh.In() <- frag
+	d.inputCh <- frag
 }
 
-func (d *defragmenter) orderedOut() *chann.Chann[eventFragment] {
+func (d *defragmenter) orderedOut() <-chan eventFragment {
 	return d.outputCh
 }
 
@@ -57,7 +55,7 @@ func (d *defragmenter) defragMsgs(ctx context.Context) {
 		case <-ctx.Done():
 			d.future = nil
 			return
-		case frag, ok := <-d.inputCh.Out():
+		case frag, ok := <-d.inputCh:
 			if !ok {
 				return
 			}
@@ -78,7 +76,7 @@ func (d *defragmenter) writeMsgsConsecutive(
 	ctx context.Context,
 	start eventFragment,
 ) {
-	d.outputCh.In() <- start
+	d.outputCh <- start
 
 	d.lastWritten++
 	for {
@@ -91,7 +89,7 @@ func (d *defragmenter) writeMsgsConsecutive(
 		next := d.lastWritten + 1
 		if frag, ok := d.future[next]; ok {
 			delete(d.future, next)
-			d.outputCh.In() <- frag
+			d.outputCh <- frag
 			d.lastWritten = next
 		} else {
 			return
@@ -101,10 +99,4 @@ func (d *defragmenter) writeMsgsConsecutive(
 
 func (d *defragmenter) close() {
 	d.wg.Wait()
-	d.inputCh.Close()
-	for range d.inputCh.Out() {
-	}
-	d.outputCh.Close()
-	for range d.outputCh.Out() {
-	}
 }

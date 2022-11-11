@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -40,13 +39,10 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	errCh := make(chan error, 10)
 	changefeedID := model.DefaultChangeFeedID("test-encode")
 
-	msgCh := chann.New[eventFragment]()
+	msgCh := make(chan eventFragment, 1024)
 	defragmenter := newDefragmenter(ctx)
 	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter, errCh)
 	return worker, func() {
-		msgCh.Close()
-		for range msgCh.Out() {
-		}
 		defragmenter.close()
 	}
 }
@@ -143,7 +139,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 				Event: event,
 			},
 		}
-		worker.inputCh.In() <- frag
+		worker.inputCh <- frag
 	}
 	cancel()
 	worker.close()
