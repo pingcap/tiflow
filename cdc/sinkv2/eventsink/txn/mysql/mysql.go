@@ -146,11 +146,11 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	var dmls *preparedDMLs
-	if s.rows > unBatchThreshold {
-		dmls = s.prepareDMLs()
+	if s.cfg.BatchDMLEnable && s.rows < unBatchThreshold {
+		dmls = s.prepareBatchDMLs()
 	} else {
 		// TODO(dongmen): add a switch to control whether to use the batch dml mode
-		dmls = s.prepareBatchDMLs()
+		dmls = s.prepareDMLs()
 	}
 
 	log.Info("prepare DMLs", zap.Any("rows", s.rows),
