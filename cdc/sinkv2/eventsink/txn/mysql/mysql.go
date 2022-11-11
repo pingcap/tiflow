@@ -148,7 +148,6 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 	// TODO(dongmen): add a switch to control whether to use the batch dml mode
 	dmls := s.prepareDMLs()
-
 	log.Info("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
@@ -202,7 +201,11 @@ type preparedDMLs struct {
 
 // convert2RowChanges is a helper function that convert the row change representation
 // of CDC into a general one.
-func convert2RowChanges(row *model.RowChangedEvent, tableInfo *timodel.TableInfo) *sqlmodel.RowChange {
+func convert2RowChanges(
+	row *model.RowChangedEvent,
+	tableInfo *timodel.TableInfo,
+	changeType sqlmodel.RowChangeType) *sqlmodel.RowChange {
+
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		if col == nil {
@@ -222,13 +225,35 @@ func convert2RowChanges(row *model.RowChangedEvent, tableInfo *timodel.TableInfo
 		postValues = append(postValues, col.Value)
 	}
 
-	return sqlmodel.NewRowChange(
-		row.Table,
-		nil,
-		preValues,
-		postValues,
-		tableInfo,
-		nil, nil)
+	var res *sqlmodel.RowChange
+
+	switch changeType {
+	case sqlmodel.RowChangeInsert:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			nil,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeUpdate:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeDelete:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			nil,
+			tableInfo,
+			nil, nil)
+	}
+	return res
 }
 
 func convertBinaryToString(row *model.RowChangedEvent) {
@@ -245,19 +270,37 @@ func convertBinaryToString(row *model.RowChangedEvent) {
 	}
 }
 
-// 对 delete event 在这里做一些特殊判断 如 id<? and id>? 这种条件的sql语句
+// TODO: Find a way to make batch delete dmls more efficient.
 func groupRowsByType(
 	event *eventsink.TxnCallbackableEvent,
 	tableInfo *timodel.TableInfo,
+	spiltUpdate bool,
 ) (insertRows, updateRows, deleteRows []*sqlmodel.RowChange) {
 	for _, row := range event.Event.Rows {
 		convertBinaryToString(row)
 		if row.IsInsert() {
-			insertRows = append(insertRows, convert2RowChanges(row, tableInfo))
+			insertRows = append(
+				insertRows,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
 		} else if row.IsDelete() {
-			deleteRows = append(deleteRows, convert2RowChanges(row, tableInfo))
+			deleteRows = append(
+				deleteRows,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+			// update 事件需要特殊处理
 		} else if row.IsUpdate() {
-			updateRows = append(updateRows, convert2RowChanges(row, tableInfo))
+			if spiltUpdate {
+				log.Info("fizz split update event", zap.Any("row", row.StartTs))
+				deleteRows = append(
+					deleteRows,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+				insertRows = append(
+					insertRows,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+			} else {
+				updateRows = append(
+					updateRows,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+			}
 		}
 	}
 	return
@@ -268,12 +311,29 @@ func batchSingleTxnDmls(
 	tableInfo *timodel.TableInfo,
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
-	insertRows, updateRows, deleteRows := groupRowsByType(event, tableInfo)
+
+	log.Info("fizz batch single txn dmls",
+		zap.Stringer("table", event.Event.Rows[0].Table),
+		zap.Bool("translateIntoInsert", translateToInsert))
+
+	insertRows, updateRows, deleteRows := groupRowsByType(event, tableInfo, !translateToInsert)
 
 	sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
 	sqls = append(sqls, sql)
 	values = append(values, value)
 
+	// handle update
+	if translateToInsert {
+		sql, value = sqlmodel.GenUpdateSQL(updateRows...)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	} else {
+		sql, value = sqlmodel.GenDeleteSQL(updateRows...)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	}
+
+	// handle insert
 	if translateToInsert {
 		sql, value = sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, insertRows...)
 		sqls = append(sqls, sql)
@@ -284,70 +344,8 @@ func batchSingleTxnDmls(
 		values = append(values, value)
 	}
 
-	sql, value = sqlmodel.GenUpdateSQL(updateRows...)
-	sqls = append(sqls, sql)
-	values = append(values, value)
 	return
 }
-
-//// This is a POC of batch DMLs.
-//func (s *mysqlBackend) prepareBatchDMLs() *preparedDMLs {
-//	// TODO: use a sync.Pool to reduce allocations.
-//	startTs := make([]uint64, 0, s.rows)
-//	sqls := make([]string, 0, s.rows)
-//	values := make([][]interface{}, 0, s.rows)
-//	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
-//
-//	// translateToInsert control the update and insert behavior
-//	// we only translate into insert when old value is enabled and safe mode is disabled
-//	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-//
-//	rowCount := 0
-//	// Note: every event in s.events is a singleTableTxn,
-//	// so we can use the first row to get the table info.
-//	for _, event := range s.events {
-//		// we need to skip empty events here, otherwise the following code will panic
-//		if len(event.Event.Rows) == 0 {
-//			continue
-//		}
-//
-//		firstRow := event.Event.Rows[0]
-//
-//		startTs = append(startTs, firstRow.StartTs)
-//		if event.Callback != nil {
-//			callbacks = append(callbacks, event.Callback)
-//		}
-//		// A row can be translated in to INSERT, when it was committed after
-//		// the table it belongs to been replicating by TiCDC, which means it must not be
-//		// replicated before, and there is no such row in downstream MySQL.
-//		translateToInsert = firstRow.CommitTs > firstRow.ReplicatingTs
-//
-//		tableColumns := firstRow.Columns
-//		if len(tableColumns) == 0 {
-//			tableColumns = firstRow.PreColumns
-//		}
-//
-//		tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
-//		log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
-//
-//		sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
-//		sqls = append(sqls, sql...)
-//		values = append(values, value...)
-//		rowCount += len(sql)
-//	}
-//
-//	if len(callbacks) == 0 {
-//		callbacks = nil
-//	}
-//
-//	return &preparedDMLs{
-//		startTs:   startTs,
-//		sqls:      sqls,
-//		values:    values,
-//		callbacks: callbacks,
-//		rowCount:  rowCount,
-//	}
-//}
 
 func hasHandleKey(cols []*model.Column) bool {
 	for _, col := range cols {
@@ -399,7 +397,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// A row can be translated in to INSERT, when it was committed after
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
-		translateToInsert = firstRow.CommitTs > firstRow.ReplicatingTs
+		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 
 		if event.Callback != nil {
 			callbacks = append(callbacks, event.Callback)
