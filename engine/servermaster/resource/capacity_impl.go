@@ -70,7 +70,7 @@ func (m *CapRescMgr) Update(id model.ExecutorID, used, reserved model.RescUnit, 
 	defer m.mu.Unlock()
 	exec, ok := m.executors[id]
 	if !ok {
-		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+		return errors.ErrUnknownExecutor.GenWithStackByArgs(id)
 	}
 	exec.Used = used
 	exec.Reserved = reserved

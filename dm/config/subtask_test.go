@@ -16,14 +16,15 @@ package config
 import (
 	"context"
 	"reflect"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-func (t *testConfig) TestSubTask(c *C) {
+func TestSubTask(t *testing.T) {
 	cfg := &SubTaskConfig{
 		Name:            "test-task",
 		IsSharding:      true,
@@ -48,41 +49,41 @@ func (t *testConfig) TestSubTask(c *C) {
 	cfg.To.Adjust()
 
 	clone1, err := cfg.Clone()
-	c.Assert(err, IsNil)
-	c.Assert(cfg, DeepEquals, clone1)
+	require.NoError(t, err)
+	require.Equal(t, cfg, clone1)
 
 	clone1.From.Password = "1234"
 	clone2, err := cfg.DecryptPassword()
-	c.Assert(err, IsNil)
-	c.Assert(clone2, DeepEquals, clone1)
+	require.NoError(t, err)
+	require.Equal(t, clone1, clone2)
 
 	cfg.From.Password = "xxx"
 	_, err = cfg.DecryptPassword()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	err = cfg.Adjust(true)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.OnlineDDL, IsTrue)
+	require.NoError(t, err)
+	require.True(t, cfg.OnlineDDL)
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	cfg.From.Password = ""
 	clone3, err := cfg.DecryptPassword()
-	c.Assert(err, IsNil)
-	c.Assert(clone3, DeepEquals, cfg)
+	require.NoError(t, err)
+	require.Equal(t, cfg, clone3)
 
 	err = cfg.Adjust(true)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	cfg.ValidatorCfg = ValidatorConfig{Mode: ValidationFast}
 	err = cfg.Adjust(true)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	cfg.ValidatorCfg = ValidatorConfig{Mode: "invalid-mode"}
 	err = cfg.Adjust(true)
-	c.Assert(terror.ErrConfigValidationMode.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigValidationMode.Equal(err))
 }
 
-func (t *testConfig) TestSubTaskAdjustFail(c *C) {
+func TestSubTaskAdjustFail(t *testing.T) {
 	newSubTaskConfig := func() *SubTaskConfig {
 		return &SubTaskConfig{
 			Name:      "test-task",
@@ -103,8 +104,8 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 		}
 	}
 	testCases := []struct {
-		genFunc     func() *SubTaskConfig
-		errorFormat string
+		genFunc func() *SubTaskConfig
+		errMsg  string
 	}{
 		{
 			func() *SubTaskConfig {
@@ -112,7 +113,7 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 				cfg.Name = ""
 				return cfg
 			},
-			"\\[.*\\], Message: task name should not be empty.*",
+			"Message: task name should not be empty",
 		},
 		{
 			func() *SubTaskConfig {
@@ -120,7 +121,7 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 				cfg.SourceID = ""
 				return cfg
 			},
-			"\\[.*\\], Message: empty source-id not valid.*",
+			"Message: empty source-id not valid",
 		},
 		{
 			func() *SubTaskConfig {
@@ -128,7 +129,7 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 				cfg.SourceID = "source-id-length-more-than-thirty-two"
 				return cfg
 			},
-			"\\[.*\\], Message: too long source-id not valid.*",
+			"Message: too long source-id not valid",
 		},
 		{
 			func() *SubTaskConfig {
@@ -136,7 +137,7 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 				cfg.ShardMode = "invalid-shard-mode"
 				return cfg
 			},
-			"\\[.*\\], Message: shard mode invalid-shard-mode not supported.*",
+			"Message: shard mode invalid-shard-mode not supported",
 		},
 		{
 			func() *SubTaskConfig {
@@ -144,18 +145,18 @@ func (t *testConfig) TestSubTaskAdjustFail(c *C) {
 				cfg.OnlineDDLScheme = "rtc"
 				return cfg
 			},
-			"\\[.*\\], Message: online scheme rtc not supported.*",
+			"Message: online scheme rtc not supported",
 		},
 	}
 
 	for _, tc := range testCases {
 		cfg := tc.genFunc()
 		err := cfg.Adjust(true)
-		c.Assert(err, ErrorMatches, tc.errorFormat)
+		require.ErrorContains(t, err, tc.errMsg)
 	}
 }
 
-func (t *testConfig) TestSubTaskBlockAllowList(c *C) {
+func TestSubTaskBlockAllowList(t *testing.T) {
 	filterRules1 := &filter.Rules{
 		DoDBs: []string{"s1"},
 	}
@@ -172,17 +173,17 @@ func (t *testConfig) TestSubTaskBlockAllowList(c *C) {
 
 	// BAList is nil, will set BAList = BWList
 	err := cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.BAList, Equals, filterRules1)
+	require.NoError(t, err)
+	require.Equal(t, filterRules1, cfg.BAList)
 
 	// BAList is not nil, will not update it
 	cfg.BAList = filterRules2
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.BAList, Equals, filterRules2)
+	require.NoError(t, err)
+	require.Equal(t, filterRules2, cfg.BAList)
 }
 
-func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
+func TestSubTaskAdjustLoaderS3Dir(t *testing.T) {
 	cfg := &SubTaskConfig{
 		Name:     "test",
 		SourceID: "source-1",
@@ -192,8 +193,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	// default loader
 	cfg.LoaderConfig = DefaultLoaderConfig()
 	err := cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, defaultDir+"."+cfg.Name)
+	require.NoError(t, err)
+	require.Equal(t, defaultDir+"."+cfg.Name, cfg.LoaderConfig.Dir)
 
 	// file
 	cfg.LoaderConfig = LoaderConfig{
@@ -202,8 +203,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+	require.NoError(t, err)
+	require.Equal(t, "file:///tmp/storage"+"."+cfg.Name, cfg.LoaderConfig.Dir)
 
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize:   defaultPoolSize,
@@ -211,8 +212,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dump_data"+"."+cfg.Name)
+	require.NoError(t, err)
+	require.Equal(t, "./dump_data"+"."+cfg.Name, cfg.LoaderConfig.Dir)
 
 	// s3
 	cfg.LoaderConfig = LoaderConfig{
@@ -221,8 +222,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"/"+cfg.Name+"."+cfg.SourceID)
+	require.NoError(t, err)
+	require.Equal(t, "s3://bucket2/prefix"+"/"+cfg.Name+"."+cfg.SourceID, cfg.LoaderConfig.Dir)
 
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize:   defaultPoolSize,
@@ -230,8 +231,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket3/prefix/path"+"/"+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
+	require.NoError(t, err)
+	require.Equal(t, "s3://bucket3/prefix/path/"+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc", cfg.LoaderConfig.Dir)
 
 	// invaild dir
 	cfg.LoaderConfig = LoaderConfig{
@@ -240,7 +241,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir 1invalid: is invalid.*")
+	require.ErrorContains(t, err, "Message: loader's dir 1invalid: is invalid")
 
 	// use loader and not s3
 	cfg.LoaderConfig = LoaderConfig{
@@ -249,8 +250,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+	require.NoError(t, err)
+	require.Equal(t, "file:///tmp/storage."+cfg.Name, cfg.LoaderConfig.Dir)
 
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize:   defaultPoolSize,
@@ -258,8 +259,8 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dumpdir"+"."+cfg.Name)
+	require.NoError(t, err)
+	require.Equal(t, "./dumpdir."+cfg.Name, cfg.LoaderConfig.Dir)
 
 	// use loader and s3
 	cfg.LoaderConfig = LoaderConfig{
@@ -268,7 +269,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeLoader,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir s3://bucket2/prefix is s3 dir, but s3 is not supported.*")
+	require.ErrorContains(t, err, "Message: loader's dir s3://bucket2/prefix is s3 dir, but s3 is not supported")
 
 	// not all or full mode
 	cfg.Mode = ModeIncrement
@@ -278,11 +279,11 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "1invalid:")
+	require.NoError(t, err)
+	require.Equal(t, "1invalid:", cfg.LoaderConfig.Dir)
 }
 
-func (t *testConfig) TestDBConfigClone(c *C) {
+func TestDBConfigClone(t *testing.T) {
 	a := &DBConfig{
 		Host:     "127.0.0.1",
 		Port:     4306,
@@ -293,38 +294,38 @@ func (t *testConfig) TestDBConfigClone(c *C) {
 	}
 
 	// When add new fields, also update this value
-	c.Assert(reflect.Indirect(reflect.ValueOf(a)).NumField(), Equals, 8)
+	require.Equal(t, 9, reflect.Indirect(reflect.ValueOf(a)).NumField())
 
 	b := a.Clone()
-	c.Assert(a, DeepEquals, b)
-	c.Assert(a.RawDBCfg, Not(Equals), b.RawDBCfg)
+	require.Equal(t, a, b)
+	require.NotSame(t, a.RawDBCfg, b.RawDBCfg)
 
 	a.RawDBCfg.MaxIdleConns = 123
-	c.Assert(a, Not(DeepEquals), b)
+	require.NotEqual(t, a, b)
 
 	packet := 1
 	a.MaxAllowedPacket = &packet
 	b = a.Clone()
-	c.Assert(a, DeepEquals, b)
-	c.Assert(a.MaxAllowedPacket, Not(Equals), b.MaxAllowedPacket)
+	require.Equal(t, a, b)
+	require.NotSame(t, a.MaxAllowedPacket, b.MaxAllowedPacket)
 
 	a.Session["2"] = "2"
-	c.Assert(a, Not(DeepEquals), b)
+	require.NotEqual(t, a, b)
 
 	a.RawDBCfg = nil
 	a.Security = &Security{}
 	b = a.Clone()
-	c.Assert(a, DeepEquals, b)
-	c.Assert(a.Security, Not(Equals), b.Security)
+	require.Equal(t, a, b)
+	require.NotSame(t, a.Security, b.Security)
 }
 
-func (t *testConfig) TestFetchTZSetting(c *C) {
+func TestFetchTZSetting(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(mock.NewRows([]string{""}).AddRow("01:00:00"))
 	tz, err := FetchTimeZoneSetting(context.Background(), db)
-	c.Assert(err, IsNil)
-	c.Assert(tz, Equals, "+01:00")
+	require.NoError(t, err)
+	require.Equal(t, "+01:00", tz)
 }

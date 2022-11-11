@@ -20,14 +20,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -145,7 +144,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		log.Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
 		err := d.BaseWorker.UpdateStatus(ctx, d.Status())
 		if err != nil {
-			if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+			if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
 				log.Warn("update status try again later", zap.String("error", err.Error()))
 				return nil
 			}

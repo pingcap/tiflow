@@ -16,10 +16,10 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DiscoveryClient is a client to the Discovery service on the server master.

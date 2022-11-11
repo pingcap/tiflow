@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
@@ -31,7 +30,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -238,7 +237,7 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if err := d.worker.doPoll(ctx); err != nil {
-		if derror.ErrWorkerHalfExit.NotEqual(err) {
+		if !errors.Is(err, errors.ErrWorkerHalfExit) {
 			return errors.Trace(err)
 		}
 		return nil

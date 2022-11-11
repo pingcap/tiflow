@@ -26,11 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var _ Broker = (*MockBroker)(nil)
@@ -86,11 +85,9 @@ func (b *MockBroker) OpenStorage(
 	b.clientMu.Lock()
 	defer b.clientMu.Unlock()
 
-	st := status.New(codes.NotFound, "resource manager error")
-
 	b.client.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: jobID, ResourceId: resourcePath}}, mock.Anything).
-		Return((*pb.QueryResourceResponse)(nil), st.Err())
+		Return((*pb.QueryResourceResponse)(nil), errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourcePath))
 	defer func() {
 		b.client.ExpectedCalls = nil
 	}()

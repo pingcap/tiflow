@@ -16,7 +16,6 @@ package orm
 import (
 	"context"
 	"database/sql"
-	gerrors "errors"
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -666,7 +665,7 @@ func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resModel.Reso
 		Where("gc_pending = true").
 		First(&ret).Error
 	if err != nil {
-		if gerrors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.ErrMetaEntryNotFound.Wrap(err)
 		}
 		return nil, errors.ErrMetaOpFail.Wrap(err)

@@ -16,7 +16,6 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -51,6 +50,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
