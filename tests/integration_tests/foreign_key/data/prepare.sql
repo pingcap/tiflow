@@ -44,7 +44,7 @@ create table t8 (id int key, foreign key (id) references t5 (id) on delete restr
 drop table t7, t8;
 
 -- Test for cascade delete.
-create table t9 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);
+create table t9 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t9(id) ON DELETE CASCADE);
 insert into t9 values (1, 'boss', null), (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1);
 insert into t9 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10);
 insert into t9 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11);
