@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
 	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
-
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"

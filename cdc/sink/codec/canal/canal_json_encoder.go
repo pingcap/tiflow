@@ -317,6 +317,9 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if len(c.terminator) > 0 {
+		value = append(value, []byte(c.terminator)...)
+	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -327,11 +330,6 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		Protocol: config.ProtocolCanalJSON,
 		Callback: callback,
 	}
-	if len(c.terminator) > 0 {
-		value = append(value, []byte(c.terminator)...)
-	}
-	m := common.NewMsg(config.ProtocolCanalJSON, nil, value, e.CommitTs,
-		model.MessageTypeRow, c.messageHolder.getSchema(), c.messageHolder.getTable())
 	m.IncRowsCount()
 
 	c.messages = append(c.messages, m)
