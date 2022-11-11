@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -48,6 +49,8 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
+
+	initialized atomic.Bool
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -128,7 +131,11 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
+		return err
+	}
+	jm.initialized.Store(true)
+	return nil
 }
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
