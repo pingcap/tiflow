@@ -34,6 +34,7 @@ const (
   },
   "sink": {
     "encoder-concurrency": 16,
+    "terminator": "\r\n",
     "dispatch-rules": [
       {
         "db-name": "a",

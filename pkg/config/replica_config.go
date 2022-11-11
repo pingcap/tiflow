@@ -54,6 +54,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			NullString: NULL,
 		},
 		EncoderConcurrency:       16,
+		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorNone.String(),
 		EnablePartitionSeparator: false,
 	},
