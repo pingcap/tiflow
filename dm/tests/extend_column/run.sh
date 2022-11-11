@@ -33,9 +33,18 @@ function run_case() {
 	# start DM task in all mode
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/import-mode-placeholder/$1/g" $WORK_DIR/dm-task.yaml
+
+	run_sql_tidb "create database extend_column;"
+	run_sql_tidb "create table extend_column.t (c1 int primary key, c2 int, c3 int);"
+
+	# 4 errors for each upstream table
+	# 1 warnings: MySQL 8.0
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
-		"does not exist in downstream table" 4
+		"does not exist in downstream table" 2 \
+		"must contain extended columns" 2 \
+		'"severity": "fail"' 4 \
+		'"severity": "warn"' 1
 
 	# create table in tidb
 	run_sql_file $cur/data/tidb.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD

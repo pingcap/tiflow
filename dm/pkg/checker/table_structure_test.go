@@ -159,12 +159,12 @@ func TestTablesChecker(t *testing.T) {
 	// 1. test a success check
 
 	commonMock()
-	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+	createTableRowUp := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
 		  "c" int(11) NOT NULL,
 		  PRIMARY KEY ("c")
 		) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnError(errNoSuchTable)
 
 	checker := NewTablesChecker(
@@ -187,12 +187,12 @@ func TestTablesChecker(t *testing.T) {
 	// 2. check many errors
 
 	commonMock()
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
+	createTableRowUp = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
   CONSTRAINT "fk" FOREIGN KEY ("c") REFERENCES "t" ("c")
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
@@ -259,9 +259,8 @@ func TestTablesChecker(t *testing.T) {
 	require.NoError(t, downMock.ExpectationsWereMet())
 
 	// 4. check warning from mismatching of upstream/downstream
-	// TODO: check all warnings here!
 	commonMock()
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
+	createTableRowUp = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
 		  "c" int(11) NOT NULL,
 		  "d" int(11) NOT NULL,
@@ -269,7 +268,7 @@ func TestTablesChecker(t *testing.T) {
 		  PRIMARY KEY ("c"),
 		  UNIQUE KEY "idx_d" ("d")
 		) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table", `CREATE TABLE "test-table" (
   		  "c" int(11) NOT NULL,
@@ -310,6 +309,49 @@ func TestTablesChecker(t *testing.T) {
 	require.Equal(t,
 		"table `test-db`.`test-table-1` downstream has more columns than upstream that require values to insert records, table name: test-table, columns: [g]",
 		result.Errors[4].ShortErr)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, downMock.ExpectationsWereMet())
+
+	// 5. check extended columns
+	commonMock()
+	createTableRowUp = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "ext1" int(11) NOT NULL,
+		  PRIMARY KEY ("c")
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
+	createTableRowDown := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "ext3" int(11) NOT NULL,
+		  PRIMARY KEY ("c")
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`)
+	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowDown)
+
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		downDB,
+		map[string]map[filter.Table][]filter.Table{
+			"test-source": {
+				{Schema: "test-db", Name: "test-table-1"}: {
+					{Schema: "test-db", Name: "test-table-1"},
+				},
+			},
+		},
+		map[filter.Table][]string{
+			{Schema: "test-db", Name: "test-table-1"}: {"ext1", "ext2", "ext3"},
+		},
+		1)
+	result = checker.Check(ctx)
+	require.Equal(t, StateFailure, result.State)
+	require.Len(t, result.Errors, 2)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` upstream table must not contain extended column [ext1]",
+		result.Errors[0].ShortErr)
+	require.Equal(t,
+		"table `test-db`.`test-table-1` downstream table must contain extended columns [ext1 ext2]",
+		result.Errors[1].ShortErr)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 }

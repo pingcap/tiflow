@@ -439,22 +439,34 @@ func (c *TablesChecker) checkTableStructurePair(
 			delete(downstreamCols, col)
 		}
 	}
+
+	upstreamDupCols := make([]string, 0, len(extendedCols))
+	downstreamMissingCols := make([]string, 0, len(extendedCols))
 	for _, col := range extendedCols {
 		if _, ok := upstreamCols[col]; ok {
-			options = append(options, &incompatibilityOption{
-				state:       StateFailure,
-				instruction: "values of extended columns will be automatically filled by DM, please remove these columns or change configuration",
-				errMessage:  fmt.Sprintf("upstream table should not contain extended column %s", col),
-			})
+			upstreamDupCols = append(upstreamDupCols, col)
 		}
 		if _, ok := downstreamCols[col]; !ok {
-			options = append(options, &incompatibilityOption{
-				state:       StateFailure,
-				instruction: "please manually add extended column to downstream table",
-				errMessage:  fmt.Sprintf("downstream table should create extended column in advance %s", col),
-			})
+			downstreamMissingCols = append(downstreamMissingCols, col)
 		}
 		delete(upstreamCols, col)
+	}
+	if len(upstreamDupCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state:       StateFailure,
+			instruction: "values of extended columns will be automatically filled by DM, please remove these columns or change configuration",
+			errMessage:  fmt.Sprintf("upstream table must not contain extended column %v", upstreamDupCols),
+		})
+	}
+	if len(downstreamMissingCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state:       StateFailure,
+			instruction: "please manually add extended column to downstream table",
+			errMessage:  fmt.Sprintf("downstream table must contain extended columns %v", downstreamMissingCols),
+		})
+	}
+	if len(upstreamDupCols) > 0 || len(downstreamMissingCols) > 0 {
+		return options
 	}
 
 	if len(upstreamCols) > 0 {
