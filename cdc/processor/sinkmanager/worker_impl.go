@@ -344,6 +344,8 @@ func (w *redoWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *redoT
 				batchSize += size
 				if cache.push(x[0], size, pos.Valid()) {
 					cachedSize += size
+				} else {
+					cachedSize -= cache.cleanBrokenEvents()
 				}
 				maybeEmitBatchEvents(false, pos.Valid())
 			}

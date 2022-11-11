@@ -23,13 +23,14 @@ import (
 
 // redoEventCache caches events fetched from EventSortEngine.
 type redoEventCache struct {
-	capacity  uint64
-	allocated uint64
+	capacity  uint64 // it's a constant.
+	allocated uint64 // atomically shared in several goroutines.
 
 	mu     sync.Mutex
 	tables map[model.TableID]*eventsAndSize
 }
 
+// newRedoEventCache creates a redoEventCache instance.
 func newRedoEventCache(capacity uint64) *redoEventCache {
 	return &redoEventCache{
 		capacity:  capacity,
@@ -38,6 +39,8 @@ func newRedoEventCache(capacity uint64) *redoEventCache {
 	}
 }
 
+// getAppender returns an eventsAndSize instance which can be used to
+// append events into the cache.
 func (r *redoEventCache) getAppender(tableID model.TableID) *eventsAndSize {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -82,6 +85,7 @@ func (r *redoEventCache) pop(tableID model.TableID) ([]*model.RowChangedEvent, u
 		item.readySize = 0
 	}
 
+	atomic.AddUint64(&r.allocated, ^(size - 1))
 	return events, size, pos
 }
 
@@ -101,6 +105,8 @@ type eventsAndSize struct {
 	capacity  uint64
 	allocated *uint64
 
+	broken bool
+
 	mu          sync.RWMutex
 	events      []*model.RowChangedEvent
 	readySize   uint64
@@ -109,9 +115,16 @@ type eventsAndSize struct {
 }
 
 func (e *eventsAndSize) push(event *model.RowChangedEvent, size uint64, txnFinished bool) bool {
+	// At most only one client can call push on a given eventsAndSize instance,
+	// so lock is unnecessary.
+	if e.broken {
+		return false
+	}
+
 	for {
 		allocated := atomic.LoadUint64(e.allocated)
 		if allocated >= e.capacity {
+			e.broken = true
 			return false
 		}
 		if atomic.CompareAndSwapUint64(e.allocated, allocated, allocated+size) {
@@ -129,4 +142,18 @@ func (e *eventsAndSize) push(event *model.RowChangedEvent, size uint64, txnFinis
 		e.pendingSize = 0
 	}
 	return true
+}
+
+func (e *eventsAndSize) cleanBrokenEvents() (size uint64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for i := e.readyCount; i < len(e.events); i++ {
+		e.events[i] = nil
+	}
+	size = e.pendingSize
+	e.pendingSize = 0
+	e.broken = false
+	atomic.AddUint64(e.allocated, ^(size - 1))
+	return
 }
