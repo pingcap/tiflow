@@ -36,7 +36,8 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 	ret := WhereHandle{}
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
-	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
+	if idx := getPKIsHandleIdx(target);
+		target.PKIsHandle || target.IsCommonHandle && idx != nil {
 		indices = append(indices, idx)
 	}
 

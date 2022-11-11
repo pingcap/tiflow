@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"strings"
 	"testing"
 	"time"
@@ -1151,6 +1152,8 @@ func TestBuildTableInfo(t *testing.T) {
 		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
+		require.NotNil(t, handle.UniqueNotNullIdx)
 		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
 	}
 }
