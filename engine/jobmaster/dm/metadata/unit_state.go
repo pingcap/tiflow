@@ -17,39 +17,44 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-// FinishedState represents the state of finished units.
-type FinishedState struct {
-	state
-
+// UnitState represents the state of units.
+type UnitState struct {
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
+	CurrentUnitStatus  map[string]*UnitStatus
 }
 
-type FinishedStateStore struct {
+// UnitStateStore is the meta store for UnitState.
+type UnitStateStore struct {
 	// rmwLock is used to prevent concurrent read-modify-write to the state.
 	rmwLock sync.Mutex
 	*frameworkMetaStore
 }
 
-func (f *FinishedStateStore) createState() state {
-	return &FinishedState{FinishedUnitStatus: map[string][]*FinishedTaskStatus{}}
+func (f *UnitStateStore) createState() state {
+	return &UnitState{
+		FinishedUnitStatus: map[string][]*FinishedTaskStatus{},
+		CurrentUnitStatus:  map[string]*UnitStatus{},
+	}
 }
 
-func (f *FinishedStateStore) key() string {
-	return adapter.DMFinishedStateAdapter.Encode()
+func (f *UnitStateStore) key() string {
+	return adapter.DMUnitStateAdapter.Encode()
 }
 
-func (f *FinishedStateStore) ReadModifyWrite(
+// ReadModifyWrite reads the state, modifies it, and writes it back.
+func (f *UnitStateStore) ReadModifyWrite(
 	ctx context.Context,
-	action func(*FinishedState) error,
+	action func(*UnitState) error,
 ) error {
 	f.rmwLock.Lock()
 	defer f.rmwLock.Unlock()
@@ -62,16 +67,16 @@ func (f *FinishedStateStore) ReadModifyWrite(
 			return err
 		}
 	}
-	err = action(s.(*FinishedState))
+	err = action(s.(*UnitState))
 	if err != nil {
 		return err
 	}
 	return f.Put(ctx, s)
 }
 
-// NewFinishedStateStore creates a new FinishedStateStore.
-func NewFinishedStateStore(kvClient metaModel.KVClient) *FinishedStateStore {
-	ret := &FinishedStateStore{
+// NewUnitStateStore creates a new UnitStateStore.
+func NewUnitStateStore(kvClient metaModel.KVClient) *UnitStateStore {
+	ret := &UnitStateStore{
 		frameworkMetaStore: newJSONFrameworkMetaStore(kvClient),
 	}
 	ret.frameworkMetaStore.stateFactory = ret
@@ -90,6 +95,14 @@ type TaskStatus struct {
 // It only used when a task is finished.
 type FinishedTaskStatus struct {
 	TaskStatus
-	Result *pb.ProcessResult
-	Status json.RawMessage
+	Result   *pb.ProcessResult
+	Status   json.RawMessage
+	Duration time.Duration
+}
+
+// UnitStatus defines the unit status.
+type UnitStatus struct {
+	Unit        frameModel.WorkerType
+	Task        string
+	CreatedTime time.Time
 }

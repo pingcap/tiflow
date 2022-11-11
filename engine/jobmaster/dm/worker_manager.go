@@ -61,6 +61,7 @@ type WorkerManager struct {
 
 	jobID           string
 	jobStore        *metadata.JobStore
+	unitStore       *metadata.UnitStateStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
@@ -78,6 +79,7 @@ func NewWorkerManager(
 	jobID string,
 	initWorkerStatus []runtime.WorkerStatus,
 	jobStore *metadata.JobStore,
+	unitStore *metadata.UnitStateStore,
 	workerAgent WorkerAgent,
 	messageAgent dmpkg.MessageAgent,
 	checkpointAgent CheckpointAgent,
@@ -88,6 +90,7 @@ func NewWorkerManager(
 		DefaultTicker:      ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
 		jobID:              jobID,
 		jobStore:           jobStore,
+		unitStore:          unitStore,
 		workerAgent:        workerAgent,
 		messageAgent:       messageAgent,
 		checkpointAgent:    checkpointAgent,
@@ -266,8 +269,8 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
-			resId := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
-			resources = append(resources, resId)
+			resID := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
+			resources = append(resources, resID)
 		}
 
 		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
@@ -276,7 +279,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(taskID, nextUnit, taskCfg, resources...); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -346,6 +349,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.Wo
 }
 
 func (wm *WorkerManager) createWorker(
+	ctx context.Context,
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
@@ -366,6 +370,28 @@ func (wm *WorkerManager) createWorker(
 		//	We choose the second mechanism now.
 		//	If a worker is created but never receives a dispatch/online/offline event(2 ticker?), we should remove it.
 		wm.UpdateWorkerStatus(runtime.InitWorkerStatus(taskID, unit, workerID))
+
+		// create success, record unit state
+		if err := wm.unitStore.ReadModifyWrite(ctx, func(state *metadata.UnitState) error {
+			wm.logger.Debug("start to update current unit state", zap.String("task", taskID), zap.Stringer("unit", unit))
+			status, ok := state.CurrentUnitStatus[taskID]
+			if !ok {
+				state.CurrentUnitStatus[taskID] = &metadata.UnitStatus{
+					Unit:        unit,
+					Task:        taskID,
+					CreatedTime: time.Now(),
+				}
+			} else {
+				if status.Unit != unit {
+					status.CreatedTime = time.Now()
+					status.Unit = unit
+				}
+			}
+			return nil
+		}); err != nil {
+			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Stringer("unit", unit), zap.Error(err))
+			return err
+		}
 	}
 	return err
 }

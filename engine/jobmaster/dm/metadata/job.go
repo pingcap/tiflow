@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -95,8 +95,6 @@ func (ts *TaskStage) UnmarshalJSON(b []byte) error {
 
 // Job represents the state of a job.
 type Job struct {
-	state
-
 	// taskID -> task
 	Tasks map[string]*Task
 

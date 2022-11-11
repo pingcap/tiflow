@@ -177,10 +177,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// sourceID -> tables
 	allowTablesPerUpstream := make(map[string][]filter.Table, len(c.instances))
 	relatedDBPerUpstream := make([]map[string]struct{}, len(c.instances))
+	tableMapPerUpstreamWithSourceID := make(map[string]map[filter.Table][]filter.Table, len(c.instances))
 	for i, inst := range c.instances {
 		sourceID := inst.cfg.SourceID
 		relatedDBPerUpstream[i] = make(map[string]struct{})
 		mapping := tableMapPerUpstream[i]
+		tableMapPerUpstreamWithSourceID[sourceID] = mapping
 		for _, tables := range mapping {
 			allowTablesPerUpstream[sourceID] = append(allowTablesPerUpstream[sourceID], tables...)
 			for _, table := range tables {
@@ -214,7 +216,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	// sourceID -> DB
-	dbs := make(map[string]*sql.DB)
+	upstreamDBs := make(map[string]*sql.DB)
 	for i, instance := range c.instances {
 		sourceID := instance.cfg.SourceID
 		// init online ddl for checker
@@ -229,7 +231,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		dbs[sourceID] = instance.sourceDB.DB
+		upstreamDBs[sourceID] = instance.sourceDB.DB
 		if instance.cfg.Mode != config.ModeIncrement {
 			// increment mode needn't check dump privilege
 			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
@@ -275,7 +277,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
-		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, allowTablesPerUpstream, dumpThreads))
+		c.checkList = append(c.checkList, checker.NewTablesChecker(
+			upstreamDBs,
+			c.instances[0].targetDB.DB,
+			tableMapPerUpstreamWithSourceID,
+			dumpThreads,
+		))
 	}
 
 	instance := c.instances[0]
@@ -296,7 +303,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				if instance.cfg.ShardMode == config.ShardPessimistic {
 					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(
 						targetTable.String(),
-						dbs,
+						upstreamDBs,
 						shardingSet,
 						checkingShardID,
 						dumpThreads,
@@ -304,7 +311,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				} else {
 					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(
 						targetTable.String(),
-						dbs,
+						upstreamDBs,
 						shardingSet,
 						dumpThreads,
 					))

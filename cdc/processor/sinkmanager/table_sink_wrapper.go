@@ -50,14 +50,14 @@ func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
 	tableSink sinkv2.TableSink,
-	state *tablepb.TableState,
+	state tablepb.TableState,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
 	return &tableSinkWrapper{
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableSink:  tableSink,
-		state:      state,
+		state:      &state,
 		targetTs:   targetTs,
 	}
 }

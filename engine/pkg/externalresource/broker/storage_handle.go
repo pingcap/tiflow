@@ -16,14 +16,13 @@ package broker
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -98,7 +97,7 @@ func (h *ResourceHandle) BrExternalStorage() brStorage.ExternalStorage {
 func (h *ResourceHandle) Persist(ctx context.Context) error {
 	if h.isInvalid.Load() {
 		// Trying to persist invalid resource.
-		return derrors.ErrInvalidResourceHandle.FastGenByArgs()
+		return errors.ErrInvalidResourceHandle.FastGenByArgs()
 	}
 
 	creatorExecutor := h.desc.ResourceIdent().Executor
@@ -150,7 +149,7 @@ func (h *ResourceHandle) Persist(ctx context.Context) error {
 func (h *ResourceHandle) Discard(ctx context.Context) error {
 	if h.isInvalid.Load() {
 		// Trying to discard invalid resource.
-		return derrors.ErrInvalidResourceHandle.FastGenByArgs()
+		return errors.ErrInvalidResourceHandle.FastGenByArgs()
 	}
 
 	err := h.fileManager.RemoveResource(ctx, h.desc.ResourceIdent())

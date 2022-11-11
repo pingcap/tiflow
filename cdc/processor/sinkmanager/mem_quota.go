@@ -136,7 +136,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 		log.Warn("Table consumed memory records not found.",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("table", tableID))
+			zap.Int64("tableID", tableID))
 		return
 	}
 	records := m.tableMemory[tableID]
@@ -160,4 +160,11 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 func (m *memQuota) close() {
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
+}
+
+// getUsedBytes returns the used memory quota.
+func (m *memQuota) getUsedBytes() uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usedBytes
 }

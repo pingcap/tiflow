@@ -27,9 +27,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockSink struct{}
+type mockSink struct {
+	events     []*eventsink.CallbackableEvent[*model.RowChangedEvent]
+	writeTimes int
+}
 
-func (m *mockSink) WriteEvents(_ ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+func newMockSink() *mockSink {
+	return &mockSink{
+		events: make([]*eventsink.CallbackableEvent[*model.RowChangedEvent], 0),
+	}
+}
+
+func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+	m.writeTimes++
+	m.events = append(m.events, events...)
 	return nil
 }
 
@@ -37,26 +48,26 @@ func (m *mockSink) Close() error {
 	return nil
 }
 
-func createTableSinkWrapper() *tableSinkWrapper {
-	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+//nolint:unparam
+func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStateReplicating
+	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
-		&mockSink{}, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		tableID,
 		innerTableSink,
-		&tableState,
+		tableState,
 		100,
 	)
-	return wrapper
+	return wrapper, sink
 }
 
 func TestTableSinkWrapperClose(t *testing.T) {
 	t.Parallel()
 
-	wrapper := createTableSinkWrapper()
+	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	require.Equal(t, tablepb.TableStateReplicating, wrapper.getState())
 	require.ErrorIs(t, cerror.ErrTableProcessorStoppedSafely, errors.Cause(wrapper.close(context.Background())))
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
@@ -65,7 +76,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 
-	wrapper := createTableSinkWrapper()
+	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	wrapper.updateReceivedSorterResolvedTs(100)
 	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
 }

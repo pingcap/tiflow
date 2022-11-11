@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

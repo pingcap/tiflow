@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -93,7 +93,7 @@ func (s *SQLStorage) Update(ctx context.Context, record *Record) error {
 		return errors.Trace(err)
 	}
 	if rowsAffected != 1 {
-		return errors.Trace(ErrRecordConflict)
+		return errors.ErrElectionRecordConflict.GenWithStackByArgs()
 	}
 	return nil
 }
