@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"

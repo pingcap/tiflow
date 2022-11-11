@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -190,7 +189,7 @@ func (g *DefaultExecutorGroup) UpdateExecutorList(executors map[model.ExecutorID
 			g.logger.Warn("failed to create new client",
 				zap.String("executor-id", string(executorID)),
 				zap.String("address", addr),
-				log.ShortError(err))
+				zap.Error(err))
 			return err
 		}
 
@@ -220,7 +219,7 @@ func (g *DefaultExecutorGroup) AddExecutor(executorID model.ExecutorID, addr str
 		g.logger.Warn("failed to create new client",
 			zap.String("executor-id", string(executorID)),
 			zap.String("address", addr),
-			log.ShortError(err))
+			zap.Error(err))
 		return err
 	}
 

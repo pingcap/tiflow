@@ -50,15 +50,17 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONBatchEncoder)
 	require.True(t, ok)
 
-	err := encoder.newJSONMessageForDML(testCaseInsert)
+	data, err := encoder.newJSONMessageForDML(testCaseInsert)
 	require.Nil(t, err)
-	jsonMsg, ok := encoder.messageHolder.(*JSONMessage)
+	var msg canalJSONMessageInterface = &JSONMessage{}
+	err = json.Unmarshal(data, msg)
+	require.Nil(t, err)
+	jsonMsg, ok := msg.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "INSERT", jsonMsg.EventType)
 	require.Equal(t, convertToCanalTs(testCaseInsert.CommitTs), jsonMsg.ExecutionTime)
-	require.Equal(t, testCaseInsert.CommitTs, jsonMsg.tikvTs)
 	require.Equal(t, "cdc", jsonMsg.Schema)
 	require.Equal(t, "person", jsonMsg.Table)
 	require.False(t, jsonMsg.IsDDL)
@@ -91,18 +93,20 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
-	jsonMsg, ok = encoder.messageHolder.(*JSONMessage)
-	require.True(t, ok)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.Nil(t, err)
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
-	err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = encoder.newJSONMessageForDML(testCaseDelete)
 	require.Nil(t, err)
-	jsonMsg, ok = encoder.messageHolder.(*JSONMessage)
-	require.True(t, ok)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.Nil(t, err)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
@@ -112,11 +116,12 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONBatchEncoder)
 	require.True(t, ok)
-	err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
 
-	withExtension, ok := encoder.messageHolder.(*canalJSONMessageWithTiDBExtension)
-	require.True(t, ok)
+	withExtension := &canalJSONMessageWithTiDBExtension{}
+	err = json.Unmarshal(data, withExtension)
+	require.Nil(t, err)
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
@@ -132,7 +137,6 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 	msg, ok := message.(*JSONMessage)
 	require.True(t, ok)
-	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
 	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
 	require.True(t, msg.IsDDL)
 	require.Equal(t, "cdc", msg.Schema)
