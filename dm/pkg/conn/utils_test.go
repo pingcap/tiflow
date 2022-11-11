@@ -99,7 +99,7 @@ func TestGetMasterStatus(t *testing.T) {
 			475,
 			"",
 			"",
-			"",
+			"0-1-2",
 			nil,
 			gmysql.MariaDBFlavor,
 		},
@@ -111,7 +111,7 @@ func TestGetMasterStatus(t *testing.T) {
 		if ca.flavor == gmysql.MariaDBFlavor {
 			mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'").WillReturnRows(
 				sqlmock.NewRows([]string{"Variable_name", "Value"}).
-					AddRow("gtid_binlog_pos", ""),
+					AddRow("gtid_binlog_pos", "0-1-2"),
 			)
 		}
 		binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err := GetMasterStatus(tctx, baseDB, ca.flavor)
