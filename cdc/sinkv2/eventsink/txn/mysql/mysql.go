@@ -47,6 +47,10 @@ const (
 	maxFlushInterval = 10 * time.Millisecond
 
 	defaultDMLMaxRetry uint64 = 8
+
+	// If the events number larger than this value,
+	// do not use the prepareBatchDMLs to prepare the DMLs.
+	unBatchThreshold = 64
 )
 
 type mysqlBackend struct {
@@ -140,8 +144,15 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	for _, event := range s.events {
 		s.statistics.ObserveRows(event.Event.Rows...)
 	}
-	// TODO(dongmen): add a switch to control whether to use the batch dml mode
-	dmls := s.prepareBatchDMLs()
+
+	var dmls *preparedDMLs
+	if s.rows > unBatchThreshold {
+		dmls = s.prepareDMLs()
+	} else {
+		// TODO(dongmen): add a switch to control whether to use the batch dml mode
+		dmls = s.prepareBatchDMLs()
+	}
+
 	log.Info("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
