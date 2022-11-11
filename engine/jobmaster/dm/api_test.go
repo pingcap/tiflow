@@ -112,6 +112,8 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
+		dumpDuration       = time.Hour
+		loadDuration       = time.Minute
 		unitState          = &metadata.UnitState{
 			CurrentUnitStatus: map[string]*metadata.UnitStatus{
 				// task1's worker not found, and current unit status is not stored
@@ -133,8 +135,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
 						},
-						Status:      dumpStatusBytes,
-						CreatedTime: dumpTime,
+						Status:   dumpStatusBytes,
+						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -143,8 +145,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 3,
 						},
-						Status:      loadStatusBytes,
-						CreatedTime: loadTime,
+						Status:   loadStatusBytes,
+						Duration: loadDuration,
 					},
 				},
 				"task7": {
@@ -155,8 +157,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
 						},
-						Status:      dumpStatusBytes,
-						CreatedTime: dumpTime,
+						Status:   dumpStatusBytes,
+						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
@@ -165,8 +167,8 @@ func TestQueryStatusAPI(t *testing.T) {
 							Stage:          metadata.StageFinished,
 							CfgModRevision: 4,
 						},
-						Status:      loadStatusBytes,
-						CreatedTime: loadTime,
+						Status:   loadStatusBytes,
+						Duration: loadDuration,
 					},
 				},
 			},
@@ -206,8 +208,21 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
-
 	require.NoError(t, err)
+
+	for task, currentStatus := range jobStatus.TaskStatus {
+		switch currentStatus.Status.Unit {
+		case frameModel.WorkerDMDump:
+			require.True(t, currentStatus.Duration-time.Since(dumpTime) < time.Second)
+		case frameModel.WorkerDMLoad:
+			require.True(t, currentStatus.Duration-time.Since(loadTime) < time.Second)
+		case frameModel.WorkerDMSync:
+			require.True(t, currentStatus.Duration-time.Since(syncTime) < time.Second)
+		}
+		// this is for passing follow test, because we can't offer the precise duration in advance
+		currentStatus.Duration = time.Second
+		jobStatus.TaskStatus[task] = currentStatus
+	}
 
 	expectedStatus := `{
 	"job_id": "dm-jobmaster-id",
@@ -223,7 +238,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "0001-01-01T00:00:00Z"
+			"duration": 1000000000
 		},
 		"task2": {
 			"expected_stage": "Finished",
@@ -236,7 +251,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "2022-11-04T20:47:57.43382274+08:00"
+			"duration": 1000000000
 		},
 		"task3": {
 			"expected_stage": "Finished",
@@ -249,7 +264,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "2022-11-04T18:47:57.43382274+08:00"
+			"duration": 1000000000
 		},
 		"task4": {
 			"expected_stage": "Running",
@@ -270,7 +285,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"progress": "20.00 %"
 				}
 			},
-			"created_time": "2022-11-04T18:47:57.43382274+08:00"
+			"duration": 1000000000
 		},
 		"task5": {
 			"expected_stage": "Running",
@@ -292,7 +307,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"bps": 1000
 				}
 			},
-			"created_time": "2022-11-04T19:47:57.43382274+08:00"
+			"duration": 1000000000
 		},
 		"task6": {
 			"expected_stage": "Running",
@@ -330,7 +345,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"recentRps": 10
 				}
 			},
-			"created_time": "2022-11-04T20:47:57.43382274+08:00"
+			"duration": 1000000000
 		},
 		"task7": {
 			"expected_stage": "Finished",
@@ -343,7 +358,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"result": null,
 				"status": null
 			},
-			"created_time": "2022-11-04T20:47:57.43382274+08:00"
+			"duration": 1000000000
 		}
 	},
 	"finished_unit_status": {
@@ -363,7 +378,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"bps": 1000,
 					"progress": "20.00 %"
 				},
-				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
+				"Duration": 3600000000000
 			},
 			{
 				"Unit": "DMLoadTask",
@@ -379,7 +394,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
 				},
-				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
+				"Duration": 60000000000
 			}
 		],
 		"task7": [
@@ -398,7 +413,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"bps": 1000,
 					"progress": "20.00 %"
 				},
-				"CreatedTime": "2022-11-04T18:47:57.43382274+08:00"
+				"Duration": 3600000000000
 			},
 			{
 				"Unit": "DMLoadTask",
@@ -414,7 +429,7 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
 				},
-				"CreatedTime": "2022-11-04T19:47:57.43382274+08:00"
+				"Duration": 60000000000
 			}
 		]
 	}

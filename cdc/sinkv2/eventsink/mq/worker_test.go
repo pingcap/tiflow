@@ -58,7 +58,7 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
 }
 
-func TestEncoderGroup(t *testing.T) {
+func TestNonBatchEncode_SendMessages(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -80,10 +80,12 @@ func TestEncoderGroup(t *testing.T) {
 
 	count := 512
 	total := 0
-	events := make([]mqEvent, 0, count)
+	expected := 0
 	for i := 0; i < count; i++ {
+		expected += i
+
 		bit := i
-		events = append(events, mqEvent{
+		worker.msgChan.In() <- mqEvent{
 			key: key,
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: row,
@@ -92,16 +94,7 @@ func TestEncoderGroup(t *testing.T) {
 				},
 				SinkState: &tableStatus,
 			},
-		})
-	}
-
-	expected := 0
-	for i := 0; i < count; i++ {
-		expected += i
-	}
-
-	for _, e := range events {
-		worker.msgChan.In() <- e
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -272,7 +265,74 @@ func TestBatchEncode_Group(t *testing.T) {
 	require.Len(t, partitionedRows[key3], 1)
 }
 
-func TestBatchEncode_AsyncSend(t *testing.T) {
+func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
+	t.Parallel()
+
+	key1 := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
+	}
+	key2 := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 2,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newBatchEncodeWorker(ctx, t)
+	defer worker.close()
+	replicatingStatus := state.TableSinkSinking
+	stoppedStatus := state.TableSinkStopping
+	events := []mqEvent{
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 1,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				},
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 2,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+				},
+				Callback:  func() {},
+				SinkState: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 3,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+				},
+				Callback:  func() {},
+				SinkState: &stoppedStatus,
+			},
+			key: key2,
+		},
+	}
+
+	partitionedRows := worker.group(events)
+	require.Len(t, partitionedRows, 1)
+	require.Len(t, partitionedRows[key1], 2)
+	// We must ensure that the sequence is not broken.
+	require.LessOrEqual(
+		t,
+		partitionedRows[key1][0].Event.GetCommitTs(),
+		partitionedRows[key1][1].Event.GetCommitTs(),
+	)
+}
+
+func TestBatchEncode_SendMessages(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
@@ -368,73 +428,33 @@ func TestBatchEncode_AsyncSend(t *testing.T) {
 		},
 	}
 
-	partitionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), partitionedRows)
-	require.NoError(t, err)
-	mp := p.(*dmlproducer.MockDMLProducer)
-	require.Len(t, mp.GetAllEvents(), 6)
-	require.Len(t, mp.GetEvents(key1), 3)
-	require.Len(t, mp.GetEvents(key2), 1)
-	require.Len(t, mp.GetEvents(key3), 2)
-}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
 
-func TestBatchEncode_AsyncSendWhenTableStopping(t *testing.T) {
-	t.Parallel()
-
-	key1 := mqv1.TopicPartitionKey{
-		Topic:     "test",
-		Partition: 1,
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, p := newBatchEncodeWorker(ctx, t)
-	defer worker.close()
-	replicatingStatus := state.TableSinkSinking
-	stoopedStatus := state.TableSinkStopping
-	events := []mqEvent{
-		{
-			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
-					CommitTs: 1,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-				},
-				Callback:  func() {},
-				SinkState: &replicatingStatus,
-			},
-			key: key1,
-		},
-		{
-			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
-					CommitTs: 2,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
-				Callback:  func() {},
-				SinkState: &replicatingStatus,
-			},
-			key: key1,
-		},
-		{
-			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
-					CommitTs: 3,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-				},
-				Callback:  func() {},
-				SinkState: &stoopedStatus,
-			},
-			key: key1,
-		},
+	for _, event := range events {
+		worker.msgChan.In() <- event
 	}
 
-	partitionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), partitionedRows)
-	require.NoError(t, err)
 	mp := p.(*dmlproducer.MockDMLProducer)
-	require.Len(t, mp.GetAllEvents(), 2)
+	require.Eventually(t, func() bool {
+		return len(mp.GetAllEvents()) == len(events)
+	}, 3*time.Second, 100*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return len(mp.GetEvents(key1)) == 3
+	}, 3*time.Second, 100*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return len(mp.GetEvents(key2)) == 1
+	}, 3*time.Second, 100*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return len(mp.GetEvents(key3)) == 2
+	}, 3*time.Second, 100*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestBatchEncodeWorker_Abort(t *testing.T) {
@@ -456,19 +476,23 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 	wg.Wait()
 }
 
-func TestNonBatchEncode_Send(t *testing.T) {
+func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
+	key2 := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 2,
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, p := newNonBatchEncodeWorker(ctx, t)
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
-	stoopedStatus := state.TableSinkStopping
+	stoppedStatus := state.TableSinkStopping
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
@@ -502,9 +526,9 @@ func TestNonBatchEncode_Send(t *testing.T) {
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
 				Callback:  func() {},
-				SinkState: &stoopedStatus,
+				SinkState: &stoppedStatus,
 			},
-			key: key1,
+			key: key2,
 		},
 	}
 	for _, e := range events {

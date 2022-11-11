@@ -1,0 +1,90 @@
+#!/bin/bash
+# tools to run a TiDB cluster
+# parameter 1: work directory
+set -eu
+WORK_DIR=$1
+
+export PD_PEER_ADDR="127.0.0.1:2380"
+export PD_ADDR="127.0.0.1:2379"
+
+export TIDB_IP="127.0.0.1"
+export TIDB_PORT="4000"
+export TIDB_ADDR="127.0.0.1:4000"
+
+export TIDB_STATUS_ADDR="127.0.0.1:10080"
+export TIKV_ADDR="127.0.0.1:2016"
+export TIKV_STATUS_ADDR="127.0.0.1:2018"
+
+start_pd() {
+	echo "Starting PD..."
+
+	cat >"$WORK_DIR/pd.toml" <<EOF
+[replication]
+# The number of replicas for each region.
+max-replicas = 1
+EOF
+
+	pd-server --version
+	mkdir -p "$WORK_DIR/pd"
+	bin/pd-server \
+		--client-urls "http://$PD_ADDR" \
+		--peer-urls "http://$PD_PEER_ADDR" \
+		--log-file "$WORK_DIR/pd.log" \
+		--config "$WORK_DIR/pd.toml" \
+		--data-dir "$WORK_DIR/pd" &
+	# wait until PD is online...
+	i=0
+	while ! curl "http://$PD_ADDR/pd/api/v1/version"; do
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo 'Failed to start PD'
+			return 1
+		fi
+		sleep 3
+	done
+}
+
+start_tikv() {
+	echo "Starting TiKV..."
+	mkdir -p "$WORK_DIR/tikv"
+	bin/tikv-server \
+		--pd "$PD_ADDR" \
+		-A "$TIKV_ADDR" \
+		--status-addr "$TIKV_STATUS_ADDR" \
+		--log-file "$WORK_DIR/tikv.log" \
+		--log-level info \
+		-s "$WORK_DIR/tikv" &
+	while ! curl "http://$PD_ADDR/pd/api/v1/cluster/status" | tee /dev/stderr | grep '"is_initialized": true'; do
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo 'Failed to initialize TiKV cluster'
+			return 1
+		fi
+		sleep 5
+	done
+}
+
+start_tidb() {
+	echo "Starting TiDB..."
+	bin/tidb-server \
+		-P 4000 \
+		--status 10080 \
+		--advertise-address="127.0.0.1" \
+		--store tikv \
+		--path "$PD_ADDR" \
+		--log-file "$WORK_DIR/tidb.log" &
+
+	i=0
+	while ! curl "http://$TIDB_IP:10080/status"; do
+		i=$((i + 1))
+		if [ "$i" -gt 50 ]; then
+			echo 'Failed to start TiDB'
+			return 1
+		fi
+		sleep 3
+	done
+}
+
+start_pd
+start_tikv
+start_tidb
