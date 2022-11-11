@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,8 +49,9 @@ const (
 	defaultDMLMaxRetry uint64 = 8
 
 	// If the events number larger than this value,
-	// do not use the prepareBatchDMLs to prepare the DMLs.
-	unBatchThreshold = 64
+	// use the prepareBatchDMLs to prepare the DMLs.
+	// TODO: choose a more reasonable value.
+	batchDMLThreshold = 1
 )
 
 type mysqlBackend struct {
@@ -146,13 +146,8 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 		s.statistics.ObserveRows(event.Event.Rows...)
 	}
 
-	var dmls *preparedDMLs
-	if s.cfg.BatchDMLEnable && s.rows < unBatchThreshold {
-		dmls = s.prepareBatchDMLs()
-	} else {
-		// TODO(dongmen): add a switch to control whether to use the batch dml mode
-		dmls = s.prepareDMLs()
-	}
+	// TODO(dongmen): add a switch to control whether to use the batch dml mode
+	dmls := s.prepareDMLs()
 
 	log.Info("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
@@ -208,7 +203,6 @@ type preparedDMLs struct {
 // convert2RowChanges is a helper function that convert the row change representation
 // of CDC into a general one.
 func convert2RowChanges(row *model.RowChangedEvent, tableInfo *timodel.TableInfo) *sqlmodel.RowChange {
-
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		if col == nil {
@@ -296,63 +290,75 @@ func batchSingleTxnDmls(
 	return
 }
 
-// This is a POC of batch DMLs.
-func (s *mysqlBackend) prepareBatchDMLs() *preparedDMLs {
-	// TODO: use a sync.Pool to reduce allocations.
-	startTs := make([]uint64, 0, s.rows)
-	sqls := make([]string, 0, s.rows)
-	values := make([][]interface{}, 0, s.rows)
-	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
+//// This is a POC of batch DMLs.
+//func (s *mysqlBackend) prepareBatchDMLs() *preparedDMLs {
+//	// TODO: use a sync.Pool to reduce allocations.
+//	startTs := make([]uint64, 0, s.rows)
+//	sqls := make([]string, 0, s.rows)
+//	values := make([][]interface{}, 0, s.rows)
+//	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
+//
+//	// translateToInsert control the update and insert behavior
+//	// we only translate into insert when old value is enabled and safe mode is disabled
+//	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
+//
+//	rowCount := 0
+//	// Note: every event in s.events is a singleTableTxn,
+//	// so we can use the first row to get the table info.
+//	for _, event := range s.events {
+//		// we need to skip empty events here, otherwise the following code will panic
+//		if len(event.Event.Rows) == 0 {
+//			continue
+//		}
+//
+//		firstRow := event.Event.Rows[0]
+//
+//		startTs = append(startTs, firstRow.StartTs)
+//		if event.Callback != nil {
+//			callbacks = append(callbacks, event.Callback)
+//		}
+//		// A row can be translated in to INSERT, when it was committed after
+//		// the table it belongs to been replicating by TiCDC, which means it must not be
+//		// replicated before, and there is no such row in downstream MySQL.
+//		translateToInsert = firstRow.CommitTs > firstRow.ReplicatingTs
+//
+//		tableColumns := firstRow.Columns
+//		if len(tableColumns) == 0 {
+//			tableColumns = firstRow.PreColumns
+//		}
+//
+//		tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+//		log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
+//
+//		sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
+//		sqls = append(sqls, sql...)
+//		values = append(values, value...)
+//		rowCount += len(sql)
+//	}
+//
+//	if len(callbacks) == 0 {
+//		callbacks = nil
+//	}
+//
+//	return &preparedDMLs{
+//		startTs:   startTs,
+//		sqls:      sqls,
+//		values:    values,
+//		callbacks: callbacks,
+//		rowCount:  rowCount,
+//	}
+//}
 
-	// translateToInsert control the update and insert behavior
-	// we only translate into insert when old value is enabled and safe mode is disabled
-	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-
-	rowCount := 0
-	// Note: every event in s.events is a singleTableTxn,
-	// so we can use the first row to get the table info.
-	for _, event := range s.events {
-		// we need to skip empty events here, otherwise the following code will panic
-		if len(event.Event.Rows) == 0 {
+func hasHandleKey(cols []*model.Column) bool {
+	for _, col := range cols {
+		if col == nil {
 			continue
 		}
-
-		firstRow := event.Event.Rows[0]
-
-		startTs = append(startTs, firstRow.StartTs)
-		if event.Callback != nil {
-			callbacks = append(callbacks, event.Callback)
+		if col.Flag.IsHandleKey() {
+			return true
 		}
-		// A row can be translated in to INSERT, when it was committed after
-		// the table it belongs to been replicating by TiCDC, which means it must not be
-		// replicated before, and there is no such row in downstream MySQL.
-		translateToInsert = firstRow.CommitTs > firstRow.ReplicatingTs
-
-		tableColumns := firstRow.Columns
-		if len(tableColumns) == 0 {
-			tableColumns = firstRow.PreColumns
-		}
-
-		tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
-		log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
-
-		sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
-		sqls = append(sqls, sql...)
-		values = append(values, value...)
-		rowCount += len(sql)
 	}
-
-	if len(callbacks) == 0 {
-		callbacks = nil
-	}
-
-	return &preparedDMLs{
-		startTs:   startTs,
-		sqls:      sqls,
-		values:    values,
-		callbacks: callbacks,
-		rowCount:  rowCount,
-	}
+	return false
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
@@ -378,33 +384,50 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-	for _, event := range s.events {
-		for _, row := range event.Event.Rows {
-			if !translateToInsert {
-				break
-			}
-			// A row can be translated in to INSERT, when it was committed after
-			// the table it belongs to been replicating by TiCDC, which means it must not be
-			// replicated before, and there is no such row in downstream MySQL.
-			translateToInsert = row.CommitTs > row.ReplicatingTs
-		}
-	}
 
 	rowCount := 0
 	for _, event := range s.events {
+		if len(event.Event.Rows) == 0 {
+			continue
+		}
+
+		firstRow := event.Event.Rows[0]
+		if len(startTs) == 0 || startTs[len(startTs)-1] != firstRow.StartTs {
+			startTs = append(startTs, firstRow.StartTs)
+		}
+
+		// A row can be translated in to INSERT, when it was committed after
+		// the table it belongs to been replicating by TiCDC, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
+		translateToInsert = firstRow.CommitTs > firstRow.ReplicatingTs
+
 		if event.Callback != nil {
 			callbacks = append(callbacks, event.Callback)
 		}
 
-		for _, row := range event.Event.Rows {
-			if len(startTs) == 0 || startTs[len(startTs)-1] != row.StartTs {
-				startTs = append(startTs, row.StartTs)
+		// Determine whether to use batch dml feature here.
+		if s.cfg.BatchDMLEnable && len(event.Event.Rows) >= batchDMLThreshold {
+			tableColumns := firstRow.Columns
+			if firstRow.IsDelete() {
+				tableColumns = firstRow.PreColumns
 			}
+			// only use batch dml when the table has a handle key
+			if hasHandleKey(tableColumns) {
+				// TODO(dongmen): we can use a better way to get table info.
+				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
+				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
+				sqls = append(sqls, sql...)
+				values = append(values, value...)
+				rowCount += len(sql)
+				continue
+			}
+		}
 
+		quoteTable := firstRow.Table.QuoteString()
+		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
-			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
