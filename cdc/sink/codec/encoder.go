@@ -36,6 +36,7 @@ type EventBatchEncoder interface {
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error)
 	// Build builds the batch and returns the bytes of key and value.
+	// Should be called after `AppendRowChangedEvent`
 	Build() []*common.Message
 }
 

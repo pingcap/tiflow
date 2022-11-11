@@ -161,3 +161,10 @@ func (m *memQuota) close() {
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
 }
+
+// getUsedBytes returns the used memory quota.
+func (m *memQuota) getUsedBytes() uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usedBytes
+}
