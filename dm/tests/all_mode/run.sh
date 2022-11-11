@@ -682,11 +682,11 @@ function test_source_and_target_with_empty_gtid() {
 
 	# check current master gtid is empty
 	# len indicates the number of non-empty fields
-	len=$(echo "show master status;" | MYSQL_PWD=$MYSQL_PASSWORD1 mysql -uroot -h127.0.0.1 -P$MYSQL_PORT1 | awk 'FNR == 2 {print NF}' )
+	len=$(echo "show master status;" | MYSQL_PWD=$MYSQL_PASSWORD1 mysql -uroot -h127.0.0.1 -P$MYSQL_PORT1 | awk 'FNR == 2 {print NF}')
 	if [ "$len" = 2 ]; then
-  		echo "gtid is empty"
+		echo "gtid is empty"
 	else
-  		exit 1
+		exit 1
 	fi
 
 	echo "start task and check stage"
