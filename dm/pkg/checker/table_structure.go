@@ -333,7 +333,7 @@ func (c *TablesChecker) checkAST(
 			options = append(options, &incompatibilityOption{
 				state:       StateFailure,
 				instruction: "extended column feature needs the table to be created with extended columns before replication",
-				errMessage:  fmt.Sprintf("table %s who has extended columns does not exist in downstream table", downstreamStmt.Table.Name),
+				errMessage:  fmt.Sprintf("upstream table %s who has extended columns %v does not exist in downstream table", upstreamStmt.Table.Name, extendedCols),
 			})
 		}
 		return options
