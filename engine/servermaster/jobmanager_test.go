@@ -23,11 +23,9 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	jobMock "github.com/pingcap/tiflow/engine/pkg/httputil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -125,15 +123,6 @@ type mockBaseMasterCreateWorkerFailed struct {
 }
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
-	workerType framework.WorkerType,
-	config framework.WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
-}
-
-func (m *mockBaseMasterCreateWorkerFailed) CreateWorkerV2(
 	workerType framework.WorkerType,
 	config framework.WorkerConfig,
 	opts ...framework.CreateWorkerOpt,
