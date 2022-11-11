@@ -18,19 +18,40 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// WorkerFlushDuration records the duration of flushing a group messages.
-var WorkerFlushDuration = prometheus.NewHistogramVec(
-	prometheus.HistogramOpts{
-		Namespace: "ticdc",
-		Subsystem: "sinkv2",
-		Name:      "mq_worker_flush_duration",
-		Help: "Flush duration(s) for MQ worker. " +
-			"It contains the grouping, encoding, and asynchronous sending off a batch of data.",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
-	}, []string{"namespace", "changefeed"})
+var (
+	// WorkerSendMessageDuration records the duration of flushing a group messages.
+	WorkerSendMessageDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "mq_worker_send_message_duration",
+			Help:      "Send Message duration(s) for MQ worker.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+		}, []string{"namespace", "changefeed"})
+	// WorkerBatchSize record the size of each batched messages.
+	WorkerBatchSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "mq_worker_batch_size",
+			Help:      "Batch size for MQ worker.",
+			Buckets:   prometheus.ExponentialBuckets(4, 2, 10), // 4 ~ 2048
+		}, []string{"namespace", "changefeed"})
+	// WorkerBatchDuration record the time duration cost on batch messages.
+	WorkerBatchDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "mq_worker_batch_duration",
+			Help:      "Batch duration for MQ worker.",
+			Buckets:   prometheus.ExponentialBuckets(0.004, 2, 10), // 4ms ~ 2s
+		}, []string{"namespace", "changefeed"})
+)
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(WorkerFlushDuration)
+	registry.MustRegister(WorkerSendMessageDuration)
+	registry.MustRegister(WorkerBatchSize)
+	registry.MustRegister(WorkerBatchDuration)
 	kafka.InitMetrics(registry)
 }

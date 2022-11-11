@@ -15,7 +15,6 @@ package servermaster
 
 import (
 	"context"
-	gerrors "errors"
 	"testing"
 	"time"
 
@@ -24,12 +23,9 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	jobMock "github.com/pingcap/tiflow/engine/pkg/httputil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -107,7 +103,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 		},
 	}
 	_, err = mgr.CreateJob(ctx, req)
-	require.True(t, ErrJobAlreadyExists.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobAlreadyExists))
 
 	// delete a finished job, re-create job with the same id will meet error
 	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
@@ -119,7 +115,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 	_, err = mgr.DeleteJob(ctx, &pb.DeleteJobRequest{Id: job.Id})
 	require.NoError(t, err)
 	_, err = mgr.CreateJob(ctx, req)
-	require.True(t, ErrJobAlreadyExists.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobAlreadyExists))
 }
 
 type mockBaseMasterCreateWorkerFailed struct {
@@ -127,15 +123,6 @@ type mockBaseMasterCreateWorkerFailed struct {
 }
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
-	workerType framework.WorkerType,
-	config framework.WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
-}
-
-func (m *mockBaseMasterCreateWorkerFailed) CreateWorkerV2(
 	workerType framework.WorkerType,
 	config framework.WorkerConfig,
 	opts ...framework.CreateWorkerOpt,
@@ -215,7 +202,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	req.Id = cancelWorkerID + "-unknown"
 	_, err = mgr.CancelJob(ctx, req)
 	require.Error(t, err)
-	require.True(t, ErrJobNotFound.Is(err))
+	require.True(t, errors.Is(err, errors.ErrJobNotFound))
 }
 
 func TestJobManagerDeleteJob(t *testing.T) {
@@ -546,7 +533,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mockJobClient.EXPECT().GetJobDetail(ctx, "123.123.12.1:234", "new-job").Return(nil, gerrors.New("error test")).Times(1)
+	mockJobClient.EXPECT().GetJobDetail(ctx, "123.123.12.1:234", "new-job").Return(nil, errors.New("error test")).Times(1)
 	job, err = mgr.GetJob(ctx, &pb.GetJobRequest{Id: "new-job"})
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
@@ -596,7 +583,7 @@ func TestSetDetailToMasterMeta(t *testing.T) {
 		{
 			name:   "NO404Error",
 			detail: nil,
-			err:    gerrors.New("some error"),
+			err:    errors.New("some error"),
 			expectMasterMeta: &frameModel.MasterMeta{
 				ErrorMsg: "some error",
 				Detail:   []byte("original job detail"),
@@ -628,10 +615,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 	mgr.JobFsm.JobDispatched(mockMaster.MasterMeta(), false)
 	errorMsg := "unit test fast fail error"
 	mockHandle := &framework.MockHandle{WorkerID: masterID}
-	nerr := pkgClient.ErrCreateWorkerTerminate.Gen(
-		&pkgClient.CreateWorkerTerminateError{
-			Details: errorMsg,
-		})
+	nerr := errors.ErrCreateWorkerTerminate.GenWithStack(errorMsg)
 	// OnWorkerDispatched callback on job manager, a terminated error will make
 	// job fast fail.
 	err := mgr.OnWorkerDispatched(mockHandle, nerr)
@@ -640,7 +624,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 		mockMaster.MasterMeta().ProjectID, int(frameModel.MasterStateFailed))
 	require.NoError(t, err)
 	require.Len(t, meta, 1)
-	require.Equal(t, errorMsg, meta[0].ErrorMsg)
+	require.Equal(t, nerr.Error(), meta[0].ErrorMsg)
 }
 
 func TestJobOperatorBgLoop(t *testing.T) {

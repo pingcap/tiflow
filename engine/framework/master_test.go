@@ -107,7 +107,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		for {
 			err := master.Poll(ctx)
 			if err != nil {
-				if errors.ErrMasterClosed.Equal(err) {
+				if errors.Is(err, errors.ErrMasterClosed) {
 					return
 				}
 			}
@@ -165,9 +165,9 @@ func TestMasterCreateWorker(t *testing.T) {
 	workerID, err := master.CreateWorker(
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
-		100,
-		"resource-1",
-		"resource-2")
+		CreateWorkerWithCost(100),
+		CreateWorkerWithResourceRequirements("resource-1", "resource-2"),
+	)
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
 
@@ -275,7 +275,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 			close(done)
 		})
 
-	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
+	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, CreateWorkerWithCost(100))
 	require.NoError(t, err)
 
 	for {

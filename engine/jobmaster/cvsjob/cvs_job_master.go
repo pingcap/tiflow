@@ -16,7 +16,6 @@ package cvs
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sync"
 	"time"
 	"unsafe"
@@ -32,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -163,7 +162,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
 		if workerInfo.needCreate.Load() {
-			workerID, err := jm.CreateWorker(frameModel.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
+			workerID, err := jm.CreateWorker(frameModel.CvsTask,
+				getTaskConfig(jm.jobStatus, idx), framework.CreateWorkerWithCost(10))
 			if err != nil {
 				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
@@ -314,7 +314,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 	id := val.(int)
 	jm.Lock()
 	defer jm.Unlock()
-	if derrors.ErrWorkerFinish.Equal(reason) {
+	if errors.Is(reason, errors.ErrWorkerFinish) {
 		delete(jm.syncFilesInfo, id)
 		delete(jm.jobStatus.FileInfos, id)
 		log.Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))

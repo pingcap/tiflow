@@ -83,7 +83,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
-        "expr": "delta(up{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
+        "expr": "delta(up{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc|tidb|pd\"}[30s]) < BOOL 0",
         "hide": false,
         "iconColor": "#FF9830",
         "limit": 100,
@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1667186943297,
+  "iteration": 1667966386939,
   "links": [],
   "panels": [
     {
@@ -7784,7 +7784,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "MQ worker batch flush duration. It contains the grouping, encoding, and asynchronous sending off a batch of data.",
+          "description": "MQ worker send messages to Kafka, this metric record the time cost on send every message.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -7801,10 +7801,10 @@
           "id": 653,
           "legend": {
             "alignAsTable": true,
-            "avg": true,
+            "avg": false,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7828,18 +7828,18 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_mq_worker_flush_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (le,changefeed,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_mq_worker_send_message_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (le,changefeed,instance))",
               "interval": "",
-              "legendFormat": "99.9-{{changefeed}}-{{instance}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-P999",
               "queryType": "randomWalk",
               "refId": "A"
             },
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sinkv2_mq_worker_flush_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_mq_worker_flush_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "expr": "sum(rate(ticdc_sinkv2_mq_worker_send_message_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_mq_worker_send_message_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
               "hide": false,
               "interval": "",
-              "legendFormat": "avg-{{changefeed}}-{{instance}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-avg",
               "refId": "B"
             }
           ],
@@ -7847,7 +7847,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Worker Batch Flush Duration",
+          "title": "Worker Send Message Duration Percentile",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7890,109 +7890,6 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The current number of in-flight requests awaiting a response for all brokers.",
-          "fieldConfig": {
-            "defaults": {
-              "links": []
-            },
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 14
-          },
-          "hiddenSeries": false,
-          "id": 627,
-          "legend": {
-            "alignAsTable": true,
-            "avg": true,
-            "current": true,
-            "max": true,
-            "min": true,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "paceLength": 10,
-          "percentage": false,
-          "pluginVersion": "7.5.10",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(ticdc_sinkv2_kafka_producer_in_flight_requests{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}-{{instance}}-{{broker}}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Kafka Inflight Requests",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "none",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Bytes/second written off all brokers.\nvalue = one-minute moving average rate of Bytes per second",
           "fieldConfig": {
             "defaults": {
@@ -8006,7 +7903,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 628,
@@ -8030,7 +7927,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8096,7 +7993,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Requests/second sent to all brokers.\nvalue = one-minute moving average rate of events per second",
+          "description": "The current number of in-flight requests awaiting a response for all brokers.",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -8109,10 +8006,10 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 21
+            "y": 14
           },
           "hiddenSeries": false,
-          "id": 629,
+          "id": 627,
           "legend": {
             "alignAsTable": true,
             "avg": true,
@@ -8133,7 +8030,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8144,7 +8041,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(ticdc_sinkv2_kafka_producer_request_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
+              "expr": "sum(ticdc_sinkv2_kafka_producer_in_flight_requests{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -8156,7 +8053,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Request Rate",
+          "title": "Kafka Inflight Requests",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8212,7 +8109,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 21
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 630,
@@ -8236,7 +8133,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8302,6 +8199,212 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Requests/second sent to all brokers.\nvalue = one-minute moving average rate of events per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 21
+          },
+          "hiddenSeries": false,
+          "id": 629,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(ticdc_sinkv2_kafka_producer_request_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}-{{broker}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Kafka Request Rate",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Responses/second received from all brokers\n\nvalue = one-minute moving average of response receive rate",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 21
+          },
+          "hiddenSeries": false,
+          "id": 631,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(ticdc_sinkv2_kafka_producer_response_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}-{{broker}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Kafka Response Rate",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The compression ratio times 100 of record batches for all topics.",
           "fieldConfig": {
             "defaults": {
@@ -8339,7 +8442,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8405,11 +8508,9 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Responses/second received from all brokers\n\nvalue = one-minute moving average of response receive rate",
+          "description": "",
           "fieldConfig": {
-            "defaults": {
-              "links": []
-            },
+            "defaults": {},
             "overrides": []
           },
           "fill": 1,
@@ -8421,13 +8522,13 @@
             "y": 28
           },
           "hiddenSeries": false,
-          "id": 631,
+          "id": 709,
           "legend": {
             "alignAsTable": true,
-            "avg": true,
+            "avg": false,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -8435,14 +8536,12 @@
           },
           "lines": true,
           "linewidth": 1,
-          "links": [],
           "nullPointMode": "null",
           "options": {
             "alertThreshold": true
           },
-          "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.10",
+          "pluginVersion": "7.5.11",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -8453,11 +8552,10 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(ticdc_sinkv2_kafka_producer_response_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance, broker)",
-              "format": "time_series",
+              "expr": "ticdc_sink_encoder_group_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "hide": false,
               "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}-{{instance}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-{{index}}",
               "refId": "A"
             }
           ],
@@ -8465,7 +8563,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Response Rate",
+          "title": "encoder group input channel size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8485,7 +8583,318 @@
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": "0",
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 35
+          },
+          "hiddenSeries": false,
+          "id": 710,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "ticdc_sink_encoder_group_output_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "encoder group output channel size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "MQ worker batch multiple messages into one when using batched encode protocol, this metric record the time cost on batch messages.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 35
+          },
+          "hiddenSeries": false,
+          "id": 711,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_mq_worker_batch_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (le,changefeed,instance))",
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sinkv2_mq_worker_batch_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_mq_worker_batch_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-avg",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Worker Batch Duration Percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 2,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "MQ worker batch multiple messages into one when using batched encode protocol, this metrics track each batch's size",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 42
+          },
+          "hiddenSeries": false,
+          "id": 712,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_mq_worker_batch_size_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (le,changefeed,instance))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sinkv2_mq_worker_batch_size_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance) /\nsum(rate(ticdc_sinkv2_mq_worker_batch_size_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\"}[1m])) by (changefeed,instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-avg",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Worker Batch Size Percentile",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
               "show": true
             },
             {
@@ -12249,7 +12658,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 11
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 15,
@@ -12379,7 +12788,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 11
+            "y": 144
           },
           "hiddenSeries": false,
           "id": 29,
@@ -12482,7 +12891,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 18
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 28,
@@ -12604,7 +13013,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 18
+            "y": 151
           },
           "hiddenSeries": false,
           "id": 31,
@@ -12719,7 +13128,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 25
+            "y": 158
           },
           "hiddenSeries": false,
           "id": 188,
@@ -12823,7 +13232,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 158
           },
           "hiddenSeries": false,
           "id": 17,
@@ -12931,7 +13340,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 32
+            "y": 165
           },
           "hiddenSeries": false,
           "id": 177,
@@ -13033,7 +13442,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 32
+            "y": 165
           },
           "hiddenSeries": false,
           "id": 459,
@@ -13145,7 +13554,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 39
+            "y": 172
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -13169,7 +13578,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "interval": "",
@@ -13222,7 +13631,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 39
+            "y": 172
           },
           "hiddenSeries": false,
           "id": 251,
@@ -13326,7 +13735,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 46
+            "y": 179
           },
           "hiddenSeries": false,
           "id": 453,
@@ -13432,7 +13841,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 46
+            "y": 179
           },
           "hiddenSeries": false,
           "id": 460,
@@ -13541,7 +13950,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 186
           },
           "hiddenSeries": false,
           "id": 5,
@@ -13642,7 +14051,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 186
           },
           "hiddenSeries": false,
           "id": 252,
@@ -13752,7 +14161,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 60
+            "y": 193
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -13834,7 +14243,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 60
+            "y": 193
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -13909,7 +14318,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 67
+            "y": 200
           },
           "hiddenSeries": false,
           "id": 53,
@@ -14019,7 +14428,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 67
+            "y": 200
           },
           "hiddenSeries": false,
           "id": 106,
@@ -14127,7 +14536,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 74
+            "y": 207
           },
           "hiddenSeries": false,
           "id": 705,
@@ -14225,7 +14634,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 74
+            "y": 207
           },
           "hiddenSeries": false,
           "id": 706,
@@ -14323,7 +14732,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 214
           },
           "hiddenSeries": false,
           "id": 707,
@@ -23786,5 +24195,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 48
+  "version": 50
 }

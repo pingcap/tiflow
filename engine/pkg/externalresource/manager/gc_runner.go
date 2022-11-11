@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"

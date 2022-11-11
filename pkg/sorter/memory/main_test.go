@@ -11,26 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rpcerror
+package memory
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-type testError struct {
-	Error[Retryable, Unavailable]
-
-	Val string `json:"val"`
-}
-
-func TestNormalize(t *testing.T) {
-	t.Parallel()
-
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
-	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-	info, ok := testErrorPrototype.Convert(err)
-	require.True(t, ok)
-	require.Equal(t, &testError{Val: "first test error"}, info)
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
@@ -43,7 +42,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -212,19 +211,11 @@ type BaseMaster interface {
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
-	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(
-		workerType WorkerType,
-		config WorkerConfig,
-		cost model.RescUnit,
-		resources ...resModel.ResourceID,
-	) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// CreateWorker is the latest version of CreateWorker, but with
 	// a more flexible way of passing options.
-	CreateWorkerV2(
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -554,7 +545,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 	select {
 	case <-m.closeCh:
-		return derror.ErrMasterClosed.GenWithStackByArgs()
+		return errors.ErrMasterClosed.GenWithStackByArgs()
 	default:
 	}
 
@@ -674,7 +665,7 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 	case frameModel.CvsJobMaster, frameModel.FakeJobMaster, frameModel.DMJobMaster:
 		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
-			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			err = errors.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
 		rawConfig = masterMeta.Config
@@ -701,24 +692,6 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 func (m *DefaultBaseMaster) CreateWorker(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	m.Logger().Info("CreateWorker",
-		zap.Stringer("worker-type", workerType),
-		zap.Any("worker-config", config),
-		zap.Int("cost", int(cost)),
-		zap.Any("resources", resources),
-		zap.String("master-id", m.id))
-
-	return m.CreateWorkerV2(workerType, config,
-		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
-}
-
-// CreateWorkerV2 implements BaseMaster.CreateWorkerV2
-func (m *DefaultBaseMaster) CreateWorkerV2(
-	workerType frameModel.WorkerType,
-	config WorkerConfig,
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
 	m.Logger().Info("CreateWorker",
@@ -736,7 +709,7 @@ func (m *DefaultBaseMaster) CreateWorkerV2(
 	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
-		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
+		return "", errors.WrapError(errors.ErrMasterConcurrencyExceeded, err)
 	}
 
 	go func() {
@@ -773,7 +746,7 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 	// keep the original error in errCenter if possible
 	defer func() {
 		if err == nil {
-			err = derror.ErrWorkerFinish.FastGenByArgs()
+			err = errors.ErrWorkerFinish.FastGenByArgs()
 		}
 		m.errCenter.OnError(err)
 	}()

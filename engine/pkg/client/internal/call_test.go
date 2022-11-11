@@ -18,7 +18,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -74,17 +73,11 @@ func TestCallFuncCancel(t *testing.T) {
 	wg.Wait()
 }
 
-type retryableErrInfo struct {
-	rpcerror.Error[rpcerror.Retryable, rpcerror.Unavailable]
-}
-
-var retryableErr = rpcerror.Normalize[retryableErrInfo]()
-
 func TestCallRetryCancel(t *testing.T) {
 	t.Parallel()
 
 	mockCallFn := func(ctx context.Context, req *mockRequest, opts ...grpc.CallOption) (*mockResponse, error) {
-		return nil, retryableErr.Gen(&retryableErrInfo{})
+		return nil, status.Error(codes.Unavailable, "")
 	}
 
 	call := NewCall(mockCallFn, &mockRequest{val: 1})
@@ -115,7 +108,7 @@ func TestCallRetrySucceed(t *testing.T) {
 		} else {
 			return &mockResponse{val: req.val}, nil
 		}
-		return nil, retryableErr.Gen(&retryableErrInfo{})
+		return nil, status.Error(codes.Unavailable, "")
 	}
 
 	call := NewCall(mockCallFn, &mockRequest{val: 1})
