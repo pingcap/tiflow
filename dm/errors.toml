@@ -1129,7 +1129,7 @@ tags = ["internal", "medium"]
 [error.DM-config-20053]
 message = "invalid load mode '%s'"
 description = ""
-workaround = "Please choose a valid value in ['sql', 'loader']"
+workaround = "Please choose a valid value in ['logical', 'physical']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]

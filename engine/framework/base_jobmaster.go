@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
@@ -27,11 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -56,13 +54,9 @@ type BaseJobMaster interface {
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 
 	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
-	// a more flexible way of passing options.
-	CreateWorkerV2(
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -131,6 +125,7 @@ type JobMasterImpl interface {
 	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
+	// TODO: when it returns error, framework should close this jobmaster.
 	OnCancel(ctx context.Context) error
 	// OnOpenAPIInitialized is called as the first callback function of the JobMasterImpl
 	// instance, the business logic should only register the OpenAPI handler in it.
@@ -237,7 +232,7 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if err := d.worker.doPoll(ctx); err != nil {
-		if derror.ErrWorkerHalfExit.NotEqual(err) {
+		if !errors.Is(err, errors.ErrWorkerHalfExit) {
 			return errors.Trace(err)
 		}
 		return nil
@@ -305,21 +300,11 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 
 // CreateWorker implements BaseJobMaster.CreateWorker
 func (d *DefaultBaseJobMaster) CreateWorker(
-	workerType WorkerType,
-	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return d.master.CreateWorker(workerType, config, cost, resources...)
-}
-
-// CreateWorkerV2 implements BaseJobMaster.CreateWorkerV2
-func (d *DefaultBaseJobMaster) CreateWorkerV2(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
-	return d.master.CreateWorkerV2(workerType, config, opts...)
+	return d.master.CreateWorker(workerType, config, opts...)
 }
 
 // UpdateStatus delegates the UpdateStatus of inner worker

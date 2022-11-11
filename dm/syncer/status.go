@@ -31,8 +31,11 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 	syncerLocation := s.checkpoint.FlushedGlobalPoint()
 	st := &pb.SyncStatus{
 		TotalEvents:         s.count.Load(),
-		TotalTps:            s.totalTps.Load(),
-		RecentTps:           s.tps.Load(),
+		TotalTps:            s.totalRps.Load(),
+		RecentTps:           s.rps.Load(),
+		TotalRows:           s.count.Load(),
+		TotalRps:            s.totalRps.Load(),
+		RecentRps:           s.rps.Load(),
 		SyncerBinlog:        syncerLocation.Position.String(),
 		SecondsBehindMaster: s.secondsBehindMaster.Load(),
 	}
@@ -108,10 +111,11 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 	totalBinlogSize := s.binlogSizeCount.Load()
 	lastBinlogSize := s.lastBinlogSizeCount.Load()
 
-	tps, totalTps := int64(0), int64(0)
+	rps, totalRps := int64(0), int64(0)
 	if seconds > 0 && totalSeconds > 0 {
-		tps = (total - last) / seconds
-		totalTps = total / totalSeconds
+		// todo: use speed recorder count rps
+		rps = (total - last) / seconds
+		totalRps = total / totalSeconds
 
 		s.currentLocationMu.RLock()
 		currentLocation := s.currentLocationMu.currentLocation
@@ -143,9 +147,9 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 	}
 
 	s.tctx.L().Info("binlog replication status",
-		zap.Int64("total_events", total),
-		zap.Int64("total_tps", totalTps),
-		zap.Int64("tps", tps),
+		zap.Int64("total_rows", total),
+		zap.Int64("total_rps", totalRps),
+		zap.Int64("rps", rps),
 		zap.Stringer("master_position", latestMasterPos),
 		log.WrapStringerField("master_gtid", latestMasterGTIDSet),
 		zap.Stringer("checkpoint", s.checkpoint))
@@ -153,6 +157,6 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 	s.lastCount.Store(total)
 	s.lastBinlogSizeCount.Store(totalBinlogSize)
 	s.lastTime.Store(time.Now())
-	s.totalTps.Store(totalTps)
-	s.tps.Store(tps)
+	s.totalRps.Store(totalRps)
+	s.rps.Store(rps)
 }

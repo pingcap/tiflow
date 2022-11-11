@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +41,8 @@ func TestQueryStatusAPI(t *testing.T) {
 			FinishedBytes:     100,
 			FinishedRows:      10,
 			EstimateTotalRows: 1000,
+			Bps:               1000,
+			Progress:          "20.00 %",
 		}
 		loadStatus = &pb.LoadStatus{
 			FinishedBytes:  4,
@@ -48,11 +50,12 @@ func TestQueryStatusAPI(t *testing.T) {
 			Progress:       "4%",
 			MetaBinlog:     "mysql-bin.000002, 8",
 			MetaBinlogGTID: "1-2-3",
+			Bps:            1000,
 		}
 		syncStatus = &pb.SyncStatus{
-			TotalEvents:         10,
-			TotalTps:            10,
-			RecentTps:           10,
+			TotalRows:           10,
+			TotalRps:            10,
+			RecentRps:           10,
 			MasterBinlog:        "mysql-bin.000002, 4",
 			MasterBinlogGtid:    "1-2-20",
 			SyncerBinlog:        "mysql-bin.000001, 432",

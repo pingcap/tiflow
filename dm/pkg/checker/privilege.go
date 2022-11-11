@@ -50,7 +50,7 @@ type priv struct {
 type SourceDumpPrivilegeChecker struct {
 	db                *sql.DB
 	dbinfo            *dbutil.DBConfig
-	checkTables       []*filter.Table
+	checkTables       []filter.Table
 	consistency       string
 	dumpWholeInstance bool
 }
@@ -59,7 +59,7 @@ type SourceDumpPrivilegeChecker struct {
 func NewSourceDumpPrivilegeChecker(
 	db *sql.DB,
 	dbinfo *dbutil.DBConfig,
-	checkTables []*filter.Table,
+	checkTables []filter.Table,
 	consistency string,
 	dumpWholeInstance bool,
 ) RealChecker {
@@ -376,7 +376,7 @@ func VerifyPrivileges(
 	return lackPrivs, nil
 }
 
-func genTableLevelPrivs(tables []*filter.Table) map[string]dbPriv {
+func genTableLevelPrivs(tables []filter.Table) map[string]dbPriv {
 	ret := make(map[string]dbPriv)
 	for _, table := range tables {
 		if _, ok := ret[table.Schema]; !ok {

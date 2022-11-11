@@ -16,10 +16,10 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DiscoveryClient is a client to the Discovery service on the server master.
@@ -135,14 +135,8 @@ func (c *discoveryClient) RegisterMetaStore(
 	call := internal.NewCall(
 		c.cli.RegisterMetaStore,
 		request)
-	resp, err := call.Do(ctx)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
-		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Message)
-	}
-	return nil
+	_, err := call.Do(ctx)
+	return err
 }
 
 func (c *discoveryClient) QueryMetaStore(

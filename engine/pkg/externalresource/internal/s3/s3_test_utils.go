@@ -20,11 +20,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,8 +112,9 @@ func NewFileManagerForUT(tempDir string, executorID resModel.ExecutorID) (*FileM
 	), factory
 }
 
-func newFileManagerForUTFromSharedStorageFactory(
+// NewFileManagerForUTFromSharedStorageFactory returns a file manager for UT.
+func NewFileManagerForUTFromSharedStorageFactory(
 	executorID model.ExecutorID, factory *mockExternalStorageFactory,
 ) *FileManager {
-	return NewFileManager(MockExecutorID, factory)
+	return NewFileManager(executorID, factory)
 }

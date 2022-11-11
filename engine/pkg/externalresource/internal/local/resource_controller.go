@@ -16,11 +16,11 @@ package local
 import (
 	"context"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var _ internal.ResourceController = &resourceController{}
@@ -44,13 +44,13 @@ func (r *resourceController) GCSingleResource(ctx context.Context, res *resModel
 func (r *resourceController) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
 	cli, err := r.clientGroup.GetExecutorClientB(ctx, resource.Executor)
 	if err != nil {
-		return perrors.Annotate(err, "removeFilesOnExecutor")
+		return errors.Annotate(err, "removeFilesOnExecutor")
 	}
 
 	return cli.RemoveResource(ctx, resource.Worker, resource.ID)
 }
 
-// GCExecutors removes all temporary resources created by the offlined executors.
+// GCExecutor removes all temporary resources created by the offlined executors.
 func (r *resourceController) GCExecutor(
 	_ context.Context, _ []*resModel.ResourceMeta, _ model.ExecutorID,
 ) error {

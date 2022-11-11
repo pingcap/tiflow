@@ -15,6 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -32,6 +33,7 @@ const (
     "worker-num": 3
   },
   "sink": {
+    "encoder-concurrency": 16,
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -103,6 +105,7 @@ const (
     "table-actor": {
       "event-batch-size": 32
     },
+    "enable-pull-based-sink": false,
     "enable-db-sorter": true,
     "db": {
       "count": 8,
@@ -141,6 +144,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -159,6 +163,7 @@ const (
     "worker-num": 3
   },
   "sink": {
+  	"encoder-concurrency": 16,
     "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
@@ -192,6 +197,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
+  "memory-quota": 2147483648,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -209,6 +215,7 @@ const (
     "worker-num": 3
   },
   "sink": {
+    "encoder-concurrency": 16,
     "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [

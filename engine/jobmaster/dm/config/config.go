@@ -19,13 +19,13 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
 

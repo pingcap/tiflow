@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -74,7 +75,7 @@ type LightningLoader struct {
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
 
-	statusRecorder *statusRecorder
+	speedRecorder *export.SpeedRecorder
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -91,7 +92,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
-		statusRecorder:        newStatusRecorder(),
+		speedRecorder:         export.NewSpeedRecorder(),
 	}
 	return loader
 }
@@ -108,6 +109,9 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
+	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
+	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
@@ -252,6 +256,8 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 	if l.cfg.FrameworkLogger != nil {
 		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
+	} else {
+		opts = append(opts, lightning.WithLogger(l.logger.Logger))
 	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
@@ -304,6 +310,7 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
 	}
+	cfg.Mydumper.SourceID = l.cfg.SourceID
 	return cfg, nil
 }
 
@@ -464,7 +471,7 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
-	currentSpeed := l.statusRecorder.getSpeed(finished)
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
@@ -473,12 +480,12 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 		zap.Int64("current speed (bytes / seconds)", currentSpeed),
 	)
 	s := &pb.LoadStatus{
-		FinishedBytes:              finished,
-		TotalBytes:                 total,
-		Progress:                   progress,
-		MetaBinlog:                 l.metaBinlog.Load(),
-		MetaBinlogGTID:             l.metaBinlogGTID.Load(),
-		CurrentSpeedBytesPerSecond: currentSpeed,
+		FinishedBytes:  finished,
+		TotalBytes:     total,
+		Progress:       progress,
+		MetaBinlog:     l.metaBinlog.Load(),
+		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		Bps:            currentSpeed,
 	}
 	return s
 }

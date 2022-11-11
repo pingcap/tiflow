@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -151,7 +152,7 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 				Name:          fmt.Sprintf("temp-resource-%d", i),
 			})
 			if removed {
-				require.ErrorContains(t, err, "ResourceFilesNotFoundError")
+				require.True(t, errors.Is(err, errors.ErrResourceFilesNotFound))
 			} else {
 				require.NoError(t, err)
 			}

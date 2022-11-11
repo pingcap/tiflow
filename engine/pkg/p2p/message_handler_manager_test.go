@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -20,8 +20,10 @@ import (
 	"strings"
 	"time"
 
-	perrors "github.com/pingcap/errors"
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -42,7 +44,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -250,7 +252,7 @@ func precheckMasterMeta(
 	if meta.ErrorMsg == "" {
 		return nil
 	}
-	errInMeta := perrors.New(meta.ErrorMsg)
+	errInMeta := errors.New(meta.ErrorMsg)
 	retryable, err := checkBusinessErrorIsRetryable(register, errInMeta, tp)
 	if err != nil {
 		return err
@@ -265,8 +267,8 @@ func precheckMasterMeta(
 func convertMakeTaskErrorToRPCError(
 	register registry.Registry, err error, tp frameModel.WorkerType,
 ) error {
-	if pkgClient.ErrCreateWorkerTerminate.Is(err) {
-		return rpcerror.ToGRPCError(err)
+	if errors.Is(err, errors.ErrCreateWorkerTerminate) {
+		return err
 	}
 
 	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
@@ -274,17 +276,9 @@ func convertMakeTaskErrorToRPCError(
 		return inErr
 	}
 	if retryable {
-		return rpcerror.ToGRPCError(
-			pkgClient.ErrCreateWorkerNonTerminate.GenWithStack(
-				&pkgClient.CreateWorkerNonTerminateError{
-					Details: err.Error(),
-				}))
+		return errors.ErrCreateWorkerNonTerminate.Wrap(err).GenWithStackByArgs()
 	}
-	return rpcerror.ToGRPCError(
-		pkgClient.ErrCreateWorkerTerminate.GenWithStack(
-			&pkgClient.CreateWorkerTerminateError{
-				Details: err.Error(),
-			}))
+	return errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
 }
 
 // checkBusinessErrorIsRetryable converts raw error to business error if possible, and
@@ -339,10 +333,10 @@ func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatc
 
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, err
 	}
 	if !ok {
-		return nil, status.Error(codes.NotFound, "RequestID not found")
+		return nil, errors.ErrDispatchTaskRequestIDNotFound.GenWithStackByArgs(req.GetRequestId())
 	}
 	return &pb.ConfirmDispatchTaskResponse{}, nil
 }
@@ -390,6 +384,20 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
+	if s.cfg.EnableGCTuning {
+		limit, err := memory.MemTotal()
+		if err != nil {
+			log.Warn("get memory failed", zap.Error(err))
+			limit = 0
+		}
+		threshold := limit * 7 / 10
+		log.Info("set memory threshold to GC tuner",
+			zap.Uint64("memory limit", limit),
+			zap.Uint64("threshold", threshold))
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(threshold)
+	}
+
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
@@ -424,7 +432,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 
-	s.grpcSrv = grpc.NewServer()
+	s.grpcSrv = grpc.NewServer(
+		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
+		grpc.ChainUnaryInterceptor(
+			grpcprometheus.UnaryServerInterceptor,
+			rpcutil.UnaryServerInterceptor,
+		),
+	)
 	err = s.startMsgService(ctx, wg)
 	if err != nil {
 		return err
@@ -460,7 +474,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -496,7 +510,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -630,7 +644,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.selfID),
@@ -640,31 +654,27 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.masterClient.Heartbeat(ctx, req)
+			_, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				log.L().Error("heartbeat rpc meet error", zap.Error(err))
-				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
-				}
-				continue
-			}
-			if resp.Err != nil {
-				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
-				switch resp.Err.Code {
-				case pb.ErrorCode_UnknownExecutor:
-					log.L().Info("heartbeat failed, will retry", zap.Error(err))
-					continue
-				case pb.ErrorCode_TombstoneExecutor:
-					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
-				case pb.ErrorCode_MasterNotReady:
+				if errors.Is(err, errors.ErrMasterNotReady) {
 					s.lastHearbeatTime = t
 					if rl.Allow() {
 						log.L().Info("heartbeat success with MasterNotReady")
 					}
 					continue
-				default:
 				}
+
+				log.Warn("heartbeat rpc meet error", zap.Error(err))
+				if errors.Is(err, errors.ErrTombstoneExecutor) {
+					return errors.ErrHeartbeat.GenWithStack("logic error: %v", err)
+				}
+
+				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+					return errors.WrapError(errors.ErrHeartbeat, err, "timeout")
+				}
+				continue
 			}
+
 			// We aim to keep lastHbTime of executor consistent with lastHbTime of Master.
 			// If we set the heartbeat time of executor to the start time of rpc, it will
 			// be a little bit earlier than the heartbeat time of master, which is safe.
@@ -673,9 +683,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			if rl.Allow() {
-				log.L().Info("heartbeat success",
-					zap.String("leader", resp.Leader),
-					zap.Strings("members", resp.Addrs))
+				log.L().Info("heartbeat success")
 			}
 		}
 	}
@@ -743,7 +751,7 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		case <-time.After(defaultDiscoveryAutoSyncInterval):
 			masters, err := s.masterClient.ListMasters(ctx)
 			if err != nil {

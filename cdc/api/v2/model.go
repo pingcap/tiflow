@@ -190,12 +190,13 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 		}
 
 		res.Sink = &config.SinkConfig{
-			DispatchRules:   dispatchRules,
-			Protocol:        c.Sink.Protocol,
-			CSVConfig:       csvConfig,
-			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
-			ColumnSelectors: columnSelectors,
-			SchemaRegistry:  c.Sink.SchemaRegistry,
+			DispatchRules:      dispatchRules,
+			Protocol:           c.Sink.Protocol,
+			CSVConfig:          csvConfig,
+			TxnAtomicity:       config.AtomicityLevel(c.Sink.TxnAtomicity),
+			ColumnSelectors:    columnSelectors,
+			SchemaRegistry:     c.Sink.SchemaRegistry,
+			EncoderConcurrency: c.Sink.EncoderConcurrency,
 		}
 	}
 	return res
@@ -285,12 +286,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Sink = &SinkConfig{
-			Protocol:        cloned.Sink.Protocol,
-			SchemaRegistry:  cloned.Sink.SchemaRegistry,
-			DispatchRules:   dispatchRules,
-			CSVConfig:       csvConfig,
-			ColumnSelectors: columnSelectors,
-			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
+			Protocol:           cloned.Sink.Protocol,
+			SchemaRegistry:     cloned.Sink.SchemaRegistry,
+			DispatchRules:      dispatchRules,
+			CSVConfig:          csvConfig,
+			ColumnSelectors:    columnSelectors,
+			TxnAtomicity:       string(cloned.Sink.TxnAtomicity),
+			EncoderConcurrency: cloned.Sink.EncoderConcurrency,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -416,12 +418,13 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol        string            `json:"protocol"`
-	SchemaRegistry  string            `json:"schema_registry"`
-	CSVConfig       *CSVConfig        `json:"csv"`
-	DispatchRules   []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity    string            `json:"transaction_atomicity"`
+	Protocol           string            `json:"protocol"`
+	SchemaRegistry     string            `json:"schema_registry"`
+	CSVConfig          *CSVConfig        `json:"csv"`
+	DispatchRules      []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors    []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity       string            `json:"transaction_atomicity"`
+	EncoderConcurrency int               `json:"encoder_concurrency"`
 }
 
 // CSVConfig denotes the csv config

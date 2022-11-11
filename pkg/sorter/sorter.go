@@ -67,7 +67,7 @@ type EventSortEngine interface {
 	// (unlimited, upperBound] are committed and not necessary any more.
 	// The EventSortEngine instance can GC them later.
 	//
-	// NOTE: It's only available if IsTableBased returns true.
+	// NOTE: It's only available if IsTableBased returns false.
 	CleanAllTables(upperBound Position) error
 
 	// Close closes the engine. All data written by this instance can be deleted.
@@ -96,20 +96,20 @@ type EventIterator interface {
 //  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
 //  2. calculate the next position with method Next.
 type Position struct {
-	CommitTs model.Ts
 	StartTs  model.Ts
+	CommitTs model.Ts
 }
 
 // Valid indicates whether the position is valid or not.
 func (p Position) Valid() bool {
-	return p.StartTs != 0 && p.CommitTs != 0
+	return p.CommitTs != 0
 }
 
 // Next can only be called on a valid Position.
 func (p Position) Next() Position {
 	return Position{
-		CommitTs: p.CommitTs,
 		StartTs:  p.StartTs + 1, // it will never overflow.
+		CommitTs: p.CommitTs,
 	}
 }
 

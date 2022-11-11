@@ -19,11 +19,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +33,7 @@ func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error
 	}
 	ls, err := brStorage.New(context.Background(), backend, nil)
 	if err != nil {
-		retErr := derrors.ErrFailToCreateExternalStorage.Wrap(err)
+		retErr := errors.ErrFailToCreateExternalStorage.Wrap(err)
 		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for local file")
 	}
 	return ls, nil

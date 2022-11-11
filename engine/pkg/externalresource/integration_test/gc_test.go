@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -33,7 +34,8 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster, mockFeatureChecker := newMockGCCluster(t)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 	cluster.Start(t)
 
 	baseDir := t.TempDir()
@@ -80,7 +82,8 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster, mockFeatureChecker := newMockGCCluster(t)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 	cluster.Start(t)
 
 	baseDir := t.TempDir()
@@ -111,7 +114,8 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	ctx := context.Background()
 
-	cluster := newMockGCCluster()
+	cluster, mockFeatureChecker := newMockGCCluster(t)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 
 	baseDir := t.TempDir()
 
