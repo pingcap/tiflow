@@ -1,5 +1,4 @@
 FROM rockylinux:9.0
-RUN apk add --no-cache tzdata
 ADD dm-master /dm-master
 ADD dm-worker /dm-worker
 ADD dmctl /dmctl
