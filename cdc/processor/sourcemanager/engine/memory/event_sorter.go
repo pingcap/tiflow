@@ -21,13 +21,13 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"go.uber.org/zap"
 )
 
 var (
-	_ sorter.EventSortEngine = (*EventSorter)(nil)
-	_ sorter.EventIterator   = (*EventIter)(nil)
+	_ engine.SortEngine    = (*EventSorter)(nil)
+	_ engine.EventIterator = (*EventIter)(nil)
 )
 
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
@@ -105,7 +105,7 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable implements sorter.EventSortEngine.
-func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Int64("tableID", tableID))
@@ -115,13 +115,13 @@ func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound
 }
 
 // FetchAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIterator {
+func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }
 
 // CleanByTable implements sorter.EventSortEngine.
-func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound sorter.Position) error {
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
 		log.Panic("clean an unexist table", zap.Int64("tableID", tableID))
@@ -132,7 +132,7 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound sorter.Posi
 }
 
 // CleanAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
+func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 	log.Panic("CleanAllTables should never be called")
 	return nil
 }
@@ -144,7 +144,7 @@ func (s *EventSorter) Close() error {
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished sorter.Position, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished engine.Position, err error) {
 	if len(s.resolved) == 0 {
 		return
 	}
@@ -216,7 +216,7 @@ func (s *tableSorter) getResolvedTs() model.Ts {
 	return *s.resolvedTs
 }
 
-func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -239,7 +239,7 @@ func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound sorter
 	return iter
 }
 
-func (s *tableSorter) clean(tableID model.TableID, upperBound sorter.Position) {
+func (s *tableSorter) clean(tableID model.TableID, upperBound engine.Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {

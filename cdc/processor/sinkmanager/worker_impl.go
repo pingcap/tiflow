@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +48,7 @@ var (
 
 type sinkWorkerImpl struct {
 	changefeedID model.ChangeFeedID
-	sortEngine   sorter.EventSortEngine
+	sortEngine   engine.SortEngine
 	memQuota     *memQuota
 	eventCache   *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
@@ -61,7 +61,7 @@ type sinkWorkerImpl struct {
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-	sortEngine sorter.EventSortEngine,
+	sortEngine engine.SortEngine,
 	quota *memQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -99,7 +99,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 
 			// Used to record the last written position.
 			// We need to use it to update the lower bound of the table sink.
-			var lastPos sorter.Position
+			var lastPos engine.Position
 			lastCommitTs := uint64(0)
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
@@ -273,9 +273,9 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 
 func (w *sinkWorkerImpl) fetchFromCache(
 	task *sinkTask, // task is read-only here.
-	lowerBound sorter.Position,
-	upperBound sorter.Position,
-) (sorter.Position, error) {
+	lowerBound engine.Position,
+	upperBound engine.Position,
+) (engine.Position, error) {
 	// Is it possible that after fetching something from cache, more events are
 	// pushed into cache immediately? It's unlikely and if it happens, new events
 	// are only available after resolvedTs has been advanced. So, here just pop one
@@ -286,7 +286,7 @@ func (w *sinkWorkerImpl) fetchFromCache(
 		w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
 		err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
 		if err != nil {
-			return sorter.Position{}, err
+			return engine.Position{}, err
 		}
 		return pos.Next(), nil
 	}
@@ -314,7 +314,7 @@ func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size u
 
 type redoWorkerImpl struct {
 	changefeedID   model.ChangeFeedID
-	sortEngine     sorter.EventSortEngine
+	sortEngine     engine.SortEngine
 	memQuota       *memQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
@@ -324,7 +324,7 @@ type redoWorkerImpl struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-	sortEngine sorter.EventSortEngine,
+	sortEngine engine.SortEngine,
 	quota *memQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
@@ -367,7 +367,7 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 
 	memAllocated := true
 
-	var lastPos sorter.Position
+	var lastPos engine.Position
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
 		if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
 			return nil
