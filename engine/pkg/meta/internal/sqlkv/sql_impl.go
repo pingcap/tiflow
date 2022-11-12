@@ -22,15 +22,14 @@ import (
 	"github.com/VividCortex/mysqlerr"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Where clause for meta kv option
@@ -65,7 +64,7 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, storeType metaModel.StoreType, table stri
 	jobID metaModel.JobID,
 ) (*sqlKVClientImpl, error) {
 	if sqlDB == nil {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
 	}
 
 	db, err := orm.NewGormDB(sqlDB, storeType)
@@ -164,7 +163,7 @@ func (c *sqlKVClientImpl) Get(ctx context.Context, key string, opts ...metaModel
 func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.Op) (*metaModel.GetResponse, metaModel.Error) {
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &sqlError{
-			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
@@ -227,7 +226,7 @@ func (c *sqlKVClientImpl) Delete(ctx context.Context, key string, opts ...metaMo
 func (c *sqlKVClientImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaModel.Op) (*metaModel.DeleteResponse, metaModel.Error) {
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &sqlError{
-			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
@@ -289,7 +288,7 @@ func (t *sqlTxn) Do(ops ...metaModel.Op) metaModel.Txn {
 
 	if t.committed {
 		t.Err = &sqlError{
-			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs("txn had been committed"),
+			displayed: errors.ErrMetaCommittedTxn.GenWithStackByArgs("txn had been committed"),
 		}
 		return t
 	}
@@ -308,7 +307,7 @@ func (t *sqlTxn) Commit() (*metaModel.TxnResponse, metaModel.Error) {
 	}
 	if t.committed {
 		t.Err = &sqlError{
-			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs("txn had been committed"),
+			displayed: errors.ErrMetaCommittedTxn.GenWithStackByArgs("txn had been committed"),
 		}
 		t.mu.Unlock()
 		return nil, t.Err
@@ -341,11 +340,11 @@ func (t *sqlTxn) Commit() (*metaModel.TxnResponse, metaModel.Error) {
 				txnRsp.Responses = append(txnRsp.Responses, makeDelResponseOp(rsp))
 			case op.IsTxn():
 				return &sqlError{
-					displayed: cerrors.ErrMetaNestedTxn.GenWithStackByArgs("unsupported nested txn"),
+					displayed: errors.ErrMetaNestedTxn.GenWithStackByArgs("unsupported nested txn"),
 				}
 			default:
 				return &sqlError{
-					displayed: cerrors.ErrMetaOpFail.GenWithStackByArgs("unknown op type"),
+					displayed: errors.ErrMetaOpFail.GenWithStackByArgs("unknown op type"),
 				}
 			}
 		}

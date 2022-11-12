@@ -25,7 +25,7 @@ import (
 )
 
 // TODO: we can use UpdateClients, don't need to close and re-create it.
-func (s *Server) createLeaderClient(ctx context.Context, addr string) {
+func (s *Server) createLeaderClient(addr string) {
 	s.closeLeaderClient()
 
 	// TODO support TLS
@@ -70,7 +70,7 @@ func (s *Server) watchLeader(ctx context.Context) error {
 				})
 				if leader.Address != leaderAddr {
 					leaderAddr = leader.Address
-					s.createLeaderClient(ctx, leaderAddr)
+					s.createLeaderClient(leaderAddr)
 				}
 			} else {
 				s.leader.Store(&rpcutil.Member{})

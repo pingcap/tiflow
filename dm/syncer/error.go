@@ -30,13 +30,12 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"go.uber.org/zap"
-
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"go.uber.org/zap"
 )
 
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
@@ -232,7 +231,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		for {
 			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
 			if err2 != nil {
-				s.tctx.L().Warn("error when getting DDL status fromTiDB", zap.Error(err2))
+				s.tctx.L().Warn("error when getting DDL status from TiDB", zap.Error(err2))
 			}
 			failpoint.Inject("TestStatus", func(val failpoint.Value) {
 				status = val.(string)

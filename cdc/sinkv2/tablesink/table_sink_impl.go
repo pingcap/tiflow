@@ -28,10 +28,14 @@ import (
 )
 
 // Assert TableSink implementation
-var _ TableSink = (*eventTableSink[*model.RowChangedEvent])(nil)
-var _ TableSink = (*eventTableSink[*model.SingleTableTxn])(nil)
+var (
+	_ TableSink = (*EventTableSink[*model.RowChangedEvent])(nil)
+	_ TableSink = (*EventTableSink[*model.SingleTableTxn])(nil)
+)
 
-type eventTableSink[E eventsink.TableEvent] struct {
+// EventTableSink is a table sink that can write events.
+type EventTableSink[E eventsink.TableEvent] struct {
+	changefeedID    model.ChangeFeedID
 	tableID         model.TableID
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
@@ -48,12 +52,14 @@ type eventTableSink[E eventsink.TableEvent] struct {
 
 // New an eventTableSink with given backendSink and event appender.
 func New[E eventsink.TableEvent](
+	changefeedID model.ChangeFeedID,
 	tableID model.TableID,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
-) *eventTableSink[E] {
-	return &eventTableSink[E]{
+) *EventTableSink[E] {
+	return &EventTableSink[E]{
+		changefeedID:              changefeedID,
 		tableID:                   tableID,
 		eventID:                   0,
 		maxResolvedTs:             model.NewResolvedTs(0),
@@ -66,12 +72,14 @@ func New[E eventsink.TableEvent](
 	}
 }
 
-func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
+// AppendRowChangedEvents appends row changed or txn events to the table sink.
+func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
-func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
+// UpdateResolvedTs advances the resolved ts of the table sink.
+func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
 	if !e.maxResolvedTs.Less(resolvedTs) {
@@ -108,32 +116,56 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
-func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
+// GetCheckpointTs returns the checkpoint ts of the table sink.
+func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *eventTableSink[E]) Close(ctx context.Context) error {
+func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	currentState := e.state.Load()
 	if currentState == state.TableSinkStopping ||
 		currentState == state.TableSinkStopped {
 		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
+			zap.String("namespace", e.changefeedID.Namespace),
+			zap.String("changefeed", e.changefeedID.ID),
 			zap.Uint64("tableID", uint64(e.tableID)))
 		return nil
 	}
 
-	log.Info("Stopping table sink", zap.Int64("tableID", e.tableID))
+	// Notice: We have to set the state to stopping first,
+	// otherwise the progressTracker may be advanced incorrectly.
+	// For example, if we do not freeze it and set the state to stooping
+	// then the progressTracker may be advanced to the checkpointTs
+	// because backend sink drops some events.
+	e.progressTracker.freezeProcess()
 	start := time.Now()
 	e.state.Store(state.TableSinkStopping)
+	stoppingCheckpointTs := e.GetCheckpointTs()
+	log.Info("Stopping table sink",
+		zap.String("namespace", e.changefeedID.Namespace),
+		zap.String("changefeed", e.changefeedID.ID),
+		zap.Int64("tableID", e.tableID),
+		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
 	err := e.progressTracker.close(ctx)
 	if err != nil {
-		log.Error("Failed to stop table sink", zap.Error(err), zap.Int64("tableID", e.tableID),
-			zap.Duration("duration", time.Since(start)))
+		failedCheckpointTs := e.GetCheckpointTs()
+		log.Error("Failed to stop table sink",
+			zap.String("namespace", e.changefeedID.Namespace),
+			zap.String("changefeed", e.changefeedID.ID),
+			zap.Int64("tableID", e.tableID),
+			zap.Uint64("checkpointTs", failedCheckpointTs.Ts),
+			zap.Duration("duration", time.Since(start)), zap.Error(err))
 		return err
 	}
 	e.state.Store(state.TableSinkStopped)
-	log.Info("Table sink stopped", zap.Int64("tableID", e.tableID),
+	stoppedCheckpointTs := e.GetCheckpointTs()
+	log.Info("Table sink stopped",
+		zap.String("namespace", e.changefeedID.Namespace),
+		zap.String("changefeed", e.changefeedID.ID),
+		zap.Int64("tableID", e.tableID),
+		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
 		zap.Duration("duration", time.Since(start)))
 	return nil
 }

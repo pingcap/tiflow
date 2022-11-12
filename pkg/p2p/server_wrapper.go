@@ -76,8 +76,8 @@ func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		if ok {
 			addr = peer.Addr.String()
 		}
-		log.Debug("gRPC server received request while CDC capture is not running.", zap.String("addr", addr))
-		return status.New(codes.Unavailable, "CDC capture is not running").Err()
+		log.Debug("gRPC server received request while message server is not running.", zap.String("addr", addr))
+		return status.New(codes.Unavailable, "message server is not running").Err()
 	}
 
 	wrappedStream := wrapStream(stream)

@@ -20,12 +20,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
@@ -43,7 +38,10 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // RegisterWorker is used to register dm task to global registry
@@ -73,9 +71,8 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
-	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Uint64("config_modify_revision", cfg.ModRevision))
-	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
-	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.Stringer("worker_type", f.workerType), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Any("task_config", cfg))
+	return newDMWorker(ctx, masterID, f.workerType, cfg), nil
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
@@ -101,22 +98,25 @@ type dmWorker struct {
 	messageHandlerManager p2p.MessageHandlerManager
 
 	cfgModRevision uint64
+	needExtStorage bool
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, cfgModRevision uint64) *dmWorker {
+func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
+	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
 	w := &dmWorker{
-		cfg:            cfg,
+		cfg:            dmSubtaskCfg,
 		stage:          metadata.StageInit,
 		workerType:     workerType,
-		taskID:         cfg.SourceID,
+		taskID:         dmSubtaskCfg.SourceID,
 		masterID:       masterID,
-		unitHolder:     newUnitHolderImpl(workerType, cfg),
+		unitHolder:     newUnitHolderImpl(workerType, dmSubtaskCfg),
 		autoResume:     autoResume,
-		cfgModRevision: cfgModRevision,
+		cfgModRevision: cfg.ModRevision,
+		needExtStorage: cfg.NeedExtStorage,
 	}
 
 	// nolint:errcheck
@@ -135,7 +135,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
-	if w.cfg.Mode != dmconfig.ModeIncrement {
+	if w.cfg.Mode != dmconfig.ModeIncrement && w.needExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}
@@ -155,6 +155,7 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	}
 	// update unit status periodically to update metrics
 	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.discardResource4Syncer(ctx)
 	return w.messageAgent.Tick(ctx)
 }
 
@@ -164,12 +165,6 @@ func (w *dmWorker) Workload() model.RescUnit {
 	return 0
 }
 
-// OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
-func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error {
-	w.Logger().Info("dmworker.OnMasterFailover")
-	return nil
-}
-
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.Logger().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
@@ -177,30 +172,38 @@ func (w *dmWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
-func (w *dmWorker) CloseImpl(ctx context.Context) error {
+func (w *dmWorker) CloseImpl(ctx context.Context) {
 	w.Logger().Info("close the dm worker", zap.String("task-id", w.taskID))
-	var recordErr error
-	// unregister jobmaster client
+
+	if err := w.unitHolder.Close(ctx); err != nil {
+		w.Logger().Error("fail to close unit holder", zap.Error(err))
+	}
+
+	if w.messageAgent == nil {
+		return
+	}
 	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
 		w.Logger().Error("failed to update message client", zap.Error(err))
-		recordErr = err
 	}
-	w.unitHolder.Close(ctx)
 	if err := w.messageAgent.Close(ctx); err != nil {
 		w.Logger().Error("failed to close message client", zap.Error(err))
-		recordErr = err
 	}
-	return recordErr
 }
 
 // setupStorage opens and configs external storage
 func (w *dmWorker) setupStorage(ctx context.Context) error {
-	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
-	h, err := w.OpenStorage(ctx, rid)
+	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID, w.IsS3StorageEnabled())
+	opts := []broker.OpenStorageOption{}
+	if w.workerType == frameModel.WorkerDMDump {
+		// always use an empty storage for dumpling task
+		opts = append(opts, broker.WithCleanBeforeOpen())
+	}
+
+	h, err := w.OpenStorage(ctx, rid, opts...)
 	for status.Code(err) == codes.Unavailable {
 		w.Logger().Info("simple retry", zap.Error(err))
 		time.Sleep(time.Second)
-		h, err = w.OpenStorage(ctx, rid)
+		h, err = w.OpenStorage(ctx, rid, opts...)
 	}
 	if err != nil {
 		return errors.Trace(err)
@@ -231,10 +234,21 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return w.UpdateStatus(ctx, status)
 	}
 
-	if w.workerType == frameModel.WorkerDMDump {
+	// now we are in StageFinished
+	switch w.workerType {
+	case frameModel.WorkerDMDump:
 		if err := w.persistStorage(ctx); err != nil {
 			w.Logger().Error("failed to persist storage", zap.Error(err))
 			// persist in next tick
+			return nil
+		}
+	case frameModel.WorkerDMLoad:
+		if w.cfg.Mode != dmconfig.ModeFull {
+			break
+		}
+		if err := w.storageWriteHandle.Discard(ctx); err != nil {
+			w.Logger().Error("failed to discard storage", zap.Error(err))
+			// discard in next tick
 			return nil
 		}
 	}
@@ -243,7 +257,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	return derror.ErrWorkerFinish.FastGenByArgs()
+	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 
 // workerStatus gets worker status.
@@ -314,4 +328,28 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (w *dmWorker) discardResource4Syncer(ctx context.Context) {
+	if w.storageWriteHandle == nil || w.workerType != frameModel.WorkerDMSync || !w.needExtStorage {
+		return
+	}
+	impl, ok := w.unitHolder.(*unitHolderImpl)
+	if !ok {
+		return
+	}
+	isFresh, err := impl.unit.IsFreshTask(ctx)
+	if err != nil {
+		w.Logger().Warn("failed to check if task is fresh", zap.Error(err))
+		return
+	}
+	if isFresh {
+		return
+	}
+
+	if err := w.storageWriteHandle.Discard(ctx); err != nil {
+		w.Logger().Error("failed to discard storage", zap.Error(err))
+		return
+	}
+	w.needExtStorage = false
 }

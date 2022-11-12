@@ -18,16 +18,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 var (
@@ -125,7 +124,7 @@ func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil || state.(*metadata.Job).Deleting {
 		tm.logger.Info("on job deleting", zap.Error(err))
-		tm.onJobDel(ctx)
+		tm.onJobDel()
 		return err
 	}
 	job := state.(*metadata.Job)
@@ -182,7 +181,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 }
 
 // remove all tasks, usually happened when delete jobs.
-func (tm *TaskManager) onJobDel(ctx context.Context) {
+func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)

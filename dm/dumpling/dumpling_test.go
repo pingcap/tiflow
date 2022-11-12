@@ -20,19 +20,19 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/docker/go-units"
+	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/util/filter"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = Suite(&testDumplingSuite{})
@@ -131,8 +131,9 @@ func (t *testDumplingSuite) TestDefaultConfig(c *C) {
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
 }
 
-func (t *testDumplingSuite) TestCallStatus(c *C) {
-	m := NewDumpling(t.cfg)
+func TestCallStatus(t *testing.T) {
+	cfg := genDumpCfg(t)
+	m := NewDumpling(cfg)
 	m.metricProxies = defaultMetricProxies
 	ctx := context.Background()
 
@@ -147,10 +148,12 @@ func (t *testDumplingSuite) TestCallStatus(c *C) {
 	dumpConf.PromRegistry = tidbpromutil.NewDefaultRegistry()
 
 	s := m.Status(nil).(*pb.DumpStatus)
-	c.Assert(s.CompletedTables, Equals, float64(0))
-	c.Assert(s.FinishedBytes, Equals, float64(0))
-	c.Assert(s.FinishedRows, Equals, float64(0))
-	c.Assert(s.EstimateTotalRows, Equals, float64(0))
+	require.Equal(t, s.CompletedTables, float64(0))
+	require.Equal(t, s.FinishedBytes, float64(0))
+	require.Equal(t, s.FinishedRows, float64(0))
+	require.Equal(t, s.EstimateTotalRows, float64(0))
+	require.Equal(t, s.Progress, "")
+	require.Equal(t, s.Bps, int64(0))
 
 	// NewDumper is the only way we can set conf to Dumper, but it will return error. so we just ignore the error
 	dumpling, _ := export.NewDumper(ctx, dumpConf)
@@ -158,10 +161,12 @@ func (t *testDumplingSuite) TestCallStatus(c *C) {
 
 	m.Close()
 	s = m.Status(nil).(*pb.DumpStatus)
-	c.Assert(s.CompletedTables, Equals, float64(0))
-	c.Assert(s.FinishedBytes, Equals, float64(0))
-	c.Assert(s.FinishedRows, Equals, float64(0))
-	c.Assert(s.EstimateTotalRows, Equals, float64(0))
+	require.Equal(t, s.CompletedTables, float64(0))
+	require.Equal(t, s.FinishedBytes, float64(0))
+	require.Equal(t, s.FinishedRows, float64(0))
+	require.Equal(t, s.EstimateTotalRows, float64(0))
+	require.Equal(t, s.Progress, "")
+	require.Equal(t, s.Bps, int64(0))
 }
 
 func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
@@ -208,4 +213,25 @@ func (t *testDumplingSuite) TestConstructArgs(c *C) {
 	c.Assert(exportCfg.FileSize, Equals, uint64(50))
 	c.Assert(exportCfg.SessionParams, NotNil)
 	c.Assert(exportCfg.SessionParams["time_zone"], Equals, "+01:00")
+}
+
+func genDumpCfg(t *testing.T) *config.SubTaskConfig {
+	t.Helper()
+
+	dir := t.TempDir()
+	return &config.SubTaskConfig{
+		Name:     "dumpling_ut",
+		Timezone: "UTC",
+		From:     config.GetDBConfigForTest(),
+		LoaderConfig: config.LoaderConfig{
+			Dir: dir,
+		},
+		BAList: &filter.Rules{
+			DoDBs: []string{testDumplingSchemaName},
+			DoTables: []*filter.Table{{
+				Schema: testDumplingSchemaName,
+				Name:   testDumplingTableName,
+			}},
+		},
+	}
 }

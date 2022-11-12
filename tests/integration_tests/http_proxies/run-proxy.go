@@ -17,10 +17,9 @@ import (
 	"flag"
 	"fmt"
 
+	grpc_proxy "github.com/bradleyjkemp/grpc-tools/grpc-proxy"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-
-	grpc_proxy "github.com/bradleyjkemp/grpc-tools/grpc-proxy"
 	"google.golang.org/grpc"
 )
 

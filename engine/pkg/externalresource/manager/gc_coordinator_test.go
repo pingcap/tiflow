@@ -19,17 +19,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/stretchr/testify/require"
 )
 
 type gcTestHelper struct {
 	ExecInfo *MockExecutorInfoProvider
 	JobInfo  *MockJobStatusProvider
-	Notifier *MockGCNotifier
+	GCRunner *MockGCRunner
 	Meta     pkgOrm.Client
 	Coord    *DefaultGCCoordinator
 
@@ -42,19 +43,19 @@ type gcTestHelper struct {
 func newGCTestHelper() *gcTestHelper {
 	execInfo := NewMockExecutorInfoProvider()
 	jobInfo := NewMockJobStatusProvider()
-	notifier := NewMockGCNotifier()
 	meta, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
 	}
-	coord := NewGCCoordinator(execInfo, jobInfo, meta, notifier)
+	gcRunner := NewMockGCRunner(meta)
+	coord := NewGCCoordinator(execInfo, jobInfo, meta, gcRunner)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ret := &gcTestHelper{
 		ExecInfo: execInfo,
 		JobInfo:  jobInfo,
 		Meta:     meta,
-		Notifier: notifier,
+		GCRunner: gcRunner,
 		Coord:    coord,
 
 		ctx:    ctx,
@@ -111,7 +112,7 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	h.JobInfo.SetJobStatus("job-3", frameModel.MasterStateInit)
 
 	err := h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-		ID:       "resource-1",
+		ID:       "/local/resource-1",
 		Job:      "job-1",
 		Worker:   "worker-1",
 		Executor: "executor-1",
@@ -119,7 +120,7 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	require.NoError(t, err)
 
 	err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-		ID:       "resource-2",
+		ID:       "/local/resource-2",
 		Job:      "job-2",
 		Worker:   "worker-2",
 		Executor: "executor-2",
@@ -127,90 +128,114 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	require.NoError(t, err)
 
 	err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-		ID:       "resource-3",
+		ID:       "/local/resource-3",
 		Job:      "job-3",
 		Worker:   "worker-3",
 		Executor: "executor-3",
 	})
 	require.NoError(t, err)
+
+	executors := []string{"executor-1", "executor-2", "executor-3"}
+	for _, executor := range executors {
+		id := model.ExecutorID(executor)
+		err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+			ID:       s3.DummyResourceID,
+			Job:      s3.GetDummyJobID(id),
+			Worker:   s3.DummyWorkerID,
+			Executor: id,
+		})
+		require.NoError(t, err)
+	}
 }
 
 func TestGCCoordinatorRemoveExecutors(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"}))
 	helper.ExecInfo.RemoveExecutor("executor-1")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"}))
 	helper.ExecInfo.RemoveExecutor("executor-2")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "/local/resource-3"}))
 	helper.ExecInfo.RemoveExecutor("executor-3")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"})
+		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "/local/resource-3"})
 	}, 1*time.Second, 10*time.Millisecond)
 
+	executors := []string{"executor-1", "executor-2", "executor-3"}
+	for _, executor := range executors {
+		require.Eventually(t, func() bool {
+			return helper.IsRemoved(t, pkgOrm.ResourceKey{
+				JobID: s3.GetDummyJobID(model.ExecutorID(executor)),
+				ID:    s3.DummyResourceID,
+			})
+		}, 1*time.Second, 10*time.Millisecond)
+	}
 	helper.Close()
 }
 
 func TestGCCoordinatorRemoveJobs(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"}))
 	helper.JobInfo.RemoveJob("job-1")
-	helper.Notifier.WaitNotify(t, 1*time.Second)
+	helper.GCRunner.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"}))
 	helper.JobInfo.RemoveJob("job-2")
-	helper.Notifier.WaitNotify(t, 1*time.Second)
+	helper.GCRunner.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "/local/resource-3"}))
 	helper.JobInfo.RemoveJob("job-3")
-	helper.Notifier.WaitNotify(t, 1*time.Second)
+	helper.GCRunner.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"})
+		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "/local/resource-3"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()
 }
 
 func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
+	t.Parallel()
 	helper := newGCTestHelper()
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"}))
+	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"}))
 
 	helper.JobInfo.RemoveJob("job-1")
 	helper.ExecInfo.RemoveExecutor("executor-2")
 
-	helper.Notifier.WaitNotify(t, 1*time.Second)
+	helper.GCRunner.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "/local/resource-1"})
 	}, 1*time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "/local/resource-2"})
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()

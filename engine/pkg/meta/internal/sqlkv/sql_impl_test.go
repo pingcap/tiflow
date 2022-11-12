@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/log"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 )
@@ -51,7 +51,7 @@ type tCase struct {
 	mockExpectResFn func(mock sqlmock.Sqlmock) // sqlmock expectation
 }
 
-func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sql.DB, sqlmock.Sqlmock, error) {
+func mockGetDBConn(t *testing.T, table string) (*sql.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	// common execution for orm
@@ -65,7 +65,7 @@ func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sq
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` longblob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	return db, mock, nil
+	return db, mock
 }
 
 type anyTime struct{}
@@ -78,13 +78,12 @@ func (a anyTime) Match(v driver.Value) bool {
 func TestNewSQLImpl(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", fakeTable, fakeJob)
+	sqlDB, mock := mockGetDBConn(t, fakeTable)
 
-	defer sqlDB.Close()
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
-	defer cli.Close()
+	defer cli.Close() //nolint:staticcheck
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 }
@@ -92,12 +91,11 @@ func TestNewSQLImpl(t *testing.T) {
 func TestPut(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", fakeTable, fakeJob)
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t, fakeTable)
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
-	defer cli.Close()
+	defer cli.Close() //nolint:staticcheck
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	var anyT anyTime
@@ -130,10 +128,9 @@ func TestPut(t *testing.T) {
 func TestGet(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", fakeTable, fakeJob)
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t, fakeTable)
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -262,10 +259,9 @@ func TestGet(t *testing.T) {
 func TestDelete(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", fakeTable, fakeJob)
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t, fakeTable)
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -341,10 +337,9 @@ func TestDelete(t *testing.T) {
 func TestTxn(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", fakeTable, fakeJob)
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t, fakeTable)
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -420,10 +415,9 @@ func testInner(t *testing.T, m sqlmock.Sqlmock, cli *sqlKVClientImpl, c tCase) {
 func TestSQLImplWithoutNamespace(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test", sqlkvModel.MetaKVTableName, "")
-	defer sqlDB.Close()
+	sqlDB, mock := mockGetDBConn(t, sqlkvModel.MetaKVTableName)
+	defer sqlDB.Close() //nolint:staticcheck
 	defer mock.ExpectClose()
-	require.Nil(t, err)
 	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, sqlkvModel.MetaKVTableName, "")
 	require.Nil(t, err)
 	require.NotNil(t, cli)

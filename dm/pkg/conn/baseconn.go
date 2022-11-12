@@ -22,15 +22,16 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
+	"github.com/pingcap/tidb/errno"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 // BaseConn is the basic connection we use in dm
@@ -93,7 +94,7 @@ func (conn *BaseConn) SetRetryStrategy(strategy retry.Strategy) error {
 	return nil
 }
 
-// QuerySQL defines query statement, and connect to real DB.
+// QuerySQL runs a query statement.
 func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if conn == nil || conn.DBConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")
@@ -221,6 +222,34 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 // 2. succeed: (rows affected, nil).
 func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, queries []string, args ...[]interface{}) (int, error) {
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
+}
+
+// ExecuteSQLsAutoSplit executes sqls and when meet "transaction too large" error,
+// it will try to split the sqls into two parts and execute them again.
+// The `queries` and `args` should be the same length.
+func (conn *BaseConn) ExecuteSQLsAutoSplit(
+	tctx *tcontext.Context,
+	hVec *prometheus.HistogramVec,
+	task string,
+	queries []string,
+	args ...[]interface{},
+) error {
+	_, err := conn.ExecuteSQL(tctx, hVec, task, queries, args...)
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return err
+	}
+
+	if mysqlErr.Number != errno.ErrTxnTooLarge || len(queries) == 1 {
+		return err
+	}
+
+	mid := len(queries) / 2
+	err = conn.ExecuteSQLsAutoSplit(tctx, hVec, task, queries[:mid], args[:mid]...)
+	if err != nil {
+		return err
+	}
+	return conn.ExecuteSQLsAutoSplit(tctx, hVec, task, queries[mid:], args[mid:]...)
 }
 
 // ApplyRetryStrategy apply specify strategy for BaseConn.

@@ -26,15 +26,14 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/tests/v3/integration"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 func TestOptimistSuite(t *testing.T) {

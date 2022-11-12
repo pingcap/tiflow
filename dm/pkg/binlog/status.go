@@ -15,10 +15,11 @@ package binlog
 
 import (
 	"path"
+	"strconv"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -50,28 +51,18 @@ func GetBinaryLogs(ctx *tcontext.Context, db *conn.BaseDB) (FileSizes, error) {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
 	defer rows.Close()
-
-	rowColumns, err := rows.Columns()
+	files := make([]binlogSize, 0, 10)
+	var rowsResult [][]string
+	rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "Log_name", "File_size")
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	files := make([]binlogSize, 0, 10)
-	for rows.Next() {
-		var file string
-		var pos int64
-		var nullPtr interface{}
-		if len(rowColumns) == 2 {
-			err = rows.Scan(&file, &pos)
-		} else {
-			err = rows.Scan(&file, &pos, &nullPtr)
-		}
+	for _, rowResult := range rowsResult {
+		pos, err := strconv.ParseInt(rowResult[1], 10, 64)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-		files = append(files, binlogSize{name: file, size: pos})
-	}
-	if rows.Err() != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		files = append(files, binlogSize{name: rowResult[0], size: pos})
 	}
 	return files, nil
 }

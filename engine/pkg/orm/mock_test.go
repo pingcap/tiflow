@@ -15,12 +15,14 @@ package orm
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -589,7 +591,7 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "UpsertResource",
 			inputs: []interface{}{
-				&resourcemeta.ResourceMeta{
+				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -606,7 +608,7 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "UpsertResource",
 			inputs: []interface{}{
-				&resourcemeta.ResourceMeta{
+				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -652,7 +654,7 @@ func TestResourceMock(t *testing.T) {
 					ID:    "r333",
 				},
 			},
-			output: &resourcemeta.ResourceMeta{
+			output: &resModel.ResourceMeta{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -681,7 +683,7 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: []*resourcemeta.ResourceMeta{
+			output: []*resModel.ResourceMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -702,14 +704,14 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 			},
-			output: []*resourcemeta.ResourceMeta{},
+			output: []*resModel.ResourceMeta{},
 		},
 		{
-			fn: "QueryResourcesByExecutorID",
+			fn: "QueryResourcesByExecutorIDs",
 			inputs: []interface{}{
-				"e444",
+				engineModel.ExecutorID("e444"),
 			},
-			output: []*resourcemeta.ResourceMeta{
+			output: []*resModel.ResourceMeta{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -726,15 +728,16 @@ func TestResourceMock(t *testing.T) {
 			},
 		},
 		{
-			fn: "QueryResourcesByExecutorID",
+			fn: "QueryResourcesByExecutorIDs",
 			inputs: []interface{}{
-				"e445",
+				engineModel.ExecutorID("e444"),
 			},
-			output: []*resourcemeta.ResourceMeta{},
+			output: []*resModel.ResourceMeta{},
 		},
 	}
 
 	for _, tc := range testCases {
+		fmt.Println("testing", tc.fn)
 		testInnerMock(t, cli, tc)
 	}
 }

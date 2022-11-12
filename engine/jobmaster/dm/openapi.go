@@ -17,12 +17,12 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {

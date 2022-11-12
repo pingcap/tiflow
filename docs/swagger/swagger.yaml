@@ -1,4 +1,19 @@
 definitions:
+  config.CSVConfig:
+    properties:
+      date-separator:
+        type: string
+      delimiter:
+        type: string
+      include-commit-ts:
+        type: boolean
+      "null":
+        type: string
+      quote:
+        type: string
+      terminator:
+        type: string
+    type: object
   config.ColumnSelector:
     properties:
       columns:
@@ -33,10 +48,14 @@ definitions:
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
+      csv:
+        $ref: '#/definitions/config.CSVConfig'
       dispatchers:
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
+      encoder-concurrency:
+        type: integer
       protocol:
         type: string
       schema-registry:
@@ -47,6 +66,8 @@ definitions:
   model.Capture:
     properties:
       address:
+        type: string
+      cluster_id:
         type: string
       id:
         type: string

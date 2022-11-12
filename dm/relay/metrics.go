@@ -18,12 +18,11 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (

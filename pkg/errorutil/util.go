@@ -16,15 +16,14 @@ package errorutil
 import (
 	"strings"
 
-	"github.com/pingcap/tidb/util/dbutil"
-	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
+	"github.com/pingcap/tidb/util/dbutil"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
@@ -135,4 +134,16 @@ func IsRetryableDDLError(err error) bool {
 		return false
 	}
 	return true
+}
+
+// IsSyncPointIgnoreError returns whether the error is ignorable for syncpoint.
+func IsSyncPointIgnoreError(err error) bool {
+	err = errors.Cause(err)
+	mysqlErr, ok := err.(*gmysql.MySQLError)
+	if !ok {
+		return false
+	}
+	// We should ignore the error when the downstream has no
+	// such system variable for compatibility.
+	return mysqlErr.Number == mysql.ErrUnknownSystemVariable
 }

@@ -14,33 +14,30 @@
 package worker
 
 import (
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
-
-var _ = check.Suite(&testTaskCheckerSuite{})
-
-type testTaskCheckerSuite struct{}
 
 var (
 	unsupportedModifyColumnError = unit.NewProcessError(terror.ErrDBExecuteFailed.Delegate(&tmysql.SQLError{Code: 1105, Message: "unsupported modify column length 20 is less than origin 40", State: tmysql.DefaultMySQLState}))
 	unknownProcessError          = unit.NewProcessError(errors.New("error message"))
 )
 
-func (s *testTaskCheckerSuite) TestResumeStrategy(c *check.C) {
-	c.Assert(ResumeSkip.String(), check.Equals, resumeStrategy2Str[ResumeSkip])
-	c.Assert(ResumeStrategy(10000).String(), check.Equals, "unsupported resume strategy: 10000")
+func TestResumeStrategy(t *testing.T) {
+	require.Equal(t, resumeStrategy2Str[ResumeSkip], ResumeSkip.String())
+	require.Equal(t, "unsupported resume strategy: 10000", ResumeStrategy(10000).String())
 
 	taskName := "test-task"
 	now := func(addition time.Duration) time.Time { return time.Now().Add(addition) }
@@ -70,7 +67,7 @@ func (s *testTaskCheckerSuite) TestResumeStrategy(c *check.C) {
 	}, nil)
 	for _, tc := range testCases {
 		rtsc, ok := tsc.(*realTaskStatusChecker)
-		c.Assert(ok, check.IsTrue)
+		require.True(t, ok)
 		bf, _ := backoff.NewBackoff(
 			1,
 			false,
@@ -81,11 +78,11 @@ func (s *testTaskCheckerSuite) TestResumeStrategy(c *check.C) {
 			LatestResumeTime: tc.latestResumeFn(tc.addition),
 		}
 		strategy := rtsc.subtaskAutoResume[taskName].CheckResumeSubtask(tc.status, config.DefaultBackoffRollback)
-		c.Assert(strategy, check.Equals, tc.expected)
+		require.Equal(t, tc.expected, strategy)
 	}
 }
 
-func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
+func TestCheck(t *testing.T) {
 	var (
 		latestResumeTime time.Time
 		latestPausedTime time.Time
@@ -94,12 +91,12 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	)
 
 	NewRelayHolder = NewDummyRelayHolder
-	dir := c.MkDir()
-	cfg := loadSourceConfigWithoutPassword(c)
+	dir := t.TempDir()
+	cfg := loadSourceConfigWithoutPassword2(t)
 	cfg.RelayDir = dir
 	cfg.MetaDir = dir
 	w, err := NewSourceWorker(cfg, nil, "", "")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	w.closed.Store(false)
 
 	tsc := NewRealTaskStatusChecker(config.CheckerConfig{
@@ -110,9 +107,9 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		BackoffMax:      config.Duration{Duration: 1 * time.Second},
 		BackoffFactor:   config.DefaultBackoffFactor,
 	}, nil)
-	c.Assert(tsc.Init(), check.IsNil)
+	require.NoError(t, tsc.Init())
 	rtsc, ok := tsc.(*realTaskStatusChecker)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	rtsc.w = w
 
 	st := &SubTask{
@@ -120,7 +117,7 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		stage: pb.Stage_Running,
 		l:     log.With(zap.String("subtask", taskName)),
 	}
-	c.Assert(st.cfg.Adjust(false), check.IsNil)
+	require.NoError(t, st.cfg.Adjust(false))
 	rtsc.w.subTaskHolder.recordSubTask(st)
 	rtsc.check()
 	bf := rtsc.subtaskAutoResume[taskName].Backoff
@@ -137,13 +134,13 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	rtsc.check()
 	time.Sleep(4 * time.Millisecond)
 	rtsc.check()
-	c.Assert(bf.Current(), check.Equals, 8*time.Millisecond)
+	require.Equal(t, 8*time.Millisecond, bf.Current())
 
 	// test backoff rollback at least once, as well as resume ignore strategy
 	st.result = &pb.ProcessResult{IsCanceled: true}
 	time.Sleep(200 * time.Millisecond)
 	rtsc.check()
-	c.Assert(bf.Current() <= 4*time.Millisecond, check.IsTrue)
+	require.True(t, bf.Current() <= 4*time.Millisecond)
 	current := bf.Current()
 
 	// test no sense strategy
@@ -152,12 +149,12 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		Errors:     []*pb.ProcessError{unsupportedModifyColumnError},
 	}
 	rtsc.check()
-	c.Assert(latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime), check.IsTrue)
+	require.True(t, latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime))
 	latestBlockTime = rtsc.subtaskAutoResume[taskName].LatestBlockTime
 	time.Sleep(200 * time.Millisecond)
 	rtsc.check()
-	c.Assert(rtsc.subtaskAutoResume[taskName].LatestBlockTime, check.Equals, latestBlockTime)
-	c.Assert(bf.Current(), check.Equals, current)
+	require.Equal(t, latestBlockTime, rtsc.subtaskAutoResume[taskName].LatestBlockTime)
+	require.Equal(t, current, bf.Current())
 
 	// test resume skip strategy
 	tsc = NewRealTaskStatusChecker(config.CheckerConfig{
@@ -168,9 +165,9 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		BackoffMax:      config.Duration{Duration: 100 * time.Second},
 		BackoffFactor:   config.DefaultBackoffFactor,
 	}, w)
-	c.Assert(tsc.Init(), check.IsNil)
+	require.NoError(t, tsc.Init())
 	rtsc, ok = tsc.(*realTaskStatusChecker)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 
 	st = &SubTask{
 		cfg:   &config.SubTaskConfig{Name: taskName},
@@ -189,16 +186,16 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	rtsc.check()
 	latestResumeTime = rtsc.subtaskAutoResume[taskName].LatestResumeTime
 	latestPausedTime = rtsc.subtaskAutoResume[taskName].LatestPausedTime
-	c.Assert(bf.Current(), check.Equals, 10*time.Second)
+	require.Equal(t, 10*time.Second, bf.Current())
 	for i := 0; i < 10; i++ {
 		rtsc.check()
-		c.Assert(latestResumeTime, check.Equals, rtsc.subtaskAutoResume[taskName].LatestResumeTime)
-		c.Assert(latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime), check.IsTrue)
+		require.Equal(t, latestResumeTime, rtsc.subtaskAutoResume[taskName].LatestResumeTime)
+		require.True(t, latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime))
 		latestPausedTime = rtsc.subtaskAutoResume[taskName].LatestPausedTime
 	}
 }
 
-func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
+func TestCheckTaskIndependent(t *testing.T) {
 	var (
 		task1                 = "task1"
 		task2                 = "tesk2"
@@ -208,12 +205,12 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	)
 
 	NewRelayHolder = NewDummyRelayHolder
-	dir := c.MkDir()
-	cfg := loadSourceConfigWithoutPassword(c)
+	dir := t.TempDir()
+	cfg := loadSourceConfigWithoutPassword2(t)
 	cfg.RelayDir = dir
 	cfg.MetaDir = dir
 	w, err := NewSourceWorker(cfg, nil, "", "")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	w.closed.Store(false)
 
 	tsc := NewRealTaskStatusChecker(config.CheckerConfig{
@@ -224,9 +221,9 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 		BackoffMax:      config.Duration{Duration: 10 * time.Second},
 		BackoffFactor:   1.0,
 	}, nil)
-	c.Assert(tsc.Init(), check.IsNil)
+	require.NoError(t, tsc.Init())
 	rtsc, ok := tsc.(*realTaskStatusChecker)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	rtsc.w = w
 
 	st1 := &SubTask{
@@ -242,9 +239,9 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	}
 	rtsc.w.subTaskHolder.recordSubTask(st2)
 	rtsc.check()
-	c.Assert(len(rtsc.subtaskAutoResume), check.Equals, 2)
+	require.Len(t, rtsc.subtaskAutoResume, 2)
 	for _, times := range rtsc.subtaskAutoResume {
-		c.Assert(times.LatestBlockTime.IsZero(), check.IsTrue)
+		require.True(t, times.LatestBlockTime.IsZero())
 	}
 
 	// test backoff strategies of different tasks do not affect each other
@@ -257,7 +254,7 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 		},
 		l: log.With(zap.String("subtask", task1)),
 	}
-	c.Assert(st1.cfg.Adjust(false), check.IsNil)
+	require.NoError(t, st1.cfg.Adjust(false))
 	rtsc.w.subTaskHolder.recordSubTask(st1)
 	st2 = &SubTask{
 		cfg:   &config.SubTaskConfig{SourceID: "source", Name: task2},
@@ -268,7 +265,7 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 		},
 		l: log.With(zap.String("subtask", task2)),
 	}
-	c.Assert(st2.cfg.Adjust(false), check.IsNil)
+	require.NoError(t, st2.cfg.Adjust(false))
 	rtsc.w.subTaskHolder.recordSubTask(st2)
 
 	task1LatestResumeTime = rtsc.subtaskAutoResume[task1].LatestResumeTime
@@ -276,10 +273,10 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	for i := 0; i < 10; i++ {
 		time.Sleep(backoffMin)
 		rtsc.check()
-		c.Assert(task1LatestResumeTime, check.Equals, rtsc.subtaskAutoResume[task1].LatestResumeTime)
-		c.Assert(task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime), check.IsTrue)
-		c.Assert(rtsc.subtaskAutoResume[task1].LatestBlockTime.IsZero(), check.IsFalse)
-		c.Assert(rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero(), check.IsTrue)
+		require.Equal(t, task1LatestResumeTime, rtsc.subtaskAutoResume[task1].LatestResumeTime)
+		require.True(t, task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime))
+		require.False(t, rtsc.subtaskAutoResume[task1].LatestBlockTime.IsZero())
+		require.True(t, rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero())
 
 		task2LatestResumeTime = rtsc.subtaskAutoResume[task2].LatestResumeTime
 	}
@@ -288,12 +285,12 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	rtsc.w.subTaskHolder.removeSubTask(task1)
 	time.Sleep(backoffMin)
 	rtsc.check()
-	c.Assert(task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime), check.IsTrue)
-	c.Assert(len(rtsc.subtaskAutoResume), check.Equals, 1)
-	c.Assert(rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero(), check.IsTrue)
+	require.True(t, task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime))
+	require.Len(t, rtsc.subtaskAutoResume, 1)
+	require.True(t, rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero())
 }
 
-func (s *testTaskCheckerSuite) TestIsResumableError(c *check.C) {
+func TestIsResumableError(t *testing.T) {
 	testCases := []struct {
 		err       error
 		resumable bool
@@ -318,10 +315,11 @@ func (s *testTaskCheckerSuite) TestIsResumableError(c *check.C) {
 		{errors.New("unknown error"), true},
 		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "Could not find first log file name in binary log index file", State: tmysql.DefaultMySQLState}), false},
 		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires", State: tmysql.DefaultMySQLState}), false},
+		{terror.ErrLoadLightningRuntime.Delegate(common.ErrDBConnect), false},
 	}
 
 	for _, tc := range testCases {
 		err := unit.NewProcessError(tc.err)
-		c.Assert(isResumableError(err), check.Equals, tc.resumable)
+		require.Equal(t, tc.resumable, isResumableError(err))
 	}
 }

@@ -808,6 +808,12 @@ description = ""
 workaround = "Please manually check the error from TiDB and handle it."
 tags = ["internal", "high"]
 
+[error.DM-functional-11130]
+message = "upstream returns incorrect number of columns for SHOW MASTER STATUS"
+description = ""
+workaround = "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS."
+tags = ["upstream", "medium"]
+
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
 description = ""
@@ -1123,7 +1129,7 @@ tags = ["internal", "medium"]
 [error.DM-config-20053]
 message = "invalid load mode '%s'"
 description = ""
-workaround = "Please choose a valid value in ['sql', 'loader']"
+workaround = "Please choose a valid value in ['logical', 'physical']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]
@@ -1695,6 +1701,12 @@ message = "inconsistent checkpoints between loader and target database"
 description = ""
 workaround = "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command."
 tags = ["internal", "high"]
+
+[error.DM-load-unit-34019]
+message = ""
+description = ""
+workaround = ""
+tags = ["not-set", "high"]
 
 [error.DM-sync-unit-36001]
 message = "panic error: %v"

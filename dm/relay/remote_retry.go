@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

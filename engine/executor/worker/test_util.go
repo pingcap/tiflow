@@ -18,12 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 )
 
 type dummyWorker struct {

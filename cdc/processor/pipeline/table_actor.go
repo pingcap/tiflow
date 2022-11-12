@@ -34,17 +34,19 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
 	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 var (
-	_        tablepb.TablePipeline         = (*tableActor)(nil)
-	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
-	stopped                                = uint32(1)
-	workload                               = model.WorkloadInfo{Workload: 1}
+	_       tablepb.TablePipeline         = (*tableActor)(nil)
+	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                               = uint32(1)
 )
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
@@ -63,7 +65,7 @@ type tableActor struct {
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
-	mounter entry.Mounter
+	mg entry.MounterGroup
 	// backend tableSink
 	tableSinkV1 sinkv1.Sink
 	tableSinkV2 sinkv2.TableSink
@@ -72,10 +74,16 @@ type tableActor struct {
 	state tablepb.TableState
 
 	pullerNode *pullerNode
-	sortNode   *sorterNode
 	sinkNode   *sinkNode
 	// contains all nodes except pullerNode
 	nodes []*ActorNode
+
+	// If useEventSortEngine is true eventSortEngine will be used, otherwise sortNode will be used.
+	//
+	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
+	useEventSortEngine bool
+	eventSortEngine    sorter.EventSortEngine
+	sortNode           *sorterNode
 
 	// states of table actor
 	started     bool
@@ -109,7 +117,7 @@ type tableActor struct {
 func NewTableActor(
 	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
-	mounter entry.Mounter,
+	mg entry.MounterGroup,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -129,6 +137,10 @@ func NewTableActor(
 	// All sub-goroutines should be spawn in this wait group.
 	wg, cctx := errgroup.WithContext(ctx)
 
+	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
+	debugConfig := serverConfig.GetGlobalServerConfig().Debug
+	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
+
 	table := &tableActor{
 		// all errors in table actor will be reported to processor
 		reportErr: cdcCtx.Throw,
@@ -141,7 +153,7 @@ func NewTableActor(
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
-		mounter:       mounter,
+		mg:            mg,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSinkV1:   sinkV1,
@@ -149,6 +161,10 @@ func NewTableActor(
 		redoManager:   redoManager,
 		targetTs:      targetTs,
 		started:       false,
+
+		useEventSortEngine: useEventSortEngine,
+		eventSortEngine:    nil,
+		sortNode:           nil,
 
 		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
@@ -247,7 +263,9 @@ func (t *tableActor) handleDataMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleBarrierMsg(ctx context.Context, barrierTs model.Ts) error {
-	t.sortNode.updateBarrierTs(barrierTs)
+	if !t.useEventSortEngine {
+		t.sortNode.updateBarrierTs(barrierTs)
+	}
 	return t.sinkNode.updateBarrierTs(ctx, barrierTs)
 }
 
@@ -293,12 +311,25 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
 		t.redoManager.Enabled(), splitTxn)
-	sorterNode := newSorterNode(t.tableName, t.tableID,
-		t.replicaInfo.StartTs, flowController,
-		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled(),
-		t.upstream.PDClient,
-	)
-	t.sortNode = sorterNode
+	if !t.useEventSortEngine {
+		sorterNode := newSorterNode(t.tableName, t.tableID,
+			t.replicaInfo.StartTs, flowController,
+			t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
+			t.upstream.PDClient,
+		)
+		t.sortNode = sorterNode
+	} else {
+		engine, err := t.globalVars.SortEngineManager.Create(t.changefeedVars.ID)
+		if err != nil {
+			log.Error("create sort engine fail",
+				zap.String("namespace", t.changefeedID.Namespace),
+				zap.String("changefeed", t.changefeedID.ID),
+				zap.Error(err))
+			return err
+		}
+		t.eventSortEngine = engine
+	}
+
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
@@ -365,10 +396,15 @@ func (t *tableActor) stop() {
 		return
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
-	if t.sortNode != nil {
+
+	if !t.useEventSortEngine && t.sortNode != nil {
 		// releaseResource will send a message to sorter router
 		t.sortNode.releaseResource()
 	}
+	if t.useEventSortEngine && t.eventSortEngine != nil {
+		t.eventSortEngine.RemoveTable(t.tableID)
+	}
+
 	t.cancel()
 	if t.sinkNode != nil && !t.sinkStopped.Load() {
 		if err := t.sinkNode.stop(t.tablePipelineCtx); err != nil {
@@ -409,6 +445,9 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	if t.redoManager.Enabled() {
 		return t.redoManager.GetResolvedTs(t.tableID)
 	}
+	if t.useEventSortEngine {
+		return t.eventSortEngine.GetResolvedTs(t.tableID)
+	}
 	return t.sortNode.ResolvedTs()
 }
 
@@ -417,16 +456,21 @@ func (t *tableActor) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
+// if the actor system is slow, too many warn log will be printed, so we need to add rate limit
+var updateBarrierTsLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*500), 1)
+
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	msg := pmessage.BarrierMessage(ts)
 	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
-		log.Warn("send fails",
-			zap.Any("msg", msg),
-			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
-			zap.Error(err))
+		if updateBarrierTsLogRateLimiter.Allow() {
+			log.Warn("send fails",
+				zap.Any("msg", msg),
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID),
+				zap.Error(err))
+		}
 	}
 }
 
@@ -448,10 +492,45 @@ func (t *tableActor) AsyncStop() bool {
 	return true
 }
 
-// Workload returns the workload of this table pipeline
-func (t *tableActor) Workload() model.WorkloadInfo {
-	// We temporarily set the value to constant 1
-	return workload
+// Stats returns the statistics of this table pipeline
+func (t *tableActor) Stats() tablepb.Stats {
+	pullerStats := t.pullerNode.plr.Stats()
+	sinkStats := t.sinkNode.Stats()
+	now, _ := t.upstream.PDClock.CurrentTime()
+
+	stats := tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
+			},
+			"sink": {
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
+			},
+		},
+	}
+
+	if !t.useEventSortEngine {
+		sorterStats := t.sortNode.sorter.Stats()
+		stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+			CheckpointTs: sorterStats.CheckpointTsIngress,
+			ResolvedTs:   sorterStats.ResolvedTsIngress,
+		}
+		stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+			CheckpointTs: sorterStats.CheckpointTsEgress,
+			ResolvedTs:   sorterStats.ResolvedTsEgress,
+		}
+	}
+
+	return stats
 }
 
 // State returns the state of this table pipeline
@@ -491,29 +570,48 @@ func (t *tableActor) Wait() {
 
 // MemoryConsumption return the memory consumption in bytes
 func (t *tableActor) MemoryConsumption() uint64 {
-	return t.sortNode.flowController.GetConsumption()
+	if !t.useEventSortEngine {
+		return t.sortNode.flowController.GetConsumption()
+	}
+	// TODO(qupeng): sink manager should handle this.
+	return 0
 }
 
 func (t *tableActor) Start(ts model.Ts) {
-	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
-		t.sortNode.startTsCh <- ts
-		close(t.sortNode.startTsCh)
+	if !t.useEventSortEngine {
+		if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+			t.sortNode.startTsCh <- ts
+			close(t.sortNode.startTsCh)
+		}
+	} else {
+		t.eventSortEngine.AddTable(t.tableID)
 	}
 }
 
 func (t *tableActor) RemainEvents() int64 {
-	return t.sortNode.remainEvent()
+	if !t.useEventSortEngine {
+		return t.sortNode.remainEvent()
+	}
+	// TODO(qupeng): record it in sort engine and sinkmanager.
+	return 0
 }
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
+	if !t.useEventSortEngine {
+		return t.pullerNode.startWithSorterNode(ctx, t.upstream, t.wg, t.sortNode)
+	}
+	return t.pullerNode.startWithEventSortEngine(ctx, t.upstream, t.wg, t.eventSortEngine)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
-	if err != nil {
-		return errors.Trace(err)
+	if !t.useEventSortEngine {
+		eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
 	}
-	return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
+	t.eventSortEngine.AddTable(t.tableID)
+	return nil
 }

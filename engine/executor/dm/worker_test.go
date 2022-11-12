@@ -16,14 +16,10 @@ package dm
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/dig"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -40,7 +36,9 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
 )
 
 var jobTemplatePath = "../../jobmaster/dm/config/job_template.yaml"
@@ -70,6 +68,7 @@ func TestFactory(t *testing.T) {
 		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ResourceBroker:        broker.NewBrokerForTesting("exector-id"),
 	}
+	defer depsForTest.ResourceBroker.Close()
 	require.NoError(t, dp.Provide(func() workerParamListForTest {
 		return depsForTest
 	}))
@@ -109,7 +108,24 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
 		return p2p.NewMockMessageHandlerManager()
 	}))
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0)
+	taskCfg := &config.TaskCfg{
+		JobCfg: config.JobCfg{
+			TargetDB: &dmconfig.DBConfig{},
+			Upstreams: []*config.UpstreamCfg{
+				{
+					MySQLInstance: dmconfig.MySQLInstance{
+						Mydumper: &dmconfig.MydumperConfig{},
+						Loader:   &dmconfig.LoaderConfig{},
+						Syncer:   &dmconfig.SyncerConfig{},
+						SourceID: "task-id",
+					},
+					DBCfg: &dmconfig.DBConfig{},
+				},
+			},
+		},
+		NeedExtStorage: true,
+	}
+	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
@@ -136,13 +152,12 @@ func TestWorker(t *testing.T) {
 
 	// placeholder
 	require.Equal(t, model.RescUnit(0), dmWorker.Workload())
-	require.NoError(t, dmWorker.OnMasterFailover(framework.MasterFailoverReason{}))
 	require.NoError(t, dmWorker.OnMasterMessage(context.Background(), "", nil))
 
 	// Finished
 	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Times(3)
 	unitHolder.On("Status").Return(&pb.DumpStatus{}).Once()
-	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+	require.True(t, errors.Is(dmWorker.Tick(context.Background()), errors.ErrWorkerFinish))
 
 	unitHolder.AssertExpectations(t)
 }

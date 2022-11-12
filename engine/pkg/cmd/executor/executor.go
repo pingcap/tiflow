@@ -18,18 +18,17 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/executor"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/util"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	ticdcutil "github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"go.uber.org/zap"
 )
 
 // options defines flags for the `server` command.
@@ -77,7 +76,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	ticdcutil.LogHTTPProxies()
 
-	server := executor.NewServer(o.executorConfig, nil)
+	server := executor.NewServer(o.executorConfig)
 
 	err = server.Run(cmdconetxt.GetDefaultContext())
 	if err != nil && errors.Cause(err) != context.Canceled {

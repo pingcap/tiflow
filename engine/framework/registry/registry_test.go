@@ -16,14 +16,13 @@ package registry
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
@@ -35,7 +34,8 @@ const (
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
-	ctx := makeCtxWithMockDeps(t)
+	ctx, cancel := makeCtxWithMockDeps(t)
+	defer cancel()
 	metaCli, err := ctx.Deps().Construct(
 		func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 			return cli, nil

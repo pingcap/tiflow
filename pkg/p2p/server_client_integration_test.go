@@ -22,16 +22,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-
 	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 // read only
@@ -46,6 +45,7 @@ var clientConfig4Testing = &MessageClientConfig{
 
 type serverConfigOpt = func(config *MessageServerConfig)
 
+//nolint:unparam
 func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts ...serverConfigOpt) (server *MessageServer, addr string, cancel func()) {
 	port := freeport.GetPort()
 	addr = fmt.Sprintf("127.0.0.1:%d", port)

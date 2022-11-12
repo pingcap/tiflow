@@ -29,6 +29,13 @@ master:
     reset-interval = "2s"
     initial-interval = "1s"
     max-interval = "15s"
+    max-try-time = 100
+
+    [storage.s3]
+    bucket = "engine-it"
+    endpoint = "http://chaos-minio:9000/"
+    access-key = "engine"
+    secret-access-key = "engineSecret"
 
 executor:
   replicas: 4
@@ -36,7 +43,6 @@ executor:
   config: |
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
-    session-ttl = 20
 
 metastore:
   frameworkStorage: 5Gi

@@ -44,9 +44,7 @@ func TestNotifierBasics(t *testing.T) {
 
 			var ev, lastEv int
 			for {
-				select {
-				case ev = <-r.C:
-				}
+				ev = <-r.C
 
 				if ev == finEv {
 					return
@@ -121,4 +119,14 @@ func TestReceiverClose(t *testing.T) {
 		t.Fatal("receiver.Close() is blocked")
 	}
 	n.Close()
+}
+
+func TestFlushWithClosedNotifier(t *testing.T) {
+	t.Parallel()
+
+	n := NewNotifier[int]()
+	n.Notify(1)
+	n.Close()
+	err := n.Flush(context.Background())
+	require.Nil(t, err)
 }

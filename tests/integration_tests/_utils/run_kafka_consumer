@@ -18,9 +18,9 @@ cd $workdir
 # some consumer may require `consumer_replica_config`, set it separately
 if [ "$consumer_replica_config" != "" ]; then
 	echo "consumer replica config found: $consumer_replica_config"
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/ --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/?safe-mode=true --config $consumer_replica_config >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 else
-	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/ >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
+	cdc_kafka_consumer --log-file $workdir/cdc_kafka_consumer$log_suffix.log --log-level info --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/?safe-mode=true >>$workdir/cdc_kafka_consumer_stdout$log_suffix.log 2>&1 &
 fi
 
 cd $pwd

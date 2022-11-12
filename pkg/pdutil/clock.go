@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const pdTimeUpdateInterval = 200 * time.Millisecond
+const pdTimeUpdateInterval = 10 * time.Millisecond
 
 // Clock is a time source of PD cluster.
 type Clock interface {
@@ -43,7 +43,7 @@ type clock struct {
 		sync.RWMutex
 		// The time encoded in PD ts.
 		tsEventTime time.Time
-		// The time we receives PD ts.
+		// The time we receive PD ts.
 		tsProcessingTime time.Time
 		err              error
 	}
@@ -120,8 +120,8 @@ func (c *clock) CurrentTime() (time.Time, error) {
 // Stop clock.
 func (c *clock) Stop() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.cancel()
+	c.mu.Unlock()
 	<-c.stopCh
 }
 

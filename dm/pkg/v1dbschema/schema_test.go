@@ -23,7 +23,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"

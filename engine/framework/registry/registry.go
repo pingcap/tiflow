@@ -17,14 +17,12 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // WorkerConfig alias to framework.WorkerConfig
@@ -91,12 +89,12 @@ func (r *registryImpl) CreateWorker(
 ) (framework.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
-		return nil, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+		return nil, errors.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
 
 	config, err := factory.DeserializeConfig(configBytes)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
 	}
 
 	impl, err := factory.NewWorkerImpl(ctx, workerID, masterID, config)
@@ -139,7 +137,7 @@ func (r *registryImpl) CreateWorker(
 func (r *registryImpl) IsRetryableError(err error, tp frameModel.WorkerType) (bool, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
-		return false, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+		return false, errors.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
 	return factory.IsRetryableError(err), nil
 }

@@ -15,44 +15,32 @@ package manager
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+var _ pb.ResourceManagerServer = (*Service)(nil)
 
 // Service implements pb.ResourceManagerServer
 type Service struct {
 	metaclient pkgOrm.Client
-
-	executors ExecutorInfoProvider
-
-	wg       sync.WaitGroup
-	cancelCh chan struct{}
-
 	preRPCHook rpcutil.PreRPCHook
 }
 
 // NewService creates a new externalresource manage service
-func NewService(
-	metaclient pkgOrm.Client,
-	executorInfoProvider ExecutorInfoProvider,
-	preRPCHook rpcutil.PreRPCHook,
-) *Service {
+func NewService(metaclient pkgOrm.Client, preRPCHook rpcutil.PreRPCHook) *Service {
 	return &Service{
 		metaclient: metaclient,
-		executors:  executorInfoProvider,
 		preRPCHook: preRPCHook,
 	}
 }
@@ -78,15 +66,9 @@ func (s *Service) QueryResource(
 	record, err := s.metaclient.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, internal.ErrResourceNotFound.GenWithStack(&internal.ResourceNotFoundError{
-				ResourceID: resourceID,
-				Details:    err.Error(),
-			})
+			return nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
 		}
-		return nil, internal.ErrResourceMetastoreError.GenWithStack(&internal.ResourceMetastoreError{
-			ResourceID: resourceID,
-			Details:    err.Error(),
-		})
+		return nil, errors.ErrResourceMetastoreError.Wrap(err).GenWithStackByArgs()
 	}
 
 	if record.Deleted {
@@ -121,19 +103,11 @@ func (s *Service) CreateResource(
 	}
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
-	if errors.ErrDuplicateResourceID.Equal(err) {
-		return nil, internal.ErrResourceAlreadyExists.GenWithStack(
-			&internal.ResourceAlreadyExistsError{
-				ResourceID: request.GetResourceId(),
-				Details:    err.Error(),
-			})
+	if errors.Is(err, errors.ErrDuplicateResourceID) {
+		return nil, errors.ErrResourceAlreadyExists.GenWithStackByArgs(request.GetResourceId())
 	}
 	if err != nil {
-		return nil, internal.ErrResourceMetastoreError.GenWithStack(
-			&internal.ResourceMetastoreError{
-				ResourceID: request.GetResourceId(),
-				Details:    err.Error(),
-			})
+		return nil, errors.ErrResourceMetastoreError.Wrap(err).GenWithStackByArgs()
 	}
 
 	return &pb.CreateResourceResponse{}, nil
@@ -158,19 +132,11 @@ func (s *Service) RemoveResource(
 
 	res, err := s.metaclient.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
-		return nil, internal.ErrResourceMetastoreError.GenWithStack(
-			&internal.ResourceMetastoreError{
-				ResourceID: resourceID,
-				Details:    err.Error(),
-			})
+		return nil, errors.ErrResourceMetastoreError.Wrap(err).GenWithStackByArgs()
 	}
 
 	if res.RowsAffected() == 0 {
-		return nil, internal.ErrResourceNotFound.GenWithStack(
-			&internal.ResourceNotFoundError{
-				ResourceID: resourceID,
-				Details:    err.Error(),
-			})
+		return nil, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceID)
 	}
 	if res.RowsAffected() > 1 {
 		log.Panic("unexpected RowsAffected",
@@ -197,7 +163,7 @@ func (s *Service) GetPlacementConstraint(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 
-	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
+	rType, _, err := resModel.ParseResourceID(resourceKey.ID)
 	if err != nil {
 		return "", false, err
 	}
@@ -225,17 +191,11 @@ func (s *Service) GetPlacementConstraint(
 
 func checkArguments(resourceID resModel.ResourceID, jobID model.JobID) error {
 	if resourceID == "" {
-		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
-			JobID:      jobID,
-			Annotation: "resource-id cannot be empty",
-		})
+		return errors.ErrInvalidArgument.GenWithStackByArgs("resource-id")
 	}
 
 	if jobID == "" {
-		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
-			ResourceID: resourceID,
-			Annotation: "job-id cannot be empty",
-		})
+		return errors.ErrInvalidArgument.GenWithStackByArgs("job-id")
 	}
 	return nil
 }

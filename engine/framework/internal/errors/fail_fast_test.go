@@ -13,12 +13,10 @@
 package errors
 
 import (
-	"errors"
 	"testing"
 
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
-
-	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func TestFailFastWrap(t *testing.T) {
@@ -26,10 +24,10 @@ func TestFailFastWrap(t *testing.T) {
 
 	// Note: this error is only used for testing.
 	// Feel free to replace it with another one.
-	testErr := derrors.ErrTooManyStatusUpdates.GenWithStackByArgs()
+	testErr := errors.ErrTooManyStatusUpdates.GenWithStackByArgs()
 
 	err := FailFast(testErr)
-	require.True(t, derrors.ErrTooManyStatusUpdates.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrTooManyStatusUpdates))
 	require.Regexp(t, "ErrTooManyStatusUpdates", err)
 
 	require.True(t, IsFailFastError(err))

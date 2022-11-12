@@ -86,6 +86,16 @@ error = '''
 puller mem buffer reach size limit
 '''
 
+["CDC:ErrCSVDecodeFailed"]
+error = '''
+csv decode failed
+'''
+
+["CDC:ErrCSVEncodeFailed"]
+error = '''
+csv encode failed
+'''
+
 ["CDC:ErrCachedTSONotExists"]
 error = '''
 GetCachedCurrentVersion: cache entry does not exist
@@ -204,6 +214,16 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
 invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
+'''
+
+["CDC:ErrCloudStorageDefragmentFailed"]
+error = '''
+cloud storage defragment encoded messages failed
+'''
+
+["CDC:ErrCloudStorageInvalidConfig"]
+error = '''
+cloud storage config invalid
 '''
 
 ["CDC:ErrClusterIDMismatch"]
@@ -1086,6 +1106,11 @@ error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
+["CDC:ErrStorageSinkInvalidDateSeparator"]
+error = '''
+date separator in cloud storage sink is invalid
+'''
+
 ["CDC:ErrSupportGetOnly"]
 error = '''
 this api supports GET method only
@@ -1196,6 +1221,11 @@ error = '''
 updating service safepoint failed
 '''
 
+["CDC:ErrUpstreamClosed"]
+error = '''
+upstream has been closed
+'''
+
 ["CDC:ErrUpstreamManagerNotReady"]
 error = '''
 upstream manager not ready
@@ -1246,9 +1276,9 @@ error = '''
 0-length response with status code: %d
 '''
 
-["DFLOW:ErrBuildJobFailed"]
+["DFLOW:ErrCapacityNotEnough"]
 error = '''
-build job failed
+capacity not enough
 '''
 
 ["DFLOW:ErrCleaningLocalTempFiles"]
@@ -1266,9 +1296,14 @@ error = '''
 creating local file resource directory failed
 '''
 
-["DFLOW:ErrDatasetEntryNotFound"]
+["DFLOW:ErrCreateWorkerNonTerminate"]
 error = '''
-dataset entry not found. Key: %s
+create worker is not terminated
+'''
+
+["DFLOW:ErrCreateWorkerTerminate"]
+error = '''
+create worker is terminated
 '''
 
 ["DFLOW:ErrDecodeEtcdKeyFail"]
@@ -1276,14 +1311,9 @@ error = '''
 failed to decode etcd key: %s
 '''
 
-["DFLOW:ErrDecodeEtcdValueFail"]
+["DFLOW:ErrDispatchTaskRequestIDNotFound"]
 error = '''
-failed to decode etcd value: %s
-'''
-
-["DFLOW:ErrDiscoveryDuplicateWatch"]
-error = '''
-service discovery can't be watched multiple times
+dispatch task request id %s not found
 '''
 
 ["DFLOW:ErrDuplicateResourceID"]
@@ -1291,9 +1321,9 @@ error = '''
 duplicate resource ID: %s
 '''
 
-["DFLOW:ErrDuplicateWorkerID"]
+["DFLOW:ErrElectionRecordConflict"]
 error = '''
-duplicate worker ID encountered: %s, report a bug
+election record conflict
 '''
 
 ["DFLOW:ErrEtcdAPIError"]
@@ -1301,14 +1331,9 @@ error = '''
 etcd api returns error
 '''
 
-["DFLOW:ErrExecutorConfigInvalidFlag"]
+["DFLOW:ErrExecutorAlreadyExists"]
 error = '''
-'%s' is an invalid flag
-'''
-
-["DFLOW:ErrExecutorConfigParseFlagSet"]
-error = '''
-parse config flag set failed
+executor %s already exists
 '''
 
 ["DFLOW:ErrExecutorConfigUnknownItem"]
@@ -1316,34 +1341,19 @@ error = '''
 master config contains unknown configuration options: %s
 '''
 
-["DFLOW:ErrExecutorConfirmDispatchFailed"]
-error = '''
-ConfirmDispatch failed
-'''
-
 ["DFLOW:ErrExecutorDecodeConfigFile"]
 error = '''
 decode config file failed
 '''
 
-["DFLOW:ErrExecutorEtcdConnFail"]
+["DFLOW:ErrExecutorNotFound"]
 error = '''
-executor conn inner etcd fail
+executor %s not found
 '''
 
 ["DFLOW:ErrExecutorNotFoundForMessage"]
 error = '''
 cannot find the executor for p2p messaging
-'''
-
-["DFLOW:ErrExecutorPreDispatchFailed"]
-error = '''
-PreDispatchTask failed
-'''
-
-["DFLOW:ErrExecutorSessionDone"]
-error = '''
-executor %s session done
 '''
 
 ["DFLOW:ErrExecutorWatcherClosed"]
@@ -1354,6 +1364,11 @@ executor watcher is closed
 ["DFLOW:ErrFailToCreateExternalStorage"]
 error = '''
 failed to create external storage
+'''
+
+["DFLOW:ErrFilterNoResult"]
+error = '''
+filter % returns no result
 '''
 
 ["DFLOW:ErrGrpcBuildConn"]
@@ -1371,14 +1386,19 @@ error = '''
 resource path is illegal: %s
 '''
 
+["DFLOW:ErrIncompatibleSchedulerRequest"]
+error = '''
+incompatible scheduler request: %s
+'''
+
+["DFLOW:ErrInvalidArgument"]
+error = '''
+invalid argument: %s
+'''
+
 ["DFLOW:ErrInvalidCliParameter"]
 error = '''
 invalid cli parameters
-'''
-
-["DFLOW:ErrInvalidJobType"]
-error = '''
-invalid job type: %s
 '''
 
 ["DFLOW:ErrInvalidMasterMessage"]
@@ -1386,34 +1406,19 @@ error = '''
 invalid master message: %s
 '''
 
-["DFLOW:ErrInvalidMetaStoreKey"]
-error = '''
-invalid metastore key %s
-'''
-
-["DFLOW:ErrInvalidMetaStoreKeyTp"]
-error = '''
-invalid metastore key type %s
-'''
-
 ["DFLOW:ErrInvalidResourceHandle"]
 error = '''
 using an invalid resource handle
 '''
 
-["DFLOW:ErrInvalidServerMasterID"]
-error = '''
-invalid server master id: %s
-'''
-
-["DFLOW:ErrInvalidWorkerType"]
-error = '''
-invalid worker type: %s
-'''
-
 ["DFLOW:ErrJobAlreadyCanceled"]
 error = '''
-job is already canceled: %s
+job %s is already canceled
+'''
+
+["DFLOW:ErrJobAlreadyExists"]
+error = '''
+job %s already exists
 '''
 
 ["DFLOW:ErrJobManagerGetJobDetailFail"]
@@ -1436,24 +1441,24 @@ error = '''
 get job detail response status code is not 2XX
 '''
 
-["DFLOW:ErrLeaderCtxCanceled"]
+["DFLOW:ErrJobNotFound"]
 error = '''
-leader context is canceled
+job %s is not found
 '''
 
-["DFLOW:ErrLeaderResigned"]
+["DFLOW:ErrJobNotRunning"]
 error = '''
-leader has resigned
+job %s is not running
+'''
+
+["DFLOW:ErrJobNotTerminated"]
+error = '''
+job %s is not terminated
 '''
 
 ["DFLOW:ErrLocalFileDirNotWritable"]
 error = '''
 local resource directory not writable
-'''
-
-["DFLOW:ErrMasterCampaignLeader"]
-error = '''
-master campaign to be leader failed
 '''
 
 ["DFLOW:ErrMasterClosed"]
@@ -1466,16 +1471,6 @@ error = '''
 master has reached concurrency quota
 '''
 
-["DFLOW:ErrMasterConfigInvalidFlag"]
-error = '''
-'%s' is an invalid flag
-'''
-
-["DFLOW:ErrMasterConfigParseFlagSet"]
-error = '''
-parse config flag set failed
-'''
-
 ["DFLOW:ErrMasterConfigUnknownItem"]
 error = '''
 master config contains unknown configuration options: %s
@@ -1486,29 +1481,19 @@ error = '''
 create worker is being backoff, retry later
 '''
 
+["DFLOW:ErrMasterCreateWorkerTerminate"]
+error = '''
+create worker is terminated, won't backoff any more
+'''
+
 ["DFLOW:ErrMasterDecodeConfigFile"]
 error = '''
 decode config file failed
 '''
 
-["DFLOW:ErrMasterEtcdCreateSessionFail"]
-error = '''
-failed to create Etcd session
-'''
-
-["DFLOW:ErrMasterEtcdElectionCampaignFail"]
-error = '''
-failed to campaign for leader
-'''
-
 ["DFLOW:ErrMasterEtcdEpochFail"]
 error = '''
 server master generate epoch fail
-'''
-
-["DFLOW:ErrMasterGenEmbedEtcdConfigFail"]
-error = '''
-master gen embed etcd config failed: %s
 '''
 
 ["DFLOW:ErrMasterInterfaceNotFound"]
@@ -1521,34 +1506,14 @@ error = '''
 invalid master meta data: %s
 '''
 
-["DFLOW:ErrMasterJoinEmbedEtcdFail"]
-error = '''
-failed to join embed etcd: %s
-'''
-
-["DFLOW:ErrMasterNewServer"]
-error = '''
-master create new server failed
-'''
-
-["DFLOW:ErrMasterNoLeader"]
-error = '''
-server master has no leader
-'''
-
 ["DFLOW:ErrMasterNotFound"]
 error = '''
 master is not found: master ID %s
 '''
 
-["DFLOW:ErrMasterNotInitialized"]
+["DFLOW:ErrMasterNotReady"]
 error = '''
-master is not initialized
-'''
-
-["DFLOW:ErrMasterParseURLFail"]
-error = '''
-failed to parse URL %s
+master is not ready
 '''
 
 ["DFLOW:ErrMasterRPCNotForward"]
@@ -1556,29 +1521,9 @@ error = '''
 server grpc is not forwarded to leader
 '''
 
-["DFLOW:ErrMasterScheduleMissTask"]
-error = '''
-task %d is not found after scheduling
-'''
-
-["DFLOW:ErrMasterSessionDone"]
-error = '''
-master session is done
-'''
-
-["DFLOW:ErrMasterStartEmbedEtcdFail"]
-error = '''
-failed to start embed etcd
-'''
-
 ["DFLOW:ErrMasterTooManyPendingEvents"]
 error = '''
 master has too many pending events
-'''
-
-["DFLOW:ErrMessageClientNotFoundForWorker"]
-error = '''
-peer message client is not found for worker: worker ID %s
 '''
 
 ["DFLOW:ErrMetaClientTypeNotSupport"]
@@ -1594,11 +1539,6 @@ meta already committed txn
 ["DFLOW:ErrMetaEmptyKey"]
 error = '''
 meta empty key
-'''
-
-["DFLOW:ErrMetaEntryAlreadyExists"]
-error = '''
-meta entry already exists
 '''
 
 ["DFLOW:ErrMetaEntryNotFound"]
@@ -1636,34 +1576,19 @@ error = '''
 meta params invalid:%s
 '''
 
-["DFLOW:ErrMetaRevisionUnmatch"]
-error = '''
-meta revision unmatch
-'''
-
 ["DFLOW:ErrMetaStoreIDDuplicate"]
 error = '''
 metastore id duplicated
 '''
 
-["DFLOW:ErrMetaStoreUnfounded"]
+["DFLOW:ErrMetaStoreNotExists"]
 error = '''
-metastore unfounded:%s
+metastore %s does not exist
 '''
 
 ["DFLOW:ErrNoRPCClient"]
 error = '''
 no available RPC client
-'''
-
-["DFLOW:ErrOperatorUnknown"]
-error = '''
-operator type %d is unknown
-'''
-
-["DFLOW:ErrPlannerDAGDepthExceeded"]
-error = '''
-dag depth exceeded: %d
 '''
 
 ["DFLOW:ErrReadLocalFileDirectoryFailed"]
@@ -1676,9 +1601,29 @@ error = '''
 removing a local resource file directory has failed
 '''
 
+["DFLOW:ErrResourceAlreadyExists"]
+error = '''
+resource %s already exists
+'''
+
+["DFLOW:ErrResourceConflict"]
+error = '''
+resource % on executor %s conflicts with resource %s on executor %s
+'''
+
 ["DFLOW:ErrResourceDoesNotExist"]
 error = '''
 resource does not exists: %s
+'''
+
+["DFLOW:ErrResourceFilesNotFound"]
+error = '''
+resource files not found
+'''
+
+["DFLOW:ErrResourceMetastoreError"]
+error = '''
+resource metastore error
 '''
 
 ["DFLOW:ErrRuntimeClosed"]
@@ -1696,19 +1641,14 @@ error = '''
 runtime has too many pending CreateWorker requests
 '''
 
-["DFLOW:ErrRuntimeInitQueuingTimeOut"]
-error = '''
-a task has waited too long to be initialized
-'''
-
 ["DFLOW:ErrRuntimeIsClosed"]
 error = '''
 runtime has been closed
 '''
 
-["DFLOW:ErrRuntimeReachedCapacity"]
+["DFLOW:ErrSelectorUnsatisfied"]
 error = '''
-runtime has reached its capacity %d
+selector %v is not satisfied
 '''
 
 ["DFLOW:ErrSendingMessageToTombstone"]
@@ -1716,19 +1656,9 @@ error = '''
 trying to send message to a tombstone worker handle: %s
 '''
 
-["DFLOW:ErrSubJobFailed"]
-error = '''
-executor %s job %d
-'''
-
-["DFLOW:ErrTaskNotFound"]
-error = '''
-task %d is not found
-'''
-
 ["DFLOW:ErrTombstoneExecutor"]
 error = '''
-executor %s has been dead
+tombstone executor: %s
 '''
 
 ["DFLOW:ErrTooManyStatusUpdates"]
@@ -1736,14 +1666,14 @@ error = '''
 there are too many pending worker status updates: %d
 '''
 
-["DFLOW:ErrUnexpectedResourcePath"]
+["DFLOW:ErrUnknown"]
 error = '''
-unexpected resource path: %s
+unknown error
 '''
 
-["DFLOW:ErrUnknownExecutorID"]
+["DFLOW:ErrUnknownExecutor"]
 error = '''
-cannot find executor ID: %s
+unknown executor: %s
 '''
 
 ["DFLOW:ErrWorkerCancel"]
@@ -1766,11 +1696,6 @@ error = '''
 the worker is in half-exited state
 '''
 
-["DFLOW:ErrWorkerNoMeta"]
-error = '''
-worker metadata does not exist
-'''
-
 ["DFLOW:ErrWorkerNotFound"]
 error = '''
 worker is not found: worker ID %s
@@ -1786,11 +1711,6 @@ error = '''
 worker has committed suicide due to master(%s) having timed out
 '''
 
-["DFLOW:ErrWorkerTimedOut"]
-error = '''
-worker heartbeat timed out: workerID %s
-'''
-
 ["DFLOW:ErrWorkerTypeNotFound"]
 error = '''
 worker type is not found: type %d
@@ -1799,11 +1719,6 @@ worker type is not found: type %d
 ["DFLOW:ErrWorkerUpdateStatusTryAgain"]
 error = '''
 worker should try again in updating the status
-'''
-
-["DLFOW:ErrResourceManagerNotReady"]
-error = '''
-resource manager is not ready
 '''
 
 ["ErrConflictingFileLocks"]

@@ -116,6 +116,8 @@ message DumpStatus {
     double finishedBytes = 3;
     double finishedRows = 4;
     double estimateTotalRows = 5;
+    int64 bps = 6;
+    string progress = 7;
 }
 
 // LoadStatus represents status for load unit
@@ -125,6 +127,7 @@ message LoadStatus {
     string progress = 3;
     string metaBinlog = 4;
     string metaBinlogGTID = 5;
+    int64 bps = 6;
 }
 
 // ShardingGroup represents a DDL sharding group, this is used by SyncStatus, and is differ from ShardingGroup in syncer pkg
@@ -143,6 +146,7 @@ message ShardingGroup {
 
 // SyncStatus represents status for sync unit
 message SyncStatus {
+    // totalEvents/totalTps/recentTps has been deprecated now
     int64 totalEvents = 1;
     int64 totalTps = 2;
     int64 recentTps = 3;
@@ -157,6 +161,9 @@ message SyncStatus {
     int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
     string blockDDLOwner = 13; // block ddl upstream info, format "task-`upstreamDatabase`.`upstreamTable`"
     string conflictMsg = 14; // block ddl conflict reason
+    int64 totalRows = 15;
+    int64 totalRps = 16;
+    int64 recentRps = 17;
 }
 
 // SourceStatus represents status for source runing on dm-worker

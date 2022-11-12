@@ -200,7 +200,10 @@ func TestGetChangefeed(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 
 	// test get changefeed succeeded
@@ -755,7 +758,10 @@ func TestListCapture(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/captures", method: "GET"}

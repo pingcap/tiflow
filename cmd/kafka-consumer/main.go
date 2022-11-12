@@ -168,7 +168,7 @@ func init() {
 
 	s = upstreamURI.Query().Get("protocol")
 	if s != "" {
-		if err := protocol.FromString(s); err != nil {
+		if protocol, err = config.ParseSinkProtocolFromString(s); err != nil {
 			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 		}
 	}
@@ -330,7 +330,7 @@ func main() {
 		}
 	}()
 
-	<-consumer.ready // Await till the consumer has been set up
+	<-consumer.ready // wait till the consumer has been set up
 	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)

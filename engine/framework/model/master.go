@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/pingcap/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"gorm.io/gorm"
 )

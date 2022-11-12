@@ -24,9 +24,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
-
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/parser/model"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -41,13 +45,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-
-	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -722,13 +720,6 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	sqls := make([]string, 0, 100)
 	args := make([][]interface{}, 0, 100)
 
-	if snapshotCp.globalPoint != nil {
-		locationG := snapshotCp.globalPoint.location
-		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
-		sqls = append(sqls, sqlG)
-		args = append(args, argG)
-	}
-
 	type tableCpSnapshotTuple struct {
 		tableCp         *binlogPoint // current table checkpoint location
 		snapshotTableCP tablePoint   // table checkpoint snapshot location
@@ -767,12 +758,21 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 		args = append(args, extraArgs[i])
 	}
 
+	// updating global checkpoint should be the last SQL, its success indicates
+	// the checkpoint is flushed successfully.
+	if snapshotCp.globalPoint != nil {
+		locationG := snapshotCp.globalPoint.location
+		sqlG, argG := cp.genUpdateSQL(globalCpSchema, globalCpTable, locationG, cp.safeModeExitPoint, nil, true)
+		sqls = append(sqls, sqlG)
+		args = append(args, argG)
+	}
+
 	cp.Unlock()
 
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
+	err := cp.dbConn.ExecuteSQLAutoSplit(tctx2, cp.metricProxies, sqls, args...)
 	if err != nil {
 		return err
 	}

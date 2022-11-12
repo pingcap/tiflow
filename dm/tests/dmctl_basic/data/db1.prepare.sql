@@ -25,6 +25,7 @@ INSERT INTO `dmctl`.`t_1` (`b`,`c`,`d`,`id`) VALUES (800180420,'JuUIxUacksp','sX
 
 create table tb_1(a INT, b INT);
 create table tb_2(a INT, c INT);
+create table _tb_1_gho(a INT, b INT); -- trigger online ddl checker
 
 create table precheck_optimistic_tb_1(a INT, b INT, primary key a(a));
 create table precheck_optimistic_tb_2(a INT, c INT, primary key a(a));

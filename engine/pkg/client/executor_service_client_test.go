@@ -18,15 +18,14 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/enginepb"
+	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/pingcap/tiflow/engine/enginepb"
-	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
 )
 
 func TestDispatchTaskNormal(t *testing.T) {
@@ -105,27 +104,19 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 		isFailFast bool
 	}{
 		{
-			err:        status.Error(codes.Aborted, "fake aborted error"),
+			err:        errors.ErrRuntimeIncomingQueueFull.FastGenByArgs(),
 			isFailFast: true,
 		},
 		{
-			err:        status.Error(codes.NotFound, "fake not found error"),
+			err:        errors.ErrDispatchTaskRequestIDNotFound.FastGenByArgs(),
 			isFailFast: true,
 		},
 		{
-			err:        errors.Trace(status.Error(codes.NotFound, "fake not found error")),
-			isFailFast: true,
-		},
-		{
-			err:        status.Error(codes.Canceled, "fake not found error"),
+			err:        errors.ErrInvalidArgument.FastGenByArgs("request-id"),
 			isFailFast: false,
 		},
 		{
-			err:        errors.New("some random error"),
-			isFailFast: false,
-		},
-		{
-			err:        context.Canceled,
+			err:        errors.ErrUnknown.FastGenByArgs(),
 			isFailFast: false,
 		},
 	}

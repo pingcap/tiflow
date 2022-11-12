@@ -19,15 +19,14 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/coreos/go-semver/semver"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-
-	"github.com/coreos/go-semver/semver"
+	"github.com/stretchr/testify/require"
 )
 
 var correctTaskConfig = `---
@@ -136,10 +135,12 @@ mysql-instances:
     syncer-config-name: "global2"
 `
 
-func (t *testConfig) TestUnusedTaskConfig(c *C) {
+func TestUnusedTaskConfig(t *testing.T) {
+	t.Parallel()
+
 	taskConfig := NewTaskConfig()
 	err := taskConfig.Decode(correctTaskConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	errorTaskConfig := `---
 name: test
 task-mode: all
@@ -247,11 +248,12 @@ mysql-instances:
 `
 	taskConfig = NewTaskConfig()
 	err = taskConfig.Decode(errorTaskConfig)
-	c.Check(err, NotNil)
-	c.Assert(err, ErrorMatches, `[\s\S]*The configurations as following \[column-mapping-rule-2 expr-1 filter-rule-2 route-rule-2\] are set in global configuration[\s\S]*`)
+	require.ErrorContains(t, err, "The configurations as following [column-mapping-rule-2 expr-1 filter-rule-2 route-rule-2] are set in global configuration")
 }
 
-func (t *testConfig) TestInvalidTaskConfig(c *C) {
+func TestName(t *testing.T) {
+	t.Parallel()
+
 	errorTaskConfig1 := `---
 name: test
 task-mode: all
@@ -305,15 +307,13 @@ mysql-instances:
 	taskConfig := NewTaskConfig()
 	err := taskConfig.Decode(errorTaskConfig1)
 	// field server-id is not a member of TaskConfig
-	c.Check(err, NotNil)
-	c.Assert(err, ErrorMatches, "*line 18: field server-id not found in type config.MySQLInstance.*")
+	require.ErrorContains(t, err, "line 18: field server-id not found in type config.MySQLInstance")
 
 	err = taskConfig.Decode(errorTaskConfig2)
 	// field name duplicate
-	c.Check(err, NotNil)
-	c.Assert(err, ErrorMatches, "*line 3: field name already set in type config.TaskConfig.*")
+	require.ErrorContains(t, err, "line 3: field name already set in type config.TaskConfig")
 
-	filepath := path.Join(c.MkDir(), "test_invalid_task.yaml")
+	filepath := path.Join(t.TempDir(), "test_invalid_task.yaml")
 	configContent := []byte(`---
 aaa: xxx
 name: test
@@ -324,11 +324,10 @@ enable-heartbeat: true
 ignore-checking-items: ["all"]
 `)
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	taskConfig = NewTaskConfig()
 	err = taskConfig.DecodeFile(filepath)
-	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "*line 2: field aaa not found in type config.TaskConfig.*")
+	require.ErrorContains(t, err, "line 2: field aaa not found in type config.TaskConfig")
 
 	configContent = []byte(`---
 name: test
@@ -340,11 +339,10 @@ enable-heartbeat: true
 ignore-checking-items: ["all"]
 `)
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	taskConfig = NewTaskConfig()
 	err = taskConfig.DecodeFile(filepath)
-	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "*line 4: field task-mode already set in type config.TaskConfig.*")
+	require.ErrorContains(t, err, "line 4: field task-mode already set in type config.TaskConfig")
 
 	configContent = []byte(`---
 name: test
@@ -354,10 +352,10 @@ enable-heartbeat: true
 ignore-checking-items: ["all"]
 `)
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	taskConfig = NewTaskConfig()
 	err = taskConfig.DecodeFile(filepath)
-	c.Assert(terror.ErrConfigInvalidTaskMode.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigInvalidTaskMode.Equal(err))
 
 	// test valid task config
 	configContent = []byte(`---
@@ -420,21 +418,21 @@ syncers:
 `)
 
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	taskConfig = NewTaskConfig()
 	err = taskConfig.DecodeFile(filepath)
-	c.Assert(err, IsNil)
-	c.Assert(taskConfig.IsSharding, IsTrue)
-	c.Assert(taskConfig.ShardMode, Equals, ShardPessimistic)
-	c.Assert(taskConfig.MySQLInstances[0].Mydumper.Threads, Equals, 11)
-	c.Assert(taskConfig.MySQLInstances[0].Loader.PoolSize, Equals, 22)
-	c.Assert(taskConfig.MySQLInstances[0].Syncer.WorkerCount, Equals, 33)
-	c.Assert(taskConfig.MySQLInstances[1].Mydumper.Threads, Equals, 4)
-	c.Assert(taskConfig.MySQLInstances[1].Loader.PoolSize, Equals, 16)
-	c.Assert(taskConfig.MySQLInstances[1].Syncer.WorkerCount, Equals, 16)
-	c.Assert(taskConfig.MySQLInstances[2].Mydumper.Threads, Equals, 44)
-	c.Assert(taskConfig.MySQLInstances[2].Loader.PoolSize, Equals, 55)
-	c.Assert(taskConfig.MySQLInstances[2].Syncer.WorkerCount, Equals, 66)
+	require.NoError(t, err)
+	require.True(t, taskConfig.IsSharding)
+	require.Equal(t, ShardPessimistic, taskConfig.ShardMode)
+	require.Equal(t, 11, taskConfig.MySQLInstances[0].Mydumper.Threads)
+	require.Equal(t, 22, taskConfig.MySQLInstances[0].Loader.PoolSize)
+	require.Equal(t, 33, taskConfig.MySQLInstances[0].Syncer.WorkerCount)
+	require.Equal(t, 4, taskConfig.MySQLInstances[1].Mydumper.Threads)
+	require.Equal(t, 16, taskConfig.MySQLInstances[1].Loader.PoolSize)
+	require.Equal(t, 16, taskConfig.MySQLInstances[1].Syncer.WorkerCount)
+	require.Equal(t, 44, taskConfig.MySQLInstances[2].Mydumper.Threads)
+	require.Equal(t, 55, taskConfig.MySQLInstances[2].Loader.PoolSize)
+	require.Equal(t, 66, taskConfig.MySQLInstances[2].Syncer.WorkerCount)
 
 	configContent = []byte(`---
 name: test
@@ -475,32 +473,36 @@ filters:
 `)
 
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	taskConfig = NewTaskConfig()
 	err = taskConfig.DecodeFile(filepath)
-	c.Assert(err, NotNil)
-	c.Assert(taskConfig.IsSharding, IsTrue)
-	c.Assert(taskConfig.ShardMode, Equals, ShardOptimistic)
+	require.Error(t, err)
+	require.True(t, taskConfig.IsSharding)
+	require.Equal(t, ShardOptimistic, taskConfig.ShardMode)
 	taskConfig.MySQLInstances[0].RouteRules = []string{"route-rule-1", "route-rule-2", "route-rule-1", "route-rule-2"}
 	taskConfig.MySQLInstances[1].FilterRules = []string{"filter-rule-1", "filter-rule-2", "filter-rule-3", "filter-rule-2"}
 	err = taskConfig.adjust()
-	c.Assert(terror.ErrConfigDuplicateCfgItem.Equal(err), IsTrue)
-	c.Assert(err, ErrorMatches, `[\s\S]*mysql-instance\(0\)'s route-rules: route-rule-1, route-rule-2[\s\S]*`)
-	c.Assert(err, ErrorMatches, `[\s\S]*mysql-instance\(1\)'s filter-rules: filter-rule-2[\s\S]*`)
+	require.True(t, terror.ErrConfigDuplicateCfgItem.Equal(err))
+	require.ErrorContains(t, err, "mysql-instance(0)'s route-rules: route-rule-1, route-rule-2")
+	require.ErrorContains(t, err, "mysql-instance(1)'s filter-rules: filter-rule-2")
 }
 
-func (t *testConfig) TestCheckDuplicateString(c *C) {
+func TestCheckDuplicateString(t *testing.T) {
+	t.Parallel()
+
 	a := []string{"a", "b", "c", "d"}
 	dupeStrings := checkDuplicateString(a)
-	c.Assert(dupeStrings, HasLen, 0)
+	require.Len(t, dupeStrings, 0)
 	a = []string{"a", "a", "b", "b", "c", "c"}
 	dupeStrings = checkDuplicateString(a)
-	c.Assert(dupeStrings, HasLen, 3)
+	require.Len(t, dupeStrings, 3)
 	sort.Strings(dupeStrings)
-	c.Assert(dupeStrings, DeepEquals, []string{"a", "b", "c"})
+	require.Equal(t, []string{"a", "b", "c"}, dupeStrings)
 }
 
-func (t *testConfig) TestTaskBlockAllowList(c *C) {
+func TestTaskBlockAllowList(t *testing.T) {
+	t.Parallel()
+
 	filterRules1 := &filter.Rules{
 		DoDBs: []string{"s1"},
 	}
@@ -519,17 +521,17 @@ func (t *testConfig) TestTaskBlockAllowList(c *C) {
 
 	// BAList is nil, will set BAList = BWList
 	err := cfg.adjust()
-	c.Assert(err, IsNil)
-	c.Assert(cfg.BAList["source-1"], Equals, filterRules1)
+	require.NoError(t, err)
+	require.Equal(t, filterRules1, cfg.BAList["source-1"])
 
 	// BAList is not nil, will not update it
 	cfg.BAList = map[string]*filter.Rules{"source-1": filterRules2}
 	err = cfg.adjust()
-	c.Assert(err, IsNil)
-	c.Assert(cfg.BAList["source-1"], Equals, filterRules2)
+	require.NoError(t, err)
+	require.Equal(t, filterRules2, cfg.BAList["source-1"])
 }
 
-func WordCount(s string) map[string]int {
+func wordCount(s string) map[string]int {
 	words := strings.Fields(s)
 	wordCount := make(map[string]int)
 	for i := range words {
@@ -539,7 +541,9 @@ func WordCount(s string) map[string]int {
 	return wordCount
 }
 
-func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
+func TestGenAndFromSubTaskConfigs(t *testing.T) {
+	t.Parallel()
+
 	var (
 		shardMode           = ShardOptimistic
 		onlineDDL           = true
@@ -693,7 +697,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			LoaderConfig: LoaderConfig{
 				PoolSize:    32,
 				Dir:         "./dumpped_data",
-				ImportMode:  LoadModeSQL,
+				ImportMode:  LoadModePhysical,
 				OnDuplicate: OnDuplicateReplace,
 			},
 			SyncerConfig: SyncerConfig{
@@ -715,7 +719,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 
 	stCfg1.Experimental.AsyncCheckpointFlush = true
 	stCfg2, err := stCfg1.Clone()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	stCfg2.SourceID = source2
 	stCfg2.Meta = &Meta{
 		BinLogName: "mysql-bin.000321",
@@ -825,21 +829,21 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 	}
 	cfg2.Experimental.AsyncCheckpointFlush = true
 
-	c.Assert(WordCount(cfg.String()), DeepEquals, WordCount(cfg2.String())) // since rules are unordered, so use WordCount to compare
+	require.Equal(t, wordCount(cfg.String()), wordCount(cfg2.String())) // since rules are unordered, so use wordCount to compare
 
-	c.Assert(cfg.adjust(), IsNil)
+	require.NoError(t, cfg.adjust())
 	stCfgs, err := TaskConfigToSubTaskConfigs(cfg, map[string]DBConfig{source1: source1DBCfg, source2: source2DBCfg})
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	// revert ./dumpped_data.from-sub-tasks
 	stCfgs[0].LoaderConfig.Dir = stCfg1.LoaderConfig.Dir
 	stCfgs[1].LoaderConfig.Dir = stCfg2.LoaderConfig.Dir
 	// fix empty list and nil
-	c.Assert(stCfgs[0].ColumnMappingRules, HasLen, 0)
-	c.Assert(stCfg1.ColumnMappingRules, HasLen, 0)
-	c.Assert(stCfgs[1].ColumnMappingRules, HasLen, 0)
-	c.Assert(stCfg2.ColumnMappingRules, HasLen, 0)
-	c.Assert(stCfgs[0].ExprFilter, HasLen, 0)
-	c.Assert(stCfg1.ExprFilter, HasLen, 0)
+	require.Len(t, stCfgs[0].ColumnMappingRules, 0)
+	require.Len(t, stCfg1.ColumnMappingRules, 0)
+	require.Len(t, stCfgs[1].ColumnMappingRules, 0)
+	require.Len(t, stCfg2.ColumnMappingRules, 0)
+	require.Len(t, stCfgs[0].ExprFilter, 0)
+	require.Len(t, stCfg1.ExprFilter, 0)
 	stCfgs[0].ColumnMappingRules = stCfg1.ColumnMappingRules
 	stCfgs[1].ColumnMappingRules = stCfg2.ColumnMappingRules
 	stCfgs[0].ExprFilter = stCfg1.ExprFilter
@@ -847,39 +851,41 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 	stCfgs[0].EnableANSIQuotes = stCfg1.EnableANSIQuotes
 	stCfgs[1].EnableANSIQuotes = stCfg2.EnableANSIQuotes
 	// some features are disabled
-	c.Assert(stCfg1.EnableHeartbeat, IsTrue)
-	c.Assert(stCfg2.EnableHeartbeat, IsTrue)
+	require.True(t, stCfg1.EnableHeartbeat)
+	require.True(t, stCfg2.EnableHeartbeat)
 	stCfg1.EnableHeartbeat = false
 	stCfg2.EnableHeartbeat = false
-	c.Assert(stCfgs[0].String(), Equals, stCfg1.String())
-	c.Assert(stCfgs[1].String(), Equals, stCfg2.String())
+	require.Equal(t, stCfg1.String(), stCfgs[0].String())
+	require.Equal(t, stCfg2.String(), stCfgs[1].String())
 }
 
-func (t *testConfig) TestMetaVerify(c *C) {
+func TestMetaVerify(t *testing.T) {
+	t.Parallel()
+
 	var m *Meta
-	c.Assert(m.Verify(), IsNil) // nil meta is fine (for not incremental task mode)
+	require.NoError(t, m.Verify()) // nil meta is fine (for not incremental task mode)
 
 	// none
 	m = &Meta{}
-	c.Assert(terror.ErrConfigMetaInvalid.Equal(m.Verify()), IsTrue)
+	require.True(t, terror.ErrConfigMetaInvalid.Equal(m.Verify()))
 
 	// only `binlog-name`.
 	m = &Meta{
 		BinLogName: "mysql-bin.000123",
 	}
-	c.Assert(m.Verify(), IsNil)
+	require.NoError(t, m.Verify())
 
 	// only `binlog-pos`.
 	m = &Meta{
 		BinLogPos: 456,
 	}
-	c.Assert(terror.ErrConfigMetaInvalid.Equal(m.Verify()), IsTrue)
+	require.True(t, terror.ErrConfigMetaInvalid.Equal(m.Verify()))
 
 	// only `binlog-gtid`.
 	m = &Meta{
 		BinLogGTID: "1-1-12,4-4-4",
 	}
-	c.Assert(m.Verify(), IsNil)
+	require.NoError(t, m.Verify())
 
 	// all
 	m = &Meta{
@@ -887,42 +893,46 @@ func (t *testConfig) TestMetaVerify(c *C) {
 		BinLogPos:  456,
 		BinLogGTID: "1-1-12,4-4-4",
 	}
-	c.Assert(m.Verify(), IsNil)
+	require.NoError(t, m.Verify())
 }
 
-func (t *testConfig) TestMySQLInstance(c *C) {
+func TestMySQLInstance(t *testing.T) {
+	t.Parallel()
+
 	var m *MySQLInstance
 	cfgName := "test"
 	err := m.VerifyAndAdjust()
-	c.Assert(terror.ErrConfigMySQLInstNotFound.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigMySQLInstNotFound.Equal(err))
 
 	m = &MySQLInstance{}
 	err = m.VerifyAndAdjust()
-	c.Assert(terror.ErrConfigEmptySourceID.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigEmptySourceID.Equal(err))
 	m.SourceID = "123"
 
 	m.Mydumper = &MydumperConfig{}
 	m.MydumperConfigName = cfgName
 	err = m.VerifyAndAdjust()
-	c.Assert(terror.ErrConfigMydumperCfgConflict.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigMydumperCfgConflict.Equal(err))
 	m.MydumperConfigName = ""
 
 	m.Loader = &LoaderConfig{}
 	m.LoaderConfigName = cfgName
 	err = m.VerifyAndAdjust()
-	c.Assert(terror.ErrConfigLoaderCfgConflict.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigLoaderCfgConflict.Equal(err))
 	m.Loader = nil
 
 	m.Syncer = &SyncerConfig{}
 	m.SyncerConfigName = cfgName
 	err = m.VerifyAndAdjust()
-	c.Assert(terror.ErrConfigSyncerCfgConflict.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigSyncerCfgConflict.Equal(err))
 	m.SyncerConfigName = ""
 
-	c.Assert(m.VerifyAndAdjust(), IsNil)
+	require.NoError(t, m.VerifyAndAdjust())
 }
 
-func (t *testConfig) TestAdjustTargetDBConfig(c *C) {
+func TestAdjustTargetDBConfig(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		dbConfig DBConfig
 		result   DBConfig
@@ -952,31 +962,35 @@ func (t *testConfig) TestAdjustTargetDBConfig(c *C) {
 
 	for _, tc := range testCases {
 		AdjustTargetDBSessionCfg(&tc.dbConfig, tc.version)
-		c.Assert(tc.dbConfig, DeepEquals, tc.result)
+		require.Equal(t, tc.result, tc.dbConfig)
 	}
 }
 
-func (t *testConfig) TestDefaultConfig(c *C) {
+func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
+
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
 	cfg.TaskMode = "all"
 	cfg.TargetDB = &DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
-	c.Assert(cfg.adjust(), IsNil)
-	c.Assert(*cfg.MySQLInstances[0].Mydumper, DeepEquals, DefaultMydumperConfig())
+	require.NoError(t, cfg.adjust())
+	require.Equal(t, DefaultMydumperConfig(), *cfg.MySQLInstances[0].Mydumper)
 
 	cfg.MySQLInstances[0].Mydumper = &MydumperConfig{MydumperPath: "test"}
-	c.Assert(cfg.adjust(), IsNil)
-	c.Assert(cfg.MySQLInstances[0].Mydumper.ChunkFilesize, Equals, defaultChunkFilesize)
+	require.NoError(t, cfg.adjust())
+	require.Equal(t, defaultChunkFilesize, cfg.MySQLInstances[0].Mydumper.ChunkFilesize)
 }
 
-func (t *testConfig) TestExclusiveAndWrongExprFilterFields(c *C) {
+func TestExclusiveAndWrongExprFilterFields(t *testing.T) {
+	t.Parallel()
+
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
 	cfg.TaskMode = "all"
 	cfg.TargetDB = &DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
-	c.Assert(cfg.adjust(), IsNil)
+	require.NoError(t, cfg.adjust())
 
 	cfg.ExprFilter["test-insert"] = &ExpressionFilter{
 		Schema:          "db",
@@ -1011,7 +1025,7 @@ func (t *testConfig) TestExclusiveAndWrongExprFilterFields(c *C) {
 		"test-update",
 		"test-delete",
 	}
-	c.Assert(cfg.adjust(), IsNil)
+	require.NoError(t, cfg.adjust())
 
 	cfg.ExprFilter["both-field"] = &ExpressionFilter{
 		Schema:          "db",
@@ -1021,7 +1035,7 @@ func (t *testConfig) TestExclusiveAndWrongExprFilterFields(c *C) {
 	}
 	cfg.MySQLInstances[0].ExpressionFilters = append(cfg.MySQLInstances[0].ExpressionFilters, "both-field")
 	err := cfg.adjust()
-	c.Assert(terror.ErrConfigExprFilterManyExpr.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigExprFilterManyExpr.Equal(err))
 
 	delete(cfg.ExprFilter, "both-field")
 	cfg.ExprFilter["wrong"] = &ExpressionFilter{
@@ -1032,25 +1046,28 @@ func (t *testConfig) TestExclusiveAndWrongExprFilterFields(c *C) {
 	length := len(cfg.MySQLInstances[0].ExpressionFilters)
 	cfg.MySQLInstances[0].ExpressionFilters[length-1] = "wrong"
 	err = cfg.adjust()
-	c.Assert(terror.ErrConfigExprFilterWrongGrammar.Equal(err), IsTrue)
+	require.True(t, terror.ErrConfigExprFilterWrongGrammar.Equal(err))
 }
 
-func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
+func TestTaskConfigForDowngrade(t *testing.T) {
+	t.Parallel()
+
 	cfg := NewTaskConfig()
 	err := cfg.Decode(correctTaskConfig)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	cfgForDowngrade := NewTaskConfigForDowngrade(cfg)
 
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, collation_compatible, experimental, validator
+	// without flag, collation_compatible, experimental, validator
+	require.Equal(t, cfgForDowngradeReflect.NumField()+4, cfgReflect.NumField())
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}
 	Clone(cfgForClone, cfg)
-	c.Assert(cfgForDowngrade, DeepEquals, cfgForClone)
+	require.Equal(t, cfgForClone, cfgForDowngrade)
 }
 
 // Clone clones src to dest.

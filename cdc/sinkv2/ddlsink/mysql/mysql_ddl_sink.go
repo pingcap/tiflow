@@ -145,7 +145,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 
 		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
@@ -182,7 +182,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) == 0 {
+	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
 	}
 	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
@@ -191,7 +191,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
 	return nil
 }

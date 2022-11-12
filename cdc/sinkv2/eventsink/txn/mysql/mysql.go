@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -100,8 +101,8 @@ func NewMySQLBackends(
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
 
-			metricTxnSinkDMLBatchCommit:   metrics.TxnSinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-			metricTxnSinkDMLBatchCallback: metrics.TxnSinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		})
 	}
 
@@ -114,6 +115,7 @@ func NewMySQLBackends(
 }
 
 // OnTxnEvent implements interface backend.
+// It adds the event to the buffer, and return true if it needs flush immediately.
 func (s *mysqlBackend) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
@@ -198,7 +200,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
 	replaces := make(map[string][][]interface{})
 
-	// flush cached batch replace or insert, to keep the sequence of DMLs
+	// flushes the cached batch replace or insert DMLs,
+	// to keep the sequence of DMLs
 	flushCacheDMLs := func() {
 		if s.cfg.BatchReplaceEnabled && len(replaces) > 0 {
 			replaceSqls, replaceValues := reduceReplace(replaces, s.cfg.BatchReplaceSize)
@@ -209,14 +212,15 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 
 	// translateToInsert control the update and insert behavior
+	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
 	for _, event := range s.events {
 		for _, row := range event.Event.Rows {
 			if !translateToInsert {
 				break
 			}
-			// It can be translated in to INSERT, if the row is committed after
-			// we starting replicating the table, which means it must not be
+			// A row can be translated in to INSERT, when it was committed after
+			// the table it belongs to been replicating by TiCDC, which means it must not be
 			// replicated before, and there is no such row in downstream MySQL.
 			translateToInsert = row.CommitTs > row.ReplicatingTs
 		}

@@ -14,11 +14,10 @@
 package model
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 )
 
@@ -51,19 +50,6 @@ func NewSchedulerRequestFromPB(req *enginepb.ScheduleTaskRequest) (*SchedulerReq
 	return schedulerReq, nil
 }
 
-// IncompatibleSchedulerRequestError indicates that the PB request is not compatible with
-// the current version.
-type IncompatibleSchedulerRequestError struct {
-	rpcerror.Error[rpcerror.NotRetryable, rpcerror.InvalidArgument]
-
-	Message string
-	Payload string
-}
-
-// ErrIncompatibleSchedulerRequest indicates that the scheduler does not recognize
-// a protobuf message as valid input. May indicate a version incompatibility problem.
-var ErrIncompatibleSchedulerRequest = rpcerror.Normalize[IncompatibleSchedulerRequestError]()
-
 // SelectorFromPB converts a protobuf Selector message to the internal
 // data type label.Selector.
 // This function does the necessary sanity checks, so it's safe to use
@@ -79,11 +65,7 @@ func SelectorFromPB(req *enginepb.Selector) (*label.Selector, error) {
 		op = label.OpRegex
 	default:
 		// Future-proof the code in case a new Op is added.
-		return nil, ErrIncompatibleSchedulerRequest.GenWithStack(
-			&IncompatibleSchedulerRequestError{
-				Message: "unknown selector op",
-				Payload: req.String(),
-			})
+		return nil, errors.ErrIncompatibleSchedulerRequest.GenWithStackByArgs("unknown selector op")
 	}
 
 	ret := &label.Selector{
@@ -93,11 +75,7 @@ func SelectorFromPB(req *enginepb.Selector) (*label.Selector, error) {
 	}
 
 	if err := ret.Validate(); err != nil {
-		return nil, ErrIncompatibleSchedulerRequest.GenWithStack(
-			&IncompatibleSchedulerRequestError{
-				Message: "invalid selector",
-				Payload: err.Error(),
-			})
+		return nil, errors.ErrIncompatibleSchedulerRequest.Wrap(err).GenWithStackByArgs("invalid selector")
 	}
 	return ret, nil
 }

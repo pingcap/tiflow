@@ -64,16 +64,15 @@ type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
 	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
-	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
+	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
-type mounterImpl struct {
+type mounter struct {
 	schemaStorage                SchemaStorage
 	tz                           *time.Location
 	enableOldValue               bool
 	changefeedID                 model.ChangeFeedID
 	filter                       pfilter.Filter
-	metricMountDuration          prometheus.Observer
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
 }
@@ -85,13 +84,11 @@ func NewMounter(schemaStorage SchemaStorage,
 	filter pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
-	return &mounterImpl{
+	return &mounter{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
 		filter:         filter,
-		metricMountDuration: mountDuration.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
@@ -102,33 +99,23 @@ func NewMounter(schemaStorage SchemaStorage,
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
-// Note: If pEvent.Row is nil after decode, it means this event should be ignored.
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) (bool, error) {
+func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
-	if pEvent.IsResolved() {
-		return true, nil
+	if event.IsResolved() {
+		return nil
 	}
-	start := time.Now()
-	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	row, err := m.unmarshalAndMountRowChanged(ctx, event.RawKV)
 	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if row == nil {
-		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", pEvent.StartTs))
-		return true, nil
+		return errors.Trace(err)
 	}
 
-	pEvent.Row = row
-	pEvent.RawKV.Value = nil
-	pEvent.RawKV.OldValue = nil
-	duration := time.Since(start)
-	if duration > time.Second {
-		m.metricMountDuration.Observe(duration.Seconds())
-	}
-	return false, nil
+	event.Row = row
+	event.RawKV.Value = nil
+	event.RawKV.OldValue = nil
+	return nil
 }
 
-func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -201,7 +188,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	recordID, err := tablecodec.DecodeRowKey(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -288,7 +275,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
-			log.Info("skip the column which is not visible",
+			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
@@ -296,7 +283,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
-			log.Info("column value is not found",
+			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
@@ -331,7 +318,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, rawCols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
+func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column

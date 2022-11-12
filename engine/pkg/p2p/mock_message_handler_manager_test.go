@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )

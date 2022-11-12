@@ -16,13 +16,12 @@ package metadata
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // JobManagerUUID defines the global unique id for job manager
@@ -63,6 +62,11 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMeta
 		return nil, errors.Trace(err)
 	}
 	return masterMeta, nil
+}
+
+// Insert inserts the metadata
+func (c *MasterMetadataClient) Insert(ctx context.Context, data *frameModel.MasterMeta) error {
+	return errors.Trace(c.metaClient.InsertJob(ctx, data))
 }
 
 // Store upsert the data

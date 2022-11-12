@@ -19,13 +19,13 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
 
@@ -161,9 +161,7 @@ func (c *JobCfg) Clone() (*JobCfg, error) {
 func (c *JobCfg) ToTaskCfgs() map[string]*TaskCfg {
 	taskCfgs := make(map[string]*TaskCfg, len(c.Upstreams))
 	for _, mysqlInstance := range c.Upstreams {
-		// nolint:errcheck
-		jobCfg, _ := c.Clone()
-		taskCfg := (*TaskCfg)(jobCfg)
+		taskCfg := c.ToTaskCfg()
 		taskCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
 		taskCfgs[mysqlInstance.SourceID] = taskCfg
 	}
@@ -176,7 +174,7 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 		return nil
 	}
 
-	jobCfg := (*JobCfg)(taskCfgs[0])
+	jobCfg := taskCfgs[0].ToJobCfg()
 	// nolint:errcheck
 	jobCfg, _ = jobCfg.Clone()
 	for i := 1; i < len(taskCfgs); i++ {
@@ -248,9 +246,31 @@ func (c *JobCfg) verifySourceID() error {
 	return nil
 }
 
+// ToTaskCfg converts JobCfg to TaskCfg.
+func (c *JobCfg) ToTaskCfg() *TaskCfg {
+	// nolint:errcheck
+	clone, _ := c.Clone()
+	return &TaskCfg{
+		JobCfg: *clone,
+	}
+}
+
 // TaskCfg shares same struct as JobCfg, but it only serves one upstream.
 // TaskCfg can be converted to an equivalent DM subtask by ToDMSubTaskCfg.
-type TaskCfg JobCfg
+// TaskCfg add some internal config for jobmaster/worker.
+type TaskCfg struct {
+	JobCfg
+
+	// FIXME: remove this item after fix https://github.com/pingcap/tiflow/issues/7304
+	NeedExtStorage bool
+}
+
+// ToJobCfg converts TaskCfg to JobCfg.
+func (c *TaskCfg) ToJobCfg() *JobCfg {
+	// nolint:errcheck
+	clone, _ := c.JobCfg.Clone()
+	return clone
+}
 
 // ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields

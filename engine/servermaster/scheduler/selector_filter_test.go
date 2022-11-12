@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/stretchr/testify/require"
 )
@@ -102,7 +103,7 @@ func TestSelectorFilter(t *testing.T) {
 		},
 	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.Error(t, err)
-	require.True(t, ErrSelectorUnsatisfied.Is(err))
+	require.True(t, errors.Is(err, errors.ErrSelectorUnsatisfied))
 }
 
 func TestCandidateExecutorGone(t *testing.T) {

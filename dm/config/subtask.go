@@ -34,14 +34,14 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // task modes.
@@ -108,6 +108,7 @@ type DBConfig struct {
 	Security *Security `toml:"security" json:"security" yaml:"security"`
 
 	RawDBCfg *RawDBConfig `toml:"-" json:"-" yaml:"-"`
+	Net      string       `toml:"-" json:"-" yaml:"-"`
 }
 
 func (db *DBConfig) String() string {
@@ -288,10 +289,16 @@ type SubTaskConfig struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
-	// below member are injected by dataflow engine
+	// members below are injected by dataflow engine
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
+	// members below are injected by dataflow engine, UUID should be unique in
+	// one go runtime.
+	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
+	// key to let MySQL driver to find the right TCPConnWithIOCounter.
+	UUID         string         `toml:"-" json:"-"`
+	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -584,5 +591,6 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 
 // NeedUseLightning returns whether need to use lightning loader.
 func (c *SubTaskConfig) NeedUseLightning() bool {
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode == LoadModeSQL
+	// TODO: return true after remove loader
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode != LoadModeLoader
 }

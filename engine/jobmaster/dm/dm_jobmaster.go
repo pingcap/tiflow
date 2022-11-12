@@ -16,14 +16,10 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -41,6 +37,8 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // JobMaster defines job master of dm job
@@ -50,10 +48,6 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
-	// taskID -> FinishedTaskStatus
-	// worker exists after finished, so we need record the finished status for QueryJobStatus
-	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
-	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -107,21 +101,22 @@ func (j dmJobMasterFactory) IsRetryableError(err error) bool {
 // it need to be called firstly in InitImpl and OnMasterRecovered
 // we should create all components if there is any error
 // CloseImpl/StopImpl will be called later to close components
-func (jm *JobMaster) initComponents(ctx context.Context) error {
+func (jm *JobMaster) initComponents() error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
-	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
+		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err
 }
 
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
+	if err := jm.initComponents(); err != nil {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
@@ -136,6 +131,16 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
 }
 
+// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
+// When it is called, the jobCfg may not be in the metadata, and we should not report an error
+func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
+	jm.Logger().Info("recovering the dm jobmaster")
+	if err := jm.initComponents(); err != nil {
+		return err
+	}
+	return jm.bootstrap(ctx)
+}
+
 // Tick implements JobMasterImpl.Tick
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
@@ -147,16 +152,6 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		return jm.cancel(ctx, frameModel.WorkerStateFinished)
 	}
 	return nil
-}
-
-// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
-// When it is called, the jobCfg may not be in the metadata, and we should not report an error
-func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
-	jm.Logger().Info("recovering the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
-		return err
-	}
-	return jm.bootstrap(ctx)
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
@@ -182,7 +177,6 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 		return err
 	}
 
-	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
@@ -216,7 +210,27 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	taskStatus := finishedTaskStatus.TaskStatus
-	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
+
+	unitStateStore := jm.metadata.UnitStateStore()
+	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
+		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
+		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
+			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
+			if status.Unit == taskStatus.Unit {
+				state.FinishedUnitStatus[taskStatus.Task][i] = &finishedTaskStatus
+				state.FinishedUnitStatus[taskStatus.Task] = state.FinishedUnitStatus[taskStatus.Task][:i+1]
+				return nil
+			}
+		}
+		state.FinishedUnitStatus[taskStatus.Task] = append(
+			state.FinishedUnitStatus[taskStatus.Task], &finishedTaskStatus,
+		)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
@@ -228,7 +242,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
-	// we alreay update finished status in OnWorkerOffline
+	// we already update finished status in OnWorkerOffline
 	if newStatus.State == frameModel.WorkerStateFinished || len(newStatus.ExtBytes) == 0 {
 		return nil
 	}
@@ -263,8 +277,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl implements JobMasterImpl.CloseImpl
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return jm.messageAgent.Close(ctx)
+func (jm *JobMaster) CloseImpl(ctx context.Context) {
+	if err := jm.messageAgent.Close(ctx); err != nil {
+		jm.Logger().Error("failed to close message agent", zap.Error(err))
+	}
 }
 
 // OnCancel implements JobMasterImpl.OnCancel
@@ -274,21 +290,21 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 }
 
 // StopImpl implements JobMasterImpl.StopImpl
-func (jm *JobMaster) StopImpl(ctx context.Context) error {
+// checkpoint is removed when job is stopped, this is different with OP DM where
+// `--remove-meta` is specified at start-task.
+func (jm *JobMaster) StopImpl(ctx context.Context) {
 	jm.Logger().Info("stoping the dm jobmaster")
 
 	// close component
-	if err := jm.CloseImpl(ctx); err != nil {
-		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
-		return err
-	}
+	jm.CloseImpl(ctx)
 
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {
-		// log and ignore the error.
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
+		jm.Logger().Error("failed to delete task", zap.Error(err))
+	}
 }
 
 // Workload implements JobMasterImpl.Workload
@@ -339,6 +355,18 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 		return err
 	}
 
+	if cfg.TaskMode == dmconfig.ModeIncrement {
+		for _, inst := range cfg.Upstreams {
+			if inst.Meta == nil {
+				meta, err2 := master.GetLatestMeta(ctx, inst.Flavor, inst.DBCfg)
+				if err2 != nil {
+					return err2
+				}
+				inst.Meta = meta
+			}
+		}
+	}
+
 	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
@@ -385,6 +413,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		// would not recover again
+		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
 	// wait all worker exit
@@ -392,9 +421,11 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, framework.ExitReasonCanceled, ctx.Err(), detail)
+			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
+			return ctx.Err()
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
+				jm.Logger().Info("all worker are offline, will exit")
 				return jm.Exit(ctx, framework.WorkerStateToExitReason(status.State), err, detail)
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
@@ -409,7 +440,7 @@ func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	}
 	job := state.(*metadata.Job)
 	for _, task := range job.Tasks {
-		cfg := (*config.JobCfg)(task.Cfg)
+		cfg := task.Cfg.ToJobCfg()
 		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
 	return errors.New("no task found in job")
@@ -424,7 +455,7 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if err != nil {
 		// put cluster info for new job
 		// TODO: better error handling by error code.
-		if err.Error() == "state not found" {
+		if errors.Cause(err) == metadata.ErrStateNotFound {
 			jm.Logger().Info("put cluster info for new job", zap.Stringer("internal version", internalVersion))
 			return clusterInfoStore.Put(ctx, metadata.NewClusterInfo(*internalVersion))
 		}

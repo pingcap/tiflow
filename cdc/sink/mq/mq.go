@@ -69,6 +69,7 @@ func newMqSink(
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *common.Config,
 	errCh chan error,
+	changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
@@ -81,7 +82,6 @@ func newMqSink(
 	}
 
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
@@ -234,7 +234,7 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedT
 // EmitCheckpointTs emits the checkpointTs to
 // default topic or the topics of all tables.
 // Concurrency Note: EmitCheckpointTs is thread-safe.
-func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*model.TableInfo) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
@@ -257,7 +257,11 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	topics := k.eventRouter.GetActiveTopics(tables)
+	var tableNames []model.TableName
+	for _, table := range tables {
+		tableNames = append(tableNames, table.TableName)
+	}
+	topics := k.eventRouter.GetActiveTopics(tableNames)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
@@ -374,7 +378,7 @@ func (k *mqSink) asyncFlushToPartitionZero(
 // NewKafkaSaramaSink creates a new Kafka mqSink.
 func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	errCh chan error,
+	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
@@ -410,8 +414,8 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	var protocol config.Protocol
-	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
+	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
+	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
@@ -452,6 +456,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		baseConfig,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -465,6 +470,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		replicaConfig,
 		encoderConfig,
 		errCh,
+		changefeedID,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)

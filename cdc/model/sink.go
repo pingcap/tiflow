@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -293,6 +294,26 @@ func (r *RowChangedEvent) IsUpdate() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) != 0
 }
 
+// PrimaryKeyColumnNames return all primary key's name
+func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
+	var result []string
+
+	var cols []*Column
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	result = make([]string, 0)
+	for _, col := range cols {
+		if col != nil && col.Flag.IsPrimaryKey() {
+			result = append(result, col.Name)
+		}
+	}
+	return result
+}
+
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)
@@ -422,6 +443,97 @@ type RedoColumn struct {
 	Flag   uint64  `msg:"flag"`
 }
 
+// BuildTiDBTableInfo builds a TiDB TableInfo from given information.
+func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
+	ret := &model.TableInfo{}
+	// nowhere will use this field, so we set a debug message
+	ret.Name = model.NewCIStr("BuildTiDBTableInfo")
+
+	for i, col := range columns {
+		columnInfo := &model.ColumnInfo{
+			Offset: i,
+			State:  model.StatePublic,
+		}
+		if col == nil {
+			// by referring to datum2Column, nil is happened when
+			// - !IsColCDCVisible, which means the column is a virtual generated
+			//   column
+			// - !exist && !fillWithDefaultValue, which means upstream does not
+			//   send the column value
+			// just mock for the first case
+			columnInfo.Name = model.NewCIStr("omitted")
+			columnInfo.GeneratedExprString = "pass_generated_check"
+			columnInfo.GeneratedStored = false
+			ret.Columns = append(ret.Columns, columnInfo)
+			continue
+		}
+		columnInfo.Name = model.NewCIStr(col.Name)
+		columnInfo.SetType(col.Type)
+		// TiKV always use utf8mb4 to store, and collation is not recorded by CDC
+		columnInfo.SetCharset(mysql.UTF8MB4Charset)
+		columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+
+		// inverse initColumnsFlag
+		flag := col.Flag
+		if flag.IsBinary() {
+			columnInfo.SetCharset("binary")
+		}
+		if flag.IsGeneratedColumn() {
+			// we do not use this field, so we set it to any non-empty string
+			columnInfo.GeneratedExprString = "pass_generated_check"
+			columnInfo.GeneratedStored = true
+		}
+		if flag.IsHandleKey() {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+			ret.IsCommonHandle = true
+		} else if flag.IsPrimaryKey() {
+			columnInfo.AddFlag(mysql.PriKeyFlag)
+		}
+		if flag.IsUniqueKey() {
+			columnInfo.AddFlag(mysql.UniqueKeyFlag)
+		}
+		if !flag.IsNullable() {
+			columnInfo.AddFlag(mysql.NotNullFlag)
+		}
+		if flag.IsMultipleKey() {
+			columnInfo.AddFlag(mysql.MultipleKeyFlag)
+		}
+		if flag.IsUnsigned() {
+			columnInfo.AddFlag(mysql.UnsignedFlag)
+		}
+		ret.Columns = append(ret.Columns, columnInfo)
+	}
+
+	for i, colOffsets := range indexColumns {
+		indexInfo := &model.IndexInfo{
+			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
+			State: model.StatePublic,
+		}
+		firstCol := columns[colOffsets[0]]
+		if firstCol.Flag.IsPrimaryKey() {
+			indexInfo.Primary = true
+		}
+		if firstCol.Flag.IsUniqueKey() {
+			indexInfo.Unique = true
+		}
+
+		for _, offset := range colOffsets {
+			col := ret.Columns[offset]
+
+			indexCol := &model.IndexColumn{}
+			indexCol.Name = col.Name
+			indexCol.Offset = offset
+			indexInfo.Columns = append(indexInfo.Columns, indexCol)
+		}
+
+		// TODO: revert the "all column set index related flag" to "only the
+		// first column set index related flag" if needed
+
+		ret.Indices = append(ret.Indices, indexInfo)
+	}
+	return ret
+}
+
 // ColumnValueString returns the string representation of the column value
 func ColumnValueString(c interface{}) string {
 	var data string
@@ -466,36 +578,13 @@ func ColumnValueString(c interface{}) string {
 	return data
 }
 
-// ColumnInfo represents the name and type information passed to the sink
-type ColumnInfo struct {
-	Name string `msg:"name"`
-	Type byte   `msg:"type"`
-}
-
-// FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
-func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
-	c.Type = tiColumnInfo.GetType()
-	c.Name = tiColumnInfo.Name.O
-}
-
-// SimpleTableInfo is the simplified table info passed to the sink
-type SimpleTableInfo struct {
-	// db name
-	Schema string `msg:"schema"`
-	// table name
-	Table string `msg:"table"`
-	// table ID
-	TableID    int64         `msg:"table-id"`
-	ColumnInfo []*ColumnInfo `msg:"column-info"`
-}
-
 // DDLEvent stores DDL event
 type DDLEvent struct {
 	StartTs      uint64           `msg:"start-ts"`
 	CommitTs     uint64           `msg:"commit-ts"`
-	TableInfo    *SimpleTableInfo `msg:"table-info"`
-	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
+	TableInfo    *TableInfo       `msg:"-"`
+	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
 }
@@ -507,7 +596,7 @@ type RedoDDLEvent struct {
 }
 
 // FromJob fills the values with DDLEvent from DDL job
-func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo) {
 	// populating DDLEvent of an `rename tables` job is handled in `FromRenameTablesJob()`
 	if d.Type == model.ActionRenameTables {
 		return
@@ -521,9 +610,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	rebuildQuery := func() {
 		switch d.Type {
 		case model.ActionDropTable:
-			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
+			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`", d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
 		case model.ActionDropView:
-			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
+			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`", d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
 		default:
 			d.Query = job.Query
 		}
@@ -532,10 +621,8 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
-	// fill PreTableInfo for the event.
-	d.fillPreTableInfo(preTableInfo)
-	// fill TableInfo for the event.
-	d.fillTableInfo(job.BinlogInfo.TableInfo, job.SchemaName)
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -543,7 +630,7 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 // FromRenameTablesJob fills the values of DDLEvent from a rename tables DDL job
 func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	oldSchemaName, newSchemaName string,
-	preTableInfo *TableInfo, tableInfo *model.TableInfo,
+	preTableInfo *TableInfo, tableInfo *TableInfo,
 ) {
 	if job.Type != model.ActionRenameTables {
 		return
@@ -556,49 +643,8 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
 		oldSchemaName, oldTableName, newSchemaName, newTableName)
 	d.Type = model.ActionRenameTable
-	// fill PreTableInfo for the event.
-	d.fillPreTableInfo(preTableInfo)
-	// fill TableInfo for the event.
-	d.fillTableInfo(tableInfo, newSchemaName)
-}
-
-// fillTableInfo populates the TableInfo of an DDLEvent
-func (d *DDLEvent) fillTableInfo(tableInfo *model.TableInfo,
-	schemaName string,
-) {
-	// `TableInfo` field of `DDLEvent` should always not be nil
-	d.TableInfo = new(SimpleTableInfo)
-	d.TableInfo.Schema = schemaName
-
-	if tableInfo == nil {
-		return
-	}
-
-	d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
-	for i, colInfo := range tableInfo.Columns {
-		d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
-		d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-	}
-
-	d.TableInfo.Table = tableInfo.Name.O
-	d.TableInfo.TableID = tableInfo.ID
-}
-
-// fillPreTableInfo populates the PreTableInfo of an event
-func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
-	if preTableInfo == nil {
-		return
-	}
-	d.PreTableInfo = new(SimpleTableInfo)
-	d.PreTableInfo.Schema = preTableInfo.TableName.Schema
-	d.PreTableInfo.Table = preTableInfo.TableName.Table
-	d.PreTableInfo.TableID = preTableInfo.ID
-
-	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
-	for i, colInfo := range preTableInfo.Columns {
-		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
-		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-	}
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
@@ -606,10 +652,11 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table    *TableName
-	StartTs  uint64
-	CommitTs uint64
-	Rows     []*RowChangedEvent
+	Table        *TableName
+	TableVersion uint64
+	StartTs      uint64
+	CommitTs     uint64
+	Rows         []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

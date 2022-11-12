@@ -22,11 +22,11 @@ function prepare() {
 	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 }
 
-function test_check_task_fail_no_block() {
+function test_check_task_warn_no_block() {
 	prepare_incompatible_tables
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-noshard.yaml" \
-		"\"state\": \"fail\"" 1
+		"\"state\": \"warn\"" 1
 }
 
 function test_check_task_fail_no_block_forsharding() {
@@ -41,7 +41,7 @@ function test_check_task_fail_no_block_forsharding() {
 
 function run() {
 	prepare
-	test_check_task_fail_no_block
+	test_check_task_warn_no_block
 	test_check_task_fail_no_block_forsharding
 }
 

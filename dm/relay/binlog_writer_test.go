@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 

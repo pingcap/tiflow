@@ -19,12 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -32,7 +27,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type workerManageTestSuite struct {
@@ -309,7 +307,7 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	event = suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOfflineEvent, event.Tp)
 	require.NotNil(t, event.Handle.GetTombstone())
-	require.True(t, derror.ErrWorkerFinish.Equal(event.Err))
+	require.True(t, errors.Is(event.Err, errors.ErrWorkerFinish))
 
 	suite.Close()
 }

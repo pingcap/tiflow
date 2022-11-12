@@ -22,13 +22,12 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var DefaultTimeoutForTest = 3 * time.Second

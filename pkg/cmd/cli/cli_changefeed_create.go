@@ -131,7 +131,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory, cmd *cobra.Command) error {
+func (o *createChangefeedOptions) complete(f factory.Factory, cmd *cobra.Command) error {
 	client, err := f.APIV2Client()
 	if err != nil {
 		return err
@@ -376,7 +376,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx := cmdcontext.GetDefaultContext()
 
-			util.CheckErr(o.complete(ctx, f, cmd))
+			util.CheckErr(o.complete(f, cmd))
 			util.CheckErr(o.validate(cmd))
 			util.CheckErr(o.run(ctx, cmd))
 		},

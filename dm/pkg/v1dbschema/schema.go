@@ -24,8 +24,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
@@ -36,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
 )
 
 // UpdateSchema updates the DB schema from v1.0.x to v2.0.x, including:

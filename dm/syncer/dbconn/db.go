@@ -14,15 +14,15 @@
 package dbconn
 
 import (
+	"context"
 	"database/sql"
+	"net"
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -31,6 +31,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 var retryTimeout = 3 * time.Second
@@ -96,27 +98,7 @@ func (conn *DBConn) QuerySQL(
 		RetryCount:         10,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
-		IsRetryableFn: func(retryTime int, err error) bool {
-			if retry.IsConnectionError(err) {
-				err = conn.ResetConn(tctx)
-				if err != nil {
-					tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("query", utils.TruncateInterface(query, -1)),
-						zap.String("arguments", utils.TruncateInterface(args, -1)),
-						log.ShortError(err))
-					return false
-				}
-				return true
-			}
-			if dbutil.IsRetryableError(err) {
-				tctx.L().Warn("query statement", zap.Int("retry", retryTime),
-					zap.String("query", utils.TruncateString(query, -1)),
-					zap.String("argument", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
-				return true
-			}
-			return false
-		},
+		IsRetryableFn:      conn.retryableFn(tctx, query, args),
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
@@ -184,31 +166,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		RetryCount:         100,
 		FirstRetryDuration: retryTimeout,
 		BackoffStrategy:    retry.Stable,
-		IsRetryableFn: func(retryTime int, err error) bool {
-			if retry.IsConnectionError(err) {
-				err = conn.ResetConn(tctx)
-				if err != nil {
-					tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("queries", utils.TruncateInterface(queries, -1)),
-						zap.String("arguments", utils.TruncateInterface(args, -1)),
-						log.ShortError(err))
-					return false
-				}
-				tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
-					zap.Error(err))
-				return true
-			}
-			if dbutil.IsRetryableError(err) {
-				tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
-					zap.String("queries", utils.TruncateInterface(queries, -1)),
-					zap.String("arguments", utils.TruncateInterface(args, -1)),
-					log.ShortError(err))
-				tctx.L().Warn("execute sql failed by retryable error", zap.Int("retry", retryTime),
-					zap.Error(err))
-				return true
-			}
-			return false
-		},
+		IsRetryableFn:      conn.retryableFn(tctx, queries, args),
 	}
 
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
@@ -262,8 +220,71 @@ func (conn *DBConn) ExecuteSQL(
 	return conn.ExecuteSQLWithIgnore(tctx, metricProxies, nil, queries, args...)
 }
 
+// ExecuteSQLAutoSplit wraps BaseConn.ExecuteSQLAutoSplit.
+// TODO: refine DBConn and BaseConn.
+func (conn *DBConn) ExecuteSQLAutoSplit(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	queries []string,
+	args ...[]interface{},
+) error {
+	if conn == nil {
+		// only happens in test
+		return nil
+	}
+	var m *prometheus.HistogramVec
+	if metricProxies != nil {
+		m = metricProxies.StmtHistogram
+	}
+	return conn.baseConn.ExecuteSQLsAutoSplit(tctx, m, conn.cfg.Name, queries, args...)
+}
+
+func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
+	return func(retryTime int, err error) bool {
+		if retry.IsConnectionError(err) {
+			err = conn.ResetConn(tctx)
+			if err != nil {
+				tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
+					zap.String("queries", utils.TruncateInterface(queries, -1)),
+					zap.String("arguments", utils.TruncateInterface(args, -1)),
+					log.ShortError(err))
+				return false
+			}
+			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
+				zap.Error(err))
+			return true
+		}
+		if dbutil.IsRetryableError(err) {
+			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				zap.String("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
+			return true
+		}
+		return false
+	}
+}
+
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
 func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
+	if cfg.IOTotalBytes != nil {
+		mysql.RegisterDialContext(cfg.UUID, func(ctx context.Context, addr string) (net.Conn, error) {
+			d := &net.Dialer{}
+			conn, err := d.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				return nil, err
+			}
+			tcpConn := conn.(*net.TCPConn)
+			// try https://github.com/go-sql-driver/mysql/blob/bcc459a906419e2890a50fc2c99ea6dd927a88f2/connector.go#L56-L64
+			err = tcpConn.SetKeepAlive(true)
+			if err != nil {
+				tctx.L().Warn("set TCP keep alive failed", zap.Error(err))
+			}
+			return NewTCPConnWithIOCounter(tcpConn, cfg.IOTotalBytes), nil
+		})
+		dbCfg.Net = cfg.UUID
+	}
+
 	conns := make([]*DBConn, 0, count)
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {

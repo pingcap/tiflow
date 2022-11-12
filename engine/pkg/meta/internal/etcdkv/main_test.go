@@ -19,7 +19,7 @@ import (
 )
 
 // TODO: enable leak test in this package
-// nolint:deadcode
+// nolint:unused
 func testMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }

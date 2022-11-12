@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -31,6 +32,7 @@ import (
 type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
+	plr        puller.Puller
 	tableID    model.TableID
 	startTs    model.Ts
 	changefeed model.ChangeFeedID
@@ -59,7 +61,7 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 	return spans
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext,
+func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
 ) error {
@@ -70,7 +72,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.New(
+	n.plr = puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,
@@ -85,7 +87,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		n.tableName,
 	)
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(plr.Run(ctxC)))
+		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))
 		return nil
 	})
 	n.wg.Go(func() error {
@@ -93,12 +95,61 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 			select {
 			case <-ctxC.Done():
 				return nil
-			case rawKV := <-plr.Output():
+			case rawKV := <-n.plr.Output():
 				if rawKV == nil {
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				sorter.handleRawEvent(ctx, pEvent)
+			}
+		}
+	})
+	n.cancel = cancel
+	return nil
+}
+
+func (n *pullerNode) startWithEventSortEngine(ctx pipeline.NodeContext,
+	up *upstream.Upstream, wg *errgroup.Group,
+	eventSortEngine sorter.EventSortEngine,
+) error {
+	n.wg = wg
+	ctxC, cancel := context.WithCancel(ctx)
+	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
+	kvCfg := config.GetGlobalServerConfig().KVClient
+	// NOTICE: always pull the old value internally
+	// See also: https://github.com/pingcap/tiflow/issues/2301.
+	n.plr = puller.New(
+		ctxC,
+		up.PDClient,
+		up.GrpcPool,
+		up.RegionCache,
+		up.KVStorage,
+		up.PDClock,
+		n.startTs,
+		n.tableSpan(),
+		kvCfg,
+		n.changefeed,
+		n.tableID,
+		n.tableName,
+	)
+	n.wg.Go(func() error {
+		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))
+		return nil
+	})
+	n.wg.Go(func() error {
+		for {
+			select {
+			case <-ctxC.Done():
+				return nil
+			case rawKV := <-n.plr.Output():
+				if rawKV == nil {
+					continue
+				}
+				pEvent := model.NewPolymorphicEvent(rawKV)
+				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
+					return err
+				}
 			}
 		}
 	})

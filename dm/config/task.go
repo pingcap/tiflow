@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -32,12 +33,11 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // Online DDL Scheme.
@@ -239,9 +239,15 @@ type LoadMode string
 
 const (
 	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
+	// deprecated, use LoadModeLogical instead.
 	LoadModeSQL LoadMode = "sql"
 	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	// deprecated, loader will be removed in future.
 	LoadModeLoader = "loader"
+	// LoadModeLogical means use tidb backend of lightning to load data, which uses SQL to load data.
+	LoadModeLogical = "logical"
+	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
+	LoadModePhysical = "physical"
 )
 
 // DuplicateResolveType defines the duplication resolution when meet duplicate rows.
@@ -290,10 +296,15 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
-		m.ImportMode = LoadModeSQL
+		m.ImportMode = LoadModeLogical
+	}
+	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) {
+		m.ImportMode = LoadModeLogical
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
-	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
+	switch m.ImportMode {
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 
@@ -998,11 +1009,16 @@ func AdjustDBTimeZone(config *DBConfig, timeZone string) {
 	config.Session["time_zone"] = timeZone
 }
 
-var defaultParser = parser.New()
+var (
+	defaultParser = parser.New()
+	parserMu      sync.Mutex
+)
 
 func checkValidExpr(expr string) error {
 	expr = "select " + expr
+	parserMu.Lock()
 	_, _, err := defaultParser.Parse(expr, "", "")
+	parserMu.Unlock()
 	return err
 }
 

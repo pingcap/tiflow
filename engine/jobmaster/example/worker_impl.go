@@ -20,11 +20,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 var _ framework.Worker = &exampleWorker{}
@@ -117,8 +116,7 @@ func (w *exampleWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, me
 	return nil
 }
 
-func (w *exampleWorker) CloseImpl(ctx context.Context) error {
+func (w *exampleWorker) CloseImpl(ctx context.Context) {
 	log.Info("CloseImpl")
 	w.wg.Wait()
-	return nil
 }

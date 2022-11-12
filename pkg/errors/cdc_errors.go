@@ -407,6 +407,26 @@ var (
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
+	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
+		"date separator in cloud storage sink is invalid",
+		errors.RFCCodeText("CDC:ErrStorageSinkInvalidDateSeparator"),
+	)
+	ErrCSVEncodeFailed = errors.Normalize(
+		"csv encode failed",
+		errors.RFCCodeText("CDC:ErrCSVEncodeFailed"),
+	)
+	ErrCSVDecodeFailed = errors.Normalize(
+		"csv decode failed",
+		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
+	)
+	ErrCloudStorageInvalidConfig = errors.Normalize(
+		"cloud storage config invalid",
+		errors.RFCCodeText("CDC:ErrCloudStorageInvalidConfig"),
+	)
+	ErrCloudStorageDefragmentFailed = errors.Normalize(
+		"cloud storage defragment encoded messages failed",
+		errors.RFCCodeText("CDC:ErrCloudStorageDefragmentFailed"),
+	)
 
 	// utilities related errors
 	ErrToTLSConfigFailed = errors.Normalize(
@@ -1043,10 +1063,13 @@ var (
 		"upstream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
-
 	ErrUpstreamManagerNotReady = errors.Normalize(
 		"upstream manager not ready",
 		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
+	)
+	ErrUpstreamClosed = errors.Normalize(
+		"upstream has been closed",
+		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
 	)
 
 	// ReplicationSet error

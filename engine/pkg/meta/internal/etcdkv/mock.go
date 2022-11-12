@@ -15,7 +15,6 @@ package etcdkv
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -25,6 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"

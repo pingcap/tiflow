@@ -135,7 +135,7 @@ func TestNewCounter(t *testing.T) {
 	factory := NewFactory4MasterImpl(
 		reg,
 		tent,
-		jobType,
+		jobType.String(),
 		jobID,
 	)
 	counter := factory.NewCounter(prometheus.CounterOpts{
@@ -186,7 +186,7 @@ func TestNewCounter(t *testing.T) {
 	factory = NewFactory4MasterImpl(
 		reg,
 		tent,
-		jobType,
+		jobType.String(),
 		jobID,
 	)
 	counter = factory.NewCounter(prometheus.CounterOpts{
@@ -203,7 +203,7 @@ func TestNewCounter(t *testing.T) {
 	factory = NewFactory4MasterImpl(
 		reg,
 		tent,
-		jobType,
+		jobType.String(),
 		jobID,
 	)
 	counter = factory.NewCounter(prometheus.CounterOpts{
@@ -221,7 +221,7 @@ func TestNewCounter(t *testing.T) {
 	factory = NewFactory4WorkerImpl(
 		reg,
 		tent,
-		jobType,
+		jobType.String(),
 		jobID,
 		workerID,
 	)
@@ -239,7 +239,7 @@ func TestNewCounter(t *testing.T) {
 	factory = NewFactory4WorkerImpl(
 		reg,
 		tent,
-		jobType,
+		jobType.String(),
 		jobID,
 		workerID,
 	)
@@ -285,7 +285,7 @@ func TestNewCounterFailConstLabelConflict(t *testing.T) {
 			"user0",
 			"proj0",
 		),
-		engineModel.JobTypeDM,
+		engineModel.JobTypeDM.String(),
 		"job0",
 	)
 	_ = factory.NewCounter(prometheus.CounterOpts{
@@ -310,7 +310,7 @@ func TestNewCounterVec(t *testing.T) {
 			"user0",
 			"proj0",
 		),
-		engineModel.JobTypeDM,
+		engineModel.JobTypeDM.String(),
 		"job0",
 	)
 	counterVec := factory.NewCounterVec(prometheus.CounterOpts{
@@ -407,11 +407,4 @@ func compareCounter(t *testing.T, expected *dto.Counter, actual *dto.Counter) {
 			require.Equal(t, label.Value, actual.Exemplar.Label[i].Value)
 		}
 	}
-}
-
-// nolint: deadcode
-func compareGauge(t *testing.T, expected *dto.Gauge, actual *dto.Gauge) {
-	require.NotNil(t, expected)
-	require.NotNil(t, actual)
-	require.Equal(t, expected.Value, actual.Value)
 }

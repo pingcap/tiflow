@@ -19,13 +19,11 @@ import (
 	"testing"
 	"time"
 
+	runtime "github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
-
-	"github.com/pingcap/errors"
-	runtime "github.com/pingcap/tiflow/engine/executor/worker"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type toyTaskStatus = int32
@@ -84,7 +82,7 @@ func (t *toyTask) Stop(ctx context.Context) error {
 }
 
 func (t *toyTask) NotifyExit(ctx context.Context, errIn error) error {
-	if derrors.ErrWorkerCancel.NotEqual(errIn) {
+	if !errors.Is(errIn, errors.ErrWorkerCancel) {
 		require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosing))
 	}
 
@@ -149,7 +147,7 @@ func TestRunnerForcefulExit(t *testing.T) {
 	task := newToyTask(t, true)
 	runner := NewRunner(task)
 
-	errIn := derrors.ErrWorkerSuicide.GenWithStackByArgs()
+	errIn := errors.ErrWorkerSuicide.GenWithStackByArgs()
 
 	task.On("Init", mock.Anything).Return(nil).Once()
 	task.On("Close", mock.Anything).Return(nil).Once()
@@ -203,7 +201,7 @@ func TestRunnerStopByCancel(t *testing.T) {
 
 	task := newToyTask(t, true)
 	runner := NewRunner(task)
-	errIn := derrors.ErrWorkerCancel.GenWithStackByArgs()
+	errIn := errors.ErrWorkerCancel.GenWithStackByArgs()
 
 	task.On("Init", mock.Anything).Return(nil).Once()
 	task.On("NotifyExit", mock.Anything, errIn).Return(nil).Once()

@@ -20,16 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/label"
-
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"go.uber.org/atomic"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
@@ -37,11 +29,12 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -49,9 +42,13 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // Master defines a basic interface that can run in dataflow engine runtime
@@ -67,37 +64,96 @@ type Master interface {
 // MasterImpl defines the interface to implement a master, business logic can be
 // added in the functions of this interface
 type MasterImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
-	// InitImpl will not be called if the master recovers from an error.
+	// InitImpl is called at the first time the MasterImpl instance is initialized
+	// after OnOpenAPIInitialized. When InitImpl returns without error, framework
+	// will try to persist an internal state so further failover will call OnMasterRecovered
+	// rather than InitImpl.
+	// Return:
+	// - error to let the framework call CloseImpl, and framework may retry InitImpl
+	//   later for some times. For non-retryable failure, business logic should
+	//   call Exit.
+	// Concurrent safety:
+	// - this function is not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
-	Tick(ctx context.Context) error
-
-	// OnMasterRecovered is called when the master has recovered from an error.
+	// OnMasterRecovered is called when the MasterImpl instance has failover from
+	// error by framework. For this MasterImpl instance, it's called after OnOpenAPIInitialized.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is not concurrent with other callbacks.
 	OnMasterRecovered(ctx context.Context) error
 
-	// OnWorkerDispatched is called when a request to launch a worker is finished.
+	// Tick is called on a fixed interval after MasterImpl's InitImpl or OnMasterRecovered,
+	// business logic can do some periodic tasks here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with other callbacks except for
+	//   Tick itself, OnOpenAPIInitialized, InitImpl, OnMasterRecovered, CloseImpl,
+	//   StopImpl.
+	Tick(ctx context.Context) error
+
+	// OnWorkerDispatched is called when the asynchronized action of CreateWorker
+	// is finished. Only after OnWorkerDispatched, OnWorkerOnline and OnWorkerStatusUpdated
+	// of the same worker may be called.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel.
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
+	// Only after OnWorkerOnline, OnWorkerOffline of the same worker may be called.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerStatusUpdated.
 	OnWorkerOnline(worker WorkerHandle) error
 
-	// OnWorkerOffline is called when a worker exits or has timed out.
-	// Worker exit scenario contains normal finish and manually stop
+	// OnWorkerOffline is called as the consequence of worker's Exit or heartbeat
+	// timed out. It's the last callback function among OnWorkerXXX for a worker.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel.
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
-	// OnWorkerStatusUpdated is called when a worker's status is updated.
+	// OnWorkerStatusUpdated is called as the consequence of worker's UpdateStatus.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with another worker's OnWorkerXXX,
+	//   Tick, CloseImpl, StopImpl, OnCancel, the same worker's OnWorkerOnline.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *frameModel.WorkerStatus) error
 
-	// CloseImpl is called when the master is being closed
-	CloseImpl(ctx context.Context) error
+	// CloseImpl is called as the consequence of returning error from InitImpl,
+	// OnMasterRecovered or Tick, the Tick will be stopped after entering this function.
+	// And framework may try to create a new masterImpl instance afterwards.
+	// Business logic is expected to release resources here, but business developer
+	// should be aware that when the runtime is crashed, CloseImpl has no time to
+	// be called.
+	// TODO: no other callbacks will be called after and concurrent with CloseImpl
+	// Concurrent safety:
+	// - this function may be concurrently called with OnWorkerMessage, OnCancel,
+	//   OnWorkerDispatched, OnWorkerOnline, OnWorkerOffline, OnWorkerStatusUpdated.
+	CloseImpl(ctx context.Context)
 
-	// StopImpl is called when the master is being canceled
-	StopImpl(ctx context.Context) error
+	// StopImpl is called the consequence of business logic calls Exit. Tick will
+	// be stopped after entering this function, and framework will treat this MasterImpl
+	// as non-recoverable,
+	// There's at most one invocation to StopImpl after Exit. If the runtime is
+	// crashed, StopImpl has no time to be called.
+	// Concurrent safety:
+	// - this function may be concurrently called with OnWorkerMessage, OnCancel,
+	//   OnWorkerDispatched, OnWorkerOnline, OnWorkerOffline, OnWorkerStatusUpdated.
+	StopImpl(ctx context.Context)
 }
 
 const (
@@ -155,19 +211,11 @@ type BaseMaster interface {
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
-	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(
-		workerType WorkerType,
-		config WorkerConfig,
-		cost model.RescUnit,
-		resources ...resModel.ResourceID,
-	) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// CreateWorker is the latest version of CreateWorker, but with
 	// a more flexible way of passing options.
-	CreateWorkerV2(
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -337,10 +385,9 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	// Don't cancel this context until it meets first error. In this way this
-	// context can be used in business logic and leaves a robust way to cancel
-	// business logic from runtime.(If business uses context correctly)
-	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
+	// Note this context must not be held in any resident goroutine.
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -498,7 +545,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 	select {
 	case <-m.closeCh:
-		return derror.ErrMasterClosed.GenWithStackByArgs()
+		return errors.ErrMasterClosed.GenWithStackByArgs()
 	default:
 	}
 
@@ -539,25 +586,17 @@ func (m *DefaultBaseMaster) doClose() {
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	err := m.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		m.Logger().Error("Failed to close MasterImpl", zap.Error(err))
-	}
+	m.Impl.CloseImpl(ctx)
 
 	m.persistMetaError()
 	m.doClose()
-	return errors.Trace(err)
+	return nil
 }
 
 // Stop implements Master.Stop
 func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
-	err := m.Impl.StopImpl(ctx)
-	if err != nil {
-		m.Logger().Error("stop master impl failed", zap.Error(err))
-	}
-	return err
+	m.Impl.StopImpl(ctx)
+	return nil
 }
 
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
@@ -626,7 +665,7 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 	case frameModel.CvsJobMaster, frameModel.FakeJobMaster, frameModel.DMJobMaster:
 		masterMeta, ok := config.(*frameModel.MasterMeta)
 		if !ok {
-			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
+			err = errors.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
 		rawConfig = masterMeta.Config
@@ -653,28 +692,10 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 func (m *DefaultBaseMaster) CreateWorker(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	m.Logger().Info("CreateWorker",
-		zap.Stringer("worker-type", workerType),
-		zap.Any("worker-config", config),
-		zap.Int("cost", int(cost)),
-		zap.Any("resources", resources),
-		zap.String("master-id", m.id))
-
-	return m.CreateWorkerV2(workerType, config,
-		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
-}
-
-// CreateWorkerV2 implements BaseMaster.CreateWorkerV2
-func (m *DefaultBaseMaster) CreateWorkerV2(
-	workerType frameModel.WorkerType,
-	config WorkerConfig,
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
 	m.Logger().Info("CreateWorker",
-		zap.Int64("worker-type", int64(workerType)),
+		zap.Stringer("worker-type", workerType),
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
@@ -688,7 +709,7 @@ func (m *DefaultBaseMaster) CreateWorkerV2(
 	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
-		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
+		return "", errors.WrapError(errors.ErrMasterConcurrencyExceeded, err)
 	}
 
 	go func() {
@@ -725,7 +746,7 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 	// keep the original error in errCenter if possible
 	defer func() {
 		if err == nil {
-			err = derror.ErrWorkerFinish.FastGenByArgs()
+			err = errors.ErrWorkerFinish.FastGenByArgs()
 		}
 		m.errCenter.OnError(err)
 	}()

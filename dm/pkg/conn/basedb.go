@@ -27,14 +27,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
 )
 
 var customID int64
@@ -61,8 +60,12 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
-		config.User, config.Password, hostPort)
+	net := "tcp"
+	if config.Net != "" {
+		net = config.Net
+	}
+	dsn := fmt.Sprintf("%s:%s@%s(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
+		config.User, config.Password, net, hostPort)
 
 	doFuncInClose := func() {}
 	if config.Security != nil {
@@ -78,15 +81,17 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
 
-		name := "dm" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
-		err = mysql.RegisterTLSConfig(name, tlsConfig)
-		if err != nil {
-			return nil, terror.ErrConnRegistryTLSConfig.Delegate(err)
-		}
-		dsn += "&tls=" + name
+		if tlsConfig != nil {
+			name := "dm" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
+			err = mysql.RegisterTLSConfig(name, tlsConfig)
+			if err != nil {
+				return nil, terror.ErrConnRegistryTLSConfig.Delegate(err)
+			}
+			dsn += "&tls=" + name
 
-		doFuncInClose = func() {
-			mysql.DeregisterTLSConfig(name)
+			doFuncInClose = func() {
+				mysql.DeregisterTLSConfig(name)
+			}
 		}
 	}
 

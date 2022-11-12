@@ -1,17 +1,20 @@
----
-# A Network Loss action causes network packets to drop randomly
 apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
+kind: Schedule
 metadata:
   name: network-loss-dm
   labels:
     app: network-loss-dm
 spec:
-  action: loss
-  mode: one
-  selector:
-    pods:
-      default: # default namespace
+  schedule: 2-59/5 * * * *
+  type: NetworkChaos
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  networkChaos:
+    action: loss
+    mode: one
+    selector:
+      pods:
+        default:
         - dm-master-0
         - dm-master-1
         - dm-master-2
@@ -19,92 +22,7 @@ spec:
         - dm-worker-1
         - dm-worker-2
         - dm-worker-3
-  loss:
-    loss: "25"
-    correlation: "25"
-  duration: "30s"
-  scheduler:
-    cron: "2-59/5 * * * *" # At every 5th minute from 2 through 59, (2, 7, 12, ...)
-
-
-# A Network Delay action causes delays in message sending
----
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: network-delay-dm
-  labels:
-    app: network-delay-dm
-spec:
-  action: delay
-  mode: one
-  selector:
-    pods:
-      default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
-  delay:
-    latency: "90ms"
-    correlation: "25"
-    jitter: "90ms"
-  duration: "30s"
-  scheduler:
-    cron: "3-59/5 * * * *" # At every 5th minute from 3 through 59, (3, 8, 13, ...)
-
----
-# A Network Duplicate action causes packet duplication
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: network-duplicate-dm
-  labels:
-    app: network-duplicate-dm
-spec:
-  action: duplicate
-  mode: one
-  selector:
-    pods:
-      default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
-  duplicate:
-    duplicate: "40"
-    correlation: "25"
-  duration: "30s"
-  scheduler:
-    cron: "4-59/5 * * * *" # At every 5th minute from 4 through 59, (4, 9, 14, ...)
-
----
-# A Network Corrupt action causes packet corruption
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: network-corrupt-dm
-  labels:
-    app: network-corrupt-dm
-spec:
-  action: corrupt
-  mode: one
-  selector:
-    pods:
-      default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
-  corrupt:
-    corrupt: "40"
-    correlation: "25"
-  duration: "30s"
-  scheduler:
-    cron: "5-59/5 * * * *" # At every 5th minute from 5 through 59, (5, 10, 15, ...)
+    loss:
+      loss: "25"
+      correlation: "25"
+    duration: 30s

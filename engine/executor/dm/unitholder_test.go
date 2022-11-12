@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -23,19 +22,19 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestUnitHolder(t *testing.T) {

@@ -21,11 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -34,6 +29,10 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -160,7 +159,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 	// log.Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
 	if task.statusRateLimiter.Allow() {
 		err := task.BaseWorker.UpdateStatus(ctx, task.Status())
-		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
 			log.Warn("update status try again later", zap.String("id", task.ID()), zap.String("error", err.Error()))
 			return nil
 		}
@@ -225,11 +224,10 @@ func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 }
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl(ctx context.Context) error {
+func (task *cvsTask) CloseImpl(ctx context.Context) {
 	if task.cancelFn != nil {
 		task.cancelFn()
 	}
-	return nil
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {

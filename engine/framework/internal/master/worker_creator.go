@@ -17,15 +17,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"go.uber.org/zap"
 )

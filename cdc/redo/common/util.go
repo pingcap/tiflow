@@ -27,6 +27,7 @@ import (
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -63,7 +64,7 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
-		S3Retryer:       defaultS3Retryer(),
+		S3Retryer:       DefaultS3Retryer(),
 	})
 	if err != nil {
 		return nil, cerror.WrapChangefeedUnretryableErr(cerror.ErrS3StorageInitialize, err)
@@ -99,13 +100,13 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	var commitTs uint64
-	var s1, namespace, s2, fileType, uid string
+	var captureID, namespace, changefeedID, fileType, uid string
 	// if the namespace is not default, the log looks like:
-	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// fmt.Sprintf("%s_%s_%s_%s_%d_%s%s", w.cfg.captureID,
 	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
 	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
 	// otherwise it looks like:
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// fmt.Sprintf("%s_%s_%s_%d_%s%s", w.cfg.captureID,
 	// w.cfg.changeFeedID.ID,
 	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
 	var (
@@ -114,10 +115,10 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	)
 	if len(strings.Split(name, "_")) == 6 {
 		formatStr = logFormat2ParseFormat(RedoLogFileFormatV2)
-		vars = []any{&s1, &namespace, &s2, &fileType, &commitTs, &uid}
+		vars = []any{&captureID, &namespace, &changefeedID, &fileType, &commitTs, &uid}
 	} else {
 		formatStr = logFormat2ParseFormat(RedoLogFileFormatV1)
-		vars = []any{&s1, &s2, &fileType, &commitTs, &uid}
+		vars = []any{&captureID, &changefeedID, &fileType, &commitTs, &uid}
 	}
 	name = strings.ReplaceAll(name, "_", " ")
 	_, err := fmt.Sscanf(name, formatStr, vars...)
@@ -151,7 +152,9 @@ func (rl retryerWithLog) RetryRules(r *request.Request) time.Duration {
 	return backoffTime
 }
 
-func defaultS3Retryer() request.Retryer {
+// DefaultS3Retryer is the default s3 retryer, maybe this function
+// should be extracted to another place.
+func DefaultS3Retryer() request.Retryer {
 	return retryerWithLog{
 		DefaultRetryer: client.DefaultRetryer{
 			NumMaxRetries:    3,
@@ -159,4 +162,24 @@ func defaultS3Retryer() request.Retryer {
 			MinThrottleDelay: 2 * time.Second,
 		},
 	}
+}
+
+// FilterChangefeedFiles return the files that match to the changefeed.
+func FilterChangefeedFiles(files []string, changefeedID model.ChangeFeedID) []string {
+	var (
+		matcher string
+		res     []string
+	)
+
+	if changefeedID.Namespace == "default" {
+		matcher = fmt.Sprintf("_%s_", changefeedID.ID)
+	} else {
+		matcher = fmt.Sprintf("_%s_%s_", changefeedID.Namespace, changefeedID.ID)
+	}
+	for _, file := range files {
+		if strings.Contains(file, matcher) {
+			res = append(res, file)
+		}
+	}
+	return res
 }

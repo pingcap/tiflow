@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:unparam
 func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(t, 1)
@@ -98,8 +99,10 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 
 	ddl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), primary key(id))",
 		Type:  mm.ActionCreateTable,
@@ -147,8 +150,10 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 
 	ddl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
 		},
 		Query: "create table person(id int, name varchar(32), primary key(id))",
 		Type:  mm.ActionCreateTable,
@@ -196,7 +201,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.NotNil(t, s)
 
 	checkpointTs := uint64(417318403368288260)
-	var tables []model.TableName
+	var tables []*model.TableInfo
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 
@@ -248,20 +253,27 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	require.NotNil(t, s)
 
 	checkpointTs := uint64(417318403368288260)
-	tables := []model.TableName{
+	tables := []*model.TableInfo{
 		{
-			Schema: "cdc",
-			Table:  "person",
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person",
+			},
 		},
 		{
-			Schema: "cdc",
-			Table:  "person1",
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person1",
+			},
 		},
 		{
-			Schema: "cdc",
-			Table:  "person2",
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person2",
+			},
 		},
 	}
+
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 
@@ -319,7 +331,7 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.NotNil(t, s)
 
 	checkpointTs := uint64(417318403368288260)
-	var tables []model.TableName
+	var tables []*model.TableInfo
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 

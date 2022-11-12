@@ -20,8 +20,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -158,8 +157,13 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 	for oldJobID, job := range fsm.pendingJobs {
 		id, err := dispatchJobFn(job)
 		if err != nil {
-			if derrors.ErrMasterCreateWorkerBackoff.Equal(err) {
-				return nil
+			// This job is being backoff, skip it and process other jobs.
+			if errors.Is(err, errors.ErrMasterCreateWorkerBackoff) {
+				continue
+			}
+			if errors.Is(err, errors.ErrMasterCreateWorkerTerminate) {
+				delete(fsm.pendingJobs, oldJobID)
+				continue
 			}
 			return err
 		}
@@ -201,7 +205,7 @@ func (fsm *JobFsm) JobOnline(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &JobHolder{
 		workerHandle: worker,
@@ -239,7 +243,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.pendingJobs[worker.ID()] = job.masterMeta
 	delete(fsm.waitAckJobs, worker.ID())

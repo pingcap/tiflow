@@ -63,7 +63,7 @@ function run() {
 	# run another cdc server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix server2
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --pd=$pd_addr 2>&1 | grep id"
-	capture_id=$($CDC_BINARY cli --pd=$pd_addr capture list 2>&1 | awk -F '"' '/id/{print $4}')
+	capture_id=$($CDC_BINARY cli --pd=$pd_addr capture list 2>&1 | awk -F '"' '/\"id/{print $4}')
 	echo "capture_id:" $capture_id
 
 	# check table has been dispatched to new capture

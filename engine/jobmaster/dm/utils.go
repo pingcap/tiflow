@@ -14,10 +14,14 @@
 package dm
 
 import (
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-// NewDMResourceID returns a ResourceID in DM's style. Currently only support local resource.
-func NewDMResourceID(taskName, sourceName string) resourcemeta.ResourceID {
-	return "/" + string(resourcemeta.ResourceTypeLocalFile) + "/" + taskName + "/" + sourceName
+// NewDMResourceID returns a ResourceID in DM's style. Currently only support s3 resource.
+func NewDMResourceID(taskName, sourceName string, isS3Enabled bool) resModel.ResourceID {
+	resType := resModel.ResourceTypeLocalFile
+	if isS3Enabled {
+		resType = resModel.ResourceTypeS3
+	}
+	return "/" + string(resType) + "/" + taskName + "-" + sourceName
 }

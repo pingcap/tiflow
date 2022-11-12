@@ -15,13 +15,8 @@ package election
 
 import (
 	"context"
-	"errors"
 	"time"
 )
-
-// ErrRecordConflict is returned when the record is conflicted.
-// It means that the record is not the latest in the storage.
-var ErrRecordConflict = errors.New("record conflict")
 
 // Storage describes the requirements of a storage that can be used for leader election.
 type Storage interface {

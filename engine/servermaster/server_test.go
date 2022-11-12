@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -27,14 +28,13 @@ import (
 	"github.com/phayes/freeport"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
-	spb "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func init() {
@@ -108,6 +108,7 @@ func TestServe(t *testing.T) {
 }
 
 func testPprof(t *testing.T, addr string) {
+	ctx := context.Background()
 	urls := []string{
 		"/debug/pprof/",
 		"/debug/pprof/cmdline",
@@ -121,8 +122,10 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/goroutine?debug=1",
 		"/debug/pprof/mutex?debug=1",
 	}
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	for _, uri := range urls {
-		resp, err := http.Get(addr + uri)
+		resp, err := cli.Get(ctx, addr+uri)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		_, err = io.ReadAll(resp.Body)
@@ -132,7 +135,10 @@ func testPprof(t *testing.T, addr string) {
 }
 
 func testPrometheusMetrics(t *testing.T, addr string) {
-	resp, err := http.Get(addr + "/metrics")
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
+	resp, err := cli.Get(ctx, addr+"/metrics")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -154,7 +160,7 @@ func (m *mockJobManager) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb
 			}
 		}
 	}
-	return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: req.Id})
+	return nil, errors.ErrJobNotFound.GenWithStackByArgs(req.GetId())
 }
 
 func (m *mockJobManager) JobCount(status pb.Job_State) int {
@@ -167,9 +173,6 @@ type mockExecutorManager struct {
 	ExecutorManager
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
-}
-
-func (m *mockExecutorManager) Stop() {
 }
 
 func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
@@ -225,12 +228,14 @@ func TestCollectMetric(t *testing.T) {
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
+	ctx := context.Background()
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		resp, err := http.Get(addr + "/metrics")
+		resp, err := cli.Get(ctx, addr+"/metrics")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -287,25 +292,27 @@ func TestHTTPErrorHandler(t *testing.T) {
 		return true
 	}, time.Second*5, time.Millisecond*100, "wait for server start")
 
-	resp, err := http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
+	cli, err := httputil.NewClient(nil)
+	require.NoError(t, err)
+
+	resp, err := cli.Get(ctx, fmt.Sprintf("http://%s/api/v1/jobs/job-1", cfg.Addr))
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
+	resp, err = cli.Get(ctx, fmt.Sprintf("http://%s/api/v1/jobs/job-2", cfg.Addr))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-
-	var pbStatus spb.Status
-	err = protojson.Unmarshal(body, &pbStatus)
+	err = resp.Body.Close()
 	require.NoError(t, err)
 
-	rpcErr := rpcerror.FromGRPCError(status.FromProto(&pbStatus).Err())
-	require.True(t, ErrJobNotFound.Is(rpcErr))
+	var httpErr openapi.HTTPError
+	err = json.Unmarshal(body, &httpErr)
+	require.NoError(t, err)
+	require.Equal(t, string(errors.ErrJobNotFound.RFCCode()), httpErr.Code)
 
 	cancel()
 	wg.Wait()
-	s.Stop()
 }

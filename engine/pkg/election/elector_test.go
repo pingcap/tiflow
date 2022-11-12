@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/election"
 	"github.com/pingcap/tiflow/engine/pkg/election/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )
@@ -53,7 +53,7 @@ func TestElectorBasic(t *testing.T) {
 			defer recordLock.Unlock()
 
 			if r.Version != record.Version {
-				return election.ErrRecordConflict
+				return errors.ErrElectionRecordConflict.GenWithStackByArgs()
 			}
 			record = r.Clone()
 			record.Version++
@@ -176,19 +176,19 @@ func TestElectorRenewFailure(t *testing.T) {
 	var recordLock sync.RWMutex
 	record := &election.Record{}
 
-	getRecord := func(ctx context.Context) (*election.Record, error) {
+	getRecord := func(_ context.Context) (*election.Record, error) { //nolint:unparam
 		recordLock.RLock()
 		defer recordLock.RUnlock()
 
 		return record.Clone(), nil
 	}
 
-	updateRecord := func(ctx context.Context, r *election.Record) error {
+	updateRecord := func(_ context.Context, r *election.Record) error {
 		recordLock.Lock()
 		defer recordLock.Unlock()
 
 		if r.Version != record.Version {
-			return election.ErrRecordConflict
+			return errors.ErrElectionRecordConflict.GenWithStackByArgs()
 		}
 		record = r.Clone()
 		record.Version++
@@ -327,7 +327,7 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 			defer recordLock.Unlock()
 
 			if r.Version != record.Version {
-				return election.ErrRecordConflict
+				return errors.ErrElectionRecordConflict.GenWithStackByArgs()
 			}
 			record = r.Clone()
 			record.Version++

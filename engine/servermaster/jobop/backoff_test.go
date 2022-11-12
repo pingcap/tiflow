@@ -61,3 +61,32 @@ func TestJobBackoff(t *testing.T) {
 	clocker.Add(time.Second * 2)
 	require.True(t, bkf.Allow())
 }
+
+func TestJobBackoffMaxTry(t *testing.T) {
+	t.Parallel()
+
+	var (
+		clocker       = clock.NewMock()
+		resetInterval = 20 * time.Second
+		maxTryTime    = 5
+	)
+	config := &BackoffConfig{
+		ResetInterval: resetInterval,
+		MaxTryTime:    maxTryTime,
+	}
+	bkf := NewJobBackoff("test-job-id", clocker, config)
+
+	for i := 0; i < maxTryTime-1; i++ {
+		bkf.Fail()
+		require.False(t, bkf.Terminate())
+	}
+	bkf.Success()
+	clocker.Add(resetInterval)
+
+	for i := 0; i < maxTryTime-1; i++ {
+		bkf.Fail()
+		require.False(t, bkf.Terminate())
+	}
+	bkf.Fail()
+	require.True(t, bkf.Terminate())
+}
