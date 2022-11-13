@@ -28,6 +28,10 @@ jobs:
         chaos-obj:
           [
             "pod-failure-dataflow",
+            "pod-kill-dataflow",
+            "network-partition-dataflow",
+            "network-emulation-dataflow",
+            "time-shift-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
