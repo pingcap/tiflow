@@ -282,6 +282,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		tableID,
 		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
+		startTs,
 		targetTs,
 	)
 	m.tableSinks.Store(tableID, sinkWrapper)
