@@ -251,6 +251,27 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
+func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changefeedInfo := getChangefeedInfo()
+	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	tableID := model.TableID(1)
+	manager.AddTable(tableID, 1, 100)
+	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
+	manager.UpdateBarrierTs(4)
+	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+
+	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes())
+	tableSink, ok := manager.tableSinks.Load(tableID)
+	require.True(t, ok)
+	require.NotNil(t, tableSink)
+	require.Equal(t, uint64(0), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
+}
+
 func TestClose(t *testing.T) {
 	t.Parallel()
 
