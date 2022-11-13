@@ -389,3 +389,50 @@ func TestCreateTableSQLToOneRow(t *testing.T) {
 	expected := "CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c1` varchar(20) DEFAULT NULL, `c2` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
 	require.Equal(t, expected, CreateTableSQLToOneRow(input))
 }
+
+func TestGetSlaveServerID(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	cases := []struct {
+		rows    *sqlmock.Rows
+		results map[uint32]struct{}
+	}{
+		// For MySQL
+		{
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id", "Slave_UUID"}).
+				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
+				AddRow(1921680101, "athena", 3306, 192168011, "07af4990-f41f-11df-a566-7ac56fdaf645"),
+			map[uint32]struct{}{
+				192168010: {}, 1921680101: {},
+			},
+		},
+		// For MariaDB
+		{
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
+				AddRow(192168010, "iconnect2", 3306, 192168011).
+				AddRow(1921680101, "athena", 3306, 192168011),
+			map[uint32]struct{}{
+				192168010: {}, 1921680101: {},
+			},
+		},
+		// For MariaDB, with Server_id greater than 2^31, to test uint conversion
+		{
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
+				AddRow(2147483649, "iconnect2", 3306, 192168011).
+				AddRow(2147483650, "athena", 3306, 192168011),
+			map[uint32]struct{}{
+				2147483649: {}, 2147483650: {},
+			},
+		},
+	}
+
+	for _, ca := range cases {
+		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
+		results, err2 := GetSlaveServerID(context.Background(), db)
+		require.NoError(t, err2)
+		require.Equal(t, ca.results, results)
+	}
+}
