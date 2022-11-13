@@ -62,6 +62,10 @@ func newTableSinkWrapper(
 	}
 }
 
+func (t *tableSinkWrapper) start() {
+	t.state.Store(tablepb.TableStateReplicating)
+}
+
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
 	t.tableSink.AppendRowChangedEvents(events...)
 }

@@ -178,7 +178,15 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-m.taskTicker.C:
+			// No more tables.
+			if m.progressHeap.len() == 0 {
+				continue
+			}
 			slowestTableProgress := m.progressHeap.pop()
+			// Only fetch data when the table is replicating.
+			if slowestTableProgress.tableState.Load() != tablepb.TableStateReplicating {
+				continue
+			}
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
 			if !ok {
@@ -222,6 +230,7 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 				p := &progress{
 					tableID:           tableID,
 					nextLowerBoundPos: lastWrittenPos.Next(),
+					tableState:        tableSink.(*tableSinkWrapper).state,
 				}
 				m.progressHeap.push(p)
 			}
@@ -279,8 +288,20 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 	initProgress := &progress{
 		tableID:           tableID,
 		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+		tableState:        sinkWrapper.state,
 	}
 	m.progressHeap.push(initProgress)
+}
+
+func (m *ManagerImpl) StartTable(tableID model.TableID) {
+	tableSink, ok := m.tableSinks.Load(tableID)
+	if !ok {
+		log.Panic("Table sink not found when starting table stats",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	tableSink.(*tableSinkWrapper).start()
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.
