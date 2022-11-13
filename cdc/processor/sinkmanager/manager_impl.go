@@ -293,6 +293,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 	m.progressHeap.push(initProgress)
 }
 
+// StartTable sets the table(TableSink) state to replicating.
 func (m *ManagerImpl) StartTable(tableID model.TableID) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
