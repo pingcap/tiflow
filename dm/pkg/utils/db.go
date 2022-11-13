@@ -28,6 +28,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -107,11 +108,6 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	}
 	defer rows.Close()
 
-	rowColumns, err := rows.Columns()
-	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-
 	/*
 		in MySQL:
 		mysql> SHOW SLAVE HOSTS;
@@ -132,37 +128,20 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 		+------------+-----------+------+-----------+
 	*/
 
-	var (
-		serverID  sql.NullInt64
-		host      sql.NullString
-		port      sql.NullInt64
-		masterID  sql.NullInt64
-		slaveUUID sql.NullString
-	)
 	serverIDs := make(map[uint32]struct{})
-	for rows.Next() {
-		if len(rowColumns) == 5 {
-			err = rows.Scan(&serverID, &host, &port, &masterID, &slaveUUID)
-		} else {
-			err = rows.Scan(&serverID, &host, &port, &masterID)
-		}
+	var rowsResult []string
+	rowsResult, err = export.GetSpecifiedColumnValueAndClose(rows, "Server_id")
+	if err != nil {
+		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	for _, serverID := range rowsResult {
+		// serverID will not be null
+		serverIDUInt, err := strconv.ParseUint(serverID, 10, 32)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-
-		if serverID.Valid {
-			serverIDs[uint32(serverID.Int64)] = struct{}{}
-		} else {
-			// should never happened
-			log.L().Warn("get invalid server_id when execute `SHOW SLAVE HOSTS;`")
-			continue
-		}
+		serverIDs[uint32(serverIDUInt)] = struct{}{}
 	}
-
-	if rows.Err() != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-
 	return serverIDs, nil
 }
 
