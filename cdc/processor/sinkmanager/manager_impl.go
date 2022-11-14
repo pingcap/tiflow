@@ -335,12 +335,12 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	cleaned := m.memQuota.clean(tableID)
+	cleanedBytes := m.memQuota.clean(tableID)
 	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Int64("tableID", tableID),
-		zap.Uint64("memory", cleaned),
+		zap.Uint64("memory", cleanedBytes),
 	)
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.

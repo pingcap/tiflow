@@ -228,12 +228,12 @@ func (w *workerImpl) receiveTableSinkTask(ctx context.Context, taskChan <-chan *
 				// But the table sink task is still processing the data.
 				// If the last time we advance the table sink, then we generate a record in the memory quota.
 				// So we need to clean up it.
-				cleaned := w.memQuota.clean(task.tableID)
+				cleanedBytes := w.memQuota.clean(task.tableID)
 				log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when canceling",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", cleaned),
+					zap.Uint64("memory", cleanedBytes),
 				)
 
 			} else {

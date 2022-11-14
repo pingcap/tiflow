@@ -240,7 +240,7 @@ func TestMemQuotaRecordAndClean(t *testing.T) {
 	require.False(t, m.hasAvailable(1))
 
 	// clean the all memory.
-	cleaned := m.clean(1)
-	require.Equal(t, uint64(300), cleaned)
+	cleanedBytes := m.clean(1)
+	require.Equal(t, uint64(300), cleanedBytes)
 	require.True(t, m.hasAvailable(100))
 }
