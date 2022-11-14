@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -99,6 +100,8 @@ type dmWorker struct {
 
 	cfgModRevision uint64
 	needExtStorage bool
+
+	stageGauge prometheus.Gauge
 }
 
 func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
@@ -117,7 +120,9 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 		autoResume:     autoResume,
 		cfgModRevision: cfg.ModRevision,
 		needExtStorage: cfg.NeedExtStorage,
+		stageGauge:     jobTaskStageGauge.WithLabelValues(masterID),
 	}
+	w.stageGauge.Set(float64(metadata.StageInit))
 
 	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
@@ -257,6 +262,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
+	jobTaskStageGauge.DeleteLabelValues(w.masterID)
 	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 
@@ -302,6 +308,7 @@ func (w *dmWorker) setStage(stage metadata.TaskStage) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.stage = stage
+	w.stageGauge.Set(float64(stage))
 }
 
 func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
