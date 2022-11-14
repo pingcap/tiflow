@@ -101,7 +101,7 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	if err != nil {
 		errOut := ToGRPCError(err)
 		s, _ := status.FromError(errOut)
-		logger := log.With(zap.String("method", info.FullMethod), zap.Error(err), zap.Any("request", req))
+		logger := log.L().With(zap.String("method", info.FullMethod), zap.Error(err), zap.Any("request", req))
 		switch s.Code() {
 		case codes.Unknown:
 			logger.Warn("request handled with an unknown error")
@@ -113,10 +113,6 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 		return nil, errOut
 	}
 
-	log.With(
-		zap.String("method", info.FullMethod),
-		zap.Any("request", req),
-		zap.Any("response", resp),
-	).Debug("request handled successfully")
+	log.Debug("request handled successfully", zap.String("method", info.FullMethod), zap.Any("request", req), zap.Any("response", resp))
 	return resp, nil
 }

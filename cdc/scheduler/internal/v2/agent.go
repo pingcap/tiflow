@@ -114,7 +114,7 @@ func NewBaseAgent(
 	messenger ProcessorMessenger,
 	config *AgentConfig,
 ) *Agent {
-	logger := log.With(
+	logger := log.L().With(
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID))
 	ret := &Agent{
