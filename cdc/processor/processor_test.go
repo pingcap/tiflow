@@ -44,7 +44,9 @@ func newProcessor4Test(
 	t *testing.T,
 	state *orchestrator.ChangefeedReactorState,
 	captureInfo *model.CaptureInfo,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error),
+	createTablePipeline func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
@@ -121,10 +123,10 @@ func initProcessor4Test(
 	})
 }
 
-func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
+func newMockTablePipeline(ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
 	return &mockTablePipeline{
-		tableID:      tableID,
-		name:         fmt.Sprintf("`test`.`table%d`", tableID),
+		span:         span,
+		name:         fmt.Sprintf("`test`.`table%d`", span.TableID),
 		state:        tablepb.TableStatePreparing,
 		resolvedTs:   replicaInfo.StartTs,
 		checkpointTs: replicaInfo.StartTs,
@@ -132,7 +134,7 @@ func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replica
 }
 
 type mockTablePipeline struct {
-	tableID      model.TableID
+	span         tablepb.Span
 	name         string
 	resolvedTs   model.Ts
 	checkpointTs model.Ts
@@ -144,7 +146,7 @@ type mockTablePipeline struct {
 }
 
 func (m *mockTablePipeline) ID() int64 {
-	return m.tableID
+	return m.span.TableID
 }
 
 func (m *mockTablePipeline) Name() string {

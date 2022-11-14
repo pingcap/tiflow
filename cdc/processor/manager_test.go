@@ -44,7 +44,9 @@ type managerTester struct {
 // NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	t *testing.T,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error),
+	createTablePipeline func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
@@ -62,10 +64,12 @@ func NewManager4Test(
 }
 
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
-	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
+	s.manager = NewManager4Test(t, func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error) {
 		return &mockTablePipeline{
-			tableID:      tableID,
-			name:         fmt.Sprintf("`test`.`table%d`", tableID),
+			span:         span,
+			name:         fmt.Sprintf("`test`.`table%d`", span),
 			state:        tablepb.TableStateReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,

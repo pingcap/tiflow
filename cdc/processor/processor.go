@@ -90,8 +90,10 @@ type processor struct {
 	wg          sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error)
-	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	createTablePipeline func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error)
+	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -231,7 +233,7 @@ func (p *processor) AddTableSpan(
 		}
 	} else {
 		table, err := p.createTablePipeline(
-			ctx.(cdcContext.Context), span.TableID, &model.TableReplicaInfo{StartTs: startTs})
+			ctx.(cdcContext.Context), span, &model.TableReplicaInfo{StartTs: startTs})
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -1162,7 +1164,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 
 func (p *processor) createTablePipelineImpl(
 	ctx cdcContext.Context,
-	tableID model.TableID,
+	span tablepb.Span,
 	replicaInfo *model.TableReplicaInfo,
 ) (table tablepb.TablePipeline, err error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
@@ -1175,13 +1177,13 @@ func (p *processor) createTablePipelineImpl(
 	})
 
 	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
 	}
 
-	tableName := p.getTableName(ctx, tableID)
+	tableName := p.getTableName(ctx, span.TableID)
 
 	if p.sinkV1 != nil {
-		s, err := sinkv1.NewTableSink(p.sinkV1, tableID, p.metricsTableSinkTotalRows)
+		s, err := sinkv1.NewTableSink(p.sinkV1, span.TableID, p.metricsTableSinkTotalRows)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1189,7 +1191,7 @@ func (p *processor) createTablePipelineImpl(
 			ctx,
 			p.upstream,
 			p.mg,
-			tableID,
+			span,
 			tableName,
 			replicaInfo,
 			s,
@@ -1200,12 +1202,12 @@ func (p *processor) createTablePipelineImpl(
 			return nil, errors.Trace(err)
 		}
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, tableID, p.metricsTableSinkTotalRows)
+		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, span.TableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
 			p.mg,
-			tableID,
+			span,
 			tableName,
 			replicaInfo,
 			nil,
