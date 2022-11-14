@@ -26,6 +26,14 @@ import (
 )
 
 func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
+	router.Use(func(c *gin.Context) {
+		if !jm.initialized.Load() {
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+		c.Next()
+	})
+
 	router.Use(terrorHTTPErrorHandler())
 
 	wrapper := openapi.ServerInterfaceWrapper{
