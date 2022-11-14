@@ -71,6 +71,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 	)
 	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
+	jm.initialized.Store(true)
 
 	engine := gin.New()
 	apiGroup := engine.Group(baseURL)
@@ -452,6 +453,16 @@ func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "", binlogSchemaResp.Results["task1"].ErrorMsg)
 	require.Equal(t.T(), "success", binlogSchemaResp.Results["task1"].Msg)
+}
+
+func (t *testDMOpenAPISuite) TestJobMasterNotInitialized() {
+	t.jm.initialized.Store(false)
+	defer t.jm.initialized.Store(true)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", baseURL+"config", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusServiceUnavailable, w.Code)
 }
 
 func equalError(t *testing.T, expected string, body *bytes.Buffer) {
