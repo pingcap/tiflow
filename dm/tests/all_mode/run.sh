@@ -647,6 +647,7 @@ function run() {
 }
 
 function prepare_test_empty_gtid() {
+  cleanup_process
 	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
 	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
