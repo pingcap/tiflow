@@ -50,7 +50,7 @@ func (m *mockSink) Close() error {
 
 //nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
-	tableState := tablepb.TableStateReplicating
+	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
@@ -59,6 +59,7 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 		tableID,
 		innerTableSink,
 		tableState,
+		0,
 		100,
 	)
 	return wrapper, sink
@@ -68,7 +69,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
-	require.Equal(t, tablepb.TableStateReplicating, wrapper.getState())
+	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
 	require.ErrorIs(t, cerror.ErrTableProcessorStoppedSafely, errors.Cause(wrapper.close(context.Background())))
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
@@ -79,6 +80,7 @@ func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	wrapper.updateReceivedSorterResolvedTs(100)
 	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
 }
 
 func TestConvertNilRowChangedEvents(t *testing.T) {

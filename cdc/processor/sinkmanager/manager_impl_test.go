@@ -127,6 +127,8 @@ func TestAddTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
+	require.Equal(t, 0, manager.progressHeap.len(), "Not started table shout not in progress heap")
+	manager.StartTable(tableID)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: sorter.Position{
@@ -184,6 +186,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.StartTable(tableID)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -208,6 +211,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
+	manager.StartTable(tableID)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -228,15 +232,36 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
-
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.StartTable(tableID)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)
 		require.NoError(t, err)
 		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
+}
+
+func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changefeedInfo := getChangefeedInfo()
+	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	tableID := model.TableID(1)
+	manager.AddTable(tableID, 1, 100)
+	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
+	manager.UpdateBarrierTs(4)
+	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+
+	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes())
+	tableSink, ok := manager.tableSinks.Load(tableID)
+	require.True(t, ok)
+	require.NotNil(t, tableSink)
+	require.Equal(t, uint64(0), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
 }
 
 func TestClose(t *testing.T) {
