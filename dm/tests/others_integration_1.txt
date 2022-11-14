@@ -1,4 +1,4 @@
-check_task
+adjust_gtidcheck_task
 validator_basic
 validator_checkpoint
 drop_column_with_index
@@ -8,4 +8,3 @@ sequence_sharding_optimistic
 sequence_sharding_removemeta
 gtid
 only_dml
-adjust_gtid
