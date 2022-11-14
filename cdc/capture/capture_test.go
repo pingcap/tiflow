@@ -98,8 +98,6 @@ func TestDrainCaptureBySignal(t *testing.T) {
 		config:           config.GetDefaultServerConfig(),
 		EtcdClient:       me,
 	}
-
-	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	done := cp.Drain()
@@ -128,7 +126,6 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 		owner:            mo,
 		config:           config.GetDefaultServerConfig(),
 	}
-	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	mo.EXPECT().AsyncStop().Do(func() {}).AnyTimes()

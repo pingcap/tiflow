@@ -1041,24 +1041,7 @@ var doc = `{
         "model.ProcessorDetail": {
             "type": "object",
             "properties": {
-                "checkpoint_ts": {
-                    "description": "The maximum event CommitTs that has been synchronized.",
-                    "type": "integer"
-                },
-                "count": {
-                    "description": "The count of events that have been replicated.",
-                    "type": "integer"
-                },
-                "error": {
-                    "description": "Error code when error happens",
-                    "$ref": "#/definitions/model.RunningError"
-                },
-                "resolved_ts": {
-                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized.",
-                    "type": "integer"
-                },
                 "table_ids": {
-                    "description": "all table ids that this processor are replicating",
                     "type": "array",
                     "items": {
                         "type": "integer"

@@ -54,11 +54,6 @@ func TestInfoProvider(t *testing.T) {
 		}},
 		"b": {Tables: map[model.TableID]*model.TableReplicaInfo{}},
 	}, tasks)
-	pos, err := ip.GetTaskPositions()
-	require.Nil(t, err)
-	require.Len(t, pos, 2)
-	require.Len(t, ip.GetTotalTableCounts(), 2)
-	require.Empty(t, ip.GetPendingTableCounts())
 }
 
 func TestInfoProviderIsInitialized(t *testing.T) {

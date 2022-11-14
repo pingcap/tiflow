@@ -679,22 +679,10 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	}
 	status, captureExist := statuses[captureID]
 
-	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	position, positionsExist := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if captureExist && positionsExist {
-		processorDetail = model.ProcessorDetail{
-			CheckPointTs: position.CheckPointTs,
-			ResolvedTs:   position.ResolvedTs,
-			Count:        position.Count,
-			Error:        position.Error,
-		}
+	if captureExist {
 		tables := make([]int64, 0)
 		for tableID := range status.Tables {
 			tables = append(tables, tableID)
