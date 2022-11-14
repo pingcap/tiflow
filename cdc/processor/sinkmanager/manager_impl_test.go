@@ -159,6 +159,7 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
+	manager.StartTable(tableID)
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
