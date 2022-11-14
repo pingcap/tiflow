@@ -183,7 +183,7 @@ func (m *memQuota) clean(tableID model.TableID) {
 		zap.Uint64("cleaned", cleaned),
 	)
 	if m.usedBytes < m.totalBytes {
-		m.blockAcquireCond.Signal()
+		m.blockAcquireCond.Broadcast()
 	}
 }
 
