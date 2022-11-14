@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/sorter/memory"
@@ -128,15 +127,14 @@ func TestAddTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	tableSink.(*tableSinkWrapper).start()
-	replicatingState := tablepb.TableStateReplicating
+	require.Equal(t, 0, manager.progressHeap.len(), "Not started table shout not in progress heap")
+	manager.StartTable(tableID)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: sorter.Position{
 			StartTs:  0,
 			CommitTs: 1,
 		},
-		tableState: &replicatingState,
 	}, manager.progressHeap.pop())
 }
 
@@ -188,9 +186,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	tableSink, ok := manager.tableSinks.Load(tableID)
-	require.True(t, ok)
-	tableSink.(*tableSinkWrapper).start()
+	manager.StartTable(tableID)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -215,9 +211,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	tableSink, ok := manager.tableSinks.Load(tableID)
-	require.True(t, ok)
-	tableSink.(*tableSinkWrapper).start()
+	manager.StartTable(tableID)
+
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
@@ -239,10 +234,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	addTableAndAddEventsToSorterEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-
-	tableSink, ok := manager.tableSinks.Load(tableID)
-	require.True(t, ok)
-	tableSink.(*tableSinkWrapper).start()
+	manager.StartTable(tableID)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)

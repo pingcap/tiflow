@@ -183,10 +183,6 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 				continue
 			}
 			slowestTableProgress := m.progressHeap.pop()
-			// Only fetch data when the table is replicating.
-			if slowestTableProgress.tableState.Load() != tablepb.TableStateReplicating {
-				continue
-			}
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
 			if !ok {
@@ -196,6 +192,19 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					zap.Int64("tableID", tableID))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
+				continue
+			}
+			tableState := tableSink.(*tableSinkWrapper).getState()
+			if tableState < tablepb.TableStateReplicating {
+				log.Panic("Tables that are not started should not appear in the progress heap",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+			}
+			// It means table sink is stopping or stopped.
+			// We should skip it and do not push it back.
+			// Because there is no case that stopping/stopped -> replicating.
+			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
@@ -230,7 +239,6 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 				p := &progress{
 					tableID:           tableID,
 					nextLowerBoundPos: lastWrittenPos.Next(),
-					tableState:        tableSink.(*tableSinkWrapper).state,
 				}
 				m.progressHeap.push(p)
 			}
@@ -286,12 +294,6 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		targetTs,
 	)
 	m.tableSinks.Store(tableID, sinkWrapper)
-	initProgress := &progress{
-		tableID:           tableID,
-		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
-		tableState:        sinkWrapper.state,
-	}
-	m.progressHeap.push(initProgress)
 }
 
 // StartTable sets the table(TableSink) state to replicating.
@@ -304,6 +306,12 @@ func (m *ManagerImpl) StartTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 	}
 	tableSink.(*tableSinkWrapper).start()
+	startTs := tableSink.(*tableSinkWrapper).startTs
+	initProgress := &progress{
+		tableID:           tableID,
+		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+	}
+	m.progressHeap.push(initProgress)
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.
