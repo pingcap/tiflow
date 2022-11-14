@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
 
@@ -54,8 +55,8 @@ type pendingResolvedTs struct {
 // Every event is associated with a `eventID` which is a continuous number. `eventID`
 // can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
-	// tableID is the table ID of the table sink.
-	tableID model.TableID
+	// span is the span of the table sink.
+	span tablepb.Span
 
 	// Internal Buffer size. Modified in tests only.
 	bufferSize uint64
@@ -90,13 +91,13 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker(tableID model.TableID, bufferSize uint64) *progressTracker {
+func newProgressTracker(span tablepb.Span, bufferSize uint64) *progressTracker {
 	if bufferSize%8 != 0 {
 		panic("bufferSize must be align to 8 bytes")
 	}
 
 	return &progressTracker{
-		tableID:    tableID,
+		span:       span,
 		bufferSize: bufferSize / 8,
 		// It means the start of the table.
 		// It's Ok to use 0 here.
@@ -263,7 +264,7 @@ func (r *progressTracker) close(ctx context.Context) {
 			return
 		case <-blockTicker.C:
 			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Int64("tableID", r.tableID),
+				zap.Stringer("span", &r.span),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.advance()),
 			)
