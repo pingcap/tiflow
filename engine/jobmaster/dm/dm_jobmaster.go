@@ -145,7 +145,11 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	if err := jm.initComponents(); err != nil {
 		return err
 	}
-	return jm.bootstrap(ctx)
+	if err := jm.bootstrap(ctx); err != nil {
+		return err
+	}
+	jm.initialized.Store(true)
+	return nil
 }
 
 // Tick implements JobMasterImpl.Tick
