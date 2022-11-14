@@ -1,6 +1,4 @@
-FROM golang:1.19.1-alpine3.15 as builder
-
-RUN apk add --no-cache git make
+FROM golang:1.19 as builder
 
 RUN mkdir -p /go/src/github.com/pingcap/dm
 WORKDIR /go/src/github.com/pingcap/dm
@@ -12,8 +10,6 @@ COPY go.sum .
 RUN GO111MODULE=on go mod download
 
 COPY . .
-
-RUN apk update && apk add bash
 
 RUN make dm-worker dm-master dmctl
 
