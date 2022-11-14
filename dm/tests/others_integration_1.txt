@@ -1,4 +1,5 @@
-adjust_gtidcheck_task
+adjust_gtid
+check_task
 validator_basic
 validator_checkpoint
 drop_column_with_index
