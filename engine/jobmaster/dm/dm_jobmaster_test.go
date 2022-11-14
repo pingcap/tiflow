@@ -45,7 +45,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -517,7 +516,9 @@ func (m *MockBaseJobmaster) MetaKVClient() metaModel.KVClient {
 	return args.Get(0).(metaModel.KVClient)
 }
 
-func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType, config framework.WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error) {
+func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType,
+	config framework.WorkerConfig, opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
