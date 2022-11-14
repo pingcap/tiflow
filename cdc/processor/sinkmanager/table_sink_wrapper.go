@@ -39,6 +39,8 @@ type tableSinkWrapper struct {
 	tableSink sinkv2.TableSink
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
+	// startTs is the start ts of the table.
+	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
@@ -51,6 +53,7 @@ func newTableSinkWrapper(
 	tableID model.TableID,
 	tableSink sinkv2.TableSink,
 	state tablepb.TableState,
+	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
 	return &tableSinkWrapper{
@@ -58,8 +61,13 @@ func newTableSinkWrapper(
 		tableID:    tableID,
 		tableSink:  tableSink,
 		state:      &state,
+		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+}
+
+func (t *tableSinkWrapper) start() {
+	t.state.Store(tablepb.TableStateReplicating)
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
@@ -67,6 +75,9 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
+	if t.state.Load() == tablepb.TableStatePreparing && ts > t.startTs {
+		t.state.Store(tablepb.TableStatePrepared)
+	}
 	t.receivedSorterResolvedTs.Store(ts)
 }
 

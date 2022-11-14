@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
-	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"go.uber.org/zap"
@@ -45,8 +44,7 @@ type WorkerAgent interface {
 	CreateWorker(
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
-		cost model.RescUnit,
-		resources ...resModel.ResourceID,
+		opts ...framework.CreateWorkerOpt,
 	) (frameModel.WorkerID, error)
 }
 
@@ -356,7 +354,9 @@ func (wm *WorkerManager) createWorker(
 	resources ...resModel.ResourceID,
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
-	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg,
+		framework.CreateWorkerWithCost(1),
+		framework.CreateWorkerWithResourceRequirements(resources...))
 	if err != nil {
 		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Stringer("unit", unit), zap.Error(err))
 	}
