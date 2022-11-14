@@ -178,6 +178,10 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-m.taskTicker.C:
+			// No more tables.
+			if m.progressHeap.len() == 0 {
+				continue
+			}
 			slowestTableProgress := m.progressHeap.pop()
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
@@ -188,6 +192,19 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					zap.Int64("tableID", tableID))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
+				continue
+			}
+			tableState := tableSink.(*tableSinkWrapper).getState()
+			if tableState < tablepb.TableStateReplicating {
+				log.Panic("Tables that are not started should not appear in the progress heap",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+			}
+			// It means table sink is stopping or stopped.
+			// We should skip it and do not push it back.
+			// Because there is no case that stopping/stopped -> replicating.
+			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
@@ -273,9 +290,23 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		tableID,
 		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
+		startTs,
 		targetTs,
 	)
 	m.tableSinks.Store(tableID, sinkWrapper)
+}
+
+// StartTable sets the table(TableSink) state to replicating.
+func (m *ManagerImpl) StartTable(tableID model.TableID) {
+	tableSink, ok := m.tableSinks.Load(tableID)
+	if !ok {
+		log.Panic("Table sink not found when starting table stats",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	tableSink.(*tableSinkWrapper).start()
+	startTs := tableSink.(*tableSinkWrapper).startTs
 	initProgress := &progress{
 		tableID:           tableID,
 		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
