@@ -29,6 +29,8 @@ type Manager interface {
 	// AddTable adds a table(TableSink) to the sink manager.
 	// Sink manager will create a new table sink and start it.
 	AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts)
+	// StartTable starts a table sin. Make it replicating data to downstream.
+	StartTable(tableID model.TableID)
 	// RemoveTable removes a table(TableSink) from the sink manager.
 	// Sink manager will stop the table sink and remove it.
 	RemoveTable(tableID model.TableID) error
