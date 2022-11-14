@@ -26,6 +26,8 @@ func TestMemQuotaTryAcquire(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	defer m.close()
+
 	require.True(t, m.tryAcquire(50))
 	require.True(t, m.tryAcquire(50))
 	require.False(t, m.tryAcquire(1))
@@ -35,19 +37,21 @@ func TestMemQuotaForceAcquire(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	defer m.close()
+
 	require.True(t, m.tryAcquire(100))
 	require.False(t, m.tryAcquire(1))
 	m.forceAcquire(1)
-	m.mu.Lock()
-	require.Equal(t, uint64(101), m.usedBytes)
-	m.mu.Unlock()
+	require.Equal(t, uint64(101), m.getUsedBytes())
 }
 
 func TestMemQuotaBlockAcquire(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
-	require.Nil(t, m.blockAcquire(100))
+	defer m.close()
+	err := m.blockAcquire(100)
+	require.Nil(t, err)
 	m.record(1, model.NewResolvedTs(1), 50)
 	m.record(1, model.NewResolvedTs(2), 50)
 
@@ -55,12 +59,14 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.Nil(t, m.blockAcquire(50))
+		err := m.blockAcquire(50)
+		require.Nil(t, err)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.Nil(t, m.blockAcquire(50))
+		err := m.blockAcquire(50)
+		require.Nil(t, err)
 	}()
 	m.release(1, model.NewResolvedTs(1))
 	m.release(1, model.NewResolvedTs(2))
@@ -71,7 +77,9 @@ func TestMemQuotaClose(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
-	require.Nil(t, m.blockAcquire(100))
+
+	err := m.blockAcquire(100)
+	require.Nil(t, err)
 	m.record(1, model.NewResolvedTs(2), 100)
 
 	var wg sync.WaitGroup
@@ -114,6 +122,8 @@ func TestMemQuotaRefund(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	defer m.close()
+
 	require.True(t, m.tryAcquire(50))
 	require.True(t, m.tryAcquire(50))
 	m.refund(50)
@@ -125,7 +135,8 @@ func TestMemQuotaRefund(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.Nil(t, m.blockAcquire(50))
+		err := m.blockAcquire(50)
+		require.Nil(t, err)
 	}()
 	m.refund(50)
 	wg.Wait()
@@ -135,6 +146,8 @@ func TestMemQuotaHasAvailable(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	defer m.close()
+
 	require.True(t, m.hasAvailable(100))
 	require.True(t, m.tryAcquire(100))
 	require.False(t, m.hasAvailable(1))
@@ -144,6 +157,8 @@ func TestMemQuotaRecordAndRelease(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	defer m.close()
+
 	require.True(t, m.tryAcquire(100))
 	m.record(1, model.NewResolvedTs(100), 100)
 	require.True(t, m.tryAcquire(100))
@@ -170,6 +185,8 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 	t.Parallel()
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	defer m.close()
+
 	require.True(t, m.tryAcquire(100))
 	resolvedTs := model.ResolvedTs{
 		Mode:    model.BatchResolvedMode,
@@ -205,4 +222,25 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 	// release the memory of resolvedTs 101
 	m.release(1, model.NewResolvedTs(101))
 	require.True(t, m.hasAvailable(300))
+}
+
+func TestMemQuotaRecordAndClean(t *testing.T) {
+	t.Parallel()
+
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	defer m.close()
+
+	require.True(t, m.tryAcquire(100))
+	m.record(1, model.NewResolvedTs(100), 100)
+	require.True(t, m.tryAcquire(100))
+	m.record(1, model.NewResolvedTs(200), 100)
+	require.True(t, m.tryAcquire(100))
+	m.record(1, model.NewResolvedTs(300), 100)
+	require.False(t, m.tryAcquire(1))
+	require.False(t, m.hasAvailable(1))
+
+	// clean the all memory.
+	cleanedBytes := m.clean(1)
+	require.Equal(t, uint64(300), cleanedBytes)
+	require.True(t, m.hasAvailable(100))
 }
