@@ -157,7 +157,8 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 }
 
 // clean all records of the table.
-func (m *memQuota) clean(tableID model.TableID) {
+// Return the cleaned memory quota.
+func (m *memQuota) clean(tableID model.TableID) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -167,7 +168,7 @@ func (m *memQuota) clean(tableID model.TableID) {
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return
+		return 0
 	}
 	cleaned := uint64(0)
 	records := m.tableMemory[tableID]
@@ -176,15 +177,10 @@ func (m *memQuota) clean(tableID model.TableID) {
 	}
 	m.usedBytes -= cleaned
 	delete(m.tableMemory, tableID)
-	log.Debug("MemoryQuotaTracing: Clean table memory records",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("cleaned", cleaned),
-	)
 	if m.usedBytes < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
 	}
+	return cleaned
 }
 
 // close the mem quota and notify the blocked acquire.
