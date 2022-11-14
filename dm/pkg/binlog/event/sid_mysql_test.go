@@ -17,31 +17,30 @@
 package event
 
 import (
-	. "github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testSIDMySQLSuite{})
-
-type testSIDMySQLSuite struct{}
-
-func (t *testSIDMySQLSuite) TestParseSID(c *C) {
+func TestParseSID(t *testing.T) {
+	t.Parallel()
 	s := "9f61c5f9-1eef-11e9-b6cf-0242ac140003"
 
 	// parse from string
 	sid, err := ParseSID(s)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// convert to string
 	s2 := sid.String()
-	c.Assert(s2, Equals, s)
+	require.Equal(t, s, s2)
 
 	// invalid format
 	s = "1eef-11e9-b6cf-0242ac140003"
 	_, err = ParseSID(s)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// invalid characters
 	s = "zzz1c5f9-1eef-11e9-b6cf-0242ac140003"
 	_, err = ParseSID(s)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 }

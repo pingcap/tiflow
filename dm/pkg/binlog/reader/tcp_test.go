@@ -21,41 +21,35 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	_ "github.com/go-sql-driver/mysql"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
 var (
-	_         = Suite(&testTCPReaderSuite{})
 	flavor    = gmysql.MySQLFlavor
 	serverIDs = []uint32{3251, 3252}
 )
 
-func TestSuite(t *testing.T) {
-	TestingT(t)
+func SetUpSuite(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos", "return(true)"))
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID", "return(true)"))
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose", "return(true)"))
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent", "return(true)"))
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus", "return(true)"))
 }
 
-type testTCPReaderSuite struct{}
-
-func (t *testTCPReaderSuite) SetUpSuite(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent", "return(true)"), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus", "return(true)"), IsNil)
+func TearDownSuite(t *testing.T) {
+	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos"))
+	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID"))
+	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose"))
+	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent"))
+	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus"))
 }
 
-func (t *testTCPReaderSuite) TearDownSuite(c *C) {
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderGetEvent"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStatus"), IsNil)
-}
-
-func (t *testTCPReaderSuite) TestSyncPos(c *C) {
+func TestSyncPos(t *testing.T) {
+	t.Parallel()
 	var (
 		cfg = replication.BinlogSyncerConfig{ServerID: serverIDs[0], Flavor: flavor}
 		pos gmysql.Position // empty position
@@ -63,40 +57,40 @@ func (t *testTCPReaderSuite) TestSyncPos(c *C) {
 
 	// the first reader
 	r := NewTCPReader(cfg)
-	c.Assert(r, NotNil)
+	require.NotNil(t, r)
 
 	// not prepared
 	e, err := r.GetEvent(context.Background())
-	c.Assert(err, NotNil)
-	c.Assert(e, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, e)
 
 	// prepare
 	err = r.StartSyncByPos(pos)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// check status, stagePrepared
 	status := r.Status()
 	trStatus, ok := status.(*TCPReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(trStatus.Stage, Equals, common.StagePrepared.String())
-	c.Assert(trStatus.ConnID, Greater, uint32(0))
+	require.True(t, ok)
+	require.Equal(t, common.StagePrepared.String(), trStatus.Stage)
+	require.Greater(t, trStatus.ConnID, uint32(0))
 	trStatusStr := trStatus.String()
-	c.Assert(strings.Contains(trStatusStr, common.StagePrepared.String()), IsTrue)
-
+	require.True(t, strings.Contains(trStatusStr, common.StagePrepared.String()))
 	// re-prepare is invalid
 	err = r.StartSyncByPos(pos)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// close the reader
 	err = r.Close()
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// already closed
 	err = r.Close()
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 }
 
-func (t *testTCPReaderSuite) TestSyncGTID(c *C) {
+func TestSyncGTID(t *testing.T) {
+	t.Parallel()
 	var (
 		cfg  = replication.BinlogSyncerConfig{ServerID: serverIDs[1], Flavor: flavor}
 		gSet gmysql.GTIDSet // nil GTID set
@@ -104,47 +98,47 @@ func (t *testTCPReaderSuite) TestSyncGTID(c *C) {
 
 	// the first reader
 	r := NewTCPReader(cfg)
-	c.Assert(r, NotNil)
+	require.NotNil(t, r)
 
 	// check status, stageNew
 	status := r.Status()
 	trStatus, ok := status.(*TCPReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(trStatus.Stage, Equals, common.StageNew.String())
+	require.True(t, ok)
+	require.Equal(t, common.StageNew.String(), trStatus.Stage)
 
 	// not prepared
 	e, err := r.GetEvent(context.Background())
-	c.Assert(err, NotNil)
-	c.Assert(e, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, e)
 
 	// nil GTID set
 	err = r.StartSyncByGTID(gSet)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// empty GTID set
 	gSet, err = gtid.ParserGTID(flavor, "")
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// prepare
 	err = r.StartSyncByGTID(gSet)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// re-prepare is invalid
 	err = r.StartSyncByGTID(gSet)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// close the reader
 	err = r.Close()
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// check status, stageClosed
 	status = r.Status()
 	trStatus, ok = status.(*TCPReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(trStatus.Stage, Equals, common.StageClosed.String())
-	c.Assert(trStatus.ConnID, Greater, uint32(0))
+	require.True(t, ok)
+	require.Equal(t, common.StageClosed.String(), trStatus.Stage)
+	require.Greater(t, trStatus.ConnID, uint32(0))
 
 	// already closed
 	err = r.Close()
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 }
