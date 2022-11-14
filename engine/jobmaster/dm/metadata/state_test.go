@@ -24,7 +24,6 @@ import (
 )
 
 type DummyState struct {
-	state
 	I int
 }
 
@@ -45,7 +44,6 @@ func (ds *DummyStore) key() string {
 }
 
 type FailedState struct {
-	state
 	I int
 	i int
 }

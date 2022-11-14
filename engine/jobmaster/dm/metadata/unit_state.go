@@ -28,13 +28,12 @@ import (
 
 // UnitState represents the state of units.
 type UnitState struct {
-	state
-
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
 	CurrentUnitStatus  map[string]*UnitStatus
 }
 
+// UnitStateStore is the meta store for UnitState.
 type UnitStateStore struct {
 	// rmwLock is used to prevent concurrent read-modify-write to the state.
 	rmwLock sync.Mutex
@@ -52,6 +51,7 @@ func (f *UnitStateStore) key() string {
 	return adapter.DMUnitStateAdapter.Encode()
 }
 
+// ReadModifyWrite reads the state, modifies it, and writes it back.
 func (f *UnitStateStore) ReadModifyWrite(
 	ctx context.Context,
 	action func(*UnitState) error,

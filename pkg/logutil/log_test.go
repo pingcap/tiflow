@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -178,4 +179,28 @@ func TestWithComponent(t *testing.T) {
 	lg.Warn("component test", zap.String("other", "other"))
 	require.Regexp(t, regexp.QuoteMeta("[\"component test\"] [component=grpc] [other=other]"), buffer.Stripped())
 	buffer.Reset()
+}
+
+func TestCallerSkip(t *testing.T) {
+	// Using log before init logger should not affect
+	// any other log after init logger.
+	//
+	// See https://github.com/pingcap/log/issues/30.
+	log.Debug("debug")
+	log.L().Debug("debug")
+
+	var buffer zaptest.Buffer
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	_, file, line, _ := runtime.Caller(0)
+	_, filename := filepath.Split(file)
+	log.Info("caller skip test", zap.String("other", "other"))
+	require.Contains(t, buffer.Stripped(), fmt.Sprintf("%s:%d", filename, line+2))
+
+	buffer.Reset()
+	_, file, line, _ = runtime.Caller(0)
+	_, filename = filepath.Split(file)
+	log.L().Info("caller skip test", zap.String("other", "other"))
+	require.Contains(t, buffer.Stripped(), fmt.Sprintf("%s:%d", filename, line+2))
 }
