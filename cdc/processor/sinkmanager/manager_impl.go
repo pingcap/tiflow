@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -178,6 +177,10 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-m.taskTicker.C:
+			// No more tables.
+			if m.progressHeap.len() == 0 {
+				continue
+			}
 			slowestTableProgress := m.progressHeap.pop()
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
@@ -188,6 +191,19 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					zap.Int64("tableID", tableID))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
+				continue
+			}
+			tableState := tableSink.(*tableSinkWrapper).getState()
+			if tableState < tablepb.TableStateReplicating {
+				log.Panic("Tables that are not started should not appear in the progress heap",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+			}
+			// It means table sink is stopping or stopped.
+			// We should skip it and do not push it back.
+			// Because there is no case that stopping/stopped -> replicating.
+			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
@@ -213,11 +229,17 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 			}
 			// Only generate the table sink task if lower bound less or equal the upper bound.
 			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
-			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(defaultRequestMemSize) {
+			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
 				m.progressHeap.push(slowestTableProgress)
 				// Next time.
 				continue
 			}
+			log.Debug("MemoryQuotaTracing: Acquire memory for table sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("memory", requestMemSize),
+			)
 			callback := func(lastWrittenPos sorter.Position) {
 				p := &progress{
 					tableID:           tableID,
@@ -232,6 +254,9 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 				upperBarrierTsGetter: getUpperBound,
 				tableSink:            tableSink.(*tableSinkWrapper),
 				callback:             callback,
+				isCanceled: func() bool {
+					return tableSink.(*tableSinkWrapper).getState() != tablepb.TableStateReplicating
+				},
 			}
 			select {
 			case <-m.ctx.Done():
@@ -273,9 +298,23 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		tableID,
 		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
+		startTs,
 		targetTs,
 	)
 	m.tableSinks.Store(tableID, sinkWrapper)
+}
+
+// StartTable sets the table(TableSink) state to replicating.
+func (m *ManagerImpl) StartTable(tableID model.TableID) {
+	tableSink, ok := m.tableSinks.Load(tableID)
+	if !ok {
+		log.Panic("Table sink not found when starting table stats",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	tableSink.(*tableSinkWrapper).start()
+	startTs := tableSink.(*tableSinkWrapper).startTs
 	initProgress := &progress{
 		tableID:           tableID,
 		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
@@ -294,12 +333,17 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	}
 	err := tableSink.(*tableSinkWrapper).close(m.ctx)
 	if err != nil {
-		if !cerror.Is(err, cerror.ErrTableProcessorStoppedSafely) {
-			return errors.Trace(err)
-		}
+		return errors.Trace(err)
 	}
+	cleanedBytes := m.memQuota.clean(tableID)
+	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("memory", cleanedBytes),
+	)
 	// NOTICE: It is safe to only remove the table sink from the map.
-	// Because if we found the table sink is not in the map, we will not add it back to the heap.
+	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SorterEngine. Because the SorterEngine also removes this table.
 	m.tableSinks.Delete(tableID)
 	return nil
@@ -339,6 +383,17 @@ func (m *ManagerImpl) Close() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		err := value.(*tableSinkWrapper).close(m.ctx)
+		if err != nil {
+			log.Error("Close table sink failed",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", key.(model.TableID)),
+				zap.Error(err))
+		}
+		return true
+	})
 	m.wg.Wait()
 	return nil
 }
