@@ -109,6 +109,9 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
+	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
+	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
@@ -253,6 +256,8 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 	if l.cfg.FrameworkLogger != nil {
 		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
+	} else {
+		opts = append(opts, lightning.WithLogger(l.logger.Logger))
 	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
