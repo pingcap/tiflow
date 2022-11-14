@@ -120,7 +120,7 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 		autoResume:     autoResume,
 		cfgModRevision: cfg.ModRevision,
 		needExtStorage: cfg.NeedExtStorage,
-		stageGauge:     jobTaskStageGauge.WithLabelValues(masterID),
+		stageGauge:     jobTaskStageGauge.WithLabelValues(masterID, dmSubtaskCfg.SourceID),
 	}
 	w.stageGauge.Set(float64(metadata.StageInit))
 
@@ -262,7 +262,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	jobTaskStageGauge.DeleteLabelValues(w.masterID)
+	jobTaskStageGauge.DeleteLabelValues(w.masterID, w.taskID)
 	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 

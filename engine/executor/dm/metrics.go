@@ -12,6 +12,6 @@ var (
 			Namespace: "tiflow",
 			Subsystem: "job_master",
 			Name:      "job_task_stage",
-			Help:      "task stage of running jobs in this cluster",
-		}, []string{"job_id"})
+			Help:      "task stage of created jobs in this cluster",
+		}, []string{"job_id", "source_id"})
 )
