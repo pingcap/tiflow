@@ -14,6 +14,7 @@
 package sinkmanager
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -27,7 +28,7 @@ type redoEventCache struct {
 	allocated uint64 // atomically shared in several goroutines.
 
 	mu     sync.Mutex
-	tables map[model.TableID]*eventsAndSize
+	tables map[model.TableID]*eventAppender
 }
 
 // newRedoEventCache creates a redoEventCache instance.
@@ -35,25 +36,28 @@ func newRedoEventCache(capacity uint64) *redoEventCache {
 	return &redoEventCache{
 		capacity:  capacity,
 		allocated: 0,
-		tables:    make(map[model.TableID]*eventsAndSize),
+		tables:    make(map[model.TableID]*eventAppender),
 	}
 }
 
-// getAppender returns an eventsAndSize instance which can be used to
+// getAppender returns an eventAppender instance which can be used to
 // append events into the cache.
-func (r *redoEventCache) getAppender(tableID model.TableID) *eventsAndSize {
+func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	item, exists := r.tables[tableID]
 	if !exists {
-		item = &eventsAndSize{capacity: r.capacity, allocated: &r.allocated}
+		item = &eventAppender{capacity: r.capacity, allocated: &r.allocated}
 		r.tables[tableID] = item
 	}
 	return item
 }
 
-// pop pops some events from the cache.
-func (r *redoEventCache) pop(tableID model.TableID) ([]*model.RowChangedEvent, uint64, sorter.Position) {
+// pop some events from the cache.
+func (r *redoEventCache) pop(
+	tableID model.TableID,
+	upperBound ...sorter.Position,
+) ([]*model.RowChangedEvent, uint64, sorter.Position) {
 	r.mu.Lock()
 	item, exists := r.tables[tableID]
 	if !exists {
@@ -68,21 +72,35 @@ func (r *redoEventCache) pop(tableID model.TableID) ([]*model.RowChangedEvent, u
 		return nil, 0, sorter.Position{}
 	}
 
-	events := item.events[0:item.readyCount]
-	size := item.readySize
-	pos := sorter.Position{
-		CommitTs: item.events[item.readyCount-1].CommitTs,
-		StartTs:  item.events[item.readyCount-1].StartTs,
+	var fetchCount int = item.readyCount
+	if len(upperBound) > 0 {
+		fetchCount = sort.Search(item.readyCount, func(i int) bool {
+			pos := sorter.Position{
+				CommitTs: item.events[i].CommitTs,
+				StartTs:  item.events[i].StartTs,
+			}
+			return pos.Compare(upperBound[0]) > 0
+		})
 	}
 
-	item.events = item.events[item.readyCount:]
+	events := item.events[0:fetchCount]
+	var size uint64 = 0
+	for _, x := range item.sizes[0:fetchCount] {
+		size += x
+	}
+	pos := sorter.Position{
+		CommitTs: item.events[fetchCount-1].CommitTs,
+		StartTs:  item.events[fetchCount-1].StartTs,
+	}
+
+	item.events = item.events[fetchCount:]
+	item.sizes = item.sizes[fetchCount:]
 	if len(item.events) == 0 {
 		r.mu.Lock()
 		delete(r.tables, tableID)
 		r.mu.Unlock()
 	} else {
-		item.readyCount = 0
-		item.readySize = 0
+		item.readyCount -= fetchCount
 	}
 
 	atomic.AddUint64(&r.allocated, ^(size - 1))
@@ -101,21 +119,20 @@ func (r *redoEventCache) removeTable(tableID model.TableID) {
 	}
 }
 
-type eventsAndSize struct {
+type eventAppender struct {
 	capacity  uint64
 	allocated *uint64
 
 	broken bool
 
-	mu          sync.RWMutex
-	events      []*model.RowChangedEvent
-	readySize   uint64
-	pendingSize uint64
-	readyCount  int
+	mu         sync.RWMutex
+	events     []*model.RowChangedEvent
+	sizes      []uint64
+	readyCount int // Count of ready events
 }
 
-func (e *eventsAndSize) push(event *model.RowChangedEvent, size uint64, txnFinished bool) bool {
-	// At most only one client can call push on a given eventsAndSize instance,
+func (e *eventAppender) push(event *model.RowChangedEvent, size uint64, txnFinished bool) bool {
+	// At most only one client can call push on a given eventAppender instance,
 	// so lock is unnecessary.
 	if e.broken {
 		return false
@@ -135,25 +152,26 @@ func (e *eventsAndSize) push(event *model.RowChangedEvent, size uint64, txnFinis
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, event)
-	e.pendingSize += size
+	e.sizes = append(e.sizes, size)
 	if txnFinished {
-		e.readySize += e.pendingSize
 		e.readyCount = len(e.events)
-		e.pendingSize = 0
 	}
 	return true
 }
 
-func (e *eventsAndSize) cleanBrokenEvents() (size uint64) {
+func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	for i := e.readyCount; i < len(e.events); i++ {
+		pendingSize += e.sizes[i]
 		e.events[i] = nil
 	}
-	size = e.pendingSize
-	e.pendingSize = 0
+
+	e.events = e.events[0:e.readyCount]
+	e.sizes = e.sizes[0:e.readyCount]
+
 	e.broken = false
-	atomic.AddUint64(e.allocated, ^(size - 1))
+	atomic.AddUint64(e.allocated, ^(pendingSize - 1))
 	return
 }

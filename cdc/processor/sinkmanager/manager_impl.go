@@ -140,7 +140,7 @@ func New(
 	return m, nil
 }
 
-// start all the sinkWorkers and report the error to the error channel.
+// start all workers and report the error to the error channel.
 func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sortEngine, m.memQuota,
@@ -352,7 +352,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 			}
 			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
 			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(defaultRequestMemSize) {
-				m.sinkProgressHeap.push(slowestTableProgress)
+				m.redoProgressHeap.push(slowestTableProgress)
 				// Next time.
 				continue
 			}
@@ -364,7 +364,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 				m.redoProgressHeap.push(p)
 			}
 
-			t := &sinkTask{
+			t := &redoTask{
 				tableID:       tableID,
 				lowerBound:    slowestTableProgress.nextLowerBoundPos,
 				getUpperBound: getUpperBound,
@@ -374,7 +374,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 			select {
 			case <-m.ctx.Done():
 				return m.ctx.Err()
-			case m.sinkTaskChan <- t:
+			case m.redoTaskChan <- t:
 			}
 		}
 	}

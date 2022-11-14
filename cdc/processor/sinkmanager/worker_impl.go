@@ -75,9 +75,8 @@ func newSinkWorker(
 	}
 }
 
-func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
+func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) (err error) {
 	for {
-	Select:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -90,18 +89,9 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			upperBound := task.getUpperBound()
 
 			if w.eventCache != nil {
-				rows, size, pos := w.eventCache.pop(task.tableID)
-				if len(rows) > 0 {
-					task.tableSink.appendRowChangedEvents(rows...)
-					w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
-					err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
-					if err != nil {
-						return errors.Trace(err)
-					}
-					lowerBound = pos.Next()
-					if lowerBound.Compare(upperBound) > 0 {
-						break Select
-					}
+				lowerBound, err = w.fetchFromCache(task, lowerBound, upperBound)
+				if err != nil {
+					return errors.Trace(err)
 				}
 			}
 
@@ -133,10 +123,11 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			}
 
 			// lowerBound and upperBound are both closed intervals.
-			iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound)
+			iter := w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound)
 			for {
 				e, pos, err := iter.Next()
 				if err != nil {
+					iter.Close()
 					return errors.Trace(err)
 				}
 				// There is no more data.
@@ -153,6 +144,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 					} else {
 						err := w.memQuota.blockAcquire(requestMemSize)
 						if err != nil {
+							iter.Close()
 							return errors.Trace(err)
 						}
 					}
@@ -168,6 +160,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 					// Always append the events to the sink.
 					// Whatever splitTxn is true or false, we should emit the events to the sink as soon as possible.
 					if err := appendEventsAndRecordCurrentSize(); err != nil {
+						iter.Close()
 						return errors.Trace(err)
 					}
 					// 1) If we need to split the transaction into multiple batches,
@@ -177,6 +170,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 					//    to avoid updating the resolved ts too frequently.
 					if w.splitTxn || currentTotalSize >= maxUpdateIntervalSize {
 						if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+							iter.Close()
 							return errors.Trace(err)
 						}
 					}
@@ -191,11 +185,13 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				} else {
 					if w.splitTxn {
 						if err := appendEventsAndRecordCurrentSize(); err != nil {
+							iter.Close()
 							return errors.Trace(err)
 						}
 						// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
 						if currentTotalSize >= maxBigTxnBatchSize {
 							if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+								iter.Close()
 								return errors.Trace(err)
 							}
 							batchID++
@@ -208,6 +204,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			// Because we do not reach the maxUpdateIntervalSize.
 			if currentTotalSize != 0 {
 				if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+					iter.Close()
 					return errors.Trace(err)
 				}
 			}
@@ -220,6 +217,28 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			}
 		}
 	}
+}
+
+func (w *sinkWorkerImpl) fetchFromCache(
+	task *sinkTask, // task is read-only here.
+	lowerBound sorter.Position,
+	upperBound sorter.Position,
+) (sorter.Position, error) {
+	// Is it possible that after fetching something from cache, more events are
+	// pushed into cache immediately? It's unlikely and if it happens, new events
+	// are only available after resolvedTs has been advanced. So, here just pop one
+	// time is ok.
+	rows, size, pos := w.eventCache.pop(task.tableID, upperBound)
+	if len(rows) > 0 {
+		task.tableSink.appendRowChangedEvents(rows...)
+		w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
+		err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
+		if err != nil {
+			return sorter.Position{}, err
+		}
+		return pos.Next(), nil
+	}
+	return lowerBound, nil
 }
 
 func (w *sinkWorkerImpl) appendEventsToTableSink(t *sinkTask, events []*model.PolymorphicEvent) (uint64, error) {
@@ -277,80 +296,96 @@ func (w *redoWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *redoT
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-taskChan:
-			rows := make([]*model.RowChangedEvent, 0, 1024)
-			batchSize := uint64(0)
-			cache := w.eventCache.getAppender(task.tableID)
-			cachedSize := uint64(0)
-			memAllocated := true
-
-			var lastPos sorter.Position
-			var maybeEmitBatchEvents = func(allFinished, txnFinished bool) error {
-				if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
-					return nil
-				}
-
-				releaseMem := func() { w.memQuota.refund(batchSize - cachedSize) }
-				err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				if lastPos.Valid() {
-					err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-
-				rows = rows[0:]
-				if cap(rows) > 1024 {
-					rows = make([]*model.RowChangedEvent, 0, 1024)
-				}
-				batchSize = 0
-				cachedSize = 0
-
-				if !allFinished {
-					if !txnFinished {
-						w.memQuota.forceAcquire(requestMemSize)
-					} else {
-						memAllocated = w.memQuota.tryAcquire(requestMemSize)
-					}
-				}
-				return nil
+			if err := w.handleTask(ctx, task); err != nil {
+				return errors.Trace(err)
 			}
-
-			// lowerBound and upperBound are both closed intervals.
-			iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound())
-			defer iter.Close()
-			for memAllocated {
-				e, pos, err := iter.Next()
-				if err != nil {
-					return errors.Trace(err)
-				}
-				if e == nil {
-					// There is no more data.
-					maybeEmitBatchEvents(true, true)
-					return nil
-				}
-				if pos.Valid() {
-					lastPos = pos
-				}
-
-				x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				rows = append(rows, x...)
-				batchSize += size
-				if cache.push(x[0], size, pos.Valid()) {
-					cachedSize += size
-				} else {
-					cachedSize -= cache.cleanBrokenEvents()
-				}
-				maybeEmitBatchEvents(false, pos.Valid())
-			}
-			// Can't allocate memory.
-			task.callback(lastPos)
 		}
 	}
+}
+
+func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
+	rows := make([]*model.RowChangedEvent, 0, 1024)
+	cache := w.eventCache.getAppender(task.tableID)
+
+	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
+	// be released after they are written into redo files. Then we need to release their
+	// memory quota, which can be calculated based on batchSize and cachedSize.
+	batchSize := uint64(0)
+	cachedSize := uint64(0)
+
+	memAllocated := true
+
+	var lastPos sorter.Position
+	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
+		if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
+			return nil
+		}
+
+		releaseMem := func() { w.memQuota.refund(batchSize - cachedSize) }
+		err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if lastPos.Valid() {
+			err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		rows = rows[0:]
+		if cap(rows) > 1024 {
+			rows = make([]*model.RowChangedEvent, 0, 1024)
+		}
+		batchSize = 0
+		cachedSize = 0
+
+		if !allFinished {
+			if !txnFinished {
+				w.memQuota.forceAcquire(requestMemSize)
+			} else {
+				memAllocated = w.memQuota.tryAcquire(requestMemSize)
+			}
+		}
+		return nil
+	}
+
+	// lowerBound and upperBound are both closed intervals.
+	iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound())
+	defer iter.Close()
+	for memAllocated {
+		e, pos, err := iter.Next()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if e == nil {
+			// There is no more data.
+			if err = maybeEmitBatchEvents(true, true); e != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		}
+		if pos.Valid() {
+			lastPos = pos
+		}
+
+		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		rows = append(rows, x...)
+		batchSize += size
+		if cache.push(x[0], size, pos.Valid()) {
+			cachedSize += size
+		} else {
+			cachedSize -= cache.cleanBrokenEvents()
+		}
+		if err = maybeEmitBatchEvents(false, pos.Valid()); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	// Can't allocate memory.
+	task.callback(lastPos)
+	return nil
 }
