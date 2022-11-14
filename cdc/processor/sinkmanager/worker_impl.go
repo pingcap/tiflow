@@ -376,7 +376,7 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 
 		rows = append(rows, x...)
 		batchSize += size
-		if cache.push(x[0], size, pos.Valid()) {
+		if cache.pushBatch(x, size, pos.Valid()) {
 			cachedSize += size
 		} else {
 			cachedSize -= cache.cleanBrokenEvents()

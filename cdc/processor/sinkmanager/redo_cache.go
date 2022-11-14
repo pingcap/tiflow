@@ -131,7 +131,10 @@ type eventAppender struct {
 	readyCount int // Count of ready events
 }
 
-func (e *eventAppender) push(event *model.RowChangedEvent, size uint64, txnFinished bool) bool {
+func (e *eventAppender) push(
+	event *model.RowChangedEvent, size uint64, txnFinished bool,
+	eventsInSameBatch ...*model.RowChangedEvent,
+) bool {
 	// At most only one client can call push on a given eventAppender instance,
 	// so lock is unnecessary.
 	if e.broken {
@@ -153,10 +156,21 @@ func (e *eventAppender) push(event *model.RowChangedEvent, size uint64, txnFinis
 	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	e.sizes = append(e.sizes, size)
+	for _, event := range eventsInSameBatch {
+		e.events = append(e.events, event)
+		e.sizes = append(e.sizes, 0)
+	}
 	if txnFinished {
 		e.readyCount = len(e.events)
 	}
 	return true
+}
+
+func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished bool) bool {
+	if len(events) == 0 {
+		return true
+	}
+	return e.push(events[0], size, txnFinished, events[1:]...)
 }
 
 func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
