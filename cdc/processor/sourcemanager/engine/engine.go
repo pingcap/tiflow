@@ -11,16 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sorter
+package engine
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// EventSortEngine is a storage engine to store and sort CDC events.
-// Every changefeed will have one EventSortEngine instance.
+// SortEngine is a storage engine to store and sort CDC events.
+// Every changefeed will have one SortEngine instance.
 // NOTE: All interfaces are thread-safe.
-type EventSortEngine interface {
+type SortEngine interface {
 	// IsTableBased tells whether the sort engine is based on table or not.
 	// If it's based on table, fetching events by table is preferred.
 	IsTableBased() bool
@@ -40,7 +40,7 @@ type EventSortEngine interface {
 	// GetResolvedTs gets resolved timestamp of the given table.
 	GetResolvedTs(tableID model.TableID) model.Ts
 
-	// OnResolve pushes action into EventSortEngine's hook list, which
+	// OnResolve pushes action into SortEngine's hook list, which
 	// will be called after any events are resolved.
 	OnResolve(action func(model.TableID, model.Ts))
 
@@ -58,14 +58,14 @@ type EventSortEngine interface {
 
 	// CleanByTable tells the engine events of the given table in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
-	// The EventSortEngine instance can GC them later.
+	// The SortEngine instance can GC them later.
 	//
 	// NOTE: CleanByTable is always available even if IsTableBased returns false.
 	CleanByTable(tableID model.TableID, upperBound Position) error
 
 	// CleanAllTables tells the engine events of all tables in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.
-	// The EventSortEngine instance can GC them later.
+	// The SortEngine instance can GC them later.
 	//
 	// NOTE: It's only available if IsTableBased returns false.
 	CleanAllTables(upperBound Position) error
@@ -76,7 +76,7 @@ type EventSortEngine interface {
 	Close() error
 }
 
-// EventIterator is an iterator to fetch events from EventSortEngine.
+// EventIterator is an iterator to fetch events from SortEngine.
 // It's unnecessary to be thread-safe.
 type EventIterator interface {
 	// Next is used to fetch one event. nil indicates it reaches the stop point.
@@ -93,7 +93,7 @@ type EventIterator interface {
 }
 
 // Position is used to
-//  1. fetch or clear events from an engine, for example, see EventSortEngine.FetchByTable.
+//  1. fetch or clear events from an engine, for example, see SortEngine.FetchByTable.
 //  2. calculate the next position with method Next.
 type Position struct {
 	StartTs  model.Ts
