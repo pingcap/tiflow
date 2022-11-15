@@ -64,7 +64,7 @@ type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
 	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
-	DecodeEventX(ctx context.Context, event *model.PolymorphicEvent) error
+	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounter struct {
