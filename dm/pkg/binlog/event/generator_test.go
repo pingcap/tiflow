@@ -317,6 +317,7 @@ func previousGTIDEventType(t *testing.T, flavor string) replication.EventType {
 }
 
 func gtidEventType(t *testing.T, flavor string) replication.EventType {
+	t.Helper()
 	switch flavor {
 	case gmysql.MySQLFlavor:
 		return replication.GTID_EVENT
