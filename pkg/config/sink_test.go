@@ -249,24 +249,6 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			},
 			wantErr: "csv config quote and delimiter cannot be the same",
 		},
-		{
-			name: "valid date separator",
-			config: &CSVConfig{
-				Quote:         "\"",
-				Delimiter:     ",",
-				DateSeparator: "day",
-			},
-			wantErr: "",
-		},
-		{
-			name: "date separator is not in [day/month/year/none]",
-			config: &CSVConfig{
-				Quote:         "\"",
-				Delimiter:     ",",
-				DateSeparator: "hello",
-			},
-			wantErr: "date separator in cloud storage sink is invalid",
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

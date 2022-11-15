@@ -746,22 +746,20 @@ var doc = `{
         "config.CSVConfig": {
             "type": "object",
             "properties": {
-                "date-separator": {
-                    "type": "string"
-                },
                 "delimiter": {
+                    "description": "delimiter between fields",
                     "type": "string"
                 },
                 "include-commit-ts": {
+                    "description": "whether to include commit ts",
                     "type": "boolean"
                 },
                 "null": {
+                    "description": "representation of null values",
                     "type": "string"
                 },
                 "quote": {
-                    "type": "string"
-                },
-                "terminator": {
+                    "description": "quoting character",
                     "type": "string"
                 }
             }
@@ -817,11 +815,17 @@ var doc = `{
                 "csv": {
                     "$ref": "#/definitions/config.CSVConfig"
                 },
+                "date-separator": {
+                    "type": "string"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
                     }
+                },
+                "enable-partition-separator": {
+                    "type": "boolean"
                 },
                 "encoder-concurrency": {
                     "type": "integer"
@@ -830,6 +834,9 @@ var doc = `{
                     "type": "string"
                 },
                 "schema-registry": {
+                    "type": "string"
+                },
+                "terminator": {
                     "type": "string"
                 },
                 "transaction-atomicity": {
