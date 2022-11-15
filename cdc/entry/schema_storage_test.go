@@ -848,7 +848,7 @@ func TestSchemaStorage(t *testing.T) {
 		defer domain.Close()
 		domain.SetStatsUpdating(true)
 		tk := testkit.NewTestKit(t, store)
-		tk.MustExec("set global tidb_enable_clustered_index = 'int_onlt';")
+		tk.MustExec("set global tidb_enable_clustered_index = 'int_only';")
 		for _, ddlSQL := range tc {
 			tk.MustExec(ddlSQL)
 		}
