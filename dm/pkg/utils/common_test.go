@@ -177,13 +177,13 @@ func TestFetchTargetDoTables(t *testing.T) {
 		mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
 	}
 
-	got, err := FetchTargetDoTables(context.Background(), db, ba, r)
+	tablesMap, extendedCols, err := FetchTargetDoTables(context.Background(), "", db, ba, r)
 	require.NoError(t, err)
-	require.Len(t, got, 2)
 	require.Equal(t, map[filter.Table][]filter.Table{
 		{Schema: "shard1", Name: "tbl1"}: {{Schema: "shard1", Name: "tbl1"}},
 		{Schema: "shard1", Name: "tbl2"}: {{Schema: "shard1", Name: "tbl2"}},
-	}, got)
+	}, tablesMap)
+	require.Len(t, extendedCols, 0)
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// route to the same downstream.
@@ -201,15 +201,15 @@ func TestFetchTargetDoTables(t *testing.T) {
 		mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
 	}
 
-	got, err = FetchTargetDoTables(context.Background(), db, ba, r)
+	tablesMap, extendedCols, err = FetchTargetDoTables(context.Background(), "", db, ba, r)
 	require.NoError(t, err)
-	require.Len(t, got, 1)
 	require.Equal(t, map[filter.Table][]filter.Table{
 		{Schema: "shard", Name: "tbl"}: {
 			{Schema: "shard1", Name: "tbl1"},
 			{Schema: "shard1", Name: "tbl2"},
 		},
-	}, got)
+	}, tablesMap)
+	require.Len(t, extendedCols, 0)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
