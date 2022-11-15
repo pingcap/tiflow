@@ -145,7 +145,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, nil, tc.rows...)
 		require.Nil(t, err)
 	}
 
@@ -253,7 +253,7 @@ func runBenchTest(ctx context.Context, b *testing.B) (LogManager, map[model.Tabl
 
 					b.StartTimer()
 				}
-				logMgr.EmitRowChangedEvents(ctx, tableID, rows...)
+				logMgr.EmitRowChangedEvents(ctx, tableID, nil, rows...)
 			}
 		}(tableID)
 	}
@@ -347,7 +347,7 @@ func TestManagerError(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, nil, tc.rows...)
 		require.Nil(t, err)
 	}
 
