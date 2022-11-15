@@ -6,7 +6,7 @@ ENV CDC_ENABLE_VENDOR=0
 RUN make cdc
 
 FROM alpine:3.15
-RUN apk add --no-cache tzdata bash curl socat
+RUN apk add --no-cache bash curl socat
 COPY --from=builder /go/src/github.com/pingcap/tiflow/bin/cdc /cdc
 EXPOSE 8300
 CMD [ "/cdc" ]
