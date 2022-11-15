@@ -44,7 +44,6 @@ function check_checkpoint() {
 }
 
 function run() {
-	curl -X POST -d "tidb_general_log=1" http://127.0.0.1:10080/settings
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
@@ -99,6 +98,7 @@ function run() {
 	pos2=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
 	gtid2=$(grep "GTID:" $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
 
+	run_sql_tidb_with_retry "select count(1) from dm_meta.${TASK_NAME}_syncer_checkpoint where is_global=1" "count(1): 2"
 	check_checkpoint $SOURCE_ID1 $name1 $pos1 $gtid1
 	check_checkpoint $SOURCE_ID2 $name2 $pos2 $gtid2
 	dmctl_stop_task_with_retry $TASK_NAME $MASTER_PORT
@@ -115,6 +115,7 @@ function run() {
 	# start task without checking, worker may exit before we get success result
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "start-task $WORK_DIR/dm-task.yaml"
 
+	run_sql_tidb_with_retry "select count(1) from dm_meta.${TASK_NAME}_syncer_checkpoint where is_global=1" "count(1): 2"
 	check_checkpoint $SOURCE_ID1 $name1 $pos1 $gtid1
 	check_checkpoint $SOURCE_ID2 $name2 $pos2 $gtid2
 	check_port_offline $WORKER1_PORT 20
@@ -136,7 +137,6 @@ function run() {
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
-	curl -X POST -d "tidb_general_log=0" http://127.0.0.1:10080/settings
 }
 
 cleanup_data adjust_gtid
