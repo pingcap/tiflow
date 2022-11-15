@@ -28,14 +28,12 @@ import (
 
 // UnitState represents the state of units.
 type UnitState struct {
-	state
-
 	// taskID -> sequence of finished status
 	FinishedUnitStatus map[string][]*FinishedTaskStatus
 	CurrentUnitStatus  map[string]*UnitStatus
 }
 
-// UnitStateStore manages the state of units.
+// UnitStateStore is the meta store for UnitState.
 type UnitStateStore struct {
 	// rmwLock is used to prevent concurrent read-modify-write to the state.
 	rmwLock sync.Mutex
@@ -53,7 +51,7 @@ func (f *UnitStateStore) key() string {
 	return adapter.DMUnitStateAdapter.Encode()
 }
 
-// ReadModifyWrite read-modify-write to the state.
+// ReadModifyWrite reads the state, modifies it, and writes it back.
 func (f *UnitStateStore) ReadModifyWrite(
 	ctx context.Context,
 	action func(*UnitState) error,
@@ -97,9 +95,9 @@ type TaskStatus struct {
 // It only used when a task is finished.
 type FinishedTaskStatus struct {
 	TaskStatus
-	Result      *pb.ProcessResult
-	Status      json.RawMessage
-	CreatedTime time.Time
+	Result   *pb.ProcessResult
+	Status   json.RawMessage
+	Duration time.Duration
 }
 
 // UnitStatus defines the unit status.

@@ -98,6 +98,7 @@ function run() {
 	pos2=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
 	gtid2=$(grep "GTID:" $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
 
+	run_sql_tidb_with_retry "select count(1) from dm_meta.${TASK_NAME}_syncer_checkpoint where is_global=1" "count(1): 2"
 	check_checkpoint $SOURCE_ID1 $name1 $pos1 $gtid1
 	check_checkpoint $SOURCE_ID2 $name2 $pos2 $gtid2
 	dmctl_stop_task_with_retry $TASK_NAME $MASTER_PORT
@@ -114,6 +115,7 @@ function run() {
 	# start task without checking, worker may exit before we get success result
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "start-task $WORK_DIR/dm-task.yaml"
 
+	run_sql_tidb_with_retry "select count(1) from dm_meta.${TASK_NAME}_syncer_checkpoint where is_global=1" "count(1): 2"
 	check_checkpoint $SOURCE_ID1 $name1 $pos1 $gtid1
 	check_checkpoint $SOURCE_ID2 $name2 $pos2 $gtid2
 	check_port_offline $WORKER1_PORT 20

@@ -18,7 +18,7 @@ import (
 
 	cvstask "github.com/pingcap/tiflow/engine/executor/cvs"
 	dmtask "github.com/pingcap/tiflow/engine/executor/dm"
-	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 )
@@ -31,5 +31,5 @@ func registerWorkers() {
 	cvs.RegisterWorker()
 	dm.RegisterWorker()
 	dmtask.RegisterWorker()
-	registry.RegisterFake(registry.GlobalWorkerRegistry())
+	fake.RegisterWorker()
 }

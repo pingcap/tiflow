@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -48,6 +49,8 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
+
+	initialized atomic.Bool
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -133,7 +136,11 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
 		return err
 	}
-	return jm.ddlCoordinator.Reset(ctx)
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
+	}
+	jm.initialized.Store(true)
+	return nil
 }
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
@@ -146,7 +153,11 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	if err := jm.bootstrap(ctx); err != nil {
 		return err
 	}
-	return jm.ddlCoordinator.Reset(ctx)
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
+	}
+	jm.initialized.Store(true)
+	return nil
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -221,7 +232,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	unitStateStore := jm.metadata.UnitStateStore()
 	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
-		finishedTaskStatus.CreatedTime = state.CurrentUnitStatus[taskStatus.Task].CreatedTime
+		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
 		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
 			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
 			if status.Unit == taskStatus.Unit {
