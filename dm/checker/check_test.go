@@ -162,6 +162,47 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 	}, cfgs)
 }
 
+func TestTargetPrivilegeChecking(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetPrivilegeChecking: {}}),
+		},
+	}
+
+	// test not enough privileges
+
+	mock := initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.Regexp(t, "(.|\n)*lack.*Drop(.|\n)*", err.Error())
+	require.Regexp(t, "(.|\n)*lack.*Index(.|\n)*", err.Error())
+	require.Len(t, msg, 0)
+
+	mock = initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Summary.Failed)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Drop global (*.*) privilege")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Index global (*.*) privilege")
+
+	// happy path
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,INDEX,DROP ON *.* TO 'test'@'%'"))
+	}, cfgs)
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
+	}, cfgs)
+}
+
 func TestVersionChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
