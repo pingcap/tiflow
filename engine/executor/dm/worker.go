@@ -122,15 +122,6 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 		needExtStorage: cfg.NeedExtStorage,
 	}
 
-	w.stageGauge = w.MetricFactory().NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "tiflow",
-			Subsystem: "dm_worker",
-			Name:      "task_stage",
-			Help:      "task stage of dm worker in this job",
-		}, []string{"job_id", "source_id"}).WithLabelValues(masterID, dmSubtaskCfg.SourceID)
-	w.stageGauge.Set(float64(metadata.StageInit))
-
 	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
 		w.messageHandlerManager = m
@@ -153,6 +144,14 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 		}
 	}
 	w.cfg.MetricsFactory = w.MetricFactory()
+	w.stageGauge = w.MetricFactory().NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "dataflow",
+			Subsystem: "dm_worker",
+			Name:      "task_stage",
+			Help:      "task stage of dm worker in this job",
+		})
+	w.stageGauge.Set(float64(metadata.StageInit))
 	w.cfg.FrameworkLogger = w.Logger()
 	return w.unitHolder.Init(ctx)
 }
