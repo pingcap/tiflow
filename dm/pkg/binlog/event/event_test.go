@@ -54,6 +54,7 @@ func TestGenEventHeader(t *testing.T) {
 }
 
 func verifyHeader(t *testing.T, obtained, excepted *replication.EventHeader, eventType replication.EventType, latestPos, eventSize uint32) {
+	t.Helper()
 	require.Equal(t, excepted.Timestamp, obtained.Timestamp)
 	require.Equal(t, excepted.ServerID, obtained.ServerID)
 	require.Equal(t, excepted.Flags, obtained.Flags)

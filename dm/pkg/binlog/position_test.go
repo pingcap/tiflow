@@ -21,8 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testPositionSuite struct{}
-
 func TestPositionFromStr(t *testing.T) {
 	t.Parallel()
 	emptyPos := gmysql.Position{}

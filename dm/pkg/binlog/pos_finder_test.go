@@ -325,7 +325,6 @@ func TestMySQL57GTID(t *testing.T) {
 		require.Equal(t, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart}, location.Position)
 		require.Equal(t, "ffffffff-ffff-ffff-ffff-ffffffffffff:1-7", location.GTIDSetStr())
 		require.Equal(t, InRangeBinlogPos, posType)
-
 	}
 	{
 		var targetEventStart uint32

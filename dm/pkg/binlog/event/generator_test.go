@@ -120,6 +120,7 @@ func TestGenerateForMariaDB(t *testing.T) {
 }
 
 func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysql.GTIDSet, previousGTIDSet gmysql.GTIDSet, latestXID uint64) {
+	t.Helper()
 	// write some events to file
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "mysql-bin-test.000001")
@@ -303,6 +304,7 @@ func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysq
 }
 
 func previousGTIDEventType(t *testing.T, flavor string) replication.EventType {
+	t.Helper()
 	switch flavor {
 	case gmysql.MySQLFlavor:
 		return replication.PREVIOUS_GTIDS_EVENT
