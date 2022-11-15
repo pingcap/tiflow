@@ -734,7 +734,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 42)
+	require.Equal(t, snap3.TableCount(false), 45)
 }
 
 /*
@@ -848,7 +848,7 @@ func TestSchemaStorage(t *testing.T) {
 		defer domain.Close()
 		domain.SetStatsUpdating(true)
 		tk := testkit.NewTestKit(t, store)
-
+		tk.MustExec("set global tidb_enable_clustered_index = 'int_onlt';")
 		for _, ddlSQL := range tc {
 			tk.MustExec(ddlSQL)
 		}
