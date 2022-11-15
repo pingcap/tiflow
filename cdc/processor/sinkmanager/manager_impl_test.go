@@ -131,7 +131,7 @@ func TestAddTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	require.Equal(t, 0, manager.progressHeap.len(), "Not started table shout not in progress heap")
+	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
 	manager.StartTable(tableID)
 	require.Equal(t, &progress{
 		tableID: tableID,
@@ -139,7 +139,7 @@ func TestAddTable(t *testing.T) {
 			StartTs:  0,
 			CommitTs: 1,
 		},
-	}, manager.progressHeap.pop())
+	}, manager.sinkProgressHeap.pop())
 }
 
 func TestRemoveTable(t *testing.T) {
