@@ -34,11 +34,11 @@ func createManager(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	errChan chan error,
-) *ManagerImpl {
+) *SinkManager {
 	sortEngine := memory.New(context.Background())
 	manager, err := New(ctx, changefeedID, changefeedInfo, nil, sortEngine, errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
-	return manager.(*ManagerImpl)
+	return manager
 }
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
