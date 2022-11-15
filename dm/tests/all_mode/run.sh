@@ -657,10 +657,7 @@ function prepare_test_empty_gtid() {
 
 function test_source_and_target_with_empty_gtid() {
 	echo "[$(date)] <<<<<< start test_source_and_target_with_empty_gtid >>>>>>"
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-  		"stop-task test" \
-  		"\"result\": true" 3
-
+	cleanup_process
 	cleanup_data all_mode
 	prepare_test_empty_gtid
 
@@ -674,6 +671,12 @@ function test_source_and_target_with_empty_gtid() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
 
 	echo "check master alive"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
