@@ -350,6 +350,10 @@ func (m *ManagerImpl) generateRedoTasks() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-taskTicker.C:
+			// No more tables.
+			if m.redoProgressHeap.len() == 0 {
+				continue
+			}
 			slowestTableProgress := m.redoProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
@@ -362,12 +366,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 				// So we do **not** need add it back to the heap.
 				continue
 			}
-			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
-			// Because it can not exceed the barrier ts.
-			// We also need to consider the resolved ts from sorter,
-			// Because if the redo log is enabled and the table just scheduled to this node,
-			// the resolved ts from sorter may be smaller than the barrier ts.
-			// So we use the min value of the barrier ts and the resolved ts from sorter.
+			// We use the table's resolved ts as the upper bound to fetch events.
 			getUpperBound := func() sorter.Position {
 				upperBoundTs := tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs()
 				return sorter.Position{
@@ -376,7 +375,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 				}
 			}
 			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
-			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(defaultRequestMemSize) {
+			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
 				m.redoProgressHeap.push(slowestTableProgress)
 				// Next time.
 				continue
@@ -452,7 +451,6 @@ func (m *ManagerImpl) StartTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 	}
 	tableSink.(*tableSinkWrapper).start()
-
 	startTs := tableSink.(*tableSinkWrapper).startTs
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
@@ -479,7 +477,6 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	cleanedBytes := m.memQuota.clean(tableID)
 	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 		zap.String("namespace", m.changefeedID.Namespace),
@@ -493,7 +490,6 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	m.tableSinks.Delete(tableID)
 
 	if m.eventCache != nil {
-		// TODO(qupeng): how to ensure the table isn't in processing by workers?
 		m.eventCache.removeTable(tableID)
 	}
 

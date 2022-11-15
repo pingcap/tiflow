@@ -257,6 +257,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				// Because we do not reach the maxUpdateIntervalSize.
 				if currentTotalSize != 0 {
 					if err := advanceTableSinkAndResetCurrentSize(); err != nil {
+						iter.Close()
 						return errors.Trace(err)
 					}
 				}
