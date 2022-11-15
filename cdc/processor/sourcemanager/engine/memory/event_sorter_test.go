@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,13 +92,13 @@ func TestEventSorter(t *testing.T) {
 
 	es := New(context.Background())
 	es.AddTable(1)
-	var nextToFetch sorter.Position
+	var nextToFetch engine.Position
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
 			es.Add(1, model.NewPolymorphicEvent(entry))
 		}
 		es.Add(1, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		iter := es.FetchByTable(1, nextToFetch, sorter.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
+		iter := es.FetchByTable(1, nextToFetch, engine.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
 		for _, expect := range tc.expect {
 			event, pos, _ := iter.Next()
 			require.NotNil(t, event)

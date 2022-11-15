@@ -1086,9 +1086,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	sortEngineManager := ctx.GlobalVars().SortEngineManager
-	if sortEngineManager != nil {
-		if err := sortEngineManager.Drop(p.changefeedID); err != nil {
+	engineFactory := ctx.GlobalVars().SortEngineFactory
+	if engineFactory != nil {
+		if err := engineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
