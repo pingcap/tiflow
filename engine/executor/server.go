@@ -395,6 +395,7 @@ func (s *Server) Run(ctx context.Context) error {
 			zap.Uint64("memory limit", limit),
 			zap.Uint64("threshold", threshold))
 		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.SetMinGCPercent(20)
 		gctuner.Tuning(threshold)
 	}
 
