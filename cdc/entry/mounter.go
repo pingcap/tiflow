@@ -64,7 +64,7 @@ type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
 	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
-	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	DecodeEventX(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounter struct {
@@ -97,9 +97,9 @@ func NewMounter(schemaStorage SchemaStorage,
 	}
 }
 
-// DecodeEvent decode kv events using ddl puller's schemaStorage
+// DecodeEventX decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
-func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+func (m *mounter) DecodeEventX(ctx context.Context, event *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
 	if event.IsResolved() {
 		return nil

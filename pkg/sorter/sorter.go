@@ -14,6 +14,9 @@
 package sorter
 
 import (
+    "context"
+
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -128,4 +131,93 @@ func (p Position) Compare(q Position) int {
 	} else {
 		return 1
 	}
+}
+
+// MountedEventIter is just like EventIterator, but returns mounted events.
+type MountedEventIter struct {
+    iter EventIterator
+    mg entry.MounterGroup
+    maxMemUsage uint64
+    maxBatchSize int
+
+    rawEvents []rawEvent
+    totalMemUsage uint64
+    nextToMount int
+    nextToEmit int
+    savedIterError error
+}
+
+type rawEvent struct {
+    event *model.PolymorphicEvent
+    txnFinished Position
+    size uint64
+}
+
+// NewMountedEventIter creates a MountedEventIter instance.
+func NewMountedEventIter(
+    iter EventIterator,
+    mg entry.MounterGroup,
+    maxMemUsage uint64,
+    maxBatchSize int,
+) *MountedEventIter {
+    return &MountedEventIter {
+        iter: iter,
+        mg: mg,
+        maxMemUsage: maxMemUsage,
+        maxBatchSize: maxBatchSize,
+    }
+}
+
+func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
+    for idx := i.nextToEmit; idx < i.nextToMount; idx++ {
+        if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
+            event = i.rawEvents[idx].event
+            txnFinished = i.rawEvents[idx].txnFinished
+            i.totalMemUsage -= i.rawEvents[idx].size
+            i.nextToEmit += 1
+        }
+        return
+    }
+
+    if i.mg != nil && i.iter != nil {
+        i.nextToMount = 0
+        i.nextToEmit = 0
+        if cap(i.rawEvents) == 0 {
+            i.rawEvents= make([]rawEvent, 0, i.maxBatchSize)
+        } else {
+            i.rawEvents= i.rawEvents[:0]
+        }
+
+        for i.totalMemUsage < i.maxMemUsage && len(i.rawEvents) < cap(i.rawEvents) {
+            event, txnFinished, err = i.iter.Next()
+            if err != nil {
+                return
+            }
+            if event == nil {
+                i.savedIterError = i.iter.Close()
+                i.iter = nil
+                break
+            } else {
+                size := uint64(event.Row.ApproximateBytes())
+                i.totalMemUsage += size
+                i.rawEvents = append(i.rawEvents, rawEvent{ event, txnFinished, size })
+            }
+        }
+        for idx := i.nextToMount; idx < len(i.rawEvents); idx++ {
+            i.rawEvents[idx].event.SetUpFinishedCh()
+            if err = i.mg.AddEvent(ctx, i.rawEvents[idx].event); err != nil {
+                i.mg = nil
+                return
+            }
+            i.nextToMount += 1
+        }
+    }
+    return
+}
+
+func (i *MountedEventIter) Close() error {
+    if i.savedIterError != nil {
+        return i.savedIterError
+    }
+    return i.iter.Close()
 }
