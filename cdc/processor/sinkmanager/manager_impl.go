@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -61,13 +61,12 @@ type ManagerImpl struct {
 	// if redo log is enabled.
 	redoManager redo.LogManager
 	// sortEngine is used by the sink manager to fetch data.
-	sortEngine sorter.EventSortEngine
+	sortEngine engine.SortEngine
 
 	// sinkFactory used to create table sink.
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks sync.Map
-
 	// lastBarrierTs is the last barrier ts.
 	lastBarrierTs atomic.Uint64
 
@@ -95,7 +94,7 @@ func New(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	redoManager redo.LogManager,
-	sortEngine sorter.EventSortEngine,
+	sortEngine engine.SortEngine,
 	errChan chan error,
 	metricsTableSinkTotalRows prometheus.Counter,
 ) (Manager, error) {
@@ -287,7 +286,7 @@ func (m *ManagerImpl) generateSinkTasks() error {
 			// Because if the redo log is enabled and the table just scheduled to this node,
 			// the resolved ts from sorter may be smaller than the barrier ts.
 			// So we use the min value of the barrier ts and the resolved ts from sorter.
-			getUpperBound := func() sorter.Position {
+			getUpperBound := func() engine.Position {
 				barrierTs := m.lastBarrierTs.Load()
 				resolvedTs := tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs()
 				var upperBoundTs model.Ts
@@ -297,7 +296,7 @@ func (m *ManagerImpl) generateSinkTasks() error {
 					upperBoundTs = resolvedTs
 				}
 
-				return sorter.Position{
+				return engine.Position{
 					StartTs:  upperBoundTs - 1,
 					CommitTs: upperBoundTs,
 				}
@@ -315,7 +314,7 @@ func (m *ManagerImpl) generateSinkTasks() error {
 				zap.Int64("tableID", tableID),
 				zap.Uint64("memory", requestMemSize),
 			)
-			callback := func(lastWrittenPos sorter.Position) {
+			callback := func(lastWrittenPos engine.Position) {
 				p := &progress{
 					tableID:           tableID,
 					nextLowerBoundPos: lastWrittenPos.Next(),
@@ -367,9 +366,9 @@ func (m *ManagerImpl) generateRedoTasks() error {
 				continue
 			}
 			// We use the table's resolved ts as the upper bound to fetch events.
-			getUpperBound := func() sorter.Position {
+			getUpperBound := func() engine.Position {
 				upperBoundTs := tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs()
-				return sorter.Position{
+				return engine.Position{
 					StartTs:  upperBoundTs - 1,
 					CommitTs: upperBoundTs,
 				}
@@ -380,7 +379,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 				// Next time.
 				continue
 			}
-			callback := func(lastWrittenPos sorter.Position) {
+			callback := func(lastWrittenPos engine.Position) {
 				p := &progress{
 					tableID:           tableID,
 					nextLowerBoundPos: lastWrittenPos.Next(),
@@ -454,12 +453,12 @@ func (m *ManagerImpl) StartTable(tableID model.TableID) {
 	startTs := tableSink.(*tableSinkWrapper).startTs
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
-		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
 	})
 	if m.redoManager != nil {
 		m.redoProgressHeap.push(&progress{
 			tableID:           tableID,
-			nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+			nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
 		})
 	}
 }
@@ -486,7 +485,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	)
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
-	// Also, no need to GC the SorterEngine. Because the SorterEngine also removes this table.
+	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
 	m.tableSinks.Delete(tableID)
 
 	if m.eventCache != nil {
@@ -507,7 +506,7 @@ func (m *ManagerImpl) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	}
 	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
-	cleanPos := sorter.Position{
+	cleanPos := engine.Position{
 		StartTs:  checkpointTs.Ts - 1,
 		CommitTs: checkpointTs.Ts,
 	}
