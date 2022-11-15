@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -497,7 +497,7 @@ func setElems(ft *types.FieldType, elems []string) *types.FieldType {
 }
 
 func TestFormatWithQuotes(t *testing.T) {
-	csvConfig := &config.CSVConfig{
+	config := &common.Config{
 		Quote: "\"",
 	}
 
@@ -523,7 +523,7 @@ func TestFormatWithQuotes(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		csvMessage := newCSVMessage(csvConfig)
+		csvMessage := newCSVMessage(config)
 		strBuilder := new(strings.Builder)
 		csvMessage.formatWithQuotes(tc.input, strBuilder)
 		require.Equal(t, tc.expected, strBuilder.String(), tc.name)
@@ -532,51 +532,51 @@ func TestFormatWithQuotes(t *testing.T) {
 
 func TestFormatWithEscape(t *testing.T) {
 	testCases := []struct {
-		name      string
-		csvConfig *config.CSVConfig
-		input     string
-		expected  string
+		name     string
+		config   *common.Config
+		input    string
+		expected string
 	}{
 		{
-			name:      "string does not contain CR/LF/backslash/delimiter",
-			csvConfig: &config.CSVConfig{Delimiter: ","},
-			input:     "abcdef",
-			expected:  "abcdef",
+			name:     "string does not contain CR/LF/backslash/delimiter",
+			config:   &common.Config{Delimiter: ","},
+			input:    "abcdef",
+			expected: "abcdef",
 		},
 		{
-			name:      "string contains CRLF",
-			csvConfig: &config.CSVConfig{Delimiter: ","},
-			input:     "abc\r\ndef",
-			expected:  "abc\\r\\ndef",
+			name:     "string contains CRLF",
+			config:   &common.Config{Delimiter: ","},
+			input:    "abc\r\ndef",
+			expected: "abc\\r\\ndef",
 		},
 		{
-			name:      "string contains backslash",
-			csvConfig: &config.CSVConfig{Delimiter: ","},
-			input:     `abc\def`,
-			expected:  `abc\\def`,
+			name:     "string contains backslash",
+			config:   &common.Config{Delimiter: ","},
+			input:    `abc\def`,
+			expected: `abc\\def`,
 		},
 		{
-			name:      "string contains a single character delimiter",
-			csvConfig: &config.CSVConfig{Delimiter: ","},
-			input:     "abc,def",
-			expected:  `abc\,def`,
+			name:     "string contains a single character delimiter",
+			config:   &common.Config{Delimiter: ","},
+			input:    "abc,def",
+			expected: `abc\,def`,
 		},
 		{
-			name:      "string contains multi-character delimiter",
-			csvConfig: &config.CSVConfig{Delimiter: "***"},
-			input:     "abc***def",
-			expected:  `abc\*\*\*def`,
+			name:     "string contains multi-character delimiter",
+			config:   &common.Config{Delimiter: "***"},
+			input:    "abc***def",
+			expected: `abc\*\*\*def`,
 		},
 		{
-			name:      "string contains CR, LF, backslash and delimiter",
-			csvConfig: &config.CSVConfig{Delimiter: "?"},
-			input:     `abc\def?ghi\r\n`,
-			expected:  `abc\\def\?ghi\\r\\n`,
+			name:     "string contains CR, LF, backslash and delimiter",
+			config:   &common.Config{Delimiter: "?"},
+			input:    `abc\def?ghi\r\n`,
+			expected: `abc\\def\?ghi\\r\\n`,
 		},
 	}
 
 	for _, tc := range testCases {
-		csvMessage := newCSVMessage(tc.csvConfig)
+		csvMessage := newCSVMessage(tc.config)
 		strBuilder := new(strings.Builder)
 		csvMessage.formatWithEscapes(tc.input, strBuilder)
 		require.Equal(t, tc.expected, strBuilder.String())
@@ -585,7 +585,7 @@ func TestFormatWithEscape(t *testing.T) {
 
 func TestCSVMessageEncode(t *testing.T) {
 	type fields struct {
-		csvConfig  *config.CSVConfig
+		config     *common.Config
 		opType     operation
 		tableName  string
 		schemaName string
@@ -600,7 +600,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode with typical configurations",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       ",",
 					Quote:           "\"",
 					Terminator:      "\n",
@@ -618,7 +618,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode values containing single-character delimter string, without quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       "!",
 					Quote:           "",
 					Terminator:      "\n",
@@ -636,7 +636,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode values containing single-character delimter string, with quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       ",",
 					Quote:           "\"",
 					Terminator:      "\n",
@@ -654,7 +654,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode values containing multi-character delimiter string, without quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       "[*]",
 					Quote:           "",
 					Terminator:      "\r\n",
@@ -672,7 +672,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode with values containing multi-character delimiter string, with quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       "[*]",
 					Quote:           "'",
 					Terminator:      "\n",
@@ -690,7 +690,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode with values containing backslash and LF, without quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       ",",
 					Quote:           "",
 					Terminator:      "\n",
@@ -708,7 +708,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode with values containing backslash and CR, with quote mark",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       ",",
 					Quote:           "'",
 					Terminator:      "\n",
@@ -726,7 +726,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		{
 			name: "csv encode with values containing unicode characters",
 			fields: fields{
-				csvConfig: &config.CSVConfig{
+				config: &common.Config{
 					Delimiter:       "\t",
 					Quote:           "\"",
 					Terminator:      "\n",
@@ -745,7 +745,7 @@ func TestCSVMessageEncode(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &csvMessage{
-				csvConfig:  tc.fields.csvConfig,
+				config:     tc.fields.config,
 				opType:     tc.fields.opType,
 				tableName:  tc.fields.tableName,
 				schemaName: tc.fields.schemaName,
@@ -791,7 +791,7 @@ func TestRowChangeEventConversion(t *testing.T) {
 			row.PreColumns = cols
 			row.Columns = cols
 		}
-		csvMsg, err := rowChangedEvent2CSVMsg(&config.CSVConfig{
+		csvMsg, err := rowChangedEvent2CSVMsg(&common.Config{
 			Delimiter:       "\t",
 			Quote:           "\"",
 			Terminator:      "\n",
@@ -884,7 +884,7 @@ func TestCSVMessageDecode(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		csvMsg := newCSVMessage(&config.CSVConfig{
+		csvMsg := newCSVMessage(&common.Config{
 			Delimiter:       ",",
 			Quote:           "\"",
 			Terminator:      "\n",

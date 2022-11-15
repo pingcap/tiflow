@@ -26,14 +26,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultWorkerNum            = 8
+	sinkWorkerNum               = 8
+	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 )
 
@@ -47,29 +47,43 @@ type ManagerImpl struct {
 	ctx context.Context
 	// cancel is used to cancel the background goroutines.
 	cancel context.CancelFunc
-	// progressHeap is the heap of the table progress.
-	progressHeap *tableProgresses
+
+	// sinkProgressHeap is the heap of the table progress for sink.
+	sinkProgressHeap *tableProgresses
+	// redoProgressHeap is the heap of the table progress for redo.
+	redoProgressHeap *tableProgresses
+
 	// memQuota is used to control the total memory usage of the sink manager.
 	memQuota *memQuota
+	// eventCache caches events fetched from sort engine.
+	eventCache *redoEventCache
+	// redoManager was used to report the resolved ts of the table,
+	// if redo log is enabled.
+	redoManager redo.LogManager
+	// sortEngine is used by the sink manager to fetch data.
+	sortEngine sorter.EventSortEngine
+
 	// sinkFactory used to create table sink.
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks sync.Map
-	// sortEngine is used by the sink manager to fetch data.
-	sortEngine sorter.EventSortEngine
-	// redoManager was used to report the resolved ts of the table,
-	// if redo log is enabled.
-	redoManager redo.LogManager
+
 	// lastBarrierTs is the last barrier ts.
 	lastBarrierTs atomic.Uint64
-	// taskTicker is used to generate fetch tasks.
-	taskTicker *time.Ticker
-	// workers used to pull data from source manager.
-	workers []worker
-	// tableTaskChan is used to send tasks to workers.
-	tableTaskChan chan *tableSinkTask
-	// wg is used to wait for all the workers to exit.
-	wg      sync.WaitGroup
+
+	// sinkWorkers used to pull data from source manager.
+	sinkWorkers []sinkWorker
+	// sinkTaskChan is used to send tasks to sinkWorkers.
+	sinkTaskChan chan *sinkTask
+
+	// redoWorkers used to pull data from source manager.
+	redoWorkers []redoWorker
+	// redoTaskChan is used to send tasks to redoWorkers.
+	redoTaskChan chan *redoTask
+
+	// wg is used to wait for all workers to exit.
+	wg sync.WaitGroup
+
 	errChan chan error
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
@@ -100,37 +114,72 @@ func New(
 		changefeedID: changefeedID,
 		ctx:          ctx,
 		cancel:       cancel,
-		progressHeap: newTableProgresses(),
 		memQuota:     newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
 		sinkFactory:  tableSinkFactory,
 		sortEngine:   sortEngine,
-		redoManager:  redoManager,
-		taskTicker:   time.NewTicker(defaultGenerateTaskInterval),
-		workers:      make([]worker, defaultWorkerNum),
-		// No buffer for tableTaskChan,
-		// because we want to block the table sink task if there is no worker available.
-		tableTaskChan:             make(chan *tableSinkTask),
+
+		sinkProgressHeap: newTableProgresses(),
+		sinkWorkers:      make([]sinkWorker, 0, sinkWorkerNum),
+		sinkTaskChan:     make(chan *sinkTask),
+
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 	}
 
-	m.startWorkers(changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
-	m.startGenerateTableTask()
+	if redoManager != nil {
+		m.redoManager = redoManager
+		m.redoProgressHeap = newTableProgresses()
+		m.redoWorkers = make([]redoWorker, 0, redoWorkerNum)
+		m.redoTaskChan = make(chan *redoTask)
+		// Use at most 1/3 memory quota for redo event cache.
+		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
+	}
 
+	m.startWorkers(changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
+	m.startGenerateTasks()
 	return m, nil
 }
 
-// start all the workers and report the error to the error channel.
+// start all workers and report the error to the error channel.
 func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
-	for i := 0; i < defaultWorkerNum; i++ {
-		w := newWorker(m.changefeedID, m.sortEngine, m.redoManager,
-			m.memQuota, splitTxn, enableOldValue)
-		m.workers = append(m.workers, w)
+	for i := 0; i < sinkWorkerNum; i++ {
+		w := newSinkWorker(m.changefeedID, m.sortEngine, m.memQuota,
+			m.eventCache, splitTxn, enableOldValue)
+		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
-			err := w.receiveTableSinkTask(m.ctx, m.tableTaskChan)
+			err := w.handleTasks(m.ctx, m.sinkTaskChan)
 			if err != nil {
-				log.Error("Worker receive table sink task failed",
+				log.Error("Worker handles sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case m.errChan <- err:
+				default:
+					log.Error("Failed to send error to error channel, error channel is full",
+						zap.String("namespace", m.changefeedID.Namespace),
+						zap.String("changefeed", m.changefeedID.ID),
+						zap.Error(err))
+				}
+			}
+		}()
+	}
+
+	if m.redoManager == nil {
+		return
+	}
+
+	for i := 0; i < redoWorkerNum; i++ {
+		w := newRedoWorker(m.changefeedID, m.sortEngine, m.memQuota,
+			m.redoManager, m.eventCache, splitTxn, enableOldValue)
+		m.redoWorkers = append(m.redoWorkers, w)
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			err := w.handleTasks(m.ctx, m.redoTaskChan)
+			if err != nil {
+				log.Error("Worker handles redo task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Error(err))
@@ -148,13 +197,37 @@ func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
 }
 
 // start generate table task and report error to the error channel.
-func (m *ManagerImpl) startGenerateTableTask() {
+func (m *ManagerImpl) startGenerateTasks() {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		err := m.generateTableSinkFetchTask()
+		err := m.generateSinkTasks()
 		if err != nil {
-			log.Error("Generate table sink fetch task failed",
+			log.Error("Generate sink tasks failed",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Error(err))
+			select {
+			case m.errChan <- err:
+			default:
+				log.Error("Failed to send error to error channel, error channel is full",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+			}
+		}
+	}()
+
+	if m.redoManager == nil {
+		return
+	}
+
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		err := m.generateRedoTasks()
+		if err != nil {
+			log.Error("Generate redo tasks failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Error(err))
@@ -170,15 +243,20 @@ func (m *ManagerImpl) startGenerateTableTask() {
 	}()
 }
 
-// generateTableSinkFetchTask generates a fetch tableSinkTask to fetch data from the source manager.
-func (m *ManagerImpl) generateTableSinkFetchTask() error {
-	defer m.taskTicker.Stop()
+// generateSinkTasks generates tasks to fetch data from the source manager.
+func (m *ManagerImpl) generateSinkTasks() error {
+	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
+	defer taskTicker.Stop()
 	for {
 		select {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
-		case <-m.taskTicker.C:
-			slowestTableProgress := m.progressHeap.pop()
+		case <-taskTicker.C:
+			// No more tables.
+			if m.sinkProgressHeap.len() == 0 {
+				continue
+			}
+			slowestTableProgress := m.sinkProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
 			tableSink, ok := m.tableSinks.Load(tableID)
 			if !ok {
@@ -188,6 +266,19 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					zap.Int64("tableID", tableID))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
+				continue
+			}
+			tableState := tableSink.(*tableSinkWrapper).getState()
+			if tableState < tablepb.TableStateReplicating {
+				log.Panic("Tables that are not started should not appear in the progress heap",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+			}
+			// It means table sink is stopping or stopped.
+			// We should skip it and do not push it back.
+			// Because there is no case that stopping/stopped -> replicating.
+			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
@@ -213,8 +304,79 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 			}
 			// Only generate the table sink task if lower bound less or equal the upper bound.
 			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
-			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(defaultRequestMemSize) {
-				m.progressHeap.push(slowestTableProgress)
+			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
+				m.sinkProgressHeap.push(slowestTableProgress)
+				// Next time.
+				continue
+			}
+			log.Debug("MemoryQuotaTracing: Acquire memory for table sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("memory", requestMemSize),
+			)
+			callback := func(lastWrittenPos sorter.Position) {
+				p := &progress{
+					tableID:           tableID,
+					nextLowerBoundPos: lastWrittenPos.Next(),
+				}
+				m.sinkProgressHeap.push(p)
+			}
+
+			t := &sinkTask{
+				tableID:       tableID,
+				lowerBound:    slowestTableProgress.nextLowerBoundPos,
+				getUpperBound: getUpperBound,
+				tableSink:     tableSink.(*tableSinkWrapper),
+				callback:      callback,
+				isCanceled: func() bool {
+					return tableSink.(*tableSinkWrapper).getState() != tablepb.TableStateReplicating
+				},
+			}
+			select {
+			case <-m.ctx.Done():
+				return m.ctx.Err()
+			case m.sinkTaskChan <- t:
+			}
+		}
+	}
+}
+
+func (m *ManagerImpl) generateRedoTasks() error {
+	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
+	defer taskTicker.Stop()
+	for {
+		select {
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		case <-taskTicker.C:
+			// No more tables.
+			if m.redoProgressHeap.len() == 0 {
+				continue
+			}
+			slowestTableProgress := m.redoProgressHeap.pop()
+			tableID := slowestTableProgress.tableID
+			tableSink, ok := m.tableSinks.Load(tableID)
+			if !ok {
+				log.Info("Table sink not found, probably already removed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
+				// So we do **not** need add it back to the heap.
+				continue
+			}
+			// We use the table's resolved ts as the upper bound to fetch events.
+			getUpperBound := func() sorter.Position {
+				upperBoundTs := tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs()
+				return sorter.Position{
+					StartTs:  upperBoundTs - 1,
+					CommitTs: upperBoundTs,
+				}
+			}
+			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
+			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
+				m.redoProgressHeap.push(slowestTableProgress)
 				// Next time.
 				continue
 			}
@@ -223,20 +385,20 @@ func (m *ManagerImpl) generateTableSinkFetchTask() error {
 					tableID:           tableID,
 					nextLowerBoundPos: lastWrittenPos.Next(),
 				}
-				m.progressHeap.push(p)
+				m.redoProgressHeap.push(p)
 			}
 
-			t := &tableSinkTask{
-				tableID:              tableID,
-				lowerBound:           slowestTableProgress.nextLowerBoundPos,
-				upperBarrierTsGetter: getUpperBound,
-				tableSink:            tableSink.(*tableSinkWrapper),
-				callback:             callback,
+			t := &redoTask{
+				tableID:       tableID,
+				lowerBound:    slowestTableProgress.nextLowerBoundPos,
+				getUpperBound: getUpperBound,
+				tableSink:     tableSink.(*tableSinkWrapper),
+				callback:      callback,
 			}
 			select {
 			case <-m.ctx.Done():
 				return m.ctx.Err()
-			case m.tableTaskChan <- t:
+			case m.redoTaskChan <- t:
 			}
 		}
 	}
@@ -273,14 +435,33 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		tableID,
 		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
+		startTs,
 		targetTs,
 	)
 	m.tableSinks.Store(tableID, sinkWrapper)
-	initProgress := &progress{
+}
+
+// StartTable sets the table(TableSink) state to replicating.
+func (m *ManagerImpl) StartTable(tableID model.TableID) {
+	tableSink, ok := m.tableSinks.Load(tableID)
+	if !ok {
+		log.Panic("Table sink not found when starting table stats",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	tableSink.(*tableSinkWrapper).start()
+	startTs := tableSink.(*tableSinkWrapper).startTs
+	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+	})
+	if m.redoManager != nil {
+		m.redoProgressHeap.push(&progress{
+			tableID:           tableID,
+			nextLowerBoundPos: sorter.Position{StartTs: startTs - 1, CommitTs: startTs},
+		})
 	}
-	m.progressHeap.push(initProgress)
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.
@@ -294,14 +475,24 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
 	}
 	err := tableSink.(*tableSinkWrapper).close(m.ctx)
 	if err != nil {
-		if !cerror.Is(err, cerror.ErrTableProcessorStoppedSafely) {
-			return errors.Trace(err)
-		}
+		return errors.Trace(err)
 	}
+	cleanedBytes := m.memQuota.clean(tableID)
+	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("memory", cleanedBytes),
+	)
 	// NOTICE: It is safe to only remove the table sink from the map.
-	// Because if we found the table sink is not in the map, we will not add it back to the heap.
+	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SorterEngine. Because the SorterEngine also removes this table.
 	m.tableSinks.Delete(tableID)
+
+	if m.eventCache != nil {
+		m.eventCache.removeTable(tableID)
+	}
+
 	return nil
 }
 
@@ -339,6 +530,17 @@ func (m *ManagerImpl) Close() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		err := value.(*tableSinkWrapper).close(m.ctx)
+		if err != nil {
+			log.Error("Close table sink failed",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", key.(model.TableID)),
+				zap.Error(err))
+		}
+		return true
+	})
 	m.wg.Wait()
 	return nil
 }
