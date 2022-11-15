@@ -112,7 +112,7 @@ func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 				pEvent.MarkFinished()
 				continue
 			}
-			err := mounter.DecodeEventX(ctx, pEvent)
+			err := mounter.DecodeEvent(ctx, pEvent)
 			if err != nil {
 				return errors.Trace(err)
 			}

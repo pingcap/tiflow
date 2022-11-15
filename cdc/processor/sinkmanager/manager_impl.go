@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -95,6 +96,7 @@ func New(
 	changefeedInfo *model.ChangeFeedInfo,
 	redoManager redo.LogManager,
 	sortEngine engine.SortEngine,
+	mg entry.MounterGroup,
 	errChan chan error,
 	metricsTableSinkTotalRows prometheus.Counter,
 ) (Manager, error) {
@@ -133,15 +135,15 @@ func New(
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
 	}
 
-	m.startWorkers(changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
+	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 	return m, nil
 }
 
 // start all workers and report the error to the error channel.
-func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
+func (m *ManagerImpl) startWorkers(mg entry.MounterGroup, splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, m.sortEngine, m.memQuota,
+		w := newSinkWorker(m.changefeedID, mg, m.sortEngine, m.memQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
@@ -170,7 +172,7 @@ func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, m.sortEngine, m.memQuota,
+		w := newRedoWorker(m.changefeedID, mg, m.sortEngine, m.memQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
