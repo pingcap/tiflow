@@ -286,7 +286,6 @@ func groupRowsByType(
 			deleteRows = append(
 				deleteRows,
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
-			// update 事件需要特殊处理
 		} else if row.IsUpdate() {
 			if spiltUpdate {
 				log.Info("fizz split update event", zap.Any("row", row.StartTs))
@@ -323,14 +322,13 @@ func batchSingleTxnDmls(
 	values = append(values, value)
 
 	// handle update
+	// TODO: find a way to batch update dmls
 	if translateToInsert {
-		sql, value = sqlmodel.GenUpdateSQL(updateRows...)
-		sqls = append(sqls, sql)
-		values = append(values, value)
-	} else {
-		sql, value = sqlmodel.GenDeleteSQL(updateRows...)
-		sqls = append(sqls, sql)
-		values = append(values, value)
+		for _, row := range updateRows {
+			sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
 	}
 
 	// handle insert
@@ -404,7 +402,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		// Determine whether to use batch dml feature here.
-		if s.cfg.BatchDMLEnable && len(event.Event.Rows) >= batchDMLThreshold {
+		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > batchDMLThreshold {
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
