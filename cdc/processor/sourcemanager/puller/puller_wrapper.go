@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,67 +11,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipeline
+package puller
 
 import (
 	"context"
+	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
-	"golang.org/x/sync/errgroup"
 )
 
-type pullerNode struct {
-	tableName string // quoted schema and table, used in metircs only
-
-	plr        puller.Puller
-	tableID    model.TableID
-	startTs    model.Ts
+// Wrapper is a wrapper of puller used by source manager.
+type Wrapper struct {
 	changefeed model.ChangeFeedID
-	cancel     context.CancelFunc
-	wg         *errgroup.Group
+	tableID    model.TableID
+	tableName  string // quoted schema and table, used in metircs only
+	p          puller.Puller
+	startTs    model.Ts
+	// cancel is used to cancel the puller when remove or close the table.
+	cancel context.CancelFunc
+	// wg is used to wait the puller to exit.
+	wg *sync.WaitGroup
 }
 
-func newPullerNode(
-	tableID model.TableID,
-	startTs model.Ts,
-	tableName string,
+// NewPullerWrapper creates a new puller wrapper.
+func NewPullerWrapper(
 	changefeed model.ChangeFeedID,
-) *pullerNode {
-	return &pullerNode{
-		tableID:    tableID,
-		startTs:    startTs,
-		tableName:  tableName,
+	tableID model.TableID,
+	tableName string,
+	startTs model.Ts,
+) *Wrapper {
+	return &Wrapper{
 		changefeed: changefeed,
+		tableID:    tableID,
+		tableName:  tableName,
+		startTs:    startTs,
 	}
 }
 
-func (n *pullerNode) tableSpan() []regionspan.Span {
+// tableSpan returns the table span with the table ID.
+func (n *Wrapper) tableSpan() []regionspan.Span {
 	// start table puller
 	spans := make([]regionspan.Span, 0, 4)
 	spans = append(spans, regionspan.GetTableSpan(n.tableID))
 	return spans
 }
 
-func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
-	up *upstream.Upstream, wg *errgroup.Group,
-	sorter *sorterNode,
-) error {
-	n.wg = wg
+// Start the puller wrapper.
+// We use cdc context to put capture info and role into context.
+func (n *Wrapper) Start(
+	ctx cdccontext.Context,
+	up *upstream.Upstream,
+	eventSortEngine engine.SortEngine,
+	errChan chan<- error,
+) {
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	n.plr = puller.New(
+	n.p = puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,
@@ -85,24 +92,37 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		n.tableID,
 		n.tableName,
 	)
-	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))
-		return nil
-	})
-	n.wg.Go(func() error {
+	n.wg.Add(1)
+	go func() {
+		defer n.wg.Done()
+		err := n.p.Run(ctxC)
+		if err != nil {
+			errChan <- err
+		}
+	}()
+	n.wg.Add(1)
+	go func() {
+		defer n.wg.Done()
 		for {
 			select {
 			case <-ctxC.Done():
-				return nil
-			case rawKV := <-n.plr.Output():
+				return
+			case rawKV := <-n.p.Output():
 				if rawKV == nil {
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				sorter.handleRawEvent(ctx, pEvent)
+				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
+					errChan <- err
+				}
 			}
 		}
-	})
+	}()
 	n.cancel = cancel
-	return nil
+}
+
+// Close the puller wrapper.
+func (n *Wrapper) Close() {
+	n.cancel()
+	n.wg.Wait()
 }
