@@ -27,7 +27,7 @@ FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
-export PATH := $(CURDIR)/bin:$(path_to_add):$(PATH)
+export PATH := $(CURDIR)/bin:$(CURDIR)/tools/bin:$(path_to_add):$(PATH)
 
 SHELL := /usr/bin/env bash
 
@@ -147,7 +147,7 @@ storage_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
+unit_test: check_failpoint_ctl generate_mock go-generate generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -233,7 +233,7 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 integration_test_storage: check_third_party_binary
 	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
@@ -272,9 +272,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@./scripts/check-diff-line-width.sh
 endif
 
-generate-msgp-code: tools/bin/msgp
-	@echo "generate-msgp-code"
-	./scripts/generate-msgp-code.sh
+go-generate: ## Run go generate on all packages.
+go-generate: tools/bin/msgp tools/bin/stringer tools/bin/mockery
+	@echo "go generate"
+	@go generate ./...
 
 generate-protobuf: ## Generate code from protobuf files.
 generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster \
