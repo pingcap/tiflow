@@ -20,9 +20,9 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sorter"
-	"github.com/pingcap/tiflow/pkg/sorter/pebble/encoding"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,8 +93,8 @@ func TestIteratorWithTableFilter(t *testing.T) {
 		count := 0
 		for tableID := 0; tableID <= 9; tableID++ {
 			iter := iterTable(db, 1, model.TableID(tableID),
-				sorter.Position{CommitTs: x.lowerTs},
-				sorter.Position{CommitTs: x.upperTs}.Next())
+				engine.Position{CommitTs: x.lowerTs},
+				engine.Position{CommitTs: x.upperTs}.Next())
 			valid := iter.Valid()
 			for valid {
 				count += 1
