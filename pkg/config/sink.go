@@ -94,10 +94,14 @@ type SinkConfig struct {
 
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
-	Delimiter       string `toml:"delimiter" json:"delimiter"`
-	Quote           string `toml:"quote" json:"quote"`
-	NullString      string `toml:"null" json:"null"`
-	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
+	// delimiter between fields
+	Delimiter string `toml:"delimiter" json:"delimiter"`
+	// quoting character
+	Quote string `toml:"quote" json:"quote"`
+	// representation of null values
+	NullString string `toml:"null" json:"null"`
+	// whether to include commit ts
+	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
 }
 
 // DateSeparator specifies the date separator in storage destination path

@@ -747,15 +747,19 @@ var doc = `{
             "type": "object",
             "properties": {
                 "delimiter": {
+                    "description": "delimiter between fields",
                     "type": "string"
                 },
                 "include-commit-ts": {
+                    "description": "whether to include commit ts",
                     "type": "boolean"
                 },
                 "null": {
+                    "description": "representation of null values",
                     "type": "string"
                 },
                 "quote": {
+                    "description": "quoting character",
                     "type": "string"
                 }
             }
