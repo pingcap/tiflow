@@ -148,7 +148,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 	// TODO(dongmen): add a switch to control whether to use the batch dml mode
 	dmls := s.prepareDMLs()
-	log.Info("prepare DMLs", zap.Any("rows", s.rows),
+	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
 	start := time.Now()
@@ -206,12 +206,12 @@ func convert2RowChanges(
 	tableInfo *timodel.TableInfo,
 	changeType sqlmodel.RowChangeType) *sqlmodel.RowChange {
 
-	log.Info("fizz convert2RowChanges",
-		zap.Any("columns", row.Columns),
-		zap.Any("preColumns", row.PreColumns),
-		zap.Any("row", row),
-		zap.Any("tableInfo", tableInfo),
-		zap.Any("changeType", changeType))
+	//log.Info("fizz convert2RowChanges",
+	//	zap.Any("columns", row.Columns),
+	//	zap.Any("preColumns", row.PreColumns),
+	//	zap.Any("row", row),
+	//	zap.Any("tableInfo", tableInfo),
+	//	zap.Any("changeType", changeType))
 
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
@@ -252,7 +252,7 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
-		log.Info("fizz convert2RowChanges delete", zap.Any("preValues", preValues))
+		//log.Info("fizz convert2RowChanges delete", zap.Any("preValues", preValues))
 		res = sqlmodel.NewRowChange(
 			row.Table,
 			nil,
@@ -260,8 +260,8 @@ func convert2RowChanges(
 			nil,
 			tableInfo,
 			nil, nil)
-		log.Info("fizz not null index", zap.Any("index", res.UniqueNotNullIdx()))
-		log.Info("fizz convert2RowChanges delete", zap.Any("res", res))
+		//log.Info("fizz not null index", zap.Any("index", res.UniqueNotNullIdx()))
+		//log.Info("fizz convert2RowChanges delete", zap.Any("res", res))
 	}
 	return res
 }
@@ -298,7 +298,7 @@ func groupRowsByType(
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
 		} else if row.IsUpdate() {
 			if spiltUpdate {
-				log.Info("fizz split update event", zap.Any("row", row.StartTs))
+				//log.Info("fizz split update event", zap.Any("row", row.StartTs))
 				deleteRows = append(
 					deleteRows,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
@@ -321,20 +321,15 @@ func batchSingleTxnDmls(
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
 
-	log.Info("fizz batch single txn dmls",
-		zap.Stringer("table", event.Event.Rows[0].Table),
-		zap.Bool("translateIntoInsert", translateToInsert))
+	//log.Info("fizz batch single txn dmls",
+	//	zap.Stringer("table", event.Event.Rows[0].Table),
+	//	zap.Bool("translateIntoInsert", translateToInsert))
 
 	insertRows, updateRows, deleteRows := groupRowsByType(event, tableInfo, !translateToInsert)
 
 	sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
 	sqls = append(sqls, sql)
 	values = append(values, value)
-	// TODO: remove it after debug done.
-	for _, row := range deleteRows {
-		sq, vals := row.GenSQL(sqlmodel.DMLDelete)
-		log.Info("fizz delete sql", zap.String("sql", sq), zap.Any("vals", vals))
-	}
 
 	// handle insert
 	if translateToInsert {
@@ -409,10 +404,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// A row can be translated in to INSERT, when it was committed after
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
-		log.Info("fizz prepare dmls",
-			zap.Bool("translateToInsert", translateToInsert),
-			zap.Any("row commitTs", firstRow.CommitTs),
-			zap.Any("row replicatingTs", firstRow.ReplicatingTs))
+		//log.Info("fizz prepare dmls",
+		//	zap.Bool("translateToInsert", translateToInsert),
+		//	zap.Any("row commitTs", firstRow.CommitTs),
+		//	zap.Any("row replicatingTs", firstRow.ReplicatingTs))
 
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 
@@ -430,7 +425,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			if hasHandleKey(tableColumns) {
 				// TODO(dongmen): we can use a better way to get table info.
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
-				log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
+				//log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
 				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
