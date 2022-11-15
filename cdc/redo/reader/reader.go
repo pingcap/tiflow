@@ -33,7 +33,7 @@ import (
 
 // RedoLogReader is a reader abstraction for redo log storage layer
 //
-//go:generate mockery --name=RedoLogReader --inpackage
+//go:generate mockery --name=RedoLogReader --inpackage --quiet
 type RedoLogReader interface {
 	io.Closer
 
