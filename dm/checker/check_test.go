@@ -51,6 +51,7 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.ShardAutoIncrementIDChecking,
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
+		config.TargetPrivilegeChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {
