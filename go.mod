@@ -20,7 +20,6 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
-	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.13.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/getkin/kin-openapi v0.80.0
@@ -57,7 +56,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20220729040631-518f63d66278
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20221026112947-f8d61344b172
-	github.com/pingcap/log v1.1.1-0.20221110025148-ca232912c9f3
+	github.com/pingcap/log v1.1.1-0.20221110065318-21a4942860b3
 	github.com/pingcap/tidb v1.1.0-beta.0.20221101122759-863d35290cc4
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20221101122759-863d35290cc4

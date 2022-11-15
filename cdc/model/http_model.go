@@ -190,16 +190,8 @@ type ProcessorCommonInfo struct {
 
 // ProcessorDetail holds the detail info of a processor
 type ProcessorDetail struct {
-	// The maximum event CommitTs that has been synchronized.
-	CheckPointTs uint64 `json:"checkpoint_ts"`
-	// The event that satisfies CommitTs <= ResolvedTs can be synchronized.
-	ResolvedTs uint64 `json:"resolved_ts"`
-	// all table ids that this processor are replicating
+	// All table ids that this processor are replicating.
 	Tables []int64 `json:"table_ids"`
-	// The count of events that have been replicated.
-	Count uint64 `json:"count"`
-	// Error code when error happens
-	Error *RunningError `json:"error"`
 }
 
 // CaptureTaskStatus holds TaskStatus of a capture

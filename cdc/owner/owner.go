@@ -545,23 +545,6 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return errors.Trace(err)
 		}
 		query.Data = ret
-	case QueryTaskPositions:
-		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
-		if !ok {
-			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
-		}
-
-		provider := cfReactor.GetInfoProvider()
-		if provider == nil {
-			// The scheduler has not been initialized yet.
-			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
-		}
-
-		ret, err := provider.GetTaskPositions()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		query.Data = ret
 	case QueryProcessors:
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
@@ -571,11 +554,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 				continue
 			}
 
-			positions, err := provider.GetTaskPositions()
+			statuses, err := provider.GetTaskStatuses()
 			if err != nil {
 				return errors.Trace(err)
 			}
-			for captureID := range positions {
+			for captureID := range statuses {
 				ret = append(ret, &model.ProcInfoSnap{
 					CfID:      cfID,
 					CaptureID: captureID,

@@ -26,6 +26,9 @@ type writeSuccessCallback func(lastWrittenPos sorter.Position)
 // Used to get an upper bound.
 type upperBoundGetter func() sorter.Position
 
+// Used to abort the task processing of the table.
+type isCanceled func() bool
+
 // sinkTask is a task for a table sink.
 // It only considers how to control the table sink.
 type sinkTask struct {
@@ -39,6 +42,7 @@ type sinkTask struct {
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
+	isCanceled    isCanceled
 }
 
 type sinkWorker interface {

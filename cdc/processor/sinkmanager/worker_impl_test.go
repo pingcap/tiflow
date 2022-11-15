@@ -182,6 +182,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
 		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 3)
@@ -296,6 +297,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
 		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	// Abort the task when no memory quota and blocked.
 	w.(*sinkWorkerImpl).memQuota.close()
@@ -422,6 +424,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
 		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
@@ -547,6 +550,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
 		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
@@ -671,6 +675,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
 		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
