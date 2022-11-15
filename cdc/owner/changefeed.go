@@ -41,7 +41,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
 	ctx cdcContext.Context, startTs uint64,
@@ -52,15 +52,9 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableSchedulerV3 {
-		ret, err = scheduler.NewSchedulerV3(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	} else {
-		ret, err = scheduler.NewScheduler(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	}
+	ret, err = scheduler.NewScheduler(
+		ctx, captureID, changeFeedID, startTs,
+		messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	return ret, errors.Trace(err)
 }
 
