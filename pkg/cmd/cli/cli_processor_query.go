@@ -82,12 +82,6 @@ func (o *queryProcessorOptions) runCliWithAPIClient(ctx context.Context, cmd *co
 			Tables: tables,
 			// Operations, AdminJobType and ModRevision are vacant
 		},
-		Position: &model.TaskPosition{
-			CheckPointTs: processor.CheckPointTs,
-			ResolvedTs:   processor.ResolvedTs,
-			Count:        processor.Count,
-			Error:        processor.Error,
-		},
 	}
 
 	return util.JSONPrint(cmd, meta)
