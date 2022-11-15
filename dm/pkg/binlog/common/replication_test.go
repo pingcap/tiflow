@@ -14,12 +14,14 @@
 package common
 
 import (
+	"testing"
+
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSetDefaultReplicationCfg(t *testing.T) {
+	t.Parallel()
 	syncCfg := replication.BinlogSyncerConfig{}
 
 	retryCnt := 5

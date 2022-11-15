@@ -14,8 +14,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestStageString(t *testing.T) {
