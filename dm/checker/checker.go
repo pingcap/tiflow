@@ -330,6 +330,10 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
+	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker())
+	}
+
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
 }

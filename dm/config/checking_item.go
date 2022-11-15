@@ -36,6 +36,10 @@ const (
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
 	ConnNumberChecking           = "conn_number"
+	// lighting prechecks
+	LightningEmptyRegionChecking        = "lightning_empty_region"
+	LightningRegionDistributionChecking = "lightning_region_distribution"
+	LightningDownstreamVersionChecking  = "lightning_downstream_version"
 )
 
 // AllCheckingItems contains all checking items.
@@ -54,6 +58,10 @@ var AllCheckingItems = map[string]string{
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
 	ConnNumberChecking:           "connection number checking item",
+	// lightning prechecks
+	LightningEmptyRegionChecking:        "lightning empty region checking item",
+	LightningRegionDistributionChecking: "lightning region distribution checking item",
+	LightningDownstreamVersionChecking:  "lightning downstream version checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.
