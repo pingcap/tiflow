@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -38,7 +37,7 @@ import (
 
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 //
-//go:generate mockery --name=RedoLogWriter --inpackage
+//go:generate mockery --name=RedoLogWriter --inpackage --quiet
 type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file.
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error
@@ -62,12 +61,6 @@ type RedoLogWriter interface {
 
 	// Close is used to close the writer.
 	Close() error
-}
-
-var redoLogPool = sync.Pool{
-	New: func() interface{} {
-		return &model.RedoLog{}
-	},
 }
 
 // LogWriterConfig is the configuration used by a Writer.
@@ -260,10 +253,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 			continue
 		}
 
-		rl := redoLogPool.Get().(*model.RedoLog)
-		rl.RedoRow = r
-		rl.RedoDDL = nil
-		rl.Type = model.RedoLogTypeRow
+		rl := &model.RedoLog{RedoRow: r, Type: model.RedoLogTypeRow}
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
@@ -275,8 +265,6 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 			l.metricTotalRowsCount.Add(float64(i))
 			return err
 		}
-
-		redoLogPool.Put(rl)
 	}
 	l.metricTotalRowsCount.Add(float64(len(rows)))
 	return nil
@@ -297,12 +285,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 		return nil
 	}
 
-	rl := redoLogPool.Get().(*model.RedoLog)
-	defer redoLogPool.Put(rl)
-
-	rl.RedoDDL = ddl
-	rl.RedoRow = nil
-	rl.Type = model.RedoLogTypeDDL
+	rl := &model.RedoLog{RedoDDL: ddl, Type: model.RedoLogTypeDDL}
 	data, err := rl.MarshalMsg(nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)

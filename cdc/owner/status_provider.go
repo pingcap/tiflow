@@ -39,9 +39,6 @@ type StatusProvider interface {
 	// GetAllTaskStatuses returns the task statuses for the specified changefeed.
 	GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error)
 
-	// GetTaskPositions returns the task positions for the specified changefeed.
-	GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error)
-
 	// GetProcessors returns the statuses of all processors
 	GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error)
 
@@ -62,8 +59,6 @@ const (
 	QueryAllChangeFeedInfo
 	// QueryAllTaskStatuses is the type of query all task statuses.
 	QueryAllTaskStatuses
-	// QueryTaskPositions is the type of query task positions.
-	QueryTaskPositions
 	// QueryProcessors is the type of query processors.
 	QueryProcessors
 	// QueryCaptures is the type of query captures info.
@@ -142,17 +137,6 @@ func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeed
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.CaptureID]*model.TaskStatus), nil
-}
-
-func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	query := &Query{
-		Tp:           QueryTaskPositions,
-		ChangeFeedID: changefeedID,
-	}
-	if err := p.sendQueryToOwner(ctx, query); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return query.Data.(map[model.CaptureID]*model.TaskPosition), nil
 }
 
 func (p *ownerStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
