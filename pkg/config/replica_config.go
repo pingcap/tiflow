@@ -51,10 +51,12 @@ var defaultReplicaConfig = &ReplicaConfig{
 		CSVConfig: &CSVConfig{
 			Quote:      string(DoubleQuoteChar),
 			Delimiter:  Comma,
-			Terminator: string(LF),
 			NullString: NULL,
 		},
-		EncoderConcurrency: 16,
+		EncoderConcurrency:       16,
+		Terminator:               CRLF,
+		DateSeparator:            DateSeparatorNone.String(),
+		EnablePartitionSeparator: false,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
