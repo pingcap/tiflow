@@ -1,3 +1,4 @@
+adjust_gtid
 check_task
 validator_basic
 validator_checkpoint
@@ -8,4 +9,3 @@ sequence_sharding_optimistic
 sequence_sharding_removemeta
 gtid
 only_dml
-adjust_gtid

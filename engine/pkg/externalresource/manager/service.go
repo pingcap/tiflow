@@ -159,7 +159,7 @@ func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.With(
+	logger := log.L().With(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 

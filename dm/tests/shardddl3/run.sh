@@ -126,7 +126,7 @@ function DM_079_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Unsupported drop primary key when the table's pkIsHandle is true" 1
+		"Unsupported drop primary key" 1
 }
 
 function DM_079() {
