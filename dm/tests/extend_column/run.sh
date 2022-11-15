@@ -10,15 +10,11 @@ tb="t"
 yb="y"
 
 function run_case() {
-	cleanup_data extend_column1
-	cleanup_data extend_column2
+	cleanup_data extend_column extend_column1 extend_column2
 	# table `y` has extend and generate column
 	# table `t` has extend and different instance
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-
-	# create table in tidb
-	run_sql_file $cur/data/tidb.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -37,6 +33,21 @@ function run_case() {
 	# start DM task in all mode
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/import-mode-placeholder/$1/g" $WORK_DIR/dm-task.yaml
+
+	run_sql_tidb "create database extend_column;"
+	run_sql_tidb "create table extend_column.t (c1 int primary key, c2 int, c3 int);"
+
+	# 4 errors for each upstream table
+	# 1 warnings: MySQL 8.0
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
+		"does not exist in downstream table" 2 \
+		"must contain extended columns" 2 \
+		'"severity": "fail"' 4 \
+		'"severity": "warn"' 1
+
+	# create table in tidb
+	run_sql_file $cur/data/tidb.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
 	# check load data
@@ -106,7 +117,6 @@ function run() {
 	done
 }
 
-# also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
 
