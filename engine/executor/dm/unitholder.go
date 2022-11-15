@@ -235,6 +235,11 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 // Status implement UnitHolder.Status. Each invocation will try to query upstream
 // once and calculate the status.
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
+	// nil sourceStatus is supported
+	return u.unit.Status(u.getSourceStatus())
+}
+
+func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) interface{} {
 	sourceStatus, err := binlog.GetSourceStatus(
 		tcontext.NewContext(ctx, u.logger),
 		u.upstreamDB,
@@ -243,22 +248,28 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 	if err != nil {
 		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
-	u.sourceStatusMu.Lock()
-	u.sourceStatus = sourceStatus
-	u.sourceStatusMu.Unlock()
+	u.setSourceStatus(sourceStatus)
+	return nil
+}
 
-	// nil sourceStatus is supported
-	return u.unit.Status(sourceStatus)
+func (u *unitHolderImpl) getSourceStatus() *binlog.SourceStatus {
+	u.sourceStatusMu.RLock()
+	defer u.sourceStatusMu.RUnlock()
+	return u.sourceStatus
+}
+
+func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
+	u.sourceStatusMu.Lock()
+	defer u.sourceStatusMu.Unlock()
+	u.sourceStatus = in
 }
 
 // CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
 func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
-	u.sourceStatusMu.RLock()
-	sourceStatus := u.sourceStatus
-	u.sourceStatusMu.RUnlock()
+	sourceStatus := u.getSourceStatus()
 
 	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
-		u.Status(ctx)
+		u.updateSourceStatus(ctx)
 	}
 }
 
