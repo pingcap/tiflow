@@ -186,7 +186,6 @@ func TestGetEvent(t *testing.T) {
 	startPos.Pos = latestPos - queryEv.Header.EventSize
 	r = NewFileReader(&FileReaderConfig{})
 	require.NotNil(t, r)
-	require.NotNil(t, r)
 	require.Nil(t, r.StartSyncByPos(startPos))
 	e, err = r.GetEvent(timeoutCtx)
 	require.Nil(t, err)
@@ -283,5 +282,6 @@ func TestWithChannelBuffer(t *testing.T) {
 	require.Equal(t, common.StagePrepared.String(), frStatus.Stage)
 	require.Equal(t, readOffset, frStatus.ReadOffset)
 	require.Equal(t, formatDescEv.Header.LogPos, frStatus.SendOffset) // already get formatDescEv
+
 	require.Nil(t, r.Close())
 }

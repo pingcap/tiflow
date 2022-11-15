@@ -43,7 +43,6 @@ func TestGenerateForMySQL(t *testing.T) {
 	latestGTID, err := gtid.ParserGTID(flavor, latestGTIDStr)
 	require.Nil(t, err)
 	require.NotNil(t, latestGTID)
-	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
 	require.NotNil(t, err)
 

@@ -44,7 +44,6 @@ func TestGenDDLEvent(t *testing.T) {
 	query := fmt.Sprintf("ALTER TABLE `%s`.`%s` CHANGE COLUMN `c2` `c2` decimal(10,3)", schema, table)
 	result, err := GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query, true, false, 0)
 	require.Nil(t, err)
-	//c.Assert(result.Events, HasLen, 2)
 	require.Len(t, result.Events, 2)
 	require.True(t, bytes.Contains(result.Data, []byte("ALTER TABLE")))
 	require.True(t, bytes.Contains(result.Data, []byte(table)))

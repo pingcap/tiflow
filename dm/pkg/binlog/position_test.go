@@ -65,7 +65,6 @@ func TestPositionFromStr(t *testing.T) {
 		} else {
 			require.Nil(t, err)
 		}
-		//c.Assert(pos, DeepEquals, cs.pos)
 		require.Equal(t, cs.pos, pos)
 	}
 }

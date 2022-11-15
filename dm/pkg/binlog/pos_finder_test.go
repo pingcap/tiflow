@@ -145,7 +145,6 @@ func TestMySQL56NoGTID(t *testing.T) {
 	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000002"), data, 0o644)
 	file3Events, data := genBinlogFile(generator, beforeTime.Add(10*time.Second), "mysql-bin.000004")
 	require.Equal(t, 11, len(file3Events))
-
 	_ = os.WriteFile(path.Join(relayDir, "mysql-bin.000003"), data, 0o644)
 
 	tcctx := tcontext.NewContext(context.Background(), log.L())
@@ -171,7 +170,6 @@ func TestMySQL56NoGTID(t *testing.T) {
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
 		location, posType, err := finder.FindByTimestamp(int64(file3Events[0].Header.Timestamp))
 		require.Nil(t, err)
-
 		require.Equal(t, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart}, location.Position)
 		require.Equal(t, "", location.GTIDSetStr())
 		require.Equal(t, InRangeBinlogPos, posType)
@@ -188,7 +186,6 @@ func TestMySQL56NoGTID(t *testing.T) {
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, false, flavor, relayDir)
 		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
-
 		require.Nil(t, err)
 		require.Equal(t, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart}, location.Position)
 		require.Equal(t, "", location.GTIDSetStr())
@@ -417,7 +414,6 @@ func TestMariadbGTID(t *testing.T) {
 		targetEventStart := file2Events[len(file2Events)-1].Header.LogPos
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
 		location, posType, err := finder.FindByTimestamp(int64(file3Events[0].Header.Timestamp))
-
 		require.Nil(t, err)
 		require.Equal(t, mysql.Position{Name: "mysql-bin.000002", Pos: targetEventStart}, location.Position)
 		require.Equal(t, "1-1-7", location.GTIDSetStr())
@@ -440,7 +436,6 @@ func TestMariadbGTID(t *testing.T) {
 		}
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
 		location, posType, err := finder.FindByTimestamp(int64(targetEvent.Header.Timestamp))
-
 		require.Nil(t, err)
 		require.Equal(t, mysql.Position{Name: "mysql-bin.000003", Pos: targetEventStart}, location.Position)
 		require.Equal(t, "1-1-8", location.GTIDSetStr())
@@ -449,7 +444,6 @@ func TestMariadbGTID(t *testing.T) {
 	{
 		finder := NewLocalBinlogPosFinder(tcctx, true, flavor, relayDir)
 		location, posType, err := finder.FindByTimestamp(beforeTime.Add(+time.Minute).Unix())
-
 		require.Nil(t, err)
 		require.Nil(t, location)
 		require.Equal(t, AboveUpperBoundBinlogPos, posType)

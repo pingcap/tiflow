@@ -123,7 +123,6 @@ func TestGenCommonGTIDEvent(t *testing.T) {
 	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	require.NotNil(t, err)
-	require.NotNil(t, err)
 	require.Nil(t, gtidEv)
 
 	// interval > 1, invalid
@@ -194,7 +193,6 @@ func TestGenCommonGTIDEvent(t *testing.T) {
 	require.Equal(t, uint32(1), gtidEvBody2.GTID.DomainID)
 	require.Equal(t, serverID, gtidEvBody2.GTID.ServerID)
 	require.Equal(t, uint64(3), gtidEvBody2.GTID.SequenceNumber)
-	require.Equal(t, uint64(3), gtidEvBody2.GTID.SequenceNumber)
 }
 
 func TestGTIDIncrease(t *testing.T) {
@@ -223,5 +221,4 @@ func TestGTIDIncrease(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, gSetOut)
 	require.Equal(t, "1-2-4", gSetOut.String())
-
 }
