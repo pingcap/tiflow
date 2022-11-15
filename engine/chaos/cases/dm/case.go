@@ -184,7 +184,9 @@ func (c *Case) genFullData() error {
 	log.L().Info("start generate full data", zap.String("name", c.name), zap.String("job_id", c.jobID))
 	for source, generators := range c.generators {
 		for table, generator := range generators {
-			if _, err := c.sources[source].ExecuteSQLs("CREATE DATABASE IF NOT EXISTS "+c.name+" CHARSET latin1", "USE "+c.name); err != nil {
+			if _, err := c.sources[source].ExecuteSQLs(
+				"CREATE DATABASE IF NOT EXISTS "+c.name+" CHARSET utf8mb4 COLLATE utf8mb4_general_ci",
+				"USE "+c.name); err != nil {
 				return err
 			}
 			if _, err := c.sources[source].ExecuteSQLs(generator.GenCreateTable()); err != nil {

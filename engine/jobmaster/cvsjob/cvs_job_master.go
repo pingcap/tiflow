@@ -162,7 +162,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
 		if workerInfo.needCreate.Load() {
-			workerID, err := jm.CreateWorker(frameModel.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
+			workerID, err := jm.CreateWorker(frameModel.CvsTask,
+				getTaskConfig(jm.jobStatus, idx), framework.CreateWorkerWithCost(10))
 			if err != nil {
 				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {

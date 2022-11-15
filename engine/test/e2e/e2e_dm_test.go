@@ -89,30 +89,38 @@ func TestDMJob(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// test metrics for syncer
-	jobIDs := map[string]struct{}{}
 	metricsURLs := []string{
 		"http://127.0.0.1:11241/metrics",
 		"http://127.0.0.1:11242/metrics",
 		"http://127.0.0.1:11243/metrics",
 	}
-	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
-	ctx := context.Background()
-	cli, err := httputil.NewClient(nil)
-	require.NoError(t, err)
-	for _, metricsURL := range metricsURLs {
-		resp, err := cli.Get(ctx, metricsURL)
+
+	testMetrics := func(re *regexp.Regexp) {
+		jobIDs := map[string]struct{}{}
+
+		ctx := context.Background()
+		cli, err := httputil.NewClient(nil)
 		require.NoError(t, err)
-		content, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		matched := re.FindAllSubmatch(content, -1)
-		for _, m := range matched {
-			jobIDs[string(m[1])] = struct{}{}
+		for _, metricsURL := range metricsURLs {
+			resp, err := cli.Get(ctx, metricsURL)
+			require.NoError(t, err)
+			content, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			matched := re.FindAllSubmatch(content, -1)
+			for _, m := range matched {
+				jobIDs[string(m[1])] = struct{}{}
+			}
+			require.NoError(t, resp.Body.Close())
 		}
-		require.NoError(t, resp.Body.Close())
+		require.Equal(t, 2, len(jobIDs))
 	}
 
-	require.Equal(t, 2, len(jobIDs))
+	// test metrics for syncer
+	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
+	testMetrics(re)
+	// test metrics for dm_worker
+	re = regexp.MustCompile(`dm_worker.*\{job_id="(.{36})"`)
+	testMetrics(re)
 }
 
 // testSimpleAllModeTask extracts the common logic for a DM "all" mode task,

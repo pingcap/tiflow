@@ -77,11 +77,14 @@ func (o *incompatibilityOption) String() string {
 type TablesChecker struct {
 	upstreamDBs  map[string]*sql.DB
 	downstreamDB *sql.DB
-	tableMap     map[string]map[filter.Table][]filter.Table // sourceID -> downstream table -> upstream tables
-	reMu         sync.Mutex
-	inCh         chan *checkItem
-	optCh        chan *incompatibilityOption
-	dumpThreads  int
+	// sourceID -> downstream table -> upstream tables
+	tableMap map[string]map[filter.Table][]filter.Table
+	// downstream table -> extended column names
+	extendedColumnPerTable map[filter.Table][]string
+	reMu                   sync.Mutex
+	inCh                   chan *checkItem
+	optCh                  chan *incompatibilityOption
+	dumpThreads            int
 	// a simple cache for downstream table structure
 	// filter.Table -> *ast.CreateTableStmt
 	// if the value is nil, it means the downstream table is not created yet
@@ -93,16 +96,18 @@ func NewTablesChecker(
 	upstreamDBs map[string]*sql.DB,
 	downstreamDB *sql.DB,
 	tableMap map[string]map[filter.Table][]filter.Table,
+	extendedColumnPerTable map[filter.Table][]string,
 	dumpThreads int,
 ) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
 	c := &TablesChecker{
-		upstreamDBs:  upstreamDBs,
-		downstreamDB: downstreamDB,
-		tableMap:     tableMap,
-		dumpThreads:  dumpThreads,
+		upstreamDBs:            upstreamDBs,
+		downstreamDB:           downstreamDB,
+		tableMap:               tableMap,
+		extendedColumnPerTable: extendedColumnPerTable,
+		dumpThreads:            dumpThreads,
 	}
 	log.L().Logger.Debug("check table structure", zap.Int("channel pool size", dumpThreads))
 	c.inCh = make(chan *checkItem, dumpThreads)
@@ -268,7 +273,15 @@ func (c *TablesChecker) startWorker(ctx context.Context) error {
 				c.downstreamTables.Store(checkItem.downstreamTable, downstreamStmt)
 			}
 
-			opts := c.checkAST(upstreamStmt, downstreamStmt.(*ast.CreateTableStmt))
+			downstreamTable := filter.Table{
+				Schema: checkItem.downstreamTable.Schema,
+				Name:   checkItem.downstreamTable.Name,
+			}
+			opts := c.checkAST(
+				upstreamStmt,
+				downstreamStmt.(*ast.CreateTableStmt),
+				c.extendedColumnPerTable[downstreamTable],
+			)
 			for _, opt := range opts {
 				opt.tableID = table.String()
 				c.optCh <- opt
@@ -278,7 +291,11 @@ func (c *TablesChecker) startWorker(ctx context.Context) error {
 	}
 }
 
-func (c *TablesChecker) checkAST(upstreamStmt *ast.CreateTableStmt, downstreamStmt *ast.CreateTableStmt) []*incompatibilityOption {
+func (c *TablesChecker) checkAST(
+	upstreamStmt *ast.CreateTableStmt,
+	downstreamStmt *ast.CreateTableStmt,
+	extendedCols []string,
+) []*incompatibilityOption {
 	var options []*incompatibilityOption
 
 	// check columns
@@ -312,10 +329,17 @@ func (c *TablesChecker) checkAST(upstreamStmt *ast.CreateTableStmt, downstreamSt
 	}
 
 	if downstreamStmt == nil {
+		if len(extendedCols) > 0 {
+			options = append(options, &incompatibilityOption{
+				state:       StateFailure,
+				instruction: "extended column feature needs the table to be created with extended columns before replication",
+				errMessage:  fmt.Sprintf("upstream table %s who has extended columns %v does not exist in downstream table", upstreamStmt.Table.Name, extendedCols),
+			})
+		}
 		return options
 	}
 
-	options = append(options, c.checkTableStructurePair(upstreamStmt, downstreamStmt)...)
+	options = append(options, c.checkTableStructurePair(upstreamStmt, downstreamStmt, extendedCols)...)
 	return options
 }
 
@@ -343,7 +367,11 @@ func (c *TablesChecker) checkUnique(cst *ast.Constraint) bool {
 	return false
 }
 
-func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.CreateTableStmt) []*incompatibilityOption {
+func (c *TablesChecker) checkTableStructurePair(
+	upstream *ast.CreateTableStmt,
+	downstream *ast.CreateTableStmt,
+	extendedCols []string,
+) []*incompatibilityOption {
 	//nolint: prealloc
 	var options []*incompatibilityOption
 
@@ -405,13 +433,42 @@ func (c *TablesChecker) checkTableStructurePair(upstream, downstream *ast.Create
 	// check columns
 	upstreamCols := getColumnsAndIgnorable(upstream)
 	downstreamCols := getColumnsAndIgnorable(downstream)
-	// TODO: handle extended column
 	for col := range upstreamCols {
 		if _, ok := downstreamCols[col]; ok {
 			delete(upstreamCols, col)
 			delete(downstreamCols, col)
 		}
 	}
+
+	upstreamDupCols := make([]string, 0, len(extendedCols))
+	downstreamMissingCols := make([]string, 0, len(extendedCols))
+	for _, col := range extendedCols {
+		if _, ok := upstreamCols[col]; ok {
+			upstreamDupCols = append(upstreamDupCols, col)
+		}
+		if _, ok := downstreamCols[col]; !ok {
+			downstreamMissingCols = append(downstreamMissingCols, col)
+		}
+		delete(upstreamCols, col)
+	}
+	if len(upstreamDupCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state:       StateFailure,
+			instruction: "values of extended columns will be automatically filled by DM, please remove these columns or change configuration",
+			errMessage:  fmt.Sprintf("upstream table must not contain extended column %v", upstreamDupCols),
+		})
+	}
+	if len(downstreamMissingCols) > 0 {
+		options = append(options, &incompatibilityOption{
+			state:       StateFailure,
+			instruction: "please manually add extended column to downstream table",
+			errMessage:  fmt.Sprintf("downstream table must contain extended columns %v", downstreamMissingCols),
+		})
+	}
+	if len(upstreamDupCols) > 0 || len(downstreamMissingCols) > 0 {
+		return options
+	}
+
 	if len(upstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
 			state: StateWarning,

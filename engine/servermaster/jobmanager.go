@@ -300,7 +300,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
-	workerID, err := jm.BaseMaster.CreateWorkerV2(
+	workerID, err := jm.BaseMaster.CreateWorker(
 		meta.Type, meta,
 		framework.CreateWorkerWithCost(defaultJobMasterCost),
 		framework.CreateWorkerWithSelectors(selectors...))
@@ -618,7 +618,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 				return "", errors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
 			return jm.BaseMaster.CreateWorker(
-				job.Type, job, defaultJobMasterCost)
+				job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 		})
 	if _, err = filterQuotaError(err); err != nil {
 		return err
@@ -645,7 +645,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 		err = jm.JobFsm.IterWaitAckJobs(
 			func(job *frameModel.MasterMeta) (string, error) {
 				return jm.BaseMaster.CreateWorker(
-					job.Type, job, defaultJobMasterCost)
+					job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 			})
 		exceedQuota, err := filterQuotaError(err)
 		if err != nil {
