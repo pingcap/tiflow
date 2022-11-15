@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -112,7 +111,7 @@ func (t *tableSinkWrapper) close(ctx context.Context) error {
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
-	return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	return nil
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.

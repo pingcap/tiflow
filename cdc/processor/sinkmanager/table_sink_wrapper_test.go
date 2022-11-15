@@ -17,12 +17,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +68,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	require.ErrorIs(t, cerror.ErrTableProcessorStoppedSafely, errors.Cause(wrapper.close(context.Background())))
+	require.Nil(t, wrapper.close(context.Background()))
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 

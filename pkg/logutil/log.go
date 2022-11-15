@@ -300,5 +300,5 @@ func ShortError(err error) zap.Field {
 
 // WithComponent return a logger with specified component scope
 func WithComponent(component string) *zap.Logger {
-	return log.With(zap.String("component", component))
+	return log.L().With(zap.String("component", component))
 }
