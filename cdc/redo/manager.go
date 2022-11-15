@@ -106,7 +106,7 @@ type LogManager interface {
 	// Min resolvedTs for all tables. If there is no tables, return math.MaxInt64.
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
-		rows ...*model.RowChangedEvent) error
+		releaseRowsMemory func(), rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	// Update checkpoint so that it can GC stale files.
 	UpdateCheckpointTs(checkpointTs model.Ts)
@@ -125,6 +125,9 @@ type cacheEvents struct {
 	rows       []*model.RowChangedEvent
 	resolvedTs model.Ts
 	eventType  model.MessageType
+
+	// releaseMemory is used to track memory usage of the events.
+	releaseMemory func()
 }
 
 type statefulRts struct {
@@ -337,6 +340,7 @@ func (m *ManagerImpl) Enabled() bool {
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
+	releaseRowsMemory func(),
 	rows ...*model.RowChangedEvent,
 ) error {
 	return m.withLock(func(m *ManagerImpl) error {
@@ -344,9 +348,10 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case m.logBuffer.In() <- cacheEvents{
-			tableID:   tableID,
-			rows:      rows,
-			eventType: model.MessageTypeRow,
+			tableID:       tableID,
+			rows:          rows,
+			releaseMemory: releaseRowsMemory,
+			eventType:     model.MessageTypeRow,
 		}:
 		}
 		return nil
@@ -622,6 +627,9 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 					logs = append(logs, RowToRedo(row))
 				}
 				err = m.writer.WriteLog(ctx, cache.tableID, logs)
+				if cache.releaseMemory != nil {
+					cache.releaseMemory()
+				}
 				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
 			case model.MessageTypeResolved:
 				m.onResolvedTsMsg(cache.tableID, cache.resolvedTs)

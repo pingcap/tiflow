@@ -1311,6 +1311,11 @@ error = '''
 failed to decode etcd key: %s
 '''
 
+["DFLOW:ErrDeserializeConfig"]
+error = '''
+deserialize config failed
+'''
+
 ["DFLOW:ErrDispatchTaskRequestIDNotFound"]
 error = '''
 dispatch task request id %s not found

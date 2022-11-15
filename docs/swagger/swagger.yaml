@@ -1,17 +1,17 @@
 definitions:
   config.CSVConfig:
     properties:
-      date-separator:
-        type: string
       delimiter:
+        description: delimiter between fields
         type: string
       include-commit-ts:
+        description: whether to include commit ts
         type: boolean
       "null":
+        description: representation of null values
         type: string
       quote:
-        type: string
-      terminator:
+        description: quoting character
         type: string
     type: object
   config.ColumnSelector:
@@ -50,15 +50,21 @@ definitions:
         type: array
       csv:
         $ref: '#/definitions/config.CSVConfig'
+      date-separator:
+        type: string
       dispatchers:
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
+      enable-partition-separator:
+        type: boolean
       encoder-concurrency:
         type: integer
       protocol:
         type: string
       schema-registry:
+        type: string
+      terminator:
         type: string
       transaction-atomicity:
         type: string
@@ -199,20 +205,7 @@ definitions:
     type: object
   model.ProcessorDetail:
     properties:
-      checkpoint_ts:
-        description: The maximum event CommitTs that has been synchronized.
-        type: integer
-      count:
-        description: The count of events that have been replicated.
-        type: integer
-      error:
-        $ref: '#/definitions/model.RunningError'
-        description: Error code when error happens
-      resolved_ts:
-        description: The event that satisfies CommitTs <= ResolvedTs can be synchronized.
-        type: integer
       table_ids:
-        description: all table ids that this processor are replicating
         items:
           type: integer
         type: array

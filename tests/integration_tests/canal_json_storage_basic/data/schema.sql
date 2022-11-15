@@ -33,10 +33,32 @@ CREATE TABLE multi_data_type
     t_datetime           DATETIME,
     t_timestamp          TIMESTAMP NULL,
     t_time               TIME,
-    t_year               YEAR,
+--  t_year               YEAR,
     t_enum               ENUM ('enum1', 'enum2', 'enum3'),
     t_set                SET ('a', 'b', 'c'),
-    t_bit                BIT(64),
+--  t_bit                BIT(64),
     t_json               JSON,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE multi_charset (
+	id INT,
+	name varchar(128) CHARACTER SET gbk,
+	country char(32) CHARACTER SET gbk,
+	city varchar(64),
+	description text CHARACTER SET gbk,
+	image tinyblob,
+	PRIMARY KEY (id)
+) ENGINE = InnoDB CHARSET = utf8mb4;
+
+CREATE TABLE binary_columns
+(
+    id                   INT AUTO_INCREMENT,
+    c_binary             binary(255),
+    c_varbinary          varbinary(255),
+    t_tinyblob           TINYBLOB,
+    t_blob               BLOB,
+    t_mediumblob         MEDIUMBLOB,
+    t_longblob           LONGBLOB,
     PRIMARY KEY (id)
 );
