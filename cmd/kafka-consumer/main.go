@@ -508,7 +508,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		case config.ProtocolOpen, config.ProtocolDefault:
 			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
-			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension)
+			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
 		default:
 			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 		}
