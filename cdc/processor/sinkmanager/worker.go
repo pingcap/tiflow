@@ -23,30 +23,44 @@ import (
 // Used to record the progress of the table.
 type writeSuccessCallback func(lastWrittenPos sorter.Position)
 
+// Used to get an upper bound.
+type upperBoundGetter func() sorter.Position
+
 // Used to abort the task processing of the table.
 type isCanceled func() bool
 
-// Used to get the upper bound of the table task.
-type tableTaskUpperBoundGetter func() sorter.Position
-
-// tableSinkTask is a task for a table sink.
+// sinkTask is a task for a table sink.
 // It only considers how to control the table sink.
-type tableSinkTask struct {
+type sinkTask struct {
 	tableID model.TableID
-	// lowerBound indicates the lower bound of the table sink.
+	// lowerBound indicates the lower bound of the task.
 	// It is a closed interval.
 	lowerBound sorter.Position
-	// upperBarrierTsGetter indicates the upper bound of the table sink.
+	// getUpperBound is used to get the upper bound of the task.
 	// It is a closed interval.
 	// Use a method to get the latest value, because the upper bound may change(only can increase).
-	upperBarrierTsGetter tableTaskUpperBoundGetter
-	tableSink            *tableSinkWrapper
-	callback             writeSuccessCallback
-	isCanceled           isCanceled
+	getUpperBound upperBoundGetter
+	tableSink     *tableSinkWrapper
+	callback      writeSuccessCallback
+	isCanceled    isCanceled
 }
 
-type worker interface {
+type sinkWorker interface {
 	// Pull data from source manager for the table sink.
 	// We suppose that the worker only handle one task at a time.
-	receiveTableSinkTask(ctx context.Context, taskChan <-chan *tableSinkTask) error
+	handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error
+}
+
+type redoTask struct {
+	tableID       model.TableID
+	lowerBound    sorter.Position
+	getUpperBound upperBoundGetter
+	tableSink     *tableSinkWrapper
+	callback      writeSuccessCallback
+}
+
+type redoWorker interface {
+	// Pull data from source manager for the table sink.
+	// We suppose that the worker only handle one task at a time.
+	handleTasks(ctx context.Context, taskChan <-chan *redoTask) error
 }
