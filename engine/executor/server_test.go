@@ -246,7 +246,7 @@ func TestConvertMakeTaskError(t *testing.T) {
 		err         error
 		isRetryable bool
 	}{
-		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
+		{errors.ErrDeserializeConfig.GenWithStackByArgs(), false},
 		{errors.New("normal error"), true},
 	}
 
@@ -303,7 +303,7 @@ func TestPrecheckMasterMeta(t *testing.T) {
 	require.NoError(t, err)
 
 	// no retry on unretryable error
-	fakeJobErr := fake.NewJobUnRetryableError(errors.New("inner error"))
+	fakeJobErr := errors.ErrDeserializeConfig.GenWithStackByArgs()
 	masterMeta.ErrorMsg = fakeJobErr.Error()
 	err = ormCli.UpsertJob(ctx, masterMeta)
 	require.NoError(t, err)

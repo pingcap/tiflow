@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/framework"
-	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -25,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
+var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(newFakeWorker)
 
 const (
 	fakeWorkerType = frameModel.FakeJobMaster
@@ -56,8 +55,8 @@ func TestGlobalRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, &framework.DefaultBaseWorker{}, worker)
 	impl := worker.(*framework.DefaultBaseWorker).Impl
-	require.IsType(t, &fake.Worker{}, impl)
-	require.NotNil(t, impl.(*fake.Worker).BaseWorker)
+	require.IsType(t, &fakeWorker{}, impl)
+	require.NotNil(t, impl.(*fakeWorker).BaseWorker)
 	require.Equal(t, "worker-1", worker.ID())
 }
 
@@ -80,13 +79,6 @@ func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1",
 		[]byte(`{"Val"":0}`), int64(2))
 	require.Error(t, err)
-}
-
-func TestLoadFake(t *testing.T) {
-	registry := NewRegistry()
-	require.NotPanics(t, func() {
-		RegisterFake(registry)
-	})
 }
 
 func TestGetTypeNameOfVarPtr(t *testing.T) {
@@ -135,14 +127,14 @@ func TestIsRetryableError(t *testing.T) {
 	t.Parallel()
 
 	registry := NewRegistry()
-	ok := registry.RegisterWorkerType(frameModel.FakeJobMaster, NewSimpleWorkerFactory(fake.NewFakeMaster))
+	ok := registry.RegisterWorkerType(frameModel.FakeJobMaster, NewSimpleWorkerFactory(newFakeWorker))
 	require.True(t, ok)
 
 	testCases := []struct {
 		err         error
 		isRetryable bool
 	}{
-		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
+		{errors.ErrDeserializeConfig.GenWithStackByArgs(), false},
 		{errors.New("normal error"), true},
 	}
 
