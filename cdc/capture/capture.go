@@ -149,6 +149,7 @@ func NewCapture(pdEndpoints []string,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
+		createEtcdClient:    createEtcdClient,
 
 		useSortEngine:     sortEngineMangerFactory != nil,
 		sortEngineFactory: sortEngineMangerFactory,
