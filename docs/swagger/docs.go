@@ -1049,6 +1049,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "table_ids": {
+                    "description": "All table ids that this processor are replicating.",
                     "type": "array",
                     "items": {
                         "type": "integer"
