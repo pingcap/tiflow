@@ -184,8 +184,8 @@ func TestStopWorker(t *testing.T) {
 			},
 		},
 	}
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
-	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker := newDMWorker(dctx, "stop-master-id", frameModel.WorkerDMDump, taskCfg)
+	dmWorker.BaseWorker = framework.MockBaseWorker("stop-worker-id", "stop-master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
 
@@ -221,8 +221,8 @@ func TestOperateTask(t *testing.T) {
 			},
 		},
 	}
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
-	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker := newDMWorker(dctx, "operate-master-id", frameModel.WorkerDMDump, taskCfg)
+	dmWorker.BaseWorker = framework.MockBaseWorker("operate-worker-id", "operate-master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = mockUnitHolder
