@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package manager
+package factory
 
 import (
 	"fmt"
@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
+	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
 	"github.com/pingcap/tiflow/pkg/config"
-	ngpebble "github.com/pingcap/tiflow/pkg/sorter/pebble"
 	"go.uber.org/zap"
 )
 
@@ -50,7 +50,7 @@ func createPebbleDBs(
 			}
 		}
 
-		db, err := ngpebble.OpenPebble(id, dir, cfg, memQuotaInBytes/uint64(cfg.Count), adjust)
+		db, err := epebble.OpenPebble(id, dir, cfg, memQuotaInBytes/uint64(cfg.Count), adjust)
 		if err != nil {
 			log.Error("create pebble fails", zap.String("dir", dir), zap.Int("id", id), zap.Error(err))
 			for _, db := range dbs {
