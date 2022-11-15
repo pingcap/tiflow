@@ -657,6 +657,11 @@ function prepare_test_empty_gtid() {
 
 function test_source_and_target_with_empty_gtid() {
 	echo "[$(date)] <<<<<< start test_source_and_target_with_empty_gtid >>>>>>"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+  		"stop-task test" \
+  		"\"result\": true" 3
+
+	cleanup_data all_mode
 	prepare_test_empty_gtid
 
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
