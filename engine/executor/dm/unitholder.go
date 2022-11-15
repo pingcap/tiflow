@@ -249,7 +249,7 @@ func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) interface{} {
 		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
 	u.setSourceStatus(sourceStatus)
-	return nil
+	return u.unit.Status(sourceStatus)
 }
 
 func (u *unitHolderImpl) getSourceStatus() *binlog.SourceStatus {
