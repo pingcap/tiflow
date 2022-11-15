@@ -140,21 +140,6 @@ func (mr *MockStatusProviderMockRecorder) GetProcessors(ctx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProcessors", reflect.TypeOf((*MockStatusProvider)(nil).GetProcessors), ctx)
 }
 
-// GetTaskPositions mocks base method.
-func (m *MockStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskPositions", ctx, changefeedID)
-	ret0, _ := ret[0].(map[model.CaptureID]*model.TaskPosition)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTaskPositions indicates an expected call of GetTaskPositions.
-func (mr *MockStatusProviderMockRecorder) GetTaskPositions(ctx, changefeedID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskPositions", reflect.TypeOf((*MockStatusProvider)(nil).GetTaskPositions), ctx, changefeedID)
-}
-
 // IsHealthy mocks base method.
 func (m *MockStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	m.ctrl.T.Helper()

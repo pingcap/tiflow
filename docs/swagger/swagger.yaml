@@ -205,20 +205,7 @@ definitions:
     type: object
   model.ProcessorDetail:
     properties:
-      checkpoint_ts:
-        description: The maximum event CommitTs that has been synchronized.
-        type: integer
-      count:
-        description: The count of events that have been replicated.
-        type: integer
-      error:
-        $ref: '#/definitions/model.RunningError'
-        description: Error code when error happens
-      resolved_ts:
-        description: The event that satisfies CommitTs <= ResolvedTs can be synchronized.
-        type: integer
       table_ids:
-        description: all table ids that this processor are replicating
         items:
           type: integer
         type: array
