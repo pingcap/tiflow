@@ -51,7 +51,7 @@ const (
 	// If the events number larger than this value,
 	// use the prepareBatchDMLs to prepare the DMLs.
 	// TODO: choose a more reasonable value.
-	batchDMLThreshold = 1
+	batchDMLThreshold = 0
 )
 
 type mysqlBackend struct {
@@ -206,6 +206,13 @@ func convert2RowChanges(
 	tableInfo *timodel.TableInfo,
 	changeType sqlmodel.RowChangeType) *sqlmodel.RowChange {
 
+	log.Info("fizz convert2RowChanges",
+		zap.Any("columns", row.Columns),
+		zap.Any("preColumns", row.PreColumns),
+		zap.Any("row", row),
+		zap.Any("tableInfo", tableInfo),
+		zap.Any("changeType", changeType))
+
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		if col == nil {
@@ -245,6 +252,7 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
+		log.Info("fizz convert2RowChanges delete", zap.Any("preValues", preValues))
 		res = sqlmodel.NewRowChange(
 			row.Table,
 			nil,
@@ -252,6 +260,8 @@ func convert2RowChanges(
 			nil,
 			tableInfo,
 			nil, nil)
+		log.Info("fizz not null index", zap.Any("index", res.UniqueNotNullIdx()))
+		log.Info("fizz convert2RowChanges delete", zap.Any("res", res))
 	}
 	return res
 }
@@ -320,15 +330,10 @@ func batchSingleTxnDmls(
 	sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
 	sqls = append(sqls, sql)
 	values = append(values, value)
-
-	// handle update
-	// TODO: find a way to batch update dmls
-	if translateToInsert {
-		for _, row := range updateRows {
-			sql, value := row.GenSQL(sqlmodel.DMLUpdate)
-			sqls = append(sqls, sql)
-			values = append(values, value)
-		}
+	// TODO: remove it after debug done.
+	for _, row := range deleteRows {
+		sq, vals := row.GenSQL(sqlmodel.DMLDelete)
+		log.Info("fizz delete sql", zap.String("sql", sq), zap.Any("vals", vals))
 	}
 
 	// handle insert
@@ -341,6 +346,12 @@ func batchSingleTxnDmls(
 		sqls = append(sqls, sql)
 		values = append(values, value)
 	}
+
+	// handle update
+	// TODO: do a testing on update performance.
+	sql, value = sqlmodel.GenUpdateSQL(updateRows...)
+	sqls = append(sqls, sql)
+	values = append(values, value)
 
 	return
 }
@@ -380,7 +391,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-
+	log.Info("fizz translate to insert",
+		zap.Bool("translateToInsert", translateToInsert),
+		zap.Bool("enableOldValue", s.cfg.EnableOldValue),
+		zap.Bool("safeMode", s.cfg.SafeMode))
 	rowCount := 0
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
@@ -395,6 +409,11 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// A row can be translated in to INSERT, when it was committed after
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
+		log.Info("fizz prepare dmls",
+			zap.Bool("translateToInsert", translateToInsert),
+			zap.Any("row commitTs", firstRow.CommitTs),
+			zap.Any("row replicatingTs", firstRow.ReplicatingTs))
+
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 
 		if event.Callback != nil {

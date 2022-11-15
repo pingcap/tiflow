@@ -1166,3 +1166,53 @@ func showCreateTable(t *testing.T, ti *timodel.TableInfo) string {
 	require.NoError(t, err)
 	return result.String()
 }
+
+func TestNewDMRowChange(t *testing.T) {
+	cases := []struct {
+		origin    string
+		recovered string
+	}{
+		{
+			"CREATE TABLE t1 (id INT," +
+				" a1 INT NOT NULL," +
+				" a3 INT NOT NULL," +
+				" UNIQUE KEY dex1(a1, a3));",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) DEFAULT NULL,\n" +
+				"  `a1` int(0) NOT NULL,\n" +
+				"  `a3` int(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`a1`(0),`a3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+	}
+	p := parser.New()
+	for _, c := range cases {
+		stmt, err := p.ParseOneStmt(c.origin, "", "")
+		require.NoError(t, err)
+		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		require.NoError(t, err)
+		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
+		cols := []*model.Column{
+			{
+				Name: "id", Type: 3, Charset: "binary", Flag: 65, Value: 1, Default: nil,
+			},
+			{
+				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Value: 1, Default: nil,
+			},
+			{
+				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Value: 2, Default: nil,
+			},
+		}
+		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
+		tableName := &model.TableName{Schema: "db", Table: "t1"}
+		rowChange := sqlmodel.NewRowChange(tableName, nil, []interface{}{1, 1, 2}, nil, recoveredTI, nil, nil)
+		sqlGot, argsGot := rowChange.GenSQL(sqlmodel.DMLDelete)
+		require.Equal(t, "DELETE FROM `db`.`t1` WHERE `a1` = ? AND `a3` = ? LIMIT 1", sqlGot)
+		require.Equal(t, []interface{}{1, 2}, argsGot)
+
+		sqlGot, argsGot = sqlmodel.GenDeleteSQL(rowChange, rowChange)
+		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1`,`a3`) IN ((?,?),(?,?))", sqlGot)
+		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
+	}
+}
