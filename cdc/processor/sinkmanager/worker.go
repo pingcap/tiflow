@@ -17,14 +17,14 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 )
 
 // Used to record the progress of the table.
-type writeSuccessCallback func(lastWrittenPos sorter.Position)
+type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func() sorter.Position
+type upperBoundGetter func() engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
@@ -35,7 +35,7 @@ type sinkTask struct {
 	tableID model.TableID
 	// lowerBound indicates the lower bound of the task.
 	// It is a closed interval.
-	lowerBound sorter.Position
+	lowerBound engine.Position
 	// getUpperBound is used to get the upper bound of the task.
 	// It is a closed interval.
 	// Use a method to get the latest value, because the upper bound may change(only can increase).
@@ -53,7 +53,7 @@ type sinkWorker interface {
 
 type redoTask struct {
 	tableID       model.TableID
-	lowerBound    sorter.Position
+	lowerBound    engine.Position
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
