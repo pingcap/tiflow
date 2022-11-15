@@ -26,10 +26,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) worker {
+func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) sinkWorker {
 	sorterEngine := memory.New(context.Background())
 	quota := newMemQuota(changefeedID, memQuota)
-	return newWorker(changefeedID, sorterEngine, nil, quota, splitTxn, false)
+	return newSinkWorker(changefeedID, sorterEngine, quota, nil, splitTxn, false)
 }
 
 // nolint:unparam
@@ -143,14 +143,14 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 	}
 
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
-	taskChan := make(chan *tableSinkTask)
+	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.receiveTableSinkTask(ctx, taskChan)
+		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -176,15 +176,13 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		}, lastWritePos.Next())
 		cancel()
 	}
-	taskChan <- &tableSinkTask{
-		tableID:              tableID,
-		lowerBound:           lowerBoundPos,
-		upperBarrierTsGetter: upperBoundGetter,
-		tableSink:            wrapper,
-		callback:             callback,
-		isCanceled: func() bool {
-			return false
-		},
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 3)
@@ -260,14 +258,14 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
-	taskChan := make(chan *tableSinkTask)
+	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.receiveTableSinkTask(ctx, taskChan)
+		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
 	}()
 
@@ -293,18 +291,16 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		}, lastWritePos.Next())
 		cancel()
 	}
-	taskChan <- &tableSinkTask{
-		tableID:              tableID,
-		lowerBound:           lowerBoundPos,
-		upperBarrierTsGetter: upperBoundGetter,
-		tableSink:            wrapper,
-		callback:             callback,
-		isCanceled: func() bool {
-			return false
-		},
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	// Abort the task when no memory quota and blocked.
-	w.(*workerImpl).memQuota.close()
+	w.(*sinkWorkerImpl).memQuota.close()
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
 }
@@ -389,14 +385,14 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
-	taskChan := make(chan *tableSinkTask)
+	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.receiveTableSinkTask(ctx, taskChan)
+		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
@@ -422,15 +418,13 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 		}, lastWritePos.Next())
 		cancel()
 	}
-	taskChan <- &tableSinkTask{
-		tableID:              tableID,
-		lowerBound:           lowerBoundPos,
-		upperBarrierTsGetter: upperBoundGetter,
-		tableSink:            wrapper,
-		callback:             callback,
-		isCanceled: func() bool {
-			return false
-		},
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
@@ -517,14 +511,14 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
-	taskChan := make(chan *tableSinkTask)
+	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.receiveTableSinkTask(ctx, taskChan)
+		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -550,15 +544,13 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 		}, lastWritePos.Next())
 		cancel()
 	}
-	taskChan <- &tableSinkTask{
-		tableID:              tableID,
-		lowerBound:           lowerBoundPos,
-		upperBarrierTsGetter: upperBoundGetter,
-		tableSink:            wrapper,
-		callback:             callback,
-		isCanceled: func() bool {
-			return false
-		},
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
@@ -644,14 +636,14 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(suite.T(), events, w.(*workerImpl).sortEngine, tableID)
+	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
-	taskChan := make(chan *tableSinkTask)
+	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := w.receiveTableSinkTask(ctx, taskChan)
+		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
@@ -677,15 +669,13 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 		}, lastWritePos.Next())
 		cancel()
 	}
-	taskChan <- &tableSinkTask{
-		tableID:              tableID,
-		lowerBound:           lowerBoundPos,
-		upperBarrierTsGetter: upperBoundGetter,
-		tableSink:            wrapper,
-		callback:             callback,
-		isCanceled: func() bool {
-			return false
-		},
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
