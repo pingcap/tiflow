@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +52,7 @@ func TestCSVBatchCodec(t *testing.T) {
 	}, {}}
 
 	for _, cs := range testCases {
-		encoder := newBatchEncoder(&config.CSVConfig{
+		encoder := newBatchEncoder(&common.Config{
 			Delimiter:       ",",
 			Quote:           "\"",
 			Terminator:      "\n",
@@ -74,7 +74,7 @@ func TestCSVBatchCodec(t *testing.T) {
 }
 
 func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newBatchEncoder(&config.CSVConfig{
+	encoder := newBatchEncoder(&common.Config{
 		Delimiter:       ",",
 		Quote:           "\"",
 		Terminator:      "\n",
