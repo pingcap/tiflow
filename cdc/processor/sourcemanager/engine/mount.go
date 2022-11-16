@@ -49,7 +49,7 @@ func NewMountedEventIter(
     }
 }
 
-// Next implements sorter.EventIterator.
+// Next returns the next mounted event.
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
     for idx := i.nextToEmit; idx < i.nextToMount; idx++ {
         if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
@@ -92,6 +92,10 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
                 return
             }
             i.nextToMount += 1
+        }
+
+        if i.nextToEmit < i.nextToMount {
+            return i.Next(ctx)
         }
     }
     return
