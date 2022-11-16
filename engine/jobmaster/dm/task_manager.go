@@ -60,8 +60,8 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 		messageAgent:  messageAgent,
 		gaugeVec: metricFactory.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "job_master",
-				Subsystem: "task_manager",
+				Namespace: "dm",
+				Subsystem: "job",
 				Name:      "task_stage",
 				Help:      "task stage of dm worker in this job",
 			}, []string{"task_id"}),
