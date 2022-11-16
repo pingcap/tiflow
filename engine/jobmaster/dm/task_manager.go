@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -38,21 +39,26 @@ var (
 type TaskManager struct {
 	*ticker.DefaultTicker
 
+	jobId        string
 	jobStore     *metadata.JobStore
 	messageAgent dmpkg.MessageAgent
 	logger       *zap.Logger
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
+
+	stageGauge map[string]prometheus.Gauge
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
+func NewTaskManager(jobId string, initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
 	taskManager := &TaskManager{
+		jobId:         jobId,
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
 		logger:        pLogger.With(zap.String("component", "task_manager")),
 		messageAgent:  messageAgent,
+		stageGauge:    make(map[string]prometheus.Gauge),
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -105,6 +111,10 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
+	if _, ok := tm.stageGauge[taskStatus.Task]; !ok {
+		tm.stageGauge[taskStatus.Task] = jobTaskStageGauge.WithLabelValues(tm.jobId, taskStatus.Task)
+	}
+	tm.stageGauge[taskStatus.Task].Set(float64(taskStatus.Stage))
 }
 
 // TaskStatus return the task status.

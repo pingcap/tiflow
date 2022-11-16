@@ -89,6 +89,7 @@ func TestDMJob(t *testing.T) {
 	}()
 	wg.Wait()
 
+	// executor metrics
 	metricsURLs := []string{
 		"http://127.0.0.1:11241/metrics",
 		"http://127.0.0.1:11242/metrics",
@@ -118,8 +119,14 @@ func TestDMJob(t *testing.T) {
 	// test metrics for syncer
 	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
 	testMetrics(re)
-	// test metrics for dm_worker
-	re = regexp.MustCompile(`dm_worker.*\{job_id="(.{36})"`)
+	// test metrics for dm_worker_task_stage
+	re = regexp.MustCompile(`dm_worker_task_stage.*\{job_id="(.{36})"`)
+	testMetrics(re)
+	// test metrics for job_master_task_stage: 2 finished full job
+	re = regexp.MustCompile(`job_master_task_stage.*\,job_id="(.{36})".*4`)
+	testMetrics(re)
+	// test metrics for job_master_task_stage: 2 running all job
+	re = regexp.MustCompile(`job_master_task_stage.*\,job_id="(.{36})".*2`)
 	testMetrics(re)
 }
 

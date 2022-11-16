@@ -268,7 +268,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	w.stageGauge.Set(0)
+	w.stageGauge.Set(float64(metadata.StageFinished))
 	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 
