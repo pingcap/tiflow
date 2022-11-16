@@ -40,7 +40,6 @@ var (
 type TaskManager struct {
 	*ticker.DefaultTicker
 
-	jobId        string
 	jobStore     *metadata.JobStore
 	messageAgent dmpkg.MessageAgent
 	logger       *zap.Logger
