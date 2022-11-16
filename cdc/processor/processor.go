@@ -792,6 +792,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue,
 		p.filter, tz, p.changefeedID)
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -1187,10 +1188,28 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
 		if err := p.sourceManger.Close(); err != nil {
+			log.Error("Failed to close source manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
 			return errors.Trace(err)
 		}
 		if err := p.sinkManager.Close(); err != nil {
+			log.Error("Failed to close sink manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
 			return errors.Trace(err)
+		}
+		engineFactory := ctx.GlobalVars().SortEngineFactory
+		if engineFactory != nil {
+			if err := engineFactory.Drop(p.changefeedID); err != nil {
+				log.Error("drop event sort engine fail",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
 		}
 	} else {
 		for _, tbl := range p.tables {
@@ -1211,52 +1230,43 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		p.agent = nil
 	}
 
-	// sink close might be time-consuming, do it the last.
-	if p.sinkV1 != nil {
-		// pass a canceled context is ok here, since we don't need to wait Close
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		log.Info("processor try to close the sinkV1",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		start := time.Now()
-		if err := p.sinkV1.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			log.Info("processor close sink failed",
+	if !p.pullBasedSinking {
+		// sink close might be time-consuming, do it the last.
+		if p.sinkV1 != nil {
+			// pass a canceled context is ok here, since we don't need to wait Close
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			log.Info("processor try to close the sinkV1",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			start := time.Now()
+			if err := p.sinkV1.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+				log.Info("processor close sink failed",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Duration("duration", time.Since(start)))
+				return errors.Trace(err)
+			}
+			log.Info("processor close sink success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
-		}
-		log.Info("processor close sink success",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)))
-	} else if p.sinkV2Factory != nil { // maybe nil in test
-		log.Info("processor try to close the sinkV2",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		start := time.Now()
-		if err := p.sinkV2Factory.Close(); err != nil && errors.Cause(err) != context.Canceled {
-			log.Info("processor close sink failed",
+		} else if p.sinkV2Factory != nil { // maybe nil in test
+			log.Info("processor try to close the sinkV2",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			start := time.Now()
+			if err := p.sinkV2Factory.Close(); err != nil && errors.Cause(err) != context.Canceled {
+				log.Info("processor close sink failed",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Duration("duration", time.Since(start)))
+				return errors.Trace(err)
+			}
+			log.Info("processor close sink success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
-		}
-		log.Info("processor close sink success",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)))
-	}
-
-	engineFactory := ctx.GlobalVars().SortEngineFactory
-	if engineFactory != nil {
-		if err := engineFactory.Drop(p.changefeedID); err != nil {
-			log.Error("drop event sort engine fail",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
 		}
 	}
 
@@ -1264,10 +1274,10 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 	failpoint.Inject("processorStopDelay", nil)
 
 	p.cleanupMetrics()
-
 	log.Info("processor closed",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
+
 	return nil
 }
 
