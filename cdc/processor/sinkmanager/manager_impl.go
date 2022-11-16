@@ -459,36 +459,46 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
 	}
 }
 
-// RemoveTable removes a table(TableSink) from the sink manager.
-func (m *SinkManager) RemoveTable(tableID model.TableID) error {
-	tableSink, ok := m.tableSinks.Load(tableID)
-	if !ok {
-		log.Panic("Table sink not found when removing table",
+// AsyncStopTable sets the table(TableSink) state to stopped.
+func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		tableSink, ok := m.tableSinks.Load(tableID)
+		if !ok {
+			log.Panic("Table sink not found when removing table",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
+		}
+		err := tableSink.(*tableSinkWrapper).close(m.ctx)
+		if err != nil {
+			log.Warn("Failed to close table sink",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Error(err))
+			m.errChan <- err
+		}
+		cleanedBytes := m.memQuota.clean(tableID)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
-	}
-	err := tableSink.(*tableSinkWrapper).close(m.ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	cleanedBytes := m.memQuota.clean(tableID)
-	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("memory", cleanedBytes),
-	)
+			zap.Int64("tableID", tableID),
+			zap.Uint64("memory", cleanedBytes),
+		)
+	}()
+}
+
+// RemoveTable removes a table(TableSink) from the sink manager.
+func (m *SinkManager) RemoveTable(tableID model.TableID) {
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
 	m.tableSinks.Delete(tableID)
-
 	if m.eventCache != nil {
 		m.eventCache.removeTable(tableID)
 	}
-
-	return nil
 }
 
 // GetAllCurrentTableIDs returns all the table IDs in the sink manager.

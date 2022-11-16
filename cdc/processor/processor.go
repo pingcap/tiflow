@@ -192,14 +192,7 @@ func (p *processor) AddTable(
 				zap.Int64("tableID", tableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
-			if p.pullBasedSinking {
-				err := p.sinkManager.RemoveTable(tableID)
-				if err != nil {
-					return false, errors.Trace(err)
-				}
-			} else {
-				p.removeTable(p.tables[tableID], tableID)
-			}
+			p.removeTable(p.tables[tableID], tableID)
 		}
 	}
 
@@ -251,40 +244,38 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 	}
 
 	if p.pullBasedSinking {
-		p.sourceManger.RemoveTable(tableID)
-		err := p.sinkManager.RemoveTable(tableID)
-		if err != nil {
-			log.Warn("Failed to remove table from sink manager",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			return false
-		}
-	} else {
-		table, ok := p.tables[tableID]
-		if !ok {
-			log.Warn("table which will be deleted is not found",
+		_, exist := p.sinkManager.GetTableState(tableID)
+		if !exist {
+			log.Warn("Table which will be deleted is not found",
 				zap.String("capture", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Int64("tableID", tableID))
 			return true
 		}
-		if !table.AsyncStop() {
-			// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
-			// and we do not want to alarm the user.
-			log.Debug("async stop the table failed, due to a full pipeline",
-				zap.String("capture", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Uint64("checkpointTs", table.CheckpointTs()),
-				zap.Int64("tableID", tableID))
-			return false
-		}
+		p.sinkManager.AsyncStopTable(tableID)
+		return true
 	}
-
+	table, ok := p.tables[tableID]
+	if !ok {
+		log.Warn("table which will be deleted is not found",
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return true
+	}
+	if !table.AsyncStop() {
+		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
+		// and we do not want to alarm the user.
+		log.Debug("async stop the table failed, due to a full pipeline",
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Uint64("checkpointTs", table.CheckpointTs()),
+			zap.Int64("tableID", tableID))
+		return false
+	}
 	return true
 }
 
@@ -432,8 +423,26 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
-		// FIXME: return the checkpointTs of the table and add metrics.
-		return 0, true
+		stats, err := p.sinkManager.GetTableStats(tableID)
+		// TODO: handle error
+		if err != nil {
+			log.Warn("Failed to get table stats",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Error(err))
+			return 0, false
+		}
+		p.sourceManger.RemoveTable(tableID)
+		p.sinkManager.RemoveTable(tableID)
+		log.Info("table removed",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", stats.CheckpointTs))
+		return stats.CheckpointTs, true
 	}
 	table := p.tables[tableID]
 	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
@@ -1166,9 +1175,13 @@ func (p *processor) createTablePipelineImpl(
 }
 
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
-	table.Cancel()
-	table.Wait()
-	delete(p.tables, tableID)
+	if p.pullBasedSinking {
+		p.sinkManager.RemoveTable(tableID)
+	} else {
+		table.Cancel()
+		table.Wait()
+		delete(p.tables, tableID)
+	}
 	if p.redoManager.Enabled() {
 		p.redoManager.RemoveTable(tableID)
 	}

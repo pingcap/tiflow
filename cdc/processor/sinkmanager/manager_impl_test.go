@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -132,7 +133,7 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	manager.StartTable(tableID, 0)
+	manager.StartTable(tableID, 1)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
@@ -169,8 +170,14 @@ func TestRemoveTable(t *testing.T) {
 		return manager.memQuota.getUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
-	err := manager.RemoveTable(tableID)
-	require.NoError(t, err)
+	manager.AsyncStopTable(tableID)
+	require.Eventually(t, func() bool {
+		state, ok := manager.GetTableState(tableID)
+		require.True(t, ok)
+		return state == tablepb.TableStateStopped
+	}, 5*time.Second, 10*time.Millisecond)
+
+	manager.RemoveTable(tableID)
 
 	_, ok = manager.tableSinks.Load(tableID)
 	require.False(t, ok)
