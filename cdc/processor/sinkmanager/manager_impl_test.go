@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
@@ -37,7 +38,10 @@ func createManager(
 	errChan chan error,
 ) *SinkManager {
 	sortEngine := memory.New(context.Background())
-	manager, err := New(ctx, changefeedID, changefeedInfo, nil, sortEngine, errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+	manager, err := New(
+		ctx, changefeedID, changefeedInfo,
+		nil, sortEngine, &entry.MockMountGroup{},
+		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
 	return manager
 }
