@@ -20,9 +20,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -34,8 +36,6 @@ var httputilServerMsg = "this is httputil test server"
 func TestHttputilNewClient(t *testing.T) {
 	t.Parallel()
 
-	_, cancel := context.WithCancel(context.Background())
-
 	dir, err := os.Getwd()
 	require.Nil(t, err)
 	certDir := "_certificates"
@@ -46,9 +46,8 @@ func TestHttputilNewClient(t *testing.T) {
 		[]string{},
 	)
 	require.Nil(t, err)
-	server, addr := runServer(serverTLS)
+	server, addr := runServer(http.HandlerFunc(handler), serverTLS)
 	defer func() {
-		cancel()
 		server.Close()
 	}()
 	credential := &security.Credential{
@@ -73,7 +72,7 @@ func TestStatusCodeCreated(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	server, addr := runServer(nil)
+	server, addr := runServer(http.HandlerFunc(createHandler), nil)
 	defer func() {
 		cancel()
 		server.Close()
@@ -84,6 +83,27 @@ func TestStatusCodeCreated(t *testing.T) {
 	respBody, err := cli.DoRequest(ctx, url, http.MethodPost, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, []byte(`"{"id": "value"}"`), respBody)
+}
+
+func TestTimeout(t *testing.T) {
+	t.Parallel()
+
+	const timeout = 500 * time.Millisecond
+
+	server, addr := runServer(sleepHandler(time.Second), nil)
+	defer func() {
+		server.Close()
+	}()
+	cli, err := NewClient(nil)
+	require.NoError(t, err)
+
+	cli.SetTimeout(timeout)
+	start := time.Now()
+	_, err = cli.Get(context.Background(), fmt.Sprintf("http://%s/", addr))
+	var uErr *url.Error
+	require.ErrorAs(t, err, &uErr)
+	require.True(t, uErr.Timeout())
+	require.GreaterOrEqual(t, time.Since(start), timeout)
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
@@ -99,18 +119,24 @@ func createHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(`"{"id": "value"}"`))
 }
 
-func runServer(tlsCfg *tls.Config) (*httptest.Server, string) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", handler)
-	mux.HandleFunc("/create", createHandler)
-	server := httptest.NewUnstartedServer(mux)
+func sleepHandler(d time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		select {
+		case <-time.After(d):
+		case <-req.Context().Done():
+		}
+	}
+}
+
+func runServer(handler http.Handler, tlsCfg *tls.Config) (*httptest.Server, string) {
+	server := httptest.NewUnstartedServer(handler)
 	addr := server.Listener.Addr().String()
 
 	if tlsCfg != nil {
 		server.TLS = tlsCfg
-		go func() { server.StartTLS() }()
+		server.StartTLS()
 	} else {
-		go func() { server.Start() }()
+		server.Start()
 	}
 	return server, addr
 }
