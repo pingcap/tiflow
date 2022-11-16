@@ -364,13 +364,13 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 		},
 		{
 			grants: []string{
-				"GRANT SELECT, CREATE, INSERT, UPDATE, DELETE, ALTER, DROP, SUPER ON *.* TO 'root'@'%'",
+				"GRANT SELECT, CREATE, INSERT, UPDATE, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
 			},
 			checkState: StateSuccess,
 		},
 		{
 			grants: []string{
-				"GRANT SELECT, INSERT, DELETE, ALTER, DROP, SUPER ON *.* TO 'root'@'%'",
+				"GRANT SELECT, INSERT, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
 			},
 			checkState: StateWarning,
 			errStr:     "lack of Create global (*.*) privilege; lack of Update global (*.*) privilege; ",
@@ -388,7 +388,6 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 			mysql.DeletePriv: {needGlobal: true},
 			mysql.AlterPriv:  {needGlobal: true},
 			mysql.DropPriv:   {needGlobal: true},
-			mysql.SuperPriv:  {needGlobal: true},
 		}
 		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
 		if cs.checkState == StateSuccess {

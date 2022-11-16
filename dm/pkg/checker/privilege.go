@@ -199,7 +199,6 @@ func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.AlterPriv:  {needGlobal: true},
 		mysql.DropPriv:   {needGlobal: true},
 		mysql.IndexPriv:  {needGlobal: true},
-		mysql.SuperPriv:  {needGlobal: true},
 	}
 	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs)
 	if err2 != nil {

@@ -17,6 +17,8 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -83,15 +85,30 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		result.State = StateSuccess
 		return result
 	}
-	processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
+	// check super privilege for SHOW PROCESSLIST
+	usedConn := 0
+	grants, err := dbutil.ShowGrants(ctx, c.toCheckDB.DB, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	defer processRows.Close()
-	usedConn := 0
-	for processRows.Next() {
-		usedConn++
+	err2 := verifyPrivilegesWithResult(result, grants, map[mysql.PrivilegeType]priv{
+		mysql.SuperPriv: {needGlobal: true},
+	})
+	if err2 != nil {
+		// no enough privilege to check the user's connection number
+		result.State = StateWarning
+		result.Errors = append(result.Errors, NewWarn("don't have SUPER privilege to check the usage of connections"))
+	} else {
+		processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
+		if err != nil {
+			markCheckError(result, err)
+			return result
+		}
+		defer processRows.Close()
+		for processRows.Next() {
+			usedConn++
+		}
 	}
 	usedConn -= 1 // exclude the connection used for show processlist
 	log.L().Debug("connection checker", zap.Int("maxConnections", maxConn), zap.Int("usedConnections", usedConn))
@@ -114,7 +131,13 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		result.State = StateFailure
 	} else {
 		// nonzero max_connections and needed connections are less than or equal to max_connections
-		result.State = StateSuccess
+		if result.State != StateWarning {
+			// if no enough privilege to check the user's connection number,
+			// the result state will be StateWarning and we can't mark it as success.
+			result.State = StateSuccess
+		}
+		// if we don't have enough privilege to check the user's connection number,
+		// usedConn is 0
 		if maxConn-usedConn < neededConn {
 			result.State = StateWarning
 			result.Instruction = "set larger max_connections or adjust the configuration of dm"

@@ -174,14 +174,14 @@ func TestTargetPrivilegeChecking(t *testing.T) {
 
 	mock := initMockDB(t)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
-		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,SUPER ON *.* TO 'test'@'%'"))
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
 	require.Contains(t, msg, "lack of Drop global (*.*) privilege; lack of Index global (*.*) privilege; ")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
-		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,SUPER ON *.* TO 'test'@'%'"))
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Summary.Warning)
@@ -193,7 +193,7 @@ func TestTargetPrivilegeChecking(t *testing.T) {
 	checkHappyPath(t, func() {
 		mock := initMockDB(t)
 		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
-			AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,INDEX,DROP,SUPER ON *.* TO 'test'@'%'"))
+			AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,INDEX,DROP ON *.* TO 'test'@'%'"))
 	}, cfgs)
 
 	checkHappyPath(t, func() {
