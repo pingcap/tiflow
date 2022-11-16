@@ -734,7 +734,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 42)
+	require.Equal(t, snap3.TableCount(false), 45)
 }
 
 /*
@@ -765,32 +765,32 @@ ActionAlterTableAlterPartition      ActionType = 46
 func TestSchemaStorage(t *testing.T) {
 	ctx := context.Background()
 	testCases := [][]string{{
-		"create database test_ddl1",                                                               // ActionCreateSchema
-		"create table test_ddl1.simple_test1 (id bigint primary key)",                             // ActionCreateTable
-		"create table test_ddl1.simple_test2 (id bigint)",                                         // ActionCreateTable
-		"create table test_ddl1.simple_test3 (id bigint primary key)",                             // ActionCreateTable
-		"create table test_ddl1.simple_test4 (id bigint primary key)",                             // ActionCreateTable
-		"DROP TABLE test_ddl1.simple_test3",                                                       // ActionDropTable
-		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                           // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                         // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",             // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                              // ActionDropColumn
-		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                     // ActionDropColumns
-		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                       // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                        // ActionDropIndex
-		"TRUNCATE test_ddl1.simple_test1",                                                         // ActionTruncateTable
-		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                          // ActionModifySchemaCharsetAndCollate
-		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",             // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                       // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                             // ActionAlterIndexVisibility
-		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                            // ActionRenameIndex
-		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                     // ActionModifyColumn
-		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",   // ActionCreateView
-		"DROP VIEW test_ddl1.view_test2",                                                          // ActionDropView
-		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                           // ActionRenameTable
-		"DROP DATABASE test_ddl1",                                                                 // ActionDropSchema
-		"create database test_ddl2",                                                               // ActionCreateSchema
-		"create table test_ddl2.simple_test1 (id bigint primary key, c1 int not null unique key)", // ActionCreateTable
+		"create database test_ddl1",                                                                            // ActionCreateSchema
+		"create table test_ddl1.simple_test1 (id bigint primary key)",                                          // ActionCreateTable
+		"create table test_ddl1.simple_test2 (id bigint)",                                                      // ActionCreateTable
+		"create table test_ddl1.simple_test3 (id bigint primary key)",                                          // ActionCreateTable
+		"create table test_ddl1.simple_test4 (id bigint primary key)",                                          // ActionCreateTable
+		"DROP TABLE test_ddl1.simple_test3",                                                                    // ActionDropTable
+		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                                        // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                                      // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",                          // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                                           // ActionDropColumn
+		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                                  // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                                    // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                                     // ActionDropIndex
+		"TRUNCATE test_ddl1.simple_test1",                                                                      // ActionTruncateTable
+		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                                       // ActionModifySchemaCharsetAndCollate
+		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",                          // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                                    // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                                          // ActionAlterIndexVisibility
+		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                                         // ActionRenameIndex
+		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                                  // ActionModifyColumn
+		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",                // ActionCreateView
+		"DROP VIEW test_ddl1.view_test2",                                                                       // ActionDropView
+		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                                        // ActionRenameTable
+		"DROP DATABASE test_ddl1",                                                                              // ActionDropSchema
+		"create database test_ddl2",                                                                            // ActionCreateSchema
+		"create table test_ddl2.simple_test1 (id bigint primary key nonclustered, c1 int not null unique key)", // ActionCreateTable
 		`CREATE TABLE test_ddl2.employees  (
 			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 			fname VARCHAR(25) NOT NULL,
@@ -848,7 +848,7 @@ func TestSchemaStorage(t *testing.T) {
 		defer domain.Close()
 		domain.SetStatsUpdating(true)
 		tk := testkit.NewTestKit(t, store)
-
+		tk.MustExec("set global tidb_enable_clustered_index = 'int_only';")
 		for _, ddlSQL := range tc {
 			tk.MustExec(ddlSQL)
 		}
