@@ -343,17 +343,17 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 	}{
 		{
 			grants:     nil, // non grants
-			checkState: StateFailure,
+			checkState: StateWarning,
 			errStr:     "there is no such grant defined for current user on host '%'",
 		},
 		{
 			grants:     []string{"invalid SQL statement"},
-			checkState: StateFailure,
+			checkState: StateWarning,
 			errStr:     "line 1 column 7 near \"invalid SQL statement\" ",
 		},
 		{
 			grants:     []string{"CREATE DATABASE db1"}, // non GRANT statement
-			checkState: StateFailure,
+			checkState: StateWarning,
 			errStr:     "CREATE DATABASE db1 is not grant statement",
 		},
 		{
@@ -364,21 +364,21 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 		},
 		{
 			grants: []string{
-				"GRANT SELECT, CREATE, INSERT, UPDATE, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
+				"GRANT SELECT, CREATE, INSERT, UPDATE, DELETE, ALTER, DROP, SUPER ON *.* TO 'root'@'%'",
 			},
 			checkState: StateSuccess,
 		},
 		{
 			grants: []string{
-				"GRANT SELECT, INSERT, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
+				"GRANT SELECT, INSERT, DELETE, ALTER, DROP, SUPER ON *.* TO 'root'@'%'",
 			},
-			checkState: StateFailure,
+			checkState: StateWarning,
 			errStr:     "lack of Create global (*.*) privilege; lack of Update global (*.*) privilege; ",
 		},
 	}
 	for _, cs := range cases {
 		result := &Result{
-			State: StateFailure,
+			State: StateWarning,
 		}
 		replRequiredPrivs := map[mysql.PrivilegeType]priv{
 			mysql.CreatePriv: {needGlobal: true},

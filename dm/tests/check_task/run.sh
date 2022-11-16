@@ -50,7 +50,7 @@ function test_privileges_can_migrate() {
 	run_sql_source1 "create table checktask1.test_privilege(id int primary key, b varchar(10))"
 	run_sql_source1 "insert into checktask1.test_privilege values (1, 'a'),(2, 'b');"
 	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
-	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index on *.* to 'test1'@'%';"
+	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index, super on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/task-priv.yaml --remove-meta" \
@@ -83,18 +83,18 @@ function test_privilege_precheck() {
 	# fail: missing privilege
 	run_sql_tidb "drop user if exists 'test1'@'%';"
 	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
-	run_sql_tidb "grant select, create, insert, delete, alter, drop, index on *.* to 'test1'@'%';"
+	run_sql_tidb "grant select, create, insert, delete, alter, drop, index, super on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-priv.yaml" \
-		"\"state\": \"fail\"" 1 \
+		"\"warning\": 1" 1 \
 		"lack of Update global (*.*) privilege" 1
 	run_sql_tidb "grant update on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
 	# success: fulfill privileges
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-priv.yaml" \
-		"\"state\": \"fail\"" 0
+		"\"msg\": \"pre-check is passed. \"" 1
 	run_sql_tidb "drop user 'test1'@'%';"
 
 	# success: all privileges
@@ -103,7 +103,7 @@ function test_privilege_precheck() {
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-priv.yaml" \
-		"\"state\": \"fail\"" 0
+		"\"msg\": \"pre-check is passed. \"" 1
 	run_sql_tidb "drop user 'test1'@'%';"
 	echo "pass test_privilege_precheck"
 }
