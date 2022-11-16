@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -100,8 +99,6 @@ type dmWorker struct {
 
 	cfgModRevision uint64
 	needExtStorage bool
-
-	stageGauge prometheus.Gauge
 }
 
 func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
@@ -144,14 +141,6 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 		}
 	}
 	w.cfg.MetricsFactory = w.MetricFactory()
-	w.stageGauge = w.MetricFactory().NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "dataflow",
-			Subsystem: "dm_worker",
-			Name:      "task_stage",
-			Help:      "task stage of dm worker in this job",
-		})
-	w.stageGauge.Set(float64(metadata.StageInit))
 	w.cfg.FrameworkLogger = w.Logger()
 	return w.unitHolder.Init(ctx)
 }
@@ -268,7 +257,6 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		return err
 	}
 
-	w.stageGauge.Set(float64(metadata.StageFinished))
 	return errors.ErrWorkerFinish.FastGenByArgs()
 }
 
@@ -314,7 +302,6 @@ func (w *dmWorker) setStage(stage metadata.TaskStage) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.stage = stage
-	w.stageGauge.Set(float64(stage))
 }
 
 func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
