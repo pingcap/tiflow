@@ -142,7 +142,7 @@ func (p *processor) AddTable(
 	var alreadyExist bool
 	var state tablepb.TableState
 	if p.pullBasedSinking {
-		alreadyExist, state = p.sinkManager.GetTableState(tableID)
+		state, alreadyExist = p.sinkManager.GetTableState(tableID)
 	} else {
 		table, ok := p.tables[tableID]
 		if ok {
@@ -169,8 +169,7 @@ func (p *processor) AddTable(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
-					// TODO: add start ts.
-					p.sinkManager.StartTable(tableID)
+					p.sinkManager.StartTable(tableID, startTs)
 				} else {
 					p.tables[tableID].Start(startTs)
 				}
@@ -222,7 +221,7 @@ func (p *processor) AddTable(
 		p.sourceManger.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if !isPrepare {
-			p.sinkManager.StartTable(tableID)
+			p.sinkManager.StartTable(tableID, startTs)
 		}
 	} else {
 		table, err := p.createTablePipeline(
@@ -305,7 +304,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 	done := func() bool {
 		var alreadyExist bool
 		if p.pullBasedSinking {
-			alreadyExist, state = p.sinkManager.GetTableState(tableID)
+			state, alreadyExist = p.sinkManager.GetTableState(tableID)
 			if alreadyExist {
 				stats, err := p.sinkManager.GetTableStats(tableID)
 				if err != nil {
@@ -389,7 +388,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	var state tablepb.TableState
 	var tableCheckpointTs uint64
 	if p.pullBasedSinking {
-		alreadyExist, state = p.sinkManager.GetTableState(tableID)
+		state, alreadyExist = p.sinkManager.GetTableState(tableID)
 		if alreadyExist {
 			stats, err := p.sinkManager.GetTableStats(tableID)
 			if err != nil {
@@ -472,7 +471,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 // GetTableStatus implements TableExecutor interface
 func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	if p.pullBasedSinking {
-		exist, state := p.sinkManager.GetTableState(tableID)
+		state, exist := p.sinkManager.GetTableState(tableID)
 		if !exist {
 			return tablepb.TableStatus{
 				TableID: tableID,

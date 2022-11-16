@@ -132,7 +132,7 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
@@ -159,7 +159,7 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -212,7 +212,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -241,7 +241,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -269,7 +269,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)

@@ -438,7 +438,7 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 }
 
 // StartTable sets the table(TableSink) state to replicating.
-func (m *SinkManager) StartTable(tableID model.TableID) {
+func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
@@ -447,7 +447,6 @@ func (m *SinkManager) StartTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 	}
 	tableSink.(*tableSinkWrapper).start()
-	startTs := tableSink.(*tableSinkWrapper).startTs
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
@@ -503,16 +502,16 @@ func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
 }
 
 // GetTableState returns the table(TableSink) state.
-func (m *SinkManager) GetTableState(tableID model.TableID) (bool, tablepb.TableState) {
+func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, bool) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Debug("Table sink not found when getting table state",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return false, tablepb.TableStateUnknown
+		return tablepb.TableStateAbsent, false
 	}
-	return true, tableSink.(*tableSinkWrapper).getState()
+	return tableSink.(*tableSinkWrapper).getState(), true
 }
 
 // GetTableStats returns the state of the table.
