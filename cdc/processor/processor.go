@@ -262,30 +262,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 			return table.State() == tablepb.TableStatePrepared
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableSchedulerV3 {
-			// The table is `replicating`, it's indicating that the `add table` must be finished.
-			return table.State() == tablepb.TableStateReplicating
-		}
-
-		// TODO: this should be removed, after SchedulerV3 become the first choice.
-		// The following only work for SchedulerV2.
-		// These two conditions are used to determine if the table's pipeline has finished
-		// initializing and all invariants have been preserved.
-		//
-		// The processor needs to make sure all reasonable invariants about the checkpoint-ts and
-		// the resolved-ts are preserved before communicating with the Owner.
-		//
-		// These conditions are similar to those in the legacy implementation of
-		// the Owner/Processor.
-		// the adding table is considered into the calculation of checkpoint ts and resolved ts
-		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-			return false
-		}
-		if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs {
-			return false
-		}
-
-		return true
+		// The table is `replicating`, it's indicating that the `add table` must be finished.
+		return table.State() == tablepb.TableStateReplicating
 	}
 	if !done() {
 		log.Debug("Add Table not finished",
@@ -746,16 +724,9 @@ func (p *processor) newAgentImpl(
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableSchedulerV3 {
-		ret, err = scheduler.NewAgentV3(
-			ctx, captureID, liveness,
-			messageServer, messageRouter, etcdClient, p, p.changefeedID)
-	} else {
-		ret, err = scheduler.NewAgent(
-			ctx, captureID, liveness,
-			messageServer, messageRouter, etcdClient, p, p.changefeedID)
-	}
+	ret, err = scheduler.NewAgent(
+		ctx, captureID, liveness,
+		messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	return ret, errors.Trace(err)
 }
 
@@ -1115,9 +1086,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	sortEngineManager := ctx.GlobalVars().SortEngineManager
-	if sortEngineManager != nil {
-		if err := sortEngineManager.Drop(p.changefeedID); err != nil {
+	engineFactory := ctx.GlobalVars().SortEngineFactory
+	if engineFactory != nil {
+		if err := engineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
