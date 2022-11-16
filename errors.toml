@@ -496,6 +496,11 @@ error = '''
 bad namespace, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-namespace-test",
 '''
 
+["CDC:ErrInvalidPullBasedSinkConfig"]
+error = '''
+invalid pull based sink config: %s
+'''
+
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q

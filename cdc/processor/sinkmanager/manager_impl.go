@@ -37,11 +37,8 @@ const (
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 )
 
-// Assert SinkManager implementation
-var _ Manager = (*ManagerImpl)(nil)
-
-// ManagerImpl is the implementation of Manager.
-type ManagerImpl struct {
+// SinkManager is the implementation of SinkManager.
+type SinkManager struct {
 	changefeedID model.ChangeFeedID
 	// ctx used to control the background goroutines.
 	ctx context.Context
@@ -97,7 +94,7 @@ func New(
 	sortEngine engine.SortEngine,
 	errChan chan error,
 	metricsTableSinkTotalRows prometheus.Counter,
-) (Manager, error) {
+) (*SinkManager, error) {
 	tableSinkFactory, err := factory.New(
 		ctx,
 		changefeedInfo.SinkURI,
@@ -109,7 +106,7 @@ func New(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	m := &ManagerImpl{
+	m := &SinkManager{
 		changefeedID: changefeedID,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -139,7 +136,7 @@ func New(
 }
 
 // start all workers and report the error to the error channel.
-func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
+func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sortEngine, m.memQuota,
 			m.eventCache, splitTxn, enableOldValue)
@@ -196,7 +193,7 @@ func (m *ManagerImpl) startWorkers(splitTxn bool, enableOldValue bool) {
 }
 
 // start generate table task and report error to the error channel.
-func (m *ManagerImpl) startGenerateTasks() {
+func (m *SinkManager) startGenerateTasks() {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
@@ -243,7 +240,7 @@ func (m *ManagerImpl) startGenerateTasks() {
 }
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
-func (m *ManagerImpl) generateSinkTasks() error {
+func (m *SinkManager) generateSinkTasks() error {
 	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
 	defer taskTicker.Stop()
 	for {
@@ -341,7 +338,7 @@ func (m *ManagerImpl) generateSinkTasks() error {
 	}
 }
 
-func (m *ManagerImpl) generateRedoTasks() error {
+func (m *SinkManager) generateRedoTasks() error {
 	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
 	defer taskTicker.Stop()
 	for {
@@ -404,7 +401,7 @@ func (m *ManagerImpl) generateRedoTasks() error {
 }
 
 // UpdateReceivedSorterResolvedTs updates the received sorter resolved ts for the table.
-func (m *ManagerImpl) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts model.Ts) {
+func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when updating resolved ts",
@@ -416,7 +413,7 @@ func (m *ManagerImpl) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts m
 }
 
 // UpdateBarrierTs updates the barrier ts of all tables in the sink manager.
-func (m *ManagerImpl) UpdateBarrierTs(ts model.Ts) {
+func (m *SinkManager) UpdateBarrierTs(ts model.Ts) {
 	// It is safe to do not use compare and swap here.
 	// Only the processor will update the barrier ts.
 	// Other goroutines will only read the barrier ts.
@@ -428,7 +425,7 @@ func (m *ManagerImpl) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
-func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) {
+func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) {
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		tableID,
@@ -441,7 +438,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 }
 
 // StartTable sets the table(TableSink) state to replicating.
-func (m *ManagerImpl) StartTable(tableID model.TableID) {
+func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
@@ -450,7 +447,6 @@ func (m *ManagerImpl) StartTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 	}
 	tableSink.(*tableSinkWrapper).start()
-	startTs := tableSink.(*tableSinkWrapper).startTs
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
@@ -463,40 +459,73 @@ func (m *ManagerImpl) StartTable(tableID model.TableID) {
 	}
 }
 
-// RemoveTable removes a table(TableSink) from the sink manager.
-func (m *ManagerImpl) RemoveTable(tableID model.TableID) error {
-	tableSink, ok := m.tableSinks.Load(tableID)
-	if !ok {
-		log.Panic("Table sink not found when removing table",
+// AsyncStopTable sets the table(TableSink) state to stopped.
+func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		tableSink, ok := m.tableSinks.Load(tableID)
+		if !ok {
+			log.Panic("Table sink not found when removing table",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
+		}
+		err := tableSink.(*tableSinkWrapper).close(m.ctx)
+		if err != nil {
+			log.Warn("Failed to close table sink",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Error(err))
+			m.errChan <- err
+		}
+		cleanedBytes := m.memQuota.clean(tableID)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
-	}
-	err := tableSink.(*tableSinkWrapper).close(m.ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	cleanedBytes := m.memQuota.clean(tableID)
-	log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("memory", cleanedBytes),
-	)
+			zap.Int64("tableID", tableID),
+			zap.Uint64("memory", cleanedBytes),
+		)
+	}()
+}
+
+// RemoveTable removes a table(TableSink) from the sink manager.
+func (m *SinkManager) RemoveTable(tableID model.TableID) {
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
 	m.tableSinks.Delete(tableID)
-
 	if m.eventCache != nil {
 		m.eventCache.removeTable(tableID)
 	}
+}
 
-	return nil
+// GetAllCurrentTableIDs returns all the table IDs in the sink manager.
+func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
+	var tableIDs []model.TableID
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		tableIDs = append(tableIDs, key.(model.TableID))
+		return true
+	})
+	return tableIDs
+}
+
+// GetTableState returns the table(TableSink) state.
+func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, bool) {
+	tableSink, ok := m.tableSinks.Load(tableID)
+	if !ok {
+		log.Debug("Table sink not found when getting table state",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return tablepb.TableStateAbsent, false
+	}
+	return tableSink.(*tableSinkWrapper).getState(), true
 }
 
 // GetTableStats returns the state of the table.
-func (m *ManagerImpl) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
+func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -514,15 +543,22 @@ func (m *ManagerImpl) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	if err != nil {
 		return pipeline.Stats{}, errors.Trace(err)
 	}
+	var resolvedTs model.Ts
+	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
+	if m.redoManager != nil {
+		resolvedTs = m.redoManager.GetResolvedTs(tableID)
+	} else {
+		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
+	}
 	return pipeline.Stats{
 		CheckpointTs: checkpointTs.Ts,
-		ResolvedTs:   tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ResolvedTs:   resolvedTs,
 		BarrierTs:    m.lastBarrierTs.Load(),
 	}, nil
 }
 
 // Close closes all workers.
-func (m *ManagerImpl) Close() error {
+func (m *SinkManager) Close() error {
 	m.cancel()
 	m.memQuota.close()
 	err := m.sinkFactory.Close()
