@@ -49,7 +49,7 @@ var (
 
 type sinkWorkerImpl struct {
 	changefeedID model.ChangeFeedID
-    mg entry.MounterGroup
+	mg           entry.MounterGroup
 	sortEngine   engine.SortEngine
 	memQuota     *memQuota
 	eventCache   *redoEventCache
@@ -63,7 +63,7 @@ type sinkWorkerImpl struct {
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-    mg entry.MounterGroup,
+	mg entry.MounterGroup,
 	sortEngine engine.SortEngine,
 	quota *memQuota,
 	eventCache *redoEventCache,
@@ -72,7 +72,7 @@ func newSinkWorker(
 ) sinkWorker {
 	return &sinkWorkerImpl{
 		changefeedID:   changefeedID,
-        mg: mg,
+		mg:             mg,
 		sortEngine:     sortEngine,
 		memQuota:       quota,
 		eventCache:     eventCache,
@@ -129,9 +129,9 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			}
 
 			// lowerBound and upperBound are both closed intervals.
-            iter := engine.NewMountedEventIter(
-                w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-                iter, w.mg, requestMemSize, 256)
+			iter := engine.NewMountedEventIter(
+				w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
+				iter, w.mg, requestMemSize, 256)
 			for !task.isCanceled() {
 				e, pos, err := iter.Next()
 				if err != nil {
@@ -320,7 +320,7 @@ func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size u
 
 type redoWorkerImpl struct {
 	changefeedID   model.ChangeFeedID
-    mg entry.MounterGroup
+	mg             entry.MounterGroup
 	sortEngine     engine.SortEngine
 	memQuota       *memQuota
 	redoManager    redo.LogManager
@@ -331,7 +331,7 @@ type redoWorkerImpl struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-    mg entry.MounterGroup,
+	mg entry.MounterGroup,
 	sortEngine engine.SortEngine,
 	quota *memQuota,
 	redoManager redo.LogManager,
@@ -341,7 +341,7 @@ func newRedoWorker(
 ) redoWorker {
 	return &redoWorkerImpl{
 		changefeedID:   changefeedID,
-        mg: mg,
+		mg:             mg,
 		sortEngine:     sortEngine,
 		memQuota:       quota,
 		redoManager:    redoManager,
@@ -412,9 +412,9 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 	}
 
 	// lowerBound and upperBound are both closed intervals.
-    iter := engine.NewMountedEventIter(
-        w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
-        iter, w.mg, requestMemSize, 256)
+	iter := engine.NewMountedEventIter(
+		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
+		iter, w.mg, requestMemSize, 256)
 	defer iter.Close()
 	for memAllocated {
 		e, pos, err := iter.Next()

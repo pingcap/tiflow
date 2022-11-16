@@ -50,7 +50,7 @@ func TestMountedEventIter(t *testing.T) {
 			return &model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table:        &model.TableName{Schema: "schema", Table: "table"},
-					IndexColumns: [][]int{[]int{1}},
+					IndexColumns: [][]int{{1}},
 				},
 			}
 		},
