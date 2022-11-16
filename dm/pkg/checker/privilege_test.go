@@ -388,6 +388,7 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 			mysql.DeletePriv: {needGlobal: true},
 			mysql.AlterPriv:  {needGlobal: true},
 			mysql.DropPriv:   {needGlobal: true},
+			mysql.SuperPriv:  {needGlobal: true},
 		}
 		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
 		if cs.checkState == StateSuccess {
