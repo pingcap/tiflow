@@ -326,7 +326,8 @@ func batchSingleTxnDmls(
 	//	zap.Bool("translateIntoInsert", translateToInsert))
 
 	insertRows, updateRows, deleteRows := groupRowsByType(event, tableInfo, !translateToInsert)
-
+	log.Info("fizz batch single txn dmls",
+		zap.Any("insertRows", insertRows), zap.Any("updateRows", updateRows), zap.Any("deleteRows", deleteRows))
 	sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
 	sqls = append(sqls, sql)
 	values = append(values, value)
@@ -393,6 +394,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	rowCount := 0
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
+			log.Warn("fizz empty rows", zap.Any("event", event))
 			continue
 		}
 
@@ -417,6 +419,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 		// Determine whether to use batch dml feature here.
 		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > batchDMLThreshold {
+			log.Info("fizz batch dmls")
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
@@ -427,6 +430,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
 				//log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
 				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
+				log.Info("fizz batch single txn dmls", zap.Strings("sql", sql), zap.Any("value", value))
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
 				rowCount += len(sql)
