@@ -1218,19 +1218,21 @@ func (p *processor) doGCSchemaStorage() {
 func (p *processor) refreshMetrics() {
 	var totalConsumed uint64
 	var totalEvents int64
-	// FIXME: sinkmanager
-	for _, table := range p.tables {
-		consumed := table.MemoryConsumption()
-		p.metricsTableMemoryHistogram.Observe(float64(consumed))
-		totalConsumed += consumed
-		events := table.RemainEvents()
-		if events > 0 {
-			totalEvents += events
+	if !p.pullBasedSinking {
+
+		for _, table := range p.tables {
+			consumed := table.MemoryConsumption()
+			p.metricsTableMemoryHistogram.Observe(float64(consumed))
+			totalConsumed += consumed
+			events := table.RemainEvents()
+			if events > 0 {
+				totalEvents += events
+			}
 		}
+		p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
+		p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+		p.metricRemainKVEventGauge.Set(float64(totalEvents))
 	}
-	p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
-	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
-	p.metricRemainKVEventGauge.Set(float64(totalEvents))
 }
 
 func (p *processor) Close(ctx cdcContext.Context) error {
@@ -1359,11 +1361,25 @@ func (p *processor) cleanupMetrics() {
 }
 
 // WriteDebugInfo write the debug info to Writer
-func (p *processor) WriteDebugInfo(w io.Writer) {
+func (p *processor) WriteDebugInfo(w io.Writer) error {
 	fmt.Fprintf(w, "%+v\n", *p.changefeed)
-	// TODO: add debug info from sinkmanager
-	for tableID, tablePipeline := range p.tables {
-		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
+	if p.pullBasedSinking {
+		tables := p.sinkManager.GetAllCurrentTableIDs()
+		for _, tableID := range tables {
+			state, _ := p.sinkManager.GetTableState(tableID)
+			stats, err := p.sinkManager.GetTableStats(tableID)
+			if err != nil {
+				return err
+			}
+			// TODO: add table name.
+			fmt.Fprintf(w, "tableID: %d, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+				tableID, stats.ResolvedTs, stats.CheckpointTs, state)
+		}
+	} else {
+		for tableID, tablePipeline := range p.tables {
+			fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+				tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
+		}
 	}
+	return nil
 }
