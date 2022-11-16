@@ -468,7 +468,6 @@ func (t *testDMOpenAPISuite) TestJobMasterNotInitialized() {
 }
 
 func equalError(t *testing.T, expected string, body *bytes.Buffer) {
-	t.Log(body.String())
 	var httpErr engineOpenAPI.HTTPError
 	json.Unmarshal(body.Bytes(), &httpErr)
 	require.Equal(t, expected, httpErr.Message)
