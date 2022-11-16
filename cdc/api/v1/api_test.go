@@ -155,7 +155,6 @@ func TestListChangefeed(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
-	fmt.Println(w.Result())
 	require.Equal(t, 200, w.Code)
 	var resp []model.ChangefeedCommonInfo
 	fmt.Println(w.Body.String())
