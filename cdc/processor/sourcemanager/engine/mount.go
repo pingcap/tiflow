@@ -82,11 +82,11 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 				i.savedIterError = i.iter.Close()
 				i.iter = nil
 				break
-			} else {
-				size := uint64(event.Row.ApproximateBytes())
-				i.totalMemUsage += size
-				i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
+
 			}
+			size := uint64(event.Row.ApproximateBytes())
+			i.totalMemUsage += size
+			i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
 		}
 		for idx := i.nextToMount; idx < len(i.rawEvents); idx++ {
 			i.rawEvents[idx].event.SetUpFinishedCh()
