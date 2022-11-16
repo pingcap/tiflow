@@ -148,7 +148,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 	// TODO(dongmen): add a switch to control whether to use the batch dml mode
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
+	log.Info("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
 	start := time.Now()
