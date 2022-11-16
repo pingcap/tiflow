@@ -138,7 +138,7 @@ func New(
 }
 
 // start all workers and report the error to the error channel.
-func (m *ManagerImpl) startWorkers(mg entry.MounterGroup, splitTxn bool, enableOldValue bool) {
+func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, mg, m.sortEngine, m.memQuota,
 			m.eventCache, splitTxn, enableOldValue)
