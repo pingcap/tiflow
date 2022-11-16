@@ -51,6 +51,7 @@ func NewMountedEventIter(
 
 // Next returns the next mounted event.
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
+    // Check whether there are events in mounting or not.
     for idx := i.nextToEmit; idx < i.nextToMount; idx++ {
         if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
             event = i.rawEvents[idx].event
@@ -61,6 +62,8 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
         return
     }
 
+    // There are no events in mounting. Fetch more events and mounting them. The batch
+    // size is determined by `maxMemUsage` and `maxBatchSize`.
     if i.mg != nil && i.iter != nil {
         i.nextToMount = 0
         i.nextToEmit = 0
@@ -94,6 +97,7 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
             i.nextToMount += 1
         }
 
+        // More events are fetched and in mounting. So re-call this function to wait them.
         if i.nextToEmit < i.nextToMount {
             return i.Next(ctx)
         }
