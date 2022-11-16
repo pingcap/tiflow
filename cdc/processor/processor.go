@@ -478,9 +478,10 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 				State:   tablepb.TableStateAbsent,
 			}
 		}
-		stats, err := p.sinkManager.GetTableStats(tableID)
+		sinkStats, err := p.sinkManager.GetTableStats(tableID)
+		// TODO: handle the error
 		if err != nil {
-			log.Warn("Failed to get table stats",
+			log.Warn("Failed to get table sinkStats",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
@@ -494,12 +495,11 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 		return tablepb.TableStatus{
 			TableID: tableID,
 			Checkpoint: tablepb.Checkpoint{
-				CheckpointTs: stats.CheckpointTs,
-				ResolvedTs:   stats.ResolvedTs,
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			// FIXME: add the stats of the table.
-			// Stats: table.Stats(),
+			Stats: p.getStatsFromSourceManagerAndSinkManager(tableID, sinkStats),
 		}
 	}
 	table, ok := p.tables[tableID]
@@ -518,6 +518,44 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 		State: table.State(),
 		Stats: table.Stats(),
 	}
+}
+
+func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats pipeline.Stats) tablepb.Stats {
+	pullerStats := p.sourceManger.GetTablePullerStats(tableID)
+	now, _ := p.upstream.PDClock.CurrentTime()
+
+	stats := tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
+			},
+			"sink": {
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
+			},
+		},
+	}
+
+	// FIXME: add the stats of the sort engine.
+	//sortStats := p.sourceManger.GetTableSortStats(tableID)
+	//stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+	//	CheckpointTs: sortStats.CheckpointTsIngress,
+	//	ResolvedTs:   sortStats.ResolvedTsIngress,
+	//}
+	//stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+	//	CheckpointTs: sortStats.CheckpointTsEgress,
+	//	ResolvedTs:   sortStats.ResolvedTsEgress,
+	//}
+
+	return stats
 }
 
 // newProcessor creates a new processor
