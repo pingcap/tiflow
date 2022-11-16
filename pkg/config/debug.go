@@ -63,5 +63,5 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 
 // IsPullBasedSinkEnabled returns whether pull-based sink is enabled.
 func (c *DebugConfig) IsPullBasedSinkEnabled() bool {
-	return c.EnablePullBasedSink && c.EnableDBSorter
+	return c.EnablePullBasedSink && c.EnableDBSorter && c.EnableNewSink
 }

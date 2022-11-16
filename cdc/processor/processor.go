@@ -850,48 +850,72 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableNewSink {
-		log.Info("Try to create sinkV1")
-		s, err := sinkv1.New(
-			stdCtx,
-			p.changefeedID,
-			p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh,
-		)
+	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
+	if p.pullBasedSinking {
+		engineFactory := ctx.GlobalVars().SortEngineFactory
+		sortEngine, err := engineFactory.Create(p.changefeedID)
 		if err != nil {
-			log.Info("processor creates sink failed",
+			log.Info("Processor creates sort engine",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
-		// See: https://go.dev/play/p/sDlHncxO3Nz
-		if s != nil {
-			p.sinkV1 = s
+		p.sourceManger = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
+		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager, sortEngine, p.errCh, p.metricsTableSinkTotalRows)
+		if err != nil {
+			log.Info("Processor creates sink manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
 		}
+		p.sinkManager = sinkManager
 	} else {
-		log.Info("Try to create sinkV2")
-		sinkV2Factory, err := factory.New(stdCtx, p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh)
-		if err != nil {
-			log.Info("processor creates sink failed",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err),
-				zap.Duration("duration", time.Since(start)))
-			return errors.Trace(err)
+		if !conf.Debug.EnableNewSink {
+			log.Info("Try to create sinkV1")
+			s, err := sinkv1.New(
+				stdCtx,
+				p.changefeedID,
+				p.changefeed.Info.SinkURI,
+				p.changefeed.Info.Config,
+				errCh,
+			)
+			if err != nil {
+				log.Error("processor creates sink failed",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err),
+					zap.Duration("duration", time.Since(start)))
+				return errors.Trace(err)
+			}
+			// Make sure `s` is not nil before assigning it to the `sinkV1`, which is an interface.
+			// See: https://go.dev/play/p/sDlHncxO3Nz
+			if s != nil {
+				p.sinkV1 = s
+			}
+		} else {
+			log.Info("Try to create sinkV2")
+			sinkV2Factory, err := factory.New(stdCtx, p.changefeed.Info.SinkURI,
+				p.changefeed.Info.Config,
+				errCh)
+			if err != nil {
+				log.Error("processor creates sink failed",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err),
+					zap.Duration("duration", time.Since(start)))
+				return errors.Trace(err)
+			}
+			p.sinkV2Factory = sinkV2Factory
 		}
-		p.sinkV2Factory = sinkV2Factory
+		log.Info("processor creates sink",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeed.ID.ID),
+			zap.Duration("duration", time.Since(start)))
 	}
-
-	log.Info("processor creates sink",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID),
-		zap.Duration("duration", time.Since(start)))
 
 	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
