@@ -252,7 +252,6 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
-		//log.Info("fizz convert2RowChanges delete", zap.Any("preValues", preValues))
 		res = sqlmodel.NewRowChange(
 			row.Table,
 			nil,
@@ -260,8 +259,6 @@ func convert2RowChanges(
 			nil,
 			tableInfo,
 			nil, nil)
-		//log.Info("fizz not null index", zap.Any("index", res.UniqueNotNullIdx()))
-		//log.Info("fizz convert2RowChanges delete", zap.Any("res", res))
 	}
 	return res
 }
@@ -298,7 +295,6 @@ func groupRowsByType(
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
 		} else if row.IsUpdate() {
 			if spiltUpdate {
-				//log.Info("fizz split update event", zap.Any("row", row.StartTs))
 				deleteRows = append(
 					deleteRows,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
@@ -320,34 +316,37 @@ func batchSingleTxnDmls(
 	tableInfo *timodel.TableInfo,
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
-
-	//log.Info("fizz batch single txn dmls",
-	//	zap.Stringer("table", event.Event.Rows[0].Table),
-	//	zap.Bool("translateIntoInsert", translateToInsert))
-
 	insertRows, updateRows, deleteRows := groupRowsByType(event, tableInfo, !translateToInsert)
-	log.Info("fizz batch single txn dmls",
-		zap.Any("insertRows", insertRows), zap.Any("updateRows", updateRows), zap.Any("deleteRows", deleteRows))
-	sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
-	sqls = append(sqls, sql)
-	values = append(values, value)
 
-	// handle insert
-	if translateToInsert {
-		sql, value = sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, insertRows...)
-		sqls = append(sqls, sql)
-		values = append(values, value)
-	} else {
-		sql, value = sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, insertRows...)
+	if len(deleteRows) > 0 {
+		sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
 		sqls = append(sqls, sql)
 		values = append(values, value)
 	}
 
+	// handle insert
+	if len(insertRows) > 0 {
+		if translateToInsert {
+			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, insertRows...)
+
+			sqls = append(sqls, sql)
+			values = append(values, value)
+
+		} else {
+			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, insertRows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+
+		}
+	}
+
 	// handle update
-	// TODO: do a testing on update performance.
-	sql, value = sqlmodel.GenUpdateSQL(updateRows...)
-	sqls = append(sqls, sql)
-	values = append(values, value)
+	if len(updateRows) > 0 {
+		// TODO: do a testing on update performance.
+		sql, value := sqlmodel.GenUpdateSQL(updateRows...)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	}
 
 	return
 }
@@ -394,7 +393,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	rowCount := 0
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
-			log.Warn("fizz empty rows", zap.Any("event", event))
 			continue
 		}
 
@@ -419,7 +417,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 		// Determine whether to use batch dml feature here.
 		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > batchDMLThreshold {
-			log.Info("fizz batch dmls")
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
@@ -430,7 +427,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
 				//log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
 				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
-				log.Info("fizz batch single txn dmls", zap.Strings("sql", sql), zap.Any("value", value))
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
 				rowCount += len(sql)
