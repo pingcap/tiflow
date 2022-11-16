@@ -110,7 +110,10 @@ func (i *MountedEventIter) Close() error {
 	if i.savedIterError != nil {
 		return i.savedIterError
 	}
-	return i.iter.Close()
+	if i.iter != nil {
+		return i.iter.Close()
+	}
+	return nil
 }
 
 type rawEvent struct {

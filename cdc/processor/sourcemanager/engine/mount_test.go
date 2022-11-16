@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,17 +31,6 @@ func (i *mockIter) Next() (*model.PolymorphicEvent, Position, error) {
 }
 
 func (i *mockIter) Close() error {
-	return nil
-}
-
-type mockMountGroup struct{}
-
-func (m *mockMountGroup) Run(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
-	event.MarkFinished()
 	return nil
 }
 
@@ -57,7 +47,7 @@ func TestMountedEventIter(t *testing.T) {
 	}
 	itemSize := uint64(rawIter.repeatItem().Row.ApproximateBytes())
 
-	mg := &mockMountGroup{}
+	mg := &entry.MockMountGroup{}
 	iter := NewMountedEventIter(rawIter, mg, itemSize*3, 8)
 
 	for i := 0; i < 3; i++ {

@@ -131,9 +131,9 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			// lowerBound and upperBound are both closed intervals.
 			iter := engine.NewMountedEventIter(
 				w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-				iter, w.mg, requestMemSize, 256)
+				w.mg, requestMemSize, 256)
 			for !task.isCanceled() {
-				e, pos, err := iter.Next()
+				e, pos, err := iter.Next(ctx)
 				if err != nil {
 					iter.Close()
 					return errors.Trace(err)
@@ -414,10 +414,10 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 	// lowerBound and upperBound are both closed intervals.
 	iter := engine.NewMountedEventIter(
 		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
-		iter, w.mg, requestMemSize, 256)
+		w.mg, requestMemSize, 256)
 	defer iter.Close()
 	for memAllocated {
-		e, pos, err := iter.Next()
+		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
