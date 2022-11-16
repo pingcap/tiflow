@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -47,18 +48,25 @@ type TaskManager struct {
 	// taskID -> TaskStatus
 	tasks sync.Map
 
+	gaugeVec   *prometheus.GaugeVec
 	stageGauge map[string]prometheus.Gauge
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(jobId string, initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger, metricFactory promutil.Factory) *TaskManager {
 	taskManager := &TaskManager{
-		jobId:         jobId,
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
 		logger:        pLogger.With(zap.String("component", "task_manager")),
 		messageAgent:  messageAgent,
-		stageGauge:    make(map[string]prometheus.Gauge),
+		gaugeVec: metricFactory.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "job_master",
+				Subsystem: "task_manager",
+				Name:      "task_stage",
+				Help:      "task stage of dm worker in this job",
+			}, []string{"task_id"}),
+		stageGauge: make(map[string]prometheus.Gauge),
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -112,7 +120,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 	if _, ok := tm.stageGauge[taskStatus.Task]; !ok {
-		tm.stageGauge[taskStatus.Task] = jobTaskStageGauge.WithLabelValues(tm.jobId, taskStatus.Task)
+		tm.stageGauge[taskStatus.Task] = tm.gaugeVec.WithLabelValues(taskStatus.Task)
 	}
 	tm.stageGauge[taskStatus.Task].Set(float64(taskStatus.Stage))
 }
