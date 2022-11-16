@@ -543,9 +543,16 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	if err != nil {
 		return pipeline.Stats{}, errors.Trace(err)
 	}
+	var resolvedTs model.Ts
+	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
+	if m.redoManager != nil {
+		resolvedTs = m.redoManager.GetResolvedTs(tableID)
+	} else {
+		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
+	}
 	return pipeline.Stats{
 		CheckpointTs: checkpointTs.Ts,
-		ResolvedTs:   tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ResolvedTs:   resolvedTs,
 		BarrierTs:    m.lastBarrierTs.Load(),
 	}, nil
 }

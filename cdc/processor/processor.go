@@ -743,7 +743,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-	p.handlePosition(oracle.GetPhysical(pdTime))
+	if err := p.handlePosition(oracle.GetPhysical(pdTime)); err != nil {
+		return errors.Trace(err)
+	}
 
 	p.doGCSchemaStorage()
 
@@ -1033,27 +1035,45 @@ func (p *processor) sendError(err error) {
 // resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
 // table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
 // checkpointTs = min(resolvedTs, all table's checkpointTs).
-func (p *processor) handlePosition(currentTs int64) {
+func (p *processor) handlePosition(currentTs int64) error {
 	minResolvedTs := uint64(math.MaxUint64)
 	minResolvedTableID := int64(0)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
-	for _, table := range p.tables {
-		ts := table.ResolvedTs()
-		if ts < minResolvedTs {
-			minResolvedTs = ts
-			minResolvedTableID = table.ID()
-		}
-	}
-
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
-	for _, table := range p.tables {
-		ts := table.CheckpointTs()
-		if ts < minCheckpointTs {
-			minCheckpointTs = ts
-			minCheckpointTableID = table.ID()
+	if p.pullBasedSinking {
+		tableIDs := p.sinkManager.GetAllCurrentTableIDs()
+		for _, tableID := range tableIDs {
+			stats, err := p.sinkManager.GetTableStats(tableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if stats.ResolvedTs < minResolvedTs {
+				minResolvedTs = stats.ResolvedTs
+				minResolvedTableID = tableID
+			}
+			if stats.CheckpointTs < minCheckpointTs {
+				minCheckpointTs = stats.CheckpointTs
+				minCheckpointTableID = tableID
+			}
+		}
+	} else {
+		for _, table := range p.tables {
+			ts := table.ResolvedTs()
+			if ts < minResolvedTs {
+				minResolvedTs = ts
+				minResolvedTableID = table.ID()
+			}
+		}
+
+		for _, table := range p.tables {
+			ts := table.CheckpointTs()
+			if ts < minCheckpointTs {
+				minCheckpointTs = ts
+				minCheckpointTableID = table.ID()
+			}
 		}
 	}
 
@@ -1069,6 +1089,8 @@ func (p *processor) handlePosition(currentTs int64) {
 
 	p.checkpointTs = minCheckpointTs
 	p.resolvedTs = minResolvedTs
+
+	return nil
 }
 
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
