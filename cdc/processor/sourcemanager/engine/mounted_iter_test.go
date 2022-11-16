@@ -35,6 +35,8 @@ func (i *mockIter) Close() error {
 }
 
 func TestMountedEventIter(t *testing.T) {
+	t.Parallel()
+
 	rawIter := &mockIter{
 		repeatItem: func() *model.PolymorphicEvent {
 			return &model.PolymorphicEvent{
