@@ -979,6 +979,17 @@ func (p *processor) handleErrorCh() error {
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := p.upstream.KVStorage
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	resolvedTs := p.changefeed.Status.ResolvedTs
+
+	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// been executed or not. So the DDL puller must start at checkpointTs-1.
+	var ddlStartTs uint64
+	if resolvedTs > checkpointTs {
+		ddlStartTs = checkpointTs
+	} else {
+		ddlStartTs = checkpointTs - 1
+	}
+
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
@@ -990,7 +1001,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.RegionCache,
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
-		checkpointTs,
+		ddlStartTs,
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
@@ -998,11 +1009,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs,
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
 		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
