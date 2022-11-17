@@ -276,42 +276,51 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
-func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+// GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
+func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig) (*lcfg.Config, error) {
 	cfg := lcfg.NewConfig()
-	if err := cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
+	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
-	cfg.App.RegionConcurrency = l.cfg.LoaderConfig.PoolSize
-	cfg.Routes = l.cfg.RouteRules
+	cfg.App.RegionConcurrency = subtaskCfg.LoaderConfig.PoolSize
+	cfg.Routes = subtaskCfg.RouteRules
 
 	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
 	var cpPath string
 	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
-	cpPath, err := storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+	cpPath, err := storage.AdjustPath(subtaskCfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
-	cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
+	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicate)
 	cfg.TiDB.Vars = make(map[string]string)
-	cfg.Routes = l.cfg.RouteRules
-	if l.cfg.To.Session != nil {
-		for k, v := range l.cfg.To.Session {
+	cfg.Routes = subtaskCfg.RouteRules
+	if subtaskCfg.To.Session != nil {
+		for k, v := range subtaskCfg.To.Session {
 			cfg.TiDB.Vars[k] = v
 		}
 	}
-	cfg.TiDB.StrSQLMode = l.sqlMode
 	cfg.TiDB.Vars = map[string]string{
-		"time_zone": l.timeZone,
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
 	}
-	cfg.Mydumper.SourceID = l.cfg.SourceID
+	cfg.Mydumper.SourceID = subtaskCfg.SourceID
+	return cfg, nil
+}
+
+func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg.TiDB.StrSQLMode = l.sqlMode
+	cfg.TiDB.Vars["time_zone"] = l.timeZone
 	return cfg, nil
 }
 

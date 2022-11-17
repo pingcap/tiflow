@@ -25,7 +25,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -334,20 +333,42 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
-		lCfg := lcfg.NewConfig()
-		err = lCfg.LoadFromGlobal(loader.MakeGlobalConfig(instance.cfg))
+		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
 		if err != nil {
 			return err
 		}
+		// bypass a Adjust error
+		lCfg.Mydumper.SourceDir = "noop://"
+		err = lCfg.Adjust(ctx)
+		if err != nil {
+			return err
+		}
+
 		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
 		if err != nil {
 			return err
 		}
-		lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
-		if err != nil {
-			return err
+		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
 		}
-		c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+		}
 	}
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
