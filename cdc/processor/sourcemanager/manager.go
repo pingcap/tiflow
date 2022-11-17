@@ -16,12 +16,15 @@ package sourcemanager
 import (
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
+	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
+	"github.com/pingcap/tiflow/cdc/puller"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"go.uber.org/zap"
 )
 
 // SourceManager is the manager of the source engine and puller.
@@ -61,7 +64,7 @@ func (m *SourceManager) IsTableBased() bool {
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
-	p := puller.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
 	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 	m.engine.AddTable(tableID)
@@ -70,7 +73,7 @@ func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
 func (m *SourceManager) RemoveTable(tableID model.TableID) {
 	if wrapper, ok := m.pullers.Load(tableID); ok {
-		wrapper.(*puller.Wrapper).Close()
+		wrapper.(*pullerwrapper.Wrapper).Close()
 		m.pullers.Delete(tableID)
 	}
 	m.engine.RemoveTable(tableID)
@@ -101,10 +104,22 @@ func (m *SourceManager) CleanAllTables(upperBound engine.Position) error {
 	return m.engine.CleanAllTables(upperBound)
 }
 
+// GetTablePullerStats returns the puller stats of the table.
+func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats {
+	p, ok := m.pullers.Load(tableID)
+	if !ok {
+		log.Panic("Table puller not found when getting table puller stats",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	return p.(*pullerwrapper.Wrapper).GetStats()
+}
+
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
 	m.pullers.Range(func(key, value interface{}) bool {
-		value.(*puller.Wrapper).Close()
+		value.(*pullerwrapper.Wrapper).Close()
 		return true
 	})
 	if err := m.engine.Close(); err != nil {

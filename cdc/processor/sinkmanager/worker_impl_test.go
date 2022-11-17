@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
@@ -29,7 +30,7 @@ import (
 func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) sinkWorker {
 	sortEngine := memory.New(context.Background())
 	quota := newMemQuota(changefeedID, memQuota)
-	return newSinkWorker(changefeedID, sortEngine, quota, nil, splitTxn, false)
+	return newSinkWorker(changefeedID, &entry.MockMountGroup{}, sortEngine, quota, nil, splitTxn, false)
 }
 
 // nolint:unparam
