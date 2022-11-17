@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"math"
 	"math/big"
 	"testing"
 
@@ -61,8 +60,7 @@ func setupEncoderAndSchemaRegistry(
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		resultBuf:                  make([]*common.Message, 0, 4096),
-		maxMessageBytes:            math.MaxInt,
+		result:                     make([]*common.Message, 0, 4096),
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,
 		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
