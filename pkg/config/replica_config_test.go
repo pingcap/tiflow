@@ -46,11 +46,13 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.CSVConfig = &CSVConfig{
 		Delimiter:       ",",
 		Quote:           "\"",
-		Terminator:      "",
 		NullString:      `\N`,
-		DateSeparator:   "month",
 		IncludeCommitTs: true,
 	}
+	conf.Sink.Terminator = ""
+	conf.Sink.DateSeparator = "month"
+	conf.Sink.EnablePartitionSeparator = true
+
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
@@ -91,6 +93,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
 	conf.Sink.TxnAtomicity = unknownTxnAtomicity
+	conf.Sink.DateSeparator = ""
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }
