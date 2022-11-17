@@ -279,6 +279,10 @@ func (m *SinkManager) generateSinkTasks() error {
 			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
+			log.Info("Generate sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
 			// Because it can not exceed the barrier ts.
 			// We also need to consider the resolved ts from sorter,
@@ -441,6 +445,10 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 
 // StartTable sets the table(TableSink) state to replicating.
 func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
+	log.Info("Start table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID))
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",

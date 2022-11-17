@@ -309,6 +309,12 @@ func (w *sinkWorkerImpl) appendEventsToTableSink(t *sinkTask, events []*model.Po
 }
 
 func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+	log.Info("Advance table sink",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("commitTs", commitTs),
+	)
 	resolvedTs := model.NewResolvedTs(commitTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode

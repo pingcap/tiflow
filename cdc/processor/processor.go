@@ -865,6 +865,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sourceManger = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
 		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager,
 			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
+		p.sourceManger.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
 			log.Info("Processor creates sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
