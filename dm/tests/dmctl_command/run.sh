@@ -763,7 +763,7 @@ function run_check_task() {
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	check_task_lightning
-	# check_full_mode_conn
+	check_full_mode_conn
 	checktask_full_mode_conn
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
