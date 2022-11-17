@@ -36,7 +36,7 @@ const (
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
 	ConnNumberChecking           = "conn_number"
-	TargetPrivilegeChecking      = "target_privilege"
+	TargetDBPrivilegeChecking    = "target_privilege"
 )
 
 // AllCheckingItems contains all checking items.
@@ -55,7 +55,7 @@ var AllCheckingItems = map[string]string{
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
 	ConnNumberChecking:           "connection number checking item",
-	TargetPrivilegeChecking:      "privileges of target DB checking item",
+	TargetDBPrivilegeChecking:    "privileges of target DB checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

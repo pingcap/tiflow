@@ -51,7 +51,7 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.ShardAutoIncrementIDChecking,
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
-		config.TargetPrivilegeChecking,
+		config.TargetDBPrivilegeChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {
@@ -163,10 +163,10 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 	}, cfgs)
 }
 
-func TestTargetPrivilegeChecking(t *testing.T) {
+func TestTargetDBPrivilegeChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
-			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetPrivilegeChecking: {}}),
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetDBPrivilegeChecking: {}}),
 		},
 	}
 
