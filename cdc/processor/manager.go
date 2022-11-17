@@ -235,7 +235,10 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
 		w := cmd.payload.(io.Writer)
-		m.writeDebugInfo(w)
+		err := m.writeDebugInfo(w)
+		if err != nil {
+			cmd.done <- err
+		}
 	case commandTpQueryTableCount:
 		count := 0
 		for _, p := range m.processors {
@@ -251,10 +254,15 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (m *managerImpl) writeDebugInfo(w io.Writer) {
+func (m *managerImpl) writeDebugInfo(w io.Writer) error {
 	for changefeedID, processor := range m.processors {
 		fmt.Fprintf(w, "changefeedID: %s\n", changefeedID)
-		processor.WriteDebugInfo(w)
+		err := processor.WriteDebugInfo(w)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		fmt.Fprintf(w, "\n")
 	}
+
+	return nil
 }

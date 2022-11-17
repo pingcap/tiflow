@@ -121,6 +121,11 @@ func (n *Wrapper) Start(
 	n.cancel = cancel
 }
 
+// GetStats returns the puller stats.
+func (n *Wrapper) GetStats() puller.Stats {
+	return n.p.Stats()
+}
+
 // Close the puller wrapper.
 func (n *Wrapper) Close() {
 	n.cancel()
