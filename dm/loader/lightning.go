@@ -80,7 +80,7 @@ type LightningLoader struct {
 
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
-	lightningCfg := makeGlobalConfig(cfg)
+	lightningCfg := MakeGlobalConfig(cfg)
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
 		logger = log.Logger{Logger: cfg.FrameworkLogger}
@@ -97,7 +97,8 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 	return loader
 }
 
-func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
+// MakeGlobalConfig converts subtask config to lightning global config.
+func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes

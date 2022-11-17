@@ -25,12 +25,15 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/checker"
@@ -331,7 +334,20 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
-		c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker())
+		lCfg := lcfg.NewConfig()
+		err = lCfg.LoadFromGlobal(loader.MakeGlobalConfig(instance.cfg))
+		if err != nil {
+			return err
+		}
+		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
+		if err != nil {
+			return err
+		}
+		lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+		if err != nil {
+			return err
+		}
+		c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
 	}
 
 	c.tctx.Logger.Info(c.displayCheckingItems())

@@ -16,7 +16,6 @@ package checker
 import (
 	"context"
 
-	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 )
 
@@ -25,11 +24,8 @@ type LightningEmptyRegionChecker struct {
 	inner restore.PrecheckItem
 }
 
-func NewLightningEmptyRegionChecker(
-	preInfoGetter restore.PreRestoreInfoGetter,
-	dbMetas []*mydump.MDDatabaseMeta,
-) RealChecker {
-	return &LightningEmptyRegionChecker{inner: restore.NewEmptyRegionCheckItem(preInfoGetter, dbMetas)}
+func NewLightningEmptyRegionChecker(lightningChecker restore.PrecheckItem) RealChecker {
+	return &LightningEmptyRegionChecker{inner: lightningChecker}
 }
 
 // Name implements the RealChecker interface.
