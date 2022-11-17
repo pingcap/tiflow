@@ -117,6 +117,9 @@ func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *Sor
 	manager := &SortEngineFactory{
 		engineType:      pebbleEngine,
 		memQuotaInBytes: memQuotaInBytes,
+		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+		closed:          make(chan struct{}),
+		dir:             dir,
 		pebbleConfig:    cfg,
 	}
 

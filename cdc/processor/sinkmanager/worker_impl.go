@@ -131,7 +131,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			// lowerBound and upperBound are both closed intervals.
 			iter := engine.NewMountedEventIter(
 				w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-				w.mg, requestMemSize, 256)
+				w.mg, 256)
 			for !task.isCanceled() {
 				e, pos, err := iter.Next(ctx)
 				if err != nil {
@@ -140,6 +140,13 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				}
 				// There is no more data.
 				if e == nil {
+					if lastCommitTs == 0 {
+						lastCommitTs = upperBound.CommitTs
+						err := advanceTableSinkAndResetCurrentSize()
+						if err != nil {
+							return errors.Trace(err)
+						}
+					}
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
@@ -320,7 +327,9 @@ func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size u
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = batchID
 	}
-	w.memQuota.record(t.tableID, resolvedTs, size)
+	if size > 0 {
+		w.memQuota.record(t.tableID, resolvedTs, size)
+	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
 
@@ -420,7 +429,7 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 	// lowerBound and upperBound are both closed intervals.
 	iter := engine.NewMountedEventIter(
 		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
-		w.mg, requestMemSize, 256)
+		w.mg, 256)
 	defer iter.Close()
 	for memAllocated {
 		e, pos, err := iter.Next(ctx)
