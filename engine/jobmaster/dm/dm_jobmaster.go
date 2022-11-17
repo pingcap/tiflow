@@ -289,8 +289,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) {
-	if err := jm.messageAgent.Close(ctx); err != nil {
-		jm.Logger().Error("failed to close message agent", zap.Error(err))
+	if jm.messageAgent != nil {
+		if err := jm.messageAgent.Close(ctx); err != nil {
+			jm.Logger().Error("failed to close message agent", zap.Error(err))
+		}
 	}
 }
 
