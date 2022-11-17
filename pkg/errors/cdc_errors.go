@@ -928,6 +928,12 @@ var (
 		errors.RFCCodeText("CDC:ErrSorterClosed"),
 	)
 
+	// Pull based sink config error.
+	ErrInvalidPullBasedSinkConfig = errors.Normalize(
+		"invalid pull based sink config: %s",
+		errors.RFCCodeText("CDC:ErrInvalidPullBasedSinkConfig"),
+	)
+
 	// processor errors
 	ErrProcessorDuplicateOperations = errors.Normalize(
 		"table processor duplicate operation, table-id: %d",
