@@ -27,13 +27,27 @@ function run() {
 		run_sql --quiet "INSERT INTO dm_many_tables.t$i VALUES (9, 90009);"
 	done
 
-	# create job & wait for job finished
+	# create job & wait for job to enter load phase
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_many_tables")
-	# check progress is forwarded gradually, not jump to "finished"
-	exec_with_retry --count 500 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
-	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 50 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
 
-	# check data
+	# test autoresume
+	docker stop dm_downstream_tidb
+	exec_with_retry --count 20 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status | .unit == \"DMLoadTask\" and .stage == \"Error\"'"
+	docker start dm_downstream_tidb
+	docker restart server-executor-0 server-executor-1 server-executor-2
+	# wait jobMaster online
+	exec_with_retry --count 50 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | grep 'job_id'"
+	exec_with_retry --count 50 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
+
+	# test pause and resume
+	exec_with_retry --count 20 "curl -X PUT \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" -H 'Content-Type: application/json' -d '{\"op\": \"pause\"}'"
+	sleep 10
+	exec_with_retry --count 20 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status | .stage == \"Paused\"'"
+	exec_with_retry --count 20 "curl -X PUT \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" -H 'Content-Type: application/json' -d '{\"op\": \"resume\"}'"
+
+	# wait for job finished and check data
+	exec_with_retry --count 20 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
