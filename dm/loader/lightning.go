@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/lightning/metric"
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -471,7 +472,12 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
-	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
+	finishedForSpeed := finished
+	// for tidb backend, `finished` is too big granularity, use below metric is much better
+	if l.cfg.LoaderConfig.ImportMode == config.LoadModeLogical {
+		finishedForSpeed = int64(metric.ReadCounter(l.core.Metrics().BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+	}
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finishedForSpeed)))
 
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
