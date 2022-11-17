@@ -39,7 +39,8 @@ function test_check_task_fail_no_block_forsharding() {
 		"\"state\": \"fail\"" 1
 }
 
-# this test case ensures that the privileges we require fully meet the demands of both syncer and loader
+# this test case ensures that the privileges we require fully meet the demands of both syncer and loader, 
+# and dm can still make progress if the downstream user lacks `super` privilege.
 function test_privileges_can_migrate() {
 	# cleanup data if last test failed
 	echo "--> start test_privileges_can_migrate..."
