@@ -102,7 +102,7 @@ func TestRegionUnbalanced(t *testing.T) {
 	require.Len(t, result.Errors, 1)
 	require.Equal(t, lightningMsg, result.Errors[0].ShortErr)
 	require.Equal(t, StateWarning, result.Errors[0].Severity)
-	
+
 	// lightning prechecker returns warning or success
 	lightningMsg = "Cluster region distribution is balanced"
 	c.inner = mockPrecheckItem{msg: lightningMsg, pass: true}
