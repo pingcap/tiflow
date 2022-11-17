@@ -47,7 +47,6 @@ func TestMountedEventIter(t *testing.T) {
 			}
 		},
 	}
-	itemSize := uint64(rawIter.repeatItem().Row.ApproximateBytes())
 
 	mg := &entry.MockMountGroup{}
 	iter := NewMountedEventIter(rawIter, mg, 3)
@@ -56,7 +55,6 @@ func TestMountedEventIter(t *testing.T) {
 		event, _, err := iter.Next(context.Background())
 		require.NotNil(t, event)
 		require.Nil(t, err)
-		require.Equal(t, itemSize*uint64(2-i), iter.totalMemUsage)
 	}
 	require.Equal(t, iter.nextToMount, 3)
 	require.Equal(t, iter.nextToEmit, 3)
