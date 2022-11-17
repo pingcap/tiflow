@@ -68,7 +68,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		err := w.Open(uuid, filename)
 		c.Assert(err, IsNil)
 		c.Assert(w.file, NotNil)
-		c.Assert(w.filename, Equals, filename)
+		c.Assert(w.filename.Load(), Equals, filename)
 		c.Assert(w.offset.Load(), Equals, int64(0))
 
 		err = w.Write(data1)
@@ -92,7 +92,7 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 		err = w.Close()
 		c.Assert(err, IsNil)
 		c.Assert(w.file, IsNil)
-		c.Assert(w.filename, Equals, "")
+		c.Assert(w.filename.Load(), Equals, "")
 		c.Assert(w.offset.Load(), Equals, int64(0))
 
 		c.Assert(w.Close(), IsNil) // noop

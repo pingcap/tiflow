@@ -36,14 +36,13 @@ const (
 )
 
 // BinlogWriter is a binlog event writer which writes binlog events to a file.
+// Open/Write/Close cannot be called concurrently
 type BinlogWriter struct {
-	mu sync.RWMutex
-
 	offset   atomic.Int64
 	file     *os.File
 	relayDir string
-	uuid     string
-	filename string
+	uuid     atomic.String
+	filename atomic.String
 
 	logger log.Logger
 
@@ -91,8 +90,6 @@ func (w *BinlogWriter) run() {
 			return
 		}
 
-		w.mu.Lock()
-		defer w.mu.Unlock()
 		if w.file == nil {
 			select {
 			case w.errCh <- terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")):
@@ -113,32 +110,22 @@ func (w *BinlogWriter) run() {
 		buf.Reset()
 	}
 
-	for {
-		select {
-		case bs, ok := <-w.input:
-			if !ok {
-				if !errOccurs {
-					writeToFile()
-				}
-				return
-			}
-			if errOccurs {
-				continue
-			}
-			if bs != nil {
-				buf.Write(bs)
-			}
-			if bs == nil || buf.Len() > bufferSize {
-				writeToFile()
-			}
-			if bs == nil {
-				w.flushWg.Done()
-			}
-		case <-time.After(waitTime):
-			if !errOccurs {
-				writeToFile()
-			}
+	for bs := range w.input {
+		if errOccurs {
+			continue
 		}
+		if bs != nil {
+			buf.Write(bs)
+		}
+		if bs == nil || buf.Len() > bufferSize || len(w.input) == 0 {
+			writeToFile()
+		}
+		if bs == nil {
+			w.flushWg.Done()
+		}
+	}
+	if !errOccurs {
+		writeToFile()
 	}
 }
 
@@ -157,13 +144,10 @@ func (w *BinlogWriter) Open(uuid, filename string) error {
 		return terror.ErrBinlogWriterGetFileStat.Delegate(err, f.Name())
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	w.offset.Store(fs.Size())
 	w.file = f
-	w.uuid = uuid
-	w.filename = filename
+	w.uuid.Store(uuid)
+	w.filename.Store(filename)
 
 	w.input = make(chan []byte, chanSize)
 	w.wg.Add(1)
@@ -176,15 +160,10 @@ func (w *BinlogWriter) Open(uuid, filename string) error {
 }
 
 func (w *BinlogWriter) Close() error {
-	w.mu.Lock()
 	if w.input != nil {
 		close(w.input)
 	}
-	w.mu.Unlock()
 	w.wg.Wait()
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	var err error
 	if w.file != nil {
@@ -197,8 +176,8 @@ func (w *BinlogWriter) Close() error {
 
 	w.file = nil
 	w.offset.Store(0)
-	w.uuid = ""
-	w.filename = ""
+	w.uuid.Store("")
+	w.filename.Store("")
 	w.input = nil
 
 	if writeErr := w.Error(); writeErr != nil {
@@ -208,15 +187,10 @@ func (w *BinlogWriter) Close() error {
 }
 
 func (w *BinlogWriter) Write(rawData []byte) error {
-	w.mu.RLock()
 	if w.file == nil {
-		w.mu.RUnlock()
 		return terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened"))
 	}
-	input := w.input
-	w.mu.RUnlock()
-
-	input <- rawData
+	w.input <- rawData
 	w.offset.Add(int64(len(rawData)))
 	return w.Error()
 }
@@ -240,11 +214,8 @@ func (w *BinlogWriter) Error() error {
 }
 
 func (w *BinlogWriter) Status() *BinlogWriterStatus {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
 	return &BinlogWriterStatus{
-		Filename: w.filename,
+		Filename: w.filename.Load(),
 		Offset:   w.offset.Load(),
 	}
 }
@@ -254,7 +225,5 @@ func (w *BinlogWriter) Offset() int64 {
 }
 
 func (w *BinlogWriter) isActive(uuid, filename string) (bool, int64) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return uuid == w.uuid && filename == w.filename, w.offset.Load()
+	return uuid == w.uuid.Load() && filename == w.filename.Load(), w.offset.Load()
 }
