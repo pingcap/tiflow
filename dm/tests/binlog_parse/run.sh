@@ -6,6 +6,8 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
+# skip one tale, sync another table
+# mariadb10.0 timestamp(3) will panic before dm v6.4.0
 function run() {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -54,8 +56,6 @@ function run() {
 
 	echo "check incremental phase 2"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	read v1
 }
 
 cleanup_data $TEST_NAME

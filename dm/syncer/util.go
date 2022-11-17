@@ -159,6 +159,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	var rowsEventDecodeFunc func(*replication.RowsEvent, []byte) error
 	if baList != nil {
 		// we don't track delete table events, so simply reset the cache if it's full
+		// TODO: use LRU or CLOCK cache if needed.
 		allowListCache := make(map[uint64]struct{}, maxCapacity)
 		blockListCache := make(map[uint64]struct{}, maxCapacity)
 
