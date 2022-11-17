@@ -119,8 +119,8 @@ func TestDMJob(t *testing.T) {
 	// test metrics for syncer
 	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
 	testMetrics(re)
-	// test metrics for dm_job_task_stage: 2 running all job
-	re = regexp.MustCompile(`dm_job_task_stage.*\{job_id="(.{36})".*2`)
+	// test metrics for dm_task_stage: 2 running all job
+	re = regexp.MustCompile(`dm_task_stage.*\{job_id="(.{36})".*2`)
 	testMetrics(re)
 }
 

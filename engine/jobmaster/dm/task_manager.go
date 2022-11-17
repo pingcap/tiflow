@@ -47,7 +47,8 @@ type TaskManager struct {
 	// taskID -> TaskStatus
 	tasks sync.Map
 
-	gaugeVec   *prometheus.GaugeVec
+	gaugeVec *prometheus.GaugeVec
+	// taskID -> stage
 	stageGauge map[string]prometheus.Gauge
 }
 
@@ -61,8 +62,8 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 		gaugeVec: metricFactory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "dm",
-				Subsystem: "job",
-				Name:      "task_stage",
+				Subsystem: "task",
+				Name:      "stage",
 				Help:      "task stage of dm worker in this job",
 			}, []string{"task_id"}),
 		stageGauge: make(map[string]prometheus.Gauge),
@@ -204,6 +205,9 @@ func (tm *TaskManager) onJobDel() {
 		tm.tasks.Delete(key)
 		return true
 	})
+	for taskID := range tm.stageGauge {
+		tm.gaugeVec.DeleteLabelValues(taskID)
+	}
 }
 
 // remove deleted task status, usually happened when update-job delete some tasks.
@@ -213,6 +217,7 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 		if _, ok := job.Tasks[taskID]; !ok {
 			tm.logger.Info("remove task status", zap.String("task_id", taskID))
 			tm.tasks.Delete(taskID)
+			tm.gaugeVec.DeleteLabelValues(taskID)
 		}
 		return true
 	})
