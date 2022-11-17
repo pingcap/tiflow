@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	tmock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -59,7 +60,7 @@ type testDMOpenAPISuite struct {
 
 func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
-		mockBaseJobmaster   = &MockBaseJobmaster{}
+		mockBaseJobmaster   = &MockBaseJobmaster{t: t.T()}
 		mockMessageAgent    = &dmpkg.MockMessageAgent{}
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
@@ -69,7 +70,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), promutil.NewFactory4Test(t.T().TempDir()))
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
 	jm.initialized.Store(true)
 

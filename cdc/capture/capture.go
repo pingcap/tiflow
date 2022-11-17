@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -36,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -92,12 +92,12 @@ type captureImpl struct {
 	EtcdClient       etcd.CDCEtcdClient
 	tableActorSystem *system.System
 
-	// useEventSortEngine indicates whether to use the new pull based sort engine or
+	// useSortEngine indicates whether to use the new pull based sort engine or
 	// the old push based sorter system. the latter will be removed after all sorter
 	// have been transformed into pull based sort engine.
-	useEventSortEngine bool
-	sorterSystem       *ssystem.System
-	sortEngineManager  *sortmgr.EventSortEngineManager
+	useSortEngine     bool
+	sorterSystem      *ssystem.System
+	sortEngineFactory *factory.SortEngineFactory
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -130,7 +130,7 @@ func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 	tableActorSystem *system.System,
-	sortEngineManager *sortmgr.EventSortEngineManager,
+	sortEngineMangerFactory *factory.SortEngineFactory,
 	sorterSystem *ssystem.System,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
@@ -146,9 +146,9 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 
-		useEventSortEngine: sortEngineManager != nil,
-		sortEngineManager:  sortEngineManager,
-		sorterSystem:       sorterSystem,
+		useSortEngine:     sortEngineMangerFactory != nil,
+		sortEngineFactory: sortEngineMangerFactory,
+		sorterSystem:      sorterSystem,
 
 		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
@@ -311,14 +311,13 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		CaptureInfo:      c.info,
-		EtcdClient:       c.EtcdClient,
-		TableActorSystem: c.tableActorSystem,
-		MessageServer:    c.MessageServer,
-		MessageRouter:    c.MessageRouter,
-
+		CaptureInfo:       c.info,
+		EtcdClient:        c.EtcdClient,
+		TableActorSystem:  c.tableActorSystem,
+		MessageServer:     c.MessageServer,
+		MessageRouter:     c.MessageRouter,
 		SorterSystem:      c.sorterSystem,
-		SortEngineManager: c.sortEngineManager,
+		SortEngineFactory: c.sortEngineFactory,
 	})
 
 	g.Go(func() error {

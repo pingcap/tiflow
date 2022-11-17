@@ -418,4 +418,8 @@ var (
 		"election record conflict",
 		errors.RFCCodeText("DFLOW:ErrElectionRecordConflict"),
 	)
+	ErrDeserializeConfig = errors.Normalize(
+		"deserialize config failed",
+		errors.RFCCodeText("DFLOW:ErrDeserializeConfig"),
+	)
 )
