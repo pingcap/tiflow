@@ -48,8 +48,6 @@ type TaskManager struct {
 	tasks sync.Map
 
 	gaugeVec *prometheus.GaugeVec
-	// taskID -> stage
-	stageGauge map[string]prometheus.Gauge
 }
 
 // NewTaskManager creates a new TaskManager instance
@@ -66,7 +64,6 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 				Name:      "stage",
 				Help:      "task stage of dm worker in this job",
 			}, []string{"task_id"}),
-		stageGauge: make(map[string]prometheus.Gauge),
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -119,10 +116,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
-	if _, ok := tm.stageGauge[taskStatus.Task]; !ok {
-		tm.stageGauge[taskStatus.Task] = tm.gaugeVec.WithLabelValues(taskStatus.Task)
-	}
-	tm.stageGauge[taskStatus.Task].Set(float64(taskStatus.Stage))
+	tm.gaugeVec.WithLabelValues(taskStatus.Task).Set(float64(taskStatus.Stage))
 }
 
 // TaskStatus return the task status.
@@ -203,11 +197,9 @@ func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
+		tm.gaugeVec.DeleteLabelValues(key.(string))
 		return true
 	})
-	for taskID := range tm.stageGauge {
-		tm.gaugeVec.DeleteLabelValues(taskID)
-	}
 }
 
 // remove deleted task status, usually happened when update-job delete some tasks.
