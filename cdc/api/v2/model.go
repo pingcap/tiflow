@@ -95,6 +95,7 @@ type ReplicaConfig struct {
 	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
 	EnableSyncPoint       bool              `json:"enable_sync_point"`
+	BDRMode               bool              `json:"bdr-mode"`
 	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
 	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
@@ -112,6 +113,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.EnableSyncPoint = c.EnableSyncPoint
 	res.SyncPointInterval = c.SyncPointInterval
 	res.SyncPointRetention = c.SyncPointRetention
+	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
 		var mySQLReplicationRules *filter.MySQLReplicationRules
@@ -215,6 +217,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		EnableSyncPoint:       cloned.EnableSyncPoint,
 		SyncPointInterval:     cloned.SyncPointInterval,
 		SyncPointRetention:    cloned.SyncPointRetention,
+		BDRMode:               cloned.BDRMode,
 	}
 
 	if cloned.Filter != nil {

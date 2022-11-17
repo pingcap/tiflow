@@ -91,6 +91,7 @@ func (n *Wrapper) Start(
 		n.changefeed,
 		n.tableID,
 		n.tableName,
+		false,
 	)
 	n.wg.Add(1)
 	go func() {

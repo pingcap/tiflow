@@ -93,6 +93,7 @@ type replicaConfig struct {
 	ForceReplicate     bool              `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint   bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	EnableSyncPoint    bool              `toml:"enable-sync-point" json:"enable-sync-point"`
+	BDRMode            bool              `toml:"bdr-mode" json:"bdr-mode"`
 	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
 	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
 	Filter             *FilterConfig     `toml:"filter" json:"filter"`

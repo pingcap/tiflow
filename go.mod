@@ -296,3 +296,5 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
+
+replace github.com/pingcap/kvproto => github.com/xiongjiwei/kvproto v0.0.0-20221116081748-24d900443289
