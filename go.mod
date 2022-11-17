@@ -296,4 +296,4 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
 
-replace github.com/pingcap/tidb => /home/lance/Projects/tidb
+replace github.com/pingcap/tidb => github.com/lance6716/tidb expose-metrics
