@@ -99,7 +99,8 @@ func TestTimeout(t *testing.T) {
 
 	cli.SetTimeout(timeout)
 	start := time.Now()
-	_, err = cli.Get(context.Background(), fmt.Sprintf("http://%s/", addr))
+	resp, err := cli.Get(context.Background(), fmt.Sprintf("http://%s/", addr))
+	require.NoError(t, resp.Body.Close())
 	var uErr *url.Error
 	require.ErrorAs(t, err, &uErr)
 	require.True(t, uErr.Timeout())
