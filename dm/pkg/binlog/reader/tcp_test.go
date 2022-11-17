@@ -41,7 +41,7 @@ type testTCPReaderSuite struct {
 	suite.Suite
 }
 
-func (t *testTCPReaderSuite) SetUpSuite() {
+func (t *testTCPReaderSuite) SetupSuite() {
 	require.Nil(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByPos", "return(true)"))
 	require.Nil(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderStartSyncByGTID", "return(true)"))
 	require.Nil(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockTCPReaderClose", "return(true)"))
