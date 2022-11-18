@@ -33,15 +33,15 @@ import (
 const errCodePrefix = "DM:Err"
 
 func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
+	router.Use(httpErrorHandler())
+
 	router.Use(func(c *gin.Context) {
 		if !jm.initialized.Load() {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			_ = c.Error(errors.ErrJobNotRunning.GenWithStackByArgs(jm.ID()))
+			c.Abort()
 			return
 		}
-		c.Next()
 	})
-
-	router.Use(httpErrorHandler())
 
 	wrapper := openapi.ServerInterfaceWrapper{
 		Handler: jm,
