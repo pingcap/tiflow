@@ -19,22 +19,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testFileReaderSuite{})
-
-type testFileReaderSuite struct{}
-
-func (t *testFileReaderSuite) TestInterfaceMethods(c *C) {
+func TestInterfaceMethods(t *testing.T) {
+	t.Parallel()
 	var (
 		cfg                       = &FileReaderConfig{}
 		gSet                      gmysql.GTIDSet // nil GTID set
@@ -43,72 +41,73 @@ func (t *testFileReaderSuite) TestInterfaceMethods(c *C) {
 	defer timeoutCancel()
 
 	r := NewFileReader(cfg)
-	c.Assert(r, NotNil)
+	require.NotNil(t, r)
 
 	// check status, stageNew
 	status := r.Status()
 	frStatus, ok := status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StageNew.String())
-	c.Assert(frStatus.ReadOffset, Equals, uint32(0))
-	c.Assert(frStatus.SendOffset, Equals, uint32(0))
+	require.True(t, ok)
+	require.Equal(t, common.StageNew.String(), frStatus.Stage)
+	require.Equal(t, uint32(0), frStatus.ReadOffset)
+	require.Equal(t, uint32(0), frStatus.SendOffset)
 	frStatusStr := frStatus.String()
-	c.Assert(frStatusStr, Matches, fmt.Sprintf(`.*"stage":"%s".*`, common.StageNew))
+	require.Regexp(t, fmt.Sprintf(`.*"stage":"%s".*`, common.StageNew), frStatusStr)
 
 	// not prepared
 	e, err := r.GetEvent(timeoutCtx)
-	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*", common.StageNew))
-	c.Assert(e, IsNil)
+	require.Regexp(t, fmt.Sprintf(".*%s.*", common.StageNew), err)
+	require.Nil(t, e)
 
 	// by GTID, not supported yet
 	err = r.StartSyncByGTID(gSet)
-	c.Assert(err, ErrorMatches, ".*not supported.*")
+	require.Regexp(t, ".*not supported.*", err)
 
 	// by pos
 	err = r.StartSyncByPos(gmysql.Position{})
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// check status, stagePrepared
 	status = r.Status()
 	frStatus, ok = status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StagePrepared.String())
-	c.Assert(frStatus.ReadOffset, Equals, uint32(0))
-	c.Assert(frStatus.SendOffset, Equals, uint32(0))
+	require.True(t, ok)
+	require.Equal(t, common.StagePrepared.String(), frStatus.Stage)
+	require.Equal(t, uint32(0), frStatus.ReadOffset)
+	require.Equal(t, uint32(0), frStatus.SendOffset)
 
 	// re-prepare is invalid
 	err = r.StartSyncByPos(gmysql.Position{})
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// binlog file not exists
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(os.IsNotExist(errors.Cause(err)), IsTrue)
-	c.Assert(e, IsNil)
+	require.True(t, os.IsNotExist(errors.Cause(err)))
+	require.Nil(t, e)
 
 	// close the reader
-	c.Assert(r.Close(), IsNil)
+	require.Nil(t, r.Close())
 
 	// check status, stageClosed
 	status = r.Status()
 	frStatus, ok = status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StageClosed.String())
-	c.Assert(frStatus.ReadOffset, Equals, uint32(0))
-	c.Assert(frStatus.SendOffset, Equals, uint32(0))
+	require.True(t, ok)
+	require.Equal(t, common.StageClosed.String(), frStatus.Stage)
+	require.Equal(t, uint32(0), frStatus.ReadOffset)
+	require.Equal(t, uint32(0), frStatus.SendOffset)
 
 	// re-close is invalid
-	c.Assert(r.Close(), NotNil)
+	require.NotNil(t, r.Close())
 }
 
-func (t *testFileReaderSuite) TestGetEvent(c *C) {
+func TestGetEvent(t *testing.T) {
+	t.Parallel()
 	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer timeoutCancel()
 
 	// create a empty file
-	dir := c.MkDir()
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "mysql-bin-test.000001")
 	f, err := os.Create(filename)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	defer f.Close()
 
 	// start from the beginning
@@ -116,27 +115,26 @@ func (t *testFileReaderSuite) TestGetEvent(c *C) {
 
 	// no data can be read, EOF
 	r := NewFileReader(&FileReaderConfig{})
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(startPos), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(startPos))
 	e, err := r.GetEvent(timeoutCtx)
-	c.Assert(errors.Cause(err), Equals, io.EOF)
-	c.Assert(e, IsNil)
-	c.Assert(r.Close(), IsNil) // close the reader
+	require.Equal(t, io.EOF, errors.Cause(err))
+	require.Nil(t, e)
+	require.Nil(t, r.Close()) // close the reader
 
 	// writer a binlog file header
 	_, err = f.Write(replication.BinLogFileHeader)
-	c.Assert(err, IsNil)
-
+	require.Nil(t, err)
 	// no valid events can be read, but can cancel it by the context argument
 	r = NewFileReader(&FileReaderConfig{})
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(startPos), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(startPos))
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	e, err = r.GetEvent(ctx)
-	c.Assert(terror.ErrReaderReachEndOfFile.Equal(err), IsTrue)
-	c.Assert(e, IsNil)
-	c.Assert(r.Close(), IsNil) // close the reader
+	require.True(t, terror.ErrReaderReachEndOfFile.Equal(err))
+	require.Nil(t, e)
+	require.Nil(t, r.Close()) // close the reader
 
 	// writer a FormatDescriptionEvent
 	header := &replication.EventHeader{
@@ -145,31 +143,31 @@ func (t *testFileReaderSuite) TestGetEvent(c *C) {
 	}
 	latestPos := uint32(len(replication.BinLogFileHeader))
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
-	c.Assert(err, IsNil)
-	c.Assert(formatDescEv, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, formatDescEv)
 	_, err = f.Write(formatDescEv.RawData)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	latestPos = formatDescEv.Header.LogPos
 
 	// got a FormatDescriptionEvent
 	r = NewFileReader(&FileReaderConfig{})
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(startPos), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(startPos))
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(err, IsNil)
-	c.Assert(e, DeepEquals, formatDescEv)
-	c.Assert(r.Close(), IsNil) // close the reader
+	require.Nil(t, err)
+	require.Equal(t, formatDescEv, e)
+	require.Nil(t, r.Close()) // close the reader
 
 	// check status, stageClosed
 	fStat, err := f.Stat()
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	fSize := uint32(fStat.Size())
 	status := r.Status()
 	frStatus, ok := status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StageClosed.String())
-	c.Assert(frStatus.ReadOffset, Equals, fSize)
-	c.Assert(frStatus.SendOffset, Equals, fSize)
+	require.True(t, ok)
+	require.Equal(t, common.StageClosed.String(), frStatus.Stage)
+	require.Equal(t, fSize, frStatus.ReadOffset)
+	require.Equal(t, fSize, frStatus.SendOffset)
 
 	// write two QueryEvent
 	var queryEv *replication.BinlogEvent
@@ -177,40 +175,41 @@ func (t *testFileReaderSuite) TestGetEvent(c *C) {
 		queryEv, err = event.GenQueryEvent(
 			header, latestPos, 0, 0, 0, nil,
 			[]byte(fmt.Sprintf("schema-%d", i)), []byte(fmt.Sprintf("query-%d", i)))
-		c.Assert(err, IsNil)
-		c.Assert(queryEv, NotNil)
+		require.Nil(t, err)
+		require.NotNil(t, queryEv)
 		_, err = f.Write(queryEv.RawData)
-		c.Assert(err, IsNil)
+		require.Nil(t, err)
 		latestPos = queryEv.Header.LogPos
 	}
 
 	// read from the middle
 	startPos.Pos = latestPos - queryEv.Header.EventSize
 	r = NewFileReader(&FileReaderConfig{})
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(startPos), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(startPos))
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(err, IsNil)
-	c.Assert(e.RawData, DeepEquals, formatDescEv.RawData) // always got a FormatDescriptionEvent first
+	require.Nil(t, err)
+	require.Equal(t, formatDescEv.RawData, e.RawData) // always got a FormatDescriptionEvent first
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(err, IsNil)
-	c.Assert(e.RawData, DeepEquals, queryEv.RawData) // the last QueryEvent
-	c.Assert(r.Close(), IsNil)                       // close the reader
+	require.Nil(t, err)
+	require.Equal(t, queryEv.RawData, e.RawData) // the last QueryEvent
+	require.Nil(t, r.Close())                    // close the reader
 
 	// read from an invalid pos
 	startPos.Pos--
 	r = NewFileReader(&FileReaderConfig{})
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(startPos), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(startPos))
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(err, IsNil)
-	c.Assert(e.RawData, DeepEquals, formatDescEv.RawData) // always got a FormatDescriptionEvent first
+	require.Nil(t, err)
+	require.Equal(t, formatDescEv.RawData, e.RawData) // always got a FormatDescriptionEvent first
 	e, err = r.GetEvent(timeoutCtx)
-	c.Assert(err, ErrorMatches, ".*EOF.*")
-	c.Assert(e, IsNil)
+	require.Regexp(t, ".*EOF.*", err)
+	require.Nil(t, e)
 }
 
-func (t *testFileReaderSuite) TestWithChannelBuffer(c *C) {
+func TestWithChannelBuffer(t *testing.T) {
+	t.Parallel()
 	var (
 		cfg                       = &FileReaderConfig{ChBufferSize: 10}
 		timeoutCtx, timeoutCancel = context.WithTimeout(context.Background(), 10*time.Second)
@@ -218,15 +217,15 @@ func (t *testFileReaderSuite) TestWithChannelBuffer(c *C) {
 	defer timeoutCancel()
 
 	// create a empty file
-	dir := c.MkDir()
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "mysql-bin-test.000001")
 	f, err := os.Create(filename)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	defer f.Close()
 
 	// writer a binlog file header
 	_, err = f.Write(replication.BinLogFileHeader)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// writer a FormatDescriptionEvent
 	header := &replication.EventHeader{
@@ -235,10 +234,10 @@ func (t *testFileReaderSuite) TestWithChannelBuffer(c *C) {
 	}
 	latestPos := uint32(len(replication.BinLogFileHeader))
 	formatDescEv, err := event.GenFormatDescriptionEvent(header, latestPos)
-	c.Assert(err, IsNil)
-	c.Assert(formatDescEv, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, formatDescEv)
 	_, err = f.Write(formatDescEv.RawData)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	latestPos = formatDescEv.Header.LogPos
 
 	// write channelBufferSize QueryEvent
@@ -247,42 +246,42 @@ func (t *testFileReaderSuite) TestWithChannelBuffer(c *C) {
 		queryEv, err = event.GenQueryEvent(
 			header, latestPos, 0, 0, 0, nil,
 			[]byte(fmt.Sprintf("schema-%d", i)), []byte(fmt.Sprintf("query-%d", i)))
-		c.Assert(err, IsNil)
-		c.Assert(queryEv, NotNil)
+		require.Nil(t, err)
+		require.NotNil(t, queryEv)
 		_, err = f.Write(queryEv.RawData)
-		c.Assert(err, IsNil)
+		require.Nil(t, err)
 		latestPos = queryEv.Header.LogPos
 	}
 
 	r := NewFileReader(cfg)
-	c.Assert(r, NotNil)
-	c.Assert(r.StartSyncByPos(gmysql.Position{Name: filename}), IsNil)
+	require.NotNil(t, r)
+	require.Nil(t, r.StartSyncByPos(gmysql.Position{Name: filename}))
 	time.Sleep(time.Second) // wait events to be read
 
 	// check status, stagePrepared
 	readOffset := latestPos - queryEv.Header.EventSize // an FormatDescriptionEvent in the channel buffer
 	status := r.Status()
 	frStatus, ok := status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StagePrepared.String())
-	c.Assert(frStatus.ReadOffset, Equals, readOffset)
-	c.Assert(frStatus.SendOffset, Equals, uint32(0)) // no event sent yet
+	require.True(t, ok)
+	require.Equal(t, common.StagePrepared.String(), frStatus.Stage)
+	require.Equal(t, readOffset, frStatus.ReadOffset)
+	require.Equal(t, uint32(0), frStatus.SendOffset) // no event sent yet
 
 	// get one event
 	e, err := r.GetEvent(timeoutCtx)
-	c.Assert(err, IsNil)
-	c.Assert(e, NotNil)
-	c.Assert(e.RawData, DeepEquals, formatDescEv.RawData)
+	require.Nil(t, err)
+	require.NotNil(t, e)
+	require.Equal(t, formatDescEv.RawData, e.RawData)
 	time.Sleep(time.Second) // wait events to be read
 
 	// check status, again
 	readOffset = latestPos // reach the end
 	status = r.Status()
 	frStatus, ok = status.(*FileReaderStatus)
-	c.Assert(ok, IsTrue)
-	c.Assert(frStatus.Stage, Equals, common.StagePrepared.String())
-	c.Assert(frStatus.ReadOffset, Equals, readOffset)
-	c.Assert(frStatus.SendOffset, Equals, formatDescEv.Header.LogPos) // already get formatDescEv
+	require.True(t, ok)
+	require.Equal(t, common.StagePrepared.String(), frStatus.Stage)
+	require.Equal(t, readOffset, frStatus.ReadOffset)
+	require.Equal(t, formatDescEv.Header.LogPos, frStatus.SendOffset) // already get formatDescEv
 
-	c.Assert(r.Close(), IsNil)
+	require.Nil(t, r.Close())
 }

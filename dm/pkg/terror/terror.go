@@ -30,6 +30,8 @@ const (
 var codeToErrorMap = new(sync.Map)
 
 // ErrCode is used as the unique identifier of a specific error type.
+//
+//go:generate stringer -type=ErrCode -trimprefix=code
 type ErrCode int
 
 // ErrClass represents a class of errors.
