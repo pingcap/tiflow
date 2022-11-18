@@ -16,30 +16,28 @@ package reader
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = Suite(&testMockReaderSuite{})
-
-type testMockReaderSuite struct{}
 
 type testMockCase struct {
 	ev  *replication.BinlogEvent
 	err error
 }
 
-func (t *testMockReaderSuite) TestRead(c *C) {
+func TestRead(t *testing.T) {
+	t.Parallel()
 	r := NewMockReader()
 
 	// some interface methods do nothing
-	c.Assert(r.StartSyncByPos(mysql.Position{}), IsNil)
-	c.Assert(r.StartSyncByGTID(nil), IsNil)
-	c.Assert(r.Status(), IsNil)
-	c.Assert(r.Close(), IsNil)
+	require.Nil(t, r.StartSyncByPos(mysql.Position{}))
+	require.Nil(t, r.StartSyncByGTID(nil))
+	require.Nil(t, r.Status())
+	require.Nil(t, r.Close())
 
 	// replace with special error
 	mockR := r.(*MockReader)
@@ -49,9 +47,9 @@ func (t *testMockReaderSuite) TestRead(c *C) {
 	mockR.ErrStartByPos = errStartByPos
 	mockR.ErrStartByGTID = errStartByGTID
 	mockR.ErrClose = errClose
-	c.Assert(r.StartSyncByPos(mysql.Position{}), Equals, errStartByPos)
-	c.Assert(r.StartSyncByGTID(nil), Equals, errStartByGTID)
-	c.Assert(r.Close(), Equals, errClose)
+	require.Equal(t, errStartByPos, r.StartSyncByPos(mysql.Position{}))
+	require.Equal(t, errStartByGTID, r.StartSyncByGTID(nil))
+	require.Equal(t, errClose, r.Close())
 
 	cases := []testMockCase{
 		{
@@ -88,9 +86,9 @@ func (t *testMockReaderSuite) TestRead(c *C) {
 	go func() {
 		for _, cs := range cases {
 			if cs.err != nil {
-				c.Assert(mockR.PushError(ctx, cs.err), IsNil)
+				require.Nil(t, mockR.PushError(ctx, cs.err))
 			} else {
-				c.Assert(mockR.PushEvent(ctx, cs.ev), IsNil)
+				require.Nil(t, mockR.PushEvent(ctx, cs.ev))
 			}
 		}
 	}()
@@ -103,18 +101,18 @@ func (t *testMockReaderSuite) TestRead(c *C) {
 		} else {
 			obtained = append(obtained, testMockCase{ev: ev, err: nil})
 		}
-		c.Assert(ctx.Err(), IsNil)
+		require.Nil(t, ctx.Err())
 		if len(obtained) == len(cases) {
 			break
 		}
 	}
 
-	c.Assert(obtained, DeepEquals, cases)
+	require.Equal(t, cases, obtained)
 
 	cancel() // cancel manually
-	c.Assert(mockR.PushError(ctx, cases[0].err), Equals, ctx.Err())
-	c.Assert(mockR.PushEvent(ctx, cases[0].ev), Equals, ctx.Err())
+	require.Equal(t, ctx.Err(), mockR.PushError(ctx, cases[0].err))
+	require.Equal(t, ctx.Err(), mockR.PushEvent(ctx, cases[0].ev))
 	ev, err := r.GetEvent(ctx)
-	c.Assert(ev, IsNil)
-	c.Assert(err, Equals, ctx.Err())
+	require.Nil(t, ev)
+	require.Equal(t, ctx.Err(), err)
 }

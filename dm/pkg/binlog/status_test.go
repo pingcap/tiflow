@@ -83,6 +83,7 @@ func TestGetBinaryLogs(t *testing.T) {
 }
 
 func TestBinlogSizesAfter(t *testing.T) {
+	t.Parallel()
 	sizes := FileSizes{
 		{name: "mysql-bin.999999", size: 1},
 		{name: "mysql-bin.1000000", size: 2},
