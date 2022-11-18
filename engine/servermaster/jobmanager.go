@@ -64,11 +64,13 @@ type JobManager interface {
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
 }
 
-const defaultJobMasterCost = 1
+const (
+	defaultJobMasterCost = 1
+	jobOperateInterval   = time.Second * 15
+	defaultHTTPTimeout   = time.Second * 10
+)
 
-const jobOperateInterval = time.Second * 15
-
-var jobNameRegex = regexp.MustCompile(`^\w([-.\w]{0,61}\w)?$`)
+var jobIDRegex = regexp.MustCompile(`^\w([-.\w]{0,61}\w)?$`)
 
 // JobManagerImpl is a special job master that manages all the job masters, and notify the offline executor to them.
 // worker state transition
@@ -208,8 +210,8 @@ func (jm *JobManagerImpl) deleteJobMeta(ctx context.Context, jobID string) error
 	return nil
 }
 
-func canQueryJobDetail(masterState frameModel.MasterState) bool {
-	return masterState == frameModel.MasterStateInit
+func (jm *JobManagerImpl) canQueryJobDetail(masterMeta *frameModel.MasterMeta) bool {
+	return masterMeta.State == frameModel.MasterStateInit || jm.JobFsm.QueryOnlineJob(masterMeta.ID) != nil
 }
 
 // GetJob implements JobManagerServer.GetJob.
@@ -223,7 +225,7 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 	}
 
 	// if job status is running, forward the request to jobmaster openapi
-	if canQueryJobDetail(masterMeta.State) {
+	if jm.canQueryJobDetail(masterMeta) {
 		detail, err := jm.jobHTTPClient.GetJobDetail(ctx, masterMeta.Addr, req.Id)
 		setDetailToMasterMeta(masterMeta, detail, err)
 	}
@@ -300,7 +302,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
-	workerID, err := jm.BaseMaster.CreateWorkerV2(
+	workerID, err := jm.BaseMaster.CreateWorker(
 		meta.Type, meta,
 		framework.CreateWorkerWithCost(defaultJobMasterCost),
 		framework.CreateWorkerWithSelectors(selectors...))
@@ -327,8 +329,8 @@ func validateCreateJobRequest(req *pb.CreateJobRequest) error {
 	if req.Job == nil {
 		return status.Error(codes.InvalidArgument, "job must not be nil")
 	}
-	if req.Job.Id != "" && !jobNameRegex.MatchString(req.Job.Id) {
-		return status.Errorf(codes.InvalidArgument, "job id must match %s", jobNameRegex.String())
+	if req.Job.Id != "" && !jobIDRegex.MatchString(req.Job.Id) {
+		return status.Errorf(codes.InvalidArgument, "job id must match %s", jobIDRegex.String())
 	}
 	if req.Job.Type == pb.Job_TypeUnknown {
 		return status.Error(codes.InvalidArgument, "job type must be specified")
@@ -381,7 +383,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 		}
 
 		// if job status is running, forward the request to jobmaster openapi
-		if canQueryJobDetail(masterMetas[i].State) {
+		if jm.canQueryJobDetail(masterMetas[i]) {
 			detail, errJob := jm.jobHTTPClient.GetJobDetail(ctx, masterMetas[i].Addr, masterMetas[i].ID)
 			setDetailToMasterMeta(masterMetas[i], detail, errJob)
 		}
@@ -540,6 +542,7 @@ func NewJobManagerImpl(
 	if err != nil {
 		return nil, err
 	}
+	httpCli.SetTimeout(defaultHTTPTimeout)
 
 	clocker := clock.New()
 	impl := &JobManagerImpl{
@@ -618,7 +621,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 				return "", errors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
 			return jm.BaseMaster.CreateWorker(
-				job.Type, job, defaultJobMasterCost)
+				job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 		})
 	if _, err = filterQuotaError(err); err != nil {
 		return err
@@ -645,7 +648,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 		err = jm.JobFsm.IterWaitAckJobs(
 			func(job *frameModel.MasterMeta) (string, error) {
 				return jm.BaseMaster.CreateWorker(
-					job.Type, job, defaultJobMasterCost)
+					job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
 			})
 		exceedQuota, err := filterQuotaError(err)
 		if err != nil {

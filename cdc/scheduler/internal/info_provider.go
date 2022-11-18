@@ -26,24 +26,4 @@ type InfoProvider interface {
 
 	// GetTaskStatuses returns the task statuses.
 	GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error)
-
-	// GetTaskPositions returns the task positions.
-	//
-	// TODO: Remove the API, as capture no longer has local checkpoint ts and
-	//       local resolved ts in scheduler v3.
-	GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error)
-
-	// GetTotalTableCounts returns the number of tables associated
-	// with each capture.
-	//
-	// TODO: Remove the API, as the only usage is metrics which
-	//       has already exported in the scheduler package.
-	GetTotalTableCounts() map[model.CaptureID]int
-
-	// GetPendingTableCounts returns the number of tables in a non-ready
-	// status (Adding & Removing) associated with each capture.
-	//
-	// TODO: Remove the API, as the only usage is metrics which
-	//       has already exported in the scheduler package.
-	GetPendingTableCounts() map[model.CaptureID]int
 }

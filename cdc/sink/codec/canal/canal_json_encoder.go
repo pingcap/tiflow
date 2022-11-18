@@ -36,16 +36,18 @@ type JSONBatchEncoder struct {
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
-
-	messages []*common.Message
+	// the symbol separating two lines
+	terminator []byte
+	messages   []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder(enableTiDBExtension bool) codec.EventBatchEncoder {
+func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: enableTiDBExtension,
+		enableTiDBExtension: config.EnableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
+		terminator:          []byte(config.Terminator),
 	}
 	return encoder
 }
@@ -314,6 +316,9 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if len(c.terminator) > 0 {
+		value = append(value, c.terminator...)
+	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -362,5 +367,5 @@ func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 
 // Build a `JSONBatchEncoder`
 func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newJSONBatchEncoder(b.config.EnableTiDBExtension)
+	return newJSONBatchEncoder(b.config)
 }

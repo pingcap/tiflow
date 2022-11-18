@@ -17,18 +17,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testCommonSuite{})
-
-type testCommonSuite struct{}
-
-func (t *testCommonSuite) TestGenCommonFileHeader(c *C) {
+func TestGenCommonFileHeader(t *testing.T) {
+	t.Parallel()
 	var (
 		flavor          = gmysql.MySQLFlavor
 		serverID uint32 = 101
@@ -36,68 +34,69 @@ func (t *testCommonSuite) TestGenCommonFileHeader(c *C) {
 		gSet     gmysql.GTIDSet
 	)
 	gSet, err := gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	events, data, err := GenCommonFileHeader(flavor, serverID, gSet, true, 0)
-	c.Assert(err, IsNil)
-	c.Assert(len(events), Equals, 2)
-	c.Assert(events[0].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
-	c.Assert(events[1].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
+	require.Nil(t, err)
+	require.Equal(t, 2, len(events))
+	require.Equal(t, replication.FORMAT_DESCRIPTION_EVENT, events[0].Header.EventType)
+	require.Equal(t, replication.PREVIOUS_GTIDS_EVENT, events[1].Header.EventType)
 
 	// write to file then parse it
-	dir := c.MkDir()
+	dir := t.TempDir()
 	mysqlFilename := filepath.Join(dir, "mysql-bin-test.000001")
 	mysqlFile, err := os.Create(mysqlFilename)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	defer mysqlFile.Close()
 
 	_, err = mysqlFile.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	count := 0
 	onEventFunc := func(e *replication.BinlogEvent) error {
 		count++
 		if count > 2 {
-			c.Fatalf("too many binlog events got, current is %+v", e.Header)
+			t.Fatalf("too many binlog events got, current is %+v", e.Header)
 		}
-		c.Assert(e.Header, DeepEquals, events[count-1].Header)
-		c.Assert(e.Event, DeepEquals, events[count-1].Event)
-		c.Assert(e.RawData, DeepEquals, events[count-1].RawData)
+		require.Equal(t, events[count-1].Header, e.Header)
+		require.Equal(t, events[count-1].Event, e.Event)
+		require.Equal(t, events[count-1].RawData, e.RawData)
 		return nil
 	}
 
 	parser2 := replication.NewBinlogParser()
 	parser2.SetVerifyChecksum(true)
 	err = parser2.ParseFile(mysqlFilename, 0, onEventFunc)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// MariaDB
 	flavor = gmysql.MariaDBFlavor
 	gSetStr = "1-2-12,2-2-3,3-3-8,4-4-4"
 
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	events, data, err = GenCommonFileHeader(flavor, serverID, gSet, true, 0)
-	c.Assert(err, IsNil)
-	c.Assert(len(events), Equals, 2)
-	c.Assert(events[0].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
-	c.Assert(events[1].Header.EventType, Equals, replication.MARIADB_GTID_LIST_EVENT)
+	require.Nil(t, err)
+	require.Equal(t, 2, len(events))
+	require.Equal(t, replication.FORMAT_DESCRIPTION_EVENT, events[0].Header.EventType)
+	require.Equal(t, replication.MARIADB_GTID_LIST_EVENT, events[1].Header.EventType)
 
 	mariadbFilename := filepath.Join(dir, "mariadb-bin-test.000001")
 	mariadbFile, err := os.Create(mariadbFilename)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	defer mariadbFile.Close()
 
 	_, err = mariadbFile.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	count = 0 // reset to 0
 	err = parser2.ParseFile(mariadbFilename, 0, onEventFunc)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 }
 
-func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
+func TestGenCommonGTIDEvent(t *testing.T) {
+	t.Parallel()
 	var (
 		flavor           = gmysql.MySQLFlavor
 		serverID  uint32 = 101
@@ -107,96 +106,97 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 
 	// nil gSet, invalid
 	gtidEv, err := GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// multi GTID in set, invalid
 	gSetStr := "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123,05474d3c-28c7-11e7-8352-203db246dd3d:1-456,10b039fc-c843-11e7-8f6a-1866daf8d810:1-789"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// multi intervals, invalid
 	gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123:200-456"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// interval > 1, invalid
 	gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// valid
 	gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:123"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	sid, err := ParseSID(gSetStr[:len(gSetStr)-4])
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(gtidEv, NotNil)
-	c.Assert(gtidEv.Header.EventType, Equals, replication.GTID_EVENT)
+	require.Nil(t, err)
+	require.NotNil(t, gtidEv)
+	require.Equal(t, replication.GTID_EVENT, gtidEv.Header.EventType)
 
 	// verify the body
 	gtidEvBody1, ok := gtidEv.Event.(*replication.GTIDEvent)
-	c.Assert(ok, IsTrue)
-	c.Assert(gtidEvBody1, NotNil)
-	c.Assert(gtidEvBody1.SID, DeepEquals, sid.Bytes())
-	c.Assert(gtidEvBody1.GNO, Equals, int64(123))
-	c.Assert(gtidEvBody1.CommitFlag, Equals, defaultGTIDFlags)
-	c.Assert(gtidEvBody1.LastCommitted, Equals, defaultLastCommitted)
-	c.Assert(gtidEvBody1.SequenceNumber, Equals, defaultSequenceNumber)
+	require.True(t, ok)
+	require.NotNil(t, gtidEvBody1)
+	require.Equal(t, sid.Bytes(), gtidEvBody1.SID)
+	require.Equal(t, int64(123), gtidEvBody1.GNO)
+	require.Equal(t, defaultGTIDFlags, gtidEvBody1.CommitFlag)
+	require.Equal(t, defaultLastCommitted, gtidEvBody1.LastCommitted)
+	require.Equal(t, defaultSequenceNumber, gtidEvBody1.SequenceNumber)
 
 	// change flavor to MariaDB
 	flavor = gmysql.MariaDBFlavor
 
 	// GTID mismatch with flavor
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// multi GTID in set, invalid
 	gSetStr = "1-2-3,4-5-6"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// server_id mismatch, invalid
 	gSetStr = "1-2-3"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(gtidEv, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, gtidEv)
 
 	// valid
 	gSetStr = fmt.Sprintf("1-%d-3", serverID)
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(gtidEv, NotNil)
-	c.Assert(gtidEv.Header.EventType, Equals, replication.MARIADB_GTID_EVENT)
+	require.Nil(t, err)
+	require.NotNil(t, gtidEv)
+	require.Equal(t, replication.MARIADB_GTID_EVENT, gtidEv.Header.EventType)
 
 	// verify the body, we
 	gtidEvBody2, ok := gtidEv.Event.(*replication.MariadbGTIDEvent)
-	c.Assert(ok, IsTrue)
-	c.Assert(gtidEvBody2.GTID.DomainID, Equals, uint32(1))
-	c.Assert(gtidEvBody2.GTID.ServerID, Equals, serverID)
-	c.Assert(gtidEvBody2.GTID.SequenceNumber, Equals, uint64(3))
+	require.True(t, ok)
+	require.Equal(t, uint32(1), gtidEvBody2.GTID.DomainID)
+	require.Equal(t, serverID, gtidEvBody2.GTID.ServerID)
+	require.Equal(t, uint64(3), gtidEvBody2.GTID.SequenceNumber)
 }
 
-func (t *testCommonSuite) TestGTIDIncrease(c *C) {
+func TestGTIDIncrease(t *testing.T) {
+	t.Parallel()
 	var (
 		flavor  = gmysql.MySQLFlavor
 		gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:123"
@@ -206,19 +206,19 @@ func (t *testCommonSuite) TestGTIDIncrease(c *C) {
 
 	// increase for MySQL
 	gSetIn, err := gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSetOut, err = GTIDIncrease(flavor, gSetIn)
-	c.Assert(err, IsNil)
-	c.Assert(gSetOut, NotNil)
-	c.Assert(gSetOut.String(), Equals, "03fc0263-28c7-11e7-a653-6c0b84d59f30:124")
+	require.Nil(t, err)
+	require.NotNil(t, gSetOut)
+	require.Equal(t, "03fc0263-28c7-11e7-a653-6c0b84d59f30:124", gSetOut.String())
 
 	// increase for MariaDB
 	flavor = gmysql.MariaDBFlavor
 	gSetStr = "1-2-3"
 	gSetIn, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSetOut, err = GTIDIncrease(flavor, gSetIn)
-	c.Assert(err, IsNil)
-	c.Assert(gSetOut, NotNil)
-	c.Assert(gSetOut.String(), Equals, "1-2-4")
+	require.Nil(t, err)
+	require.NotNil(t, gSetOut)
+	require.Equal(t, "1-2-4", gSetOut.String())
 }
