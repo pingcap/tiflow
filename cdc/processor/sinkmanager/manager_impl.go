@@ -279,10 +279,6 @@ func (m *SinkManager) generateSinkTasks() error {
 			if tableState > tablepb.TableStateReplicating {
 				continue
 			}
-			log.Info("Generate sink task",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
 			// Because it can not exceed the barrier ts.
 			// We also need to consider the resolved ts from sorter,
@@ -340,6 +336,11 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
+
+			log.Debug("Generate sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -402,6 +403,11 @@ func (m *SinkManager) generateRedoTasks() error {
 				return m.ctx.Err()
 			case m.redoTaskChan <- t:
 			}
+
+			log.Debug("Generate redo task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -535,7 +541,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
+func (m *SinkManager) GetTableStatsX(tableID model.TableID) (pipeline.Stats, error) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
