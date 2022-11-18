@@ -63,6 +63,9 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	taskStatusMap := taskManager.TaskStatus()
+	// copy undetermined time.Now
+	dumpStatus1.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[0].SourceID].StageUpdatedTime
+	dumpStatus2.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[1].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -81,6 +84,8 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
+	// copy undetermined time.Now
+	loadStatus1.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[0].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -91,6 +96,8 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	offlineStatus := runtime.NewOfflineStatus(jobCfg.Upstreams[1].SourceID)
 	taskManager.UpdateTaskStatus(offlineStatus)
 	taskStatusMap = taskManager.TaskStatus()
+	// copy undetermined time.Now
+	offlineStatus.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[1].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -100,6 +107,8 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	// online
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	taskStatusMap = taskManager.TaskStatus()
+	// copy undetermined time.Now
+	dumpStatus2.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[1].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -113,6 +122,9 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	}
 	taskManager = NewTaskManager(taskStatusList, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	taskStatusMap = taskManager.TaskStatus()
+	// copy undetermined time.Now
+	loadStatus1.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[0].SourceID].StageUpdatedTime
+	dumpStatus2.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[1].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -311,6 +323,7 @@ func (t *testDMJobmasterSuite) TestGenOp() {
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
+	oldTime := time.Now().Add(-time.Second)
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
@@ -331,12 +344,21 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	}
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = time.Now().Add(time.Second)
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = time.Now().Add(time.Second)
 	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 
 	dumpStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	e := errors.New("operate task failed")
 	mockAgent.On("SendMessage").Return(e).Once()
+	// old expected stage time will not trigger SendMessage
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = oldTime
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = oldTime
+	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
+
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = time.Now().Add(time.Second)
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = time.Now().Add(time.Second)
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
 }
 
