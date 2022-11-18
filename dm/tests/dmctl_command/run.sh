@@ -762,8 +762,8 @@ function run_check_task() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
-	# check_task_lightning
-	# check_full_mode_conn
+	check_task_lightning
+	check_full_mode_conn
 	checktask_full_mode_conn
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
