@@ -29,3 +29,21 @@ func (m *CreateJobRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *PreDispatchTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *QueryMetaStoreResponse) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *QueryStorageConfigResponse) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	return nil
+}

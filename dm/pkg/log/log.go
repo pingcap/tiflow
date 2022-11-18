@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
+	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tiflow/dm/pkg/helper"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -122,7 +123,13 @@ func InitLogger(cfg *Config) error {
 
 	// Do not log stack traces at all, as we'll get the stack trace from the
 	// error itself.
-	appLogger = Logger{logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))}
+	logger = logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	pclog.ReplaceGlobals(logger, props)
+
+	lightningLogger := logger.With(zap.String("component", "lightning"))
+	lightningLog.SetAppLogger(lightningLogger)
+
+	appLogger = Logger{logger}
 	appLevel = props.Level
 	appProps = props
 	// init and set tidb slow query logger to stdout if log level is debug

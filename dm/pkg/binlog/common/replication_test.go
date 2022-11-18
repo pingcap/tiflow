@@ -14,20 +14,23 @@
 package common
 
 import (
+	"testing"
+
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func (t *testCommonSuite) TestSetDefaultReplicationCfg(c *C) {
+func TestSetDefaultReplicationCfg(t *testing.T) {
+	t.Parallel()
 	syncCfg := replication.BinlogSyncerConfig{}
 
 	retryCnt := 5
 	SetDefaultReplicationCfg(&syncCfg, retryCnt)
-	c.Assert(syncCfg.MaxReconnectAttempts, Equals, retryCnt)
-	c.Assert(syncCfg.DisableRetrySync, IsFalse)
+	require.Equal(t, retryCnt, syncCfg.MaxReconnectAttempts)
+	require.False(t, syncCfg.DisableRetrySync)
 
 	retryCnt = 1
 	SetDefaultReplicationCfg(&syncCfg, retryCnt)
-	c.Assert(syncCfg.MaxReconnectAttempts, Equals, retryCnt)
-	c.Assert(syncCfg.DisableRetrySync, IsTrue)
+	require.Equal(t, retryCnt, syncCfg.MaxReconnectAttempts)
+	require.True(t, syncCfg.DisableRetrySync)
 }
