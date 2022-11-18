@@ -298,7 +298,8 @@ func (m *FileManager) removeFilesIf(
 
 	log.Info("Removing resources",
 		zap.Any("scope", scope),
-		zap.Any("toRemoveFiles", toRemoveFiles))
+		zap.Any("numOfToRemoveFiles", len(toRemoveFiles)))
+	log.Debug("Removing files", zap.Any("toRemoveFiles", toRemoveFiles))
 
 	for _, path := range toRemoveFiles {
 		if err := storage.DeleteFile(ctx, path); err != nil {
