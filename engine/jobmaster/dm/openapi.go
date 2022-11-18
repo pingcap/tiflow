@@ -22,8 +22,15 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	engineOpenAPI "github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
+
+// errCodePrefix is the prefix that attach to terror's error code string.
+// e.g. codeDBBadConn -> DM:ErrDBBadConn, codeDBInvalidConn -> DM:ErrDBInvalidConn
+// This is used to distinguish with other components' error code, such as DFLOW and CDC.
+// TODO: replace all terror usage with pkg/errors, need further discussion.
+const errCodePrefix = "DM:Err"
 
 func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 	router.Use(func(c *gin.Context) {
@@ -34,7 +41,7 @@ func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 		c.Next()
 	})
 
-	router.Use(terrorHTTPErrorHandler())
+	router.Use(httpErrorHandler())
 
 	wrapper := openapi.ServerInterfaceWrapper{
 		Handler: jm,
@@ -75,25 +82,28 @@ func (jm *JobMaster) DMAPIGetJobStatus(c *gin.Context, params openapi.DMAPIGetJo
 }
 
 // TODO: extract terror from worker response
-func terrorHTTPErrorHandler() gin.HandlerFunc {
+func httpErrorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 		gErr := c.Errors.Last()
 		if gErr == nil {
 			return
 		}
-		var (
-			// TODO: implement error code for engine.
-			code int
-			msg  string
-		)
-		if tErr, ok := gErr.Err.(*terror.Error); ok {
-			code = int(tErr.Code())
-			msg = tErr.Error()
+
+		// Adapt to the error format of engine openapi.
+		var httpErr *engineOpenAPI.HTTPError
+		var tErr *terror.Error
+		if errors.As(gErr.Err, &tErr) {
+			code := errCodePrefix + tErr.Code().String()
+			message := tErr.Error()
+			httpErr = &engineOpenAPI.HTTPError{
+				Code:    code,
+				Message: message,
+			}
 		} else {
-			msg = gErr.Error()
+			httpErr = engineOpenAPI.NewHTTPError(gErr.Err)
 		}
-		c.IndentedJSON(http.StatusInternalServerError, openapi.ErrorWithMessage{Code: code, Message: msg})
+		c.JSON(errors.HTTPStatusCode(gErr.Err), httpErr)
 	}
 }
 

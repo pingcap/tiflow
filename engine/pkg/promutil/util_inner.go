@@ -85,3 +85,18 @@ func NewFactory4FrameworkImpl(reg *Registry) Factory {
 		frameworkID,
 	)
 }
+
+// NewFactory4TestImpl return a Factory for test
+func NewFactory4TestImpl(reg *Registry, testID string) Factory {
+	return NewAutoRegisterFactory(
+		NewWrappingFactory(
+			NewPromFactory(),
+			frameworkMetricPrefix,
+			prometheus.Labels{
+				constLableTestKey: testID,
+			},
+		),
+		reg,
+		testID,
+	)
+}
