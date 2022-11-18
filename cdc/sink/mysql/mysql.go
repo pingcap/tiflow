@@ -164,13 +164,6 @@ func NewMySQLSink(
 		return nil, err
 	}
 
-	//Note(dongmen): Only for BDR mode use for now.
-	sysVariables := make(map[string]string)
-	sysVariables["tidb_cdc_write_source"] = strconv.Itoa(1)
-	if err := setSessionVariables(ctx, db, sysVariables); err != nil {
-		return nil, err
-	}
-
 	log.Info("Start mysql sink")
 
 	db.SetMaxIdleConns(params.workerCount)
@@ -412,16 +405,6 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 	}
 
 	return true, nil
-}
-
-func setSessionVariables(ctx context.Context, db *sql.DB, vars map[string]string) error {
-	for k, v := range vars {
-		_, err := db.ExecContext(ctx, fmt.Sprintf("SET SESSION %s = %s", k, v))
-		if err != nil {
-			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-		}
-	}
-	return nil
 }
 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
