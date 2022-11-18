@@ -131,7 +131,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			// lowerBound and upperBound are both closed intervals.
 			iter := engine.NewMountedEventIter(
 				w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-				w.mg, requestMemSize, 256)
+				w.mg, 256)
 			for !task.isCanceled() {
 				e, pos, err := iter.Next(ctx)
 				if err != nil {
@@ -258,6 +258,14 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				)
 
 			} else {
+				if lastCommitTs == 0 {
+					lastCommitTs = upperBound.CommitTs
+					err := advanceTableSinkAndResetCurrentSize()
+					if err != nil {
+						return errors.Trace(err)
+					}
+					lastPos = upperBound
+				}
 				// This means that we append all the events to the table sink.
 				// But we have not updated the resolved ts.
 				// Because we do not reach the maxUpdateIntervalSize.
@@ -309,12 +317,20 @@ func (w *sinkWorkerImpl) appendEventsToTableSink(t *sinkTask, events []*model.Po
 }
 
 func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+	log.Info("Advance table sink",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("commitTs", commitTs),
+	)
 	resolvedTs := model.NewResolvedTs(commitTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = batchID
 	}
-	w.memQuota.record(t.tableID, resolvedTs, size)
+	if size > 0 {
+		w.memQuota.record(t.tableID, resolvedTs, size)
+	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
 
@@ -414,7 +430,7 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 	// lowerBound and upperBound are both closed intervals.
 	iter := engine.NewMountedEventIter(
 		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
-		w.mg, requestMemSize, 256)
+		w.mg, 256)
 	defer iter.Close()
 	for memAllocated {
 		e, pos, err := iter.Next(ctx)

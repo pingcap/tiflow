@@ -865,6 +865,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sourceManger = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
 		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager,
 			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
+		p.sourceManger.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
 			log.Info("Processor creates sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -1305,12 +1306,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.Error(err))
 			return errors.Trace(err)
 		}
-		if err := p.sinkManager.Close(); err != nil {
-			log.Error("Failed to close sink manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
+		if p.sinkManager != nil {
+			if err := p.sinkManager.Close(); err != nil {
+				log.Error("Failed to close sink manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			p.sinkManager = nil
 		}
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		if engineFactory != nil {
