@@ -29,11 +29,14 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	engineOpenAPI "github.com/pingcap/tiflow/engine/pkg/openapi"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	tmock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -59,7 +62,7 @@ type testDMOpenAPISuite struct {
 
 func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
-		mockBaseJobmaster   = &MockBaseJobmaster{}
+		mockBaseJobmaster   = &MockBaseJobmaster{t: t.T()}
 		mockMessageAgent    = &dmpkg.MockMessageAgent{}
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
@@ -69,7 +72,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), promutil.NewFactory4Test(t.T().TempDir()))
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
 	jm.initialized.Store(true)
 
@@ -466,8 +469,57 @@ func (t *testDMOpenAPISuite) TestJobMasterNotInitialized() {
 }
 
 func equalError(t *testing.T, expected string, body *bytes.Buffer) {
-	var e openapi.ErrorWithMessage
-	json.Unmarshal(body.Bytes(), &e)
-	require.Equal(t, expected, e.Message)
-	require.Equal(t, 0, e.Code)
+	var httpErr engineOpenAPI.HTTPError
+	json.Unmarshal(body.Bytes(), &httpErr)
+	require.Equal(t, expected, httpErr.Message)
+}
+
+func TestHTTPErrorHandler(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		err     error
+		code    string
+		message string
+	}{
+		{
+			errors.New("unknown error"),
+			string(errors.ErrUnknown.RFCCode()),
+			"unknown error",
+		},
+		{
+			errors.ErrDeserializeConfig.GenWithStackByArgs(),
+			string(errors.ErrDeserializeConfig.RFCCode()),
+			errors.ErrDeserializeConfig.GetMsg(),
+		},
+		{
+			terror.ErrDBBadConn.Generate(),
+			"DM:ErrDBBadConn",
+			terror.ErrDBBadConn.Generate().Error(),
+		},
+		{
+			terror.ErrDBInvalidConn.Generate(),
+			"DM:ErrDBInvalidConn",
+			terror.ErrDBInvalidConn.Generate().Error(),
+		},
+	}
+
+	for _, tc := range testCases {
+		engine := gin.New()
+		engine.Use(httpErrorHandler())
+		engine.GET("/test", func(c *gin.Context) {
+			c.Error(tc.err)
+		})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/test", nil)
+		engine.ServeHTTP(w, r)
+		require.Equal(t, errors.HTTPStatusCode(tc.err), w.Code)
+
+		var httpErr engineOpenAPI.HTTPError
+		err := json.Unmarshal(w.Body.Bytes(), &httpErr)
+		require.NoError(t, err)
+		require.Equal(t, tc.code, httpErr.Code)
+		require.Equal(t, tc.message, httpErr.Message)
+	}
 }

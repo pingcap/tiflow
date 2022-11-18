@@ -17,18 +17,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testGeneratorSuite{})
-
-type testGeneratorSuite struct{}
-
-func (t *testGeneratorSuite) TestGenerateForMySQL(c *C) {
+func TestGenerateForMySQL(t *testing.T) {
+	t.Parallel()
 	var (
 		flavor           = gmysql.MySQLFlavor
 		serverID  uint32 = 101
@@ -37,42 +35,43 @@ func (t *testGeneratorSuite) TestGenerateForMySQL(c *C) {
 
 	previousGTIDSetStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14,406a3f61-690d-11e7-87c5-6c92bf46f384:1-94321383,53bfca22-690d-11e7-8a62-18ded7a37b78:1-495,686e1ab6-c47e-11e7-a42c-6c92bf46f384:1-34981190,03fc0263-28c7-11e7-a653-6c0b84d59f30:1-7041423,05474d3c-28c7-11e7-8352-203db246dd3d:1-170,10b039fc-c843-11e7-8f6a-1866daf8d810:1-308290454"
 	previousGTIDSet, err := gtid.ParserGTID(flavor, previousGTIDSetStr)
-	c.Assert(err, IsNil)
-	c.Assert(previousGTIDSet, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, previousGTIDSet)
 
 	// mutil GTID in latestGTID
 	latestGTIDStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
 	latestGTID, err := gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// latestGTID not one of the latest previousGTIDSet, UUID not found
 	latestGTIDStr = "11111111-2343-11e7-be21-6c0b84d59f30:14"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// latestGTID not one of the latest previousGTIDSet, interval mismatch
 	latestGTIDStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:13"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	latestGTIDStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 
-	t.testGenerate(c, flavor, serverID, latestGTID, previousGTIDSet, latestXID)
+	testGenerate(t, flavor, serverID, latestGTID, previousGTIDSet, latestXID)
 }
 
-func (t *testGeneratorSuite) TestGenerateForMariaDB(c *C) {
+func TestGenerateForMariaDB(t *testing.T) {
+	t.Parallel()
 	var (
 		flavor           = gmysql.MariaDBFlavor
 		serverID  uint32 = 101
@@ -81,84 +80,85 @@ func (t *testGeneratorSuite) TestGenerateForMariaDB(c *C) {
 
 	previousGTIDSetStr := "1-101-12,2-2-3,3-3-8,4-4-4"
 	previousGTIDSet, err := gtid.ParserGTID(flavor, previousGTIDSetStr)
-	c.Assert(err, IsNil)
-	c.Assert(previousGTIDSet, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, previousGTIDSet)
 
 	// multi GTID in latestGTID
 	latestGTIDStr := "1-101-12,2-2-23"
 	latestGTID, err := gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// latestGTID not one of previousGTIDSet, domain-id mismatch
 	latestGTIDStr = "5-101-12"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	// latestGTID not one of previousGTIDSet, sequence-number not equal
 	latestGTIDStr = "1-101-13"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 	_, err = NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
 	latestGTIDStr = "1-101-12"
 	latestGTID, err = gtid.ParserGTID(flavor, latestGTIDStr)
-	c.Assert(err, IsNil)
-	c.Assert(latestGTID, NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, latestGTID)
 
 	// server-id mismatch
 	_, err = NewGenerator(flavor, 100, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, NotNil)
+	require.NotNil(t, err)
 
-	t.testGenerate(c, flavor, serverID, latestGTID, previousGTIDSet, latestXID)
+	testGenerate(t, flavor, serverID, latestGTID, previousGTIDSet, latestXID)
 }
 
-func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, latestGTID gmysql.GTIDSet, previousGTIDSet gmysql.GTIDSet, latestXID uint64) {
+func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysql.GTIDSet, previousGTIDSet gmysql.GTIDSet, latestXID uint64) {
+	t.Helper()
 	// write some events to file
-	dir := c.MkDir()
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "mysql-bin-test.000001")
 	f, err := os.Create(filename)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	defer f.Close()
 
 	g, err := NewGenerator(flavor, serverID, 0, latestGTID, previousGTIDSet, latestXID)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents := make([]*replication.BinlogEvent, 0, 20)
 	allEventTypes := make([]replication.EventType, 0, 50)
 
 	// file header
 	currentEvents, data, err := g.GenFileHeader(0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, replication.FORMAT_DESCRIPTION_EVENT, t.previousGTIDEventType(c, flavor))
+	allEventTypes = append(allEventTypes, replication.FORMAT_DESCRIPTION_EVENT, previousGTIDEventType(t, flavor))
 
 	// CREATE DATABASE `db`
 	schema := "db"
 	currentEvents, data, err = g.GenCreateDatabaseEvents(schema)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT)
 
 	// CREATE TABLE `db`.`tbl` (c1 INT, c2 TEXT)
 	table := "tbl"
 	query := fmt.Sprintf("CREATE TABLE `%s`.`%s` (c1 INT, c2 TEXT)", schema, table)
 	currentEvents, data, err = g.GenCreateTableEvents(schema, query)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT)
 
 	// INSERT INTO `db`.`tbl` VALUES (1, "string 1")
 	var (
@@ -178,11 +178,11 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 	}
 	eventType := replication.WRITE_ROWS_EVENTv2
 	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
 
 	// INSERT INTO `db`.`tbl` VALUES (11, "string 11"), (12, "string 12")
 	// INSERT INTO `db`.`tbl` VALUES (13, "string 13"),
@@ -207,11 +207,11 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 		},
 	}
 	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
 
 	// UPDATE `db`.`tbl` SET c2="another string 11" WHERE c1=11
 	// UPDATE `db`.`tbl` SET c1=120, c2="another string 120" WHERE C1=12
@@ -237,11 +237,11 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 	}
 	eventType = replication.UPDATE_ROWS_EVENTv2
 	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
 
 	// DELETE FROM `db`.`tbl` WHERE c1=13
 	deleteRows := make([][]interface{}, 0, 1)
@@ -257,42 +257,42 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 	}
 	eventType = replication.DELETE_ROWS_EVENTv2
 	currentEvents, data, err = g.GenDMLEvents(eventType, dmlData, 0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
 
 	// ALTER TABLE
 	query = fmt.Sprintf("ALTER TABLE `%s`.`%s` ADD COLUMN c3 INT", schema, table)
 	currentEvents, data, err = g.GenDDLEvents(schema, query, 0)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT)
 
 	// DROP TABLE `db`.`tbl`
 	currentEvents, data, err = g.GenDropTableEvents(schema, table)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT)
 
 	// DROP DATABASE `db`
 	currentEvents, data, err = g.GenDropDatabaseEvents(schema)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	allEvents = append(allEvents, currentEvents...)
-	allEventTypes = append(allEventTypes, t.gtidEventType(c, flavor), replication.QUERY_EVENT)
+	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT)
 
 	// parse the file
 	count := 0
 	onEventFunc := func(e *replication.BinlogEvent) error {
-		c.Assert(e.Header.EventType, Equals, allEventTypes[count])
-		c.Assert(e.RawData, DeepEquals, allEvents[count].RawData)
+		require.Equal(t, allEventTypes[count], e.Header.EventType)
+		require.Equal(t, allEvents[count].RawData, e.RawData)
 		count++
 		return nil
 	}
@@ -300,29 +300,31 @@ func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, 
 	parser2 := replication.NewBinlogParser()
 	parser2.SetVerifyChecksum(true)
 	err = parser2.ParseFile(filename, 0, onEventFunc)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 }
 
-func (t *testGeneratorSuite) previousGTIDEventType(c *C, flavor string) replication.EventType {
+func previousGTIDEventType(t *testing.T, flavor string) replication.EventType {
+	t.Helper()
 	switch flavor {
 	case gmysql.MySQLFlavor:
 		return replication.PREVIOUS_GTIDS_EVENT
 	case gmysql.MariaDBFlavor:
 		return replication.MARIADB_GTID_LIST_EVENT
 	default:
-		c.Fatalf("unsupported flavor %s", flavor)
+		t.Fatalf("unsupported flavor %s", flavor)
 		return replication.PREVIOUS_GTIDS_EVENT // hack for compiler
 	}
 }
 
-func (t *testGeneratorSuite) gtidEventType(c *C, flavor string) replication.EventType {
+func gtidEventType(t *testing.T, flavor string) replication.EventType {
+	t.Helper()
 	switch flavor {
 	case gmysql.MySQLFlavor:
 		return replication.GTID_EVENT
 	case gmysql.MariaDBFlavor:
 		return replication.MARIADB_GTID_EVENT
 	default:
-		c.Fatalf("unsupported flavor %s", flavor)
+		t.Fatalf("unsupported flavor %s", flavor)
 		return replication.GTID_EVENT // hack for compiler
 	}
 }
