@@ -73,6 +73,9 @@ type unitHolderImpl struct {
 	runCtx    context.Context
 	runCancel context.CancelFunc
 	result    *pb.ProcessResult // TODO: check if framework can persist result
+
+	// used to run background task
+	bgWg sync.WaitGroup
 }
 
 var _ unitHolder = &unitHolderImpl{}
@@ -151,6 +154,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 	u.fieldMu.Lock()
 	u.runCancel()
 	u.fieldMu.Unlock()
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	// TODO: refactor unit.Syncer
 	// unit needs to manage its own life cycle
@@ -196,6 +200,7 @@ func (u *unitHolderImpl) Close(ctx context.Context) error {
 	}
 	u.fieldMu.Unlock()
 
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	if u.unit != nil {
 		u.unit.Close()
@@ -269,7 +274,11 @@ func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
 	sourceStatus := u.getSourceStatus()
 
 	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
-		u.updateSourceStatus(ctx)
+		u.bgWg.Add(1)
+		go func() {
+			defer u.bgWg.Done()
+			u.updateSourceStatus(ctx)
+		}()
 	}
 }
 
