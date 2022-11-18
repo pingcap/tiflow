@@ -203,6 +203,8 @@ func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
 	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
+		// because we cannot be very precisely sure about which table
+		// the binlog will write, so we only throw a warning here.
 		result.State = StateWarning
 	}
 	return result

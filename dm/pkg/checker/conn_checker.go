@@ -109,8 +109,8 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		for processRows.Next() {
 			usedConn++
 		}
+		usedConn -= 1 // exclude the connection used for show processlist
 	}
-	usedConn -= 1 // exclude the connection used for show processlist
 	log.L().Debug("connection checker", zap.Int("maxConnections", maxConn), zap.Int("usedConnections", usedConn))
 	neededConn := c.getConfigConn(c.stCfgs)
 	if neededConn > maxConn {
