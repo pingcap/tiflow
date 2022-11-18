@@ -541,7 +541,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStatsX(tableID model.TableID) (pipeline.Stats, error) {
+func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
