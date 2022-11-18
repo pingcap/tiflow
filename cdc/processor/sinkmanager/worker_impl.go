@@ -140,13 +140,6 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				}
 				// There is no more data.
 				if e == nil {
-					if lastCommitTs == 0 {
-						lastCommitTs = upperBound.CommitTs
-						err := advanceTableSinkAndResetCurrentSize()
-						if err != nil {
-							return errors.Trace(err)
-						}
-					}
 					break
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
@@ -265,6 +258,14 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				)
 
 			} else {
+				if lastCommitTs == 0 {
+					lastCommitTs = upperBound.CommitTs
+					err := advanceTableSinkAndResetCurrentSize()
+					if err != nil {
+						return errors.Trace(err)
+					}
+					lastPos = upperBound
+				}
 				// This means that we append all the events to the table sink.
 				// But we have not updated the resolved ts.
 				// Because we do not reach the maxUpdateIntervalSize.

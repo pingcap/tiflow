@@ -14,8 +14,6 @@
 package pebble
 
 import (
-	"encoding/binary"
-	"hash/fnv"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -395,9 +393,5 @@ func genUniqueID() uint32 {
 }
 
 func getDB(tableID model.TableID, dbCount int) int {
-	h := fnv.New64()
-	b := [8]byte{}
-	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
-	h.Write(b[:])
-	return int(h.Sum64()) % dbCount
+	return int(tableID) % dbCount
 }
