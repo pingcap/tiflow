@@ -115,7 +115,6 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		zap.Stringer("unit", taskStatus.Unit),
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
-	taskStatus.StageUpdatedTime = time.Now()
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 	tm.gaugeVec.WithLabelValues(taskStatus.Task).Set(float64(taskStatus.Stage))
 }
