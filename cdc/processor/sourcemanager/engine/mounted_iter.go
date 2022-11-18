@@ -24,11 +24,9 @@ import (
 type MountedEventIter struct {
 	iter         EventIterator
 	mg           entry.MounterGroup
-	maxMemUsage  uint64
 	maxBatchSize int
 
 	rawEvents      []rawEvent
-	totalMemUsage  uint64
 	nextToMount    int
 	nextToEmit     int
 	savedIterError error
@@ -38,13 +36,11 @@ type MountedEventIter struct {
 func NewMountedEventIter(
 	iter EventIterator,
 	mg entry.MounterGroup,
-	maxMemUsage uint64,
 	maxBatchSize int,
 ) *MountedEventIter {
 	return &MountedEventIter{
 		iter:         iter,
 		mg:           mg,
-		maxMemUsage:  maxMemUsage,
 		maxBatchSize: maxBatchSize,
 	}
 }
@@ -56,14 +52,13 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
 			event = i.rawEvents[idx].event
 			txnFinished = i.rawEvents[idx].txnFinished
-			i.totalMemUsage -= i.rawEvents[idx].size
 			i.nextToEmit += 1
 		}
 		return
 	}
 
-	// There are no events in mounting. Fetch more events and mounting them. The batch
-	// size is determined by `maxMemUsage` and `maxBatchSize`.
+	// There are no events in mounting. Fetch more events and mounting them.
+	// The batch size is determined by `maxBatchSize`.
 	if i.mg != nil && i.iter != nil {
 		i.nextToMount = 0
 		i.nextToEmit = 0
@@ -73,7 +68,7 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 			i.rawEvents = i.rawEvents[:0]
 		}
 
-		for i.totalMemUsage < i.maxMemUsage && len(i.rawEvents) < cap(i.rawEvents) {
+		for len(i.rawEvents) < cap(i.rawEvents) {
 			event, txnFinished, err = i.iter.Next()
 			if err != nil {
 				return
@@ -82,11 +77,8 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 				i.savedIterError = i.iter.Close()
 				i.iter = nil
 				break
-
 			}
-			size := uint64(event.Row.ApproximateBytes())
-			i.totalMemUsage += size
-			i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
+			i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
 		}
 		for idx := i.nextToMount; idx < len(i.rawEvents); idx++ {
 			i.rawEvents[idx].event.SetUpFinishedCh()
@@ -119,5 +111,4 @@ func (i *MountedEventIter) Close() error {
 type rawEvent struct {
 	event       *model.PolymorphicEvent
 	txnFinished Position
-	size        uint64
 }

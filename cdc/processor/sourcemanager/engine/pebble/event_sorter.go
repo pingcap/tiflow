@@ -49,6 +49,7 @@ type EventSorter struct {
 
 	// Following fields are protected by mu.
 	mu         sync.RWMutex
+	isClosed   bool
 	onResolves []func(model.TableID, model.Ts)
 	tables     map[model.TableID]*tableState
 }
@@ -221,6 +222,14 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 
 // Close implements sorter.EventSortEngine.
 func (s *EventSorter) Close() error {
+	s.mu.Lock()
+	if s.isClosed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.isClosed = true
+	s.mu.Unlock()
+
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
@@ -399,5 +408,5 @@ func getDB(tableID model.TableID, dbCount int) int {
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
 	h.Write(b[:])
-	return int(h.Sum64()) % dbCount
+	return int(h.Sum64() % uint64(dbCount))
 }
