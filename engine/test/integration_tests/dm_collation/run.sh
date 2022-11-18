@@ -31,19 +31,14 @@ function run() {
 	# create the table, task can be continued.
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'utf8mb4_0900_as_cs'"
 	run_sql --port 4000 "create table test_panic.t1 (id int PRIMARY KEY, name varchar(20) COLLATE utf8mb4_bin);"
-	# after a manually pause + resume, the task can be continued. TODO: no need to pause?
-
-	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "pause"}'
-	exec_with_retry --count 5 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.stage == \"Paused\"'"
+	# after a manually resume, the task can be continued.
 	# duplicate request is OK
-	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "pause"}'
+	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 
 	# wait for dump and load finished
 
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMSyncTask\" and .task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
-	# duplicate request is OK
-	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 	curl http://127.0.0.1:10245/api/v1/jobs/$job_id/status | tee /dev/stderr | jq -e '.finished_unit_status."mysql-02"[1].Status.finishedBytes == 174'
 
 	# check data

@@ -229,12 +229,85 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 }
 
 func (t *testDMJobmasterSuite) TestGenOp() {
-	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StagePaused), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StageRunning), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StagePaused), dmpkg.Pause)
-	require.Equal(t.T(), genOp(metadata.StageError, metadata.StagePaused), dmpkg.Pause)
-	require.Equal(t.T(), genOp(metadata.StageFinished, metadata.StageRunning), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StageRunning), dmpkg.Resume)
+	earlierTime := time.Now()
+	laterTime := earlierTime.Add(time.Second)
+	cases := []struct {
+		runningStage             metadata.TaskStage
+		runningStageUpdatedTime  time.Time
+		expectedStage            metadata.TaskStage
+		expectedStageUpdatedTime time.Time
+		op                       dmpkg.OperateType
+	}{
+		{
+			runningStage:             metadata.StagePaused,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Pause,
+		},
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Pause,
+		},
+		{
+			runningStage:             metadata.StageFinished,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StagePaused,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Resume,
+		},
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Resume,
+		},
+		// any combinations with runningStageUpdatedTime later than expectedStageUpdatedTime is no-op
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  laterTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: earlierTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  laterTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: earlierTime,
+			op:                       dmpkg.None,
+		},
+	}
+
+	for _, c := range cases {
+		op := genOp(c.runningStage, c.runningStageUpdatedTime, c.expectedStage, c.expectedStageUpdatedTime)
+		require.Equal(t.T(), c.op, op)
+	}
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {

@@ -115,6 +115,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		zap.Stringer("unit", taskStatus.Unit),
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
+	taskStatus.StageUpdatedTime = time.Now()
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 	tm.gaugeVec.WithLabelValues(taskStatus.Task).Set(float64(taskStatus.Stage))
 }
@@ -165,7 +166,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 			continue
 		}
 
-		op := genOp(runningTask.Stage, persistentTask.Stage)
+		op := genOp(runningTask.Stage, runningTask.StageUpdatedTime, persistentTask.Stage, persistentTask.StageUpdatedTime)
 		if op == dmpkg.None {
 			tm.logger.Debug(
 				"task status will not be changed",
@@ -224,11 +225,19 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 	return value.(runtime.TaskStatus), true
 }
 
-func genOp(runtimeStage, expectedStage metadata.TaskStage) dmpkg.OperateType {
+func genOp(
+	runningStage metadata.TaskStage,
+	runningStageUpdatedTime time.Time,
+	expectedStage metadata.TaskStage,
+	expectedStageUpdatedTime time.Time,
+) dmpkg.OperateType {
+	if runningStageUpdatedTime.After(expectedStageUpdatedTime) {
+		return dmpkg.None
+	}
 	switch {
-	case expectedStage == metadata.StagePaused && (runtimeStage == metadata.StageRunning || runtimeStage == metadata.StageError):
+	case expectedStage == metadata.StagePaused && (runningStage == metadata.StageRunning || runningStage == metadata.StageError):
 		return dmpkg.Pause
-	case expectedStage == metadata.StageRunning && runtimeStage == metadata.StagePaused:
+	case expectedStage == metadata.StageRunning && (runningStage == metadata.StagePaused || runningStage == metadata.StageError):
 		return dmpkg.Resume
 	// TODO: support update
 	default:
