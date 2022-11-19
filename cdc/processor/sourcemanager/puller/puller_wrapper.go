@@ -17,12 +17,14 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -72,6 +74,9 @@ func (n *Wrapper) Start(
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
 ) {
+	failpoint.Inject("ProcessorAddTableError", func() {
+		errChan <- cerrors.New("processor add table injected error")
+	})
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
