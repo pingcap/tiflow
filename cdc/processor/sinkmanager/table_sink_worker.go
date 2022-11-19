@@ -16,11 +16,11 @@ package sinkmanager
 import (
 	"context"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
