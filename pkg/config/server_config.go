@@ -151,7 +151,7 @@ var defaultServerConfig = &ServerConfig{
 
 		Scheduler:           NewDefaultSchedulerConfig(),
 		EnableNewSink:       true,
-		EnablePullBasedSink: false,
+		EnablePullBasedSink: true,
 	},
 	ClusterID: "default",
 }
