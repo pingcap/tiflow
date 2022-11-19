@@ -302,10 +302,7 @@ func (jm *JobManagerImpl) CreateJob(ctx context.Context, req *pb.CreateJobReques
 
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
-	workerID, err := jm.BaseMaster.CreateWorker(
-		meta.Type, meta,
-		framework.CreateWorkerWithCost(defaultJobMasterCost),
-		framework.CreateWorkerWithSelectors(selectors...))
+	workerID, err := jm.createJob(meta)
 	if err != nil {
 		err2 := metadata.DeleteMasterMeta(ctx, jm.frameMetaClient, meta.ID)
 		if err2 != nil {
@@ -620,8 +617,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 			if !jm.JobBackoffMgr.Allow(job.ID) {
 				return "", errors.ErrMasterCreateWorkerBackoff.FastGenByArgs()
 			}
-			return jm.BaseMaster.CreateWorker(
-				job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
+			return jm.createJob(job)
 		})
 	if _, err = filterQuotaError(err); err != nil {
 		return err
@@ -647,8 +643,7 @@ func (jm *JobManagerImpl) Tick(ctx context.Context) error {
 		}
 		err = jm.JobFsm.IterWaitAckJobs(
 			func(job *frameModel.MasterMeta) (string, error) {
-				return jm.BaseMaster.CreateWorker(
-					job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost))
+				return jm.createJob(job)
 			})
 		exceedQuota, err := filterQuotaError(err)
 		if err != nil {
@@ -838,6 +833,13 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 			}
 		}
 	})
+}
+
+func (jm *JobManagerImpl) createJob(job *frameModel.MasterMeta) (string, error) {
+	return jm.BaseMaster.CreateWorker(
+		job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost),
+		framework.CreateWorkerWithSelectors(job.Ext.Selectors...),
+	)
 }
 
 func (jm *JobManagerImpl) terminateJob(
