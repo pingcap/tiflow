@@ -36,7 +36,7 @@ function run() {
 	exec_with_retry --count 20 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status | .unit == \"DMLoadTask\" and .stage == \"Error\"'"
 	docker start dm_downstream_tidb
 	docker restart server-executor-0 server-executor-1 server-executor-2
-	
+
 	# wait jobMaster online
 	exec_with_retry --count 50 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | grep 'job_id'"
 	exec_with_retry --count 500 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.status | .finishedBytes > 0 and .finishedBytes < .totalBytes'"
@@ -46,9 +46,10 @@ function run() {
 	sleep 10
 	exec_with_retry --count 20 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status | .stage == \"Paused\"'"
 	exec_with_retry --count 20 "curl -X PUT \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" -H 'Content-Type: application/json' -d '{\"op\": \"resume\"}'"
+	exec_with_retry --count 20 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status | .stage == \"Running\"'"
 
 	# wait for job finished and check data
-	exec_with_retry --count 20 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 50 --interval_sec 10 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
