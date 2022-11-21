@@ -18,9 +18,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
-	"github.com/pingcap/tidb/parser/charset"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"net/url"
 	"time"
 
@@ -28,6 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/charset"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -38,6 +37,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -48,8 +48,8 @@ const (
 
 	defaultDMLMaxRetry uint64 = 8
 
-	// If the events number larger than this value,
-	// use the prepareBatchDMLs to prepare the DMLs.
+	// If the row number in a singleTableTxnEvent larger than this value,
+	// use the prepareBatchDMLs to prepare DMLs for this txn.
 	// TODO: choose a more reasonable value.
 	batchDMLThreshold = 0
 )
@@ -146,7 +146,6 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 		s.statistics.ObserveRows(event.Event.Rows...)
 	}
 
-	// TODO(dongmen): add a switch to control whether to use the batch dml mode
 	dmls := s.prepareDMLs()
 	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
@@ -205,13 +204,6 @@ func convert2RowChanges(
 	row *model.RowChangedEvent,
 	tableInfo *timodel.TableInfo,
 	changeType sqlmodel.RowChangeType) *sqlmodel.RowChange {
-
-	//log.Info("fizz convert2RowChanges",
-	//	zap.Any("columns", row.Columns),
-	//	zap.Any("preColumns", row.PreColumns),
-	//	zap.Any("row", row),
-	//	zap.Any("tableInfo", tableInfo),
-	//	zap.Any("changeType", changeType))
 
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
@@ -386,10 +378,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-	//log.Info("fizz translate to insert",
-	//	zap.Bool("translateToInsert", translateToInsert),
-	//	zap.Bool("enableOldValue", s.cfg.EnableOldValue),
-	//	zap.Bool("safeMode", s.cfg.SafeMode))
+
 	rowCount := 0
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
@@ -404,11 +393,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// A row can be translated in to INSERT, when it was committed after
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
-		//log.Info("fizz prepare dmls",
-		//	zap.Bool("translateToInsert", translateToInsert),
-		//	zap.Any("row commitTs", firstRow.CommitTs),
-		//	zap.Any("row replicatingTs", firstRow.ReplicatingTs))
-
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 
 		if event.Callback != nil {
@@ -423,9 +407,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 			// only use batch dml when the table has a handle key
 			if hasHandleKey(tableColumns) {
-				// TODO(dongmen): we can use a better way to get table info.
+				// TODO(dongmen): find a better way to get table info.
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
-				//log.Info("fizz build table info", zap.Any("tableInfo", tableInfo))
 				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
