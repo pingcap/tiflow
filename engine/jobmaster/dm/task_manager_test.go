@@ -289,7 +289,6 @@ func (t *testDMJobmasterSuite) TestGenOp() {
 			expectedStageUpdatedTime: laterTime,
 			op:                       dmpkg.Resume,
 		},
-		// any combinations with runningStageUpdatedTime later than expectedStageUpdatedTime is no-op
 		{
 			runningStage:             metadata.StageError,
 			runningStageUpdatedTime:  laterTime,
@@ -302,11 +301,12 @@ func (t *testDMJobmasterSuite) TestGenOp() {
 			runningStageUpdatedTime:  laterTime,
 			expectedStage:            metadata.StagePaused,
 			expectedStageUpdatedTime: earlierTime,
-			op:                       dmpkg.None,
+			op:                       dmpkg.Pause,
 		},
 	}
 
-	for _, c := range cases {
+	for i, c := range cases {
+		t.T().Logf("case %d", i)
 		op := genOp(c.runningStage, c.runningStageUpdatedTime, c.expectedStage, c.expectedStageUpdatedTime)
 		require.Equal(t.T(), c.op, op)
 	}
@@ -346,14 +346,18 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	e := errors.New("operate task failed")
 	mockAgent.On("SendMessage").Return(e).Once()
-	// old expected stage time will not trigger SendMessage
-	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = oldTime
-	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = oldTime
-	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
-
 	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = newTime
 	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = newTime
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
+
+	// newer error stage will not trigger SendMessage, so will not meet injected error
+	dumpStatus2.Stage = metadata.StageError
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	e = errors.New("operate task failed")
+	mockAgent.On("SendMessage").Return(e).Once()
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = oldTime
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = oldTime
+	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 }
 
 func (t *testDMJobmasterSuite) TestTaskManager() {

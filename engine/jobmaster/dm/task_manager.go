@@ -230,14 +230,18 @@ func genOp(
 	expectedStage metadata.TaskStage,
 	expectedStageUpdatedTime time.Time,
 ) dmpkg.OperateType {
-	if runningStageUpdatedTime.After(expectedStageUpdatedTime) {
-		return dmpkg.None
-	}
 	switch {
 	case expectedStage == metadata.StagePaused && (runningStage == metadata.StageRunning || runningStage == metadata.StageError):
 		return dmpkg.Pause
-	case expectedStage == metadata.StageRunning && (runningStage == metadata.StagePaused || runningStage == metadata.StageError):
-		return dmpkg.Resume
+	case expectedStage == metadata.StageRunning:
+		if runningStage == metadata.StagePaused {
+			return dmpkg.Resume
+		}
+		// only resume a error task for a manual Resume action by checking expectedStageUpdatedTime
+		if runningStage == metadata.StageError && expectedStageUpdatedTime.After(runningStageUpdatedTime) {
+			return dmpkg.Resume
+		}
+		return dmpkg.None
 	// TODO: support update
 	default:
 		return dmpkg.None
