@@ -48,7 +48,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 	result := &Result{
 		Name:  checkerName,
 		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
-		State: StateFailure,
+		State: StateSuccess,
 	}
 	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
 	if err != nil {
