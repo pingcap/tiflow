@@ -105,5 +105,5 @@ func TestConnNumberChecker(t *testing.T) {
 	result = loaderChecker.Check(context.Background())
 	require.Equal(t, 1, len(result.Errors))
 	require.Equal(t, StateWarning, result.State)
-	require.Regexp(t, "(.|\n)*don't have SUPER privilege to check the usage of connections(.|\n)*", result.Errors[0].ShortErr)
+	require.Regexp(t, "(.|\n)*lack of Super global(.|\n)*", result.Errors[0].ShortErr)
 }

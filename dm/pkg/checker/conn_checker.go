@@ -44,7 +44,7 @@ func newConnNumberChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig
 	}
 }
 
-func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Result {
+func (c *connNumberChecker) check(ctx context.Context, checkerName string, neededPriv map[mysql.PrivilegeType]priv) *Result {
 	result := &Result{
 		Name:  checkerName,
 		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
@@ -81,8 +81,8 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 	}
 	rows.Close()
 	if maxConn == 0 {
+		// state = success
 		c.unlimitedConn = true
-		result.State = StateSuccess
 		return result
 	}
 	// check super privilege for SHOW PROCESSLIST
@@ -92,13 +92,12 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		markCheckError(result, err)
 		return result
 	}
-	err2 := verifyPrivilegesWithResult(result, grants, map[mysql.PrivilegeType]priv{
-		mysql.SuperPriv: {needGlobal: true},
-	})
+	err2 := verifyPrivilegesWithResult(result, grants, neededPriv)
 	if err2 != nil {
 		// no enough privilege to check the user's connection number
 		result.State = StateWarning
-		result.Errors = append(result.Errors, NewWarn("don't have SUPER privilege to check the usage of connections"))
+		result.Errors = append(result.Errors, NewWarn(err2.ShortErr))
+		result.Instruction = err2.Instruction
 	} else {
 		processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
 		if err != nil {
@@ -130,12 +129,6 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		result.Instruction = "set larger max_connections or adjust the configuration of dm"
 		result.State = StateFailure
 	} else {
-		// nonzero max_connections and needed connections are less than or equal to max_connections
-		if result.State != StateWarning {
-			// if no enough privilege to check the user's connection number,
-			// the result state will be StateWarning and we can't mark it as success.
-			result.State = StateSuccess
-		}
 		// if we don't have enough privilege to check the user's connection number,
 		// usedConn is 0
 		if maxConn-usedConn < neededConn {
@@ -179,7 +172,9 @@ func (l *LoaderConnNumberChecker) Name() string {
 }
 
 func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
-	result := l.check(ctx, l.Name())
+	result := l.check(ctx, l.Name(), map[mysql.PrivilegeType]priv{
+		mysql.SuperPriv: {needGlobal: true},
+	})
 	if !l.unlimitedConn && result.State == StateFailure {
 		// if the max_connections is set as a specific number
 		// and we failed because of the number connecions needed is smaller than max_connections
@@ -212,8 +207,13 @@ type DumperConnNumberChecker struct {
 	connNumberChecker
 }
 
+// Mariadb (process priv): https://mariadb.com/kb/en/show-processlist/
+// MySQL(process priv): https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html
+// Aurora (process priv): https://aws.amazon.com/cn/premiumsupport/knowledge-center/rds-mysql-running-queries/
 func (d *DumperConnNumberChecker) Check(ctx context.Context) *Result {
-	return d.check(ctx, d.Name())
+	return d.check(ctx, d.Name(), map[mysql.PrivilegeType]priv{
+		mysql.ProcessPriv: {needGlobal: true},
+	})
 }
 
 func (d *DumperConnNumberChecker) Name() string {

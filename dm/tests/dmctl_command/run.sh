@@ -177,7 +177,7 @@ function checktask_full_mode_conn() {
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $WORK_DIR/temp.yaml" \
-		"don't have SUPER privilege to check the usage of connections" 1
+		"lack of Super global" 1
 	run_sql_tidb "drop user test1;"
 
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
