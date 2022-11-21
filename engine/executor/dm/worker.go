@@ -164,7 +164,7 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 		return err
 	}
 	// update unit status periodically to update metrics
-	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.unitHolder.CheckAndUpdateStatus()
 	w.discardResource4Syncer(ctx)
 	return w.messageAgent.Tick(ctx)
 }
@@ -273,9 +273,15 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 // workerStatus gets worker status.
 func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
 	var (
-		stage       = w.getStage()
-		code        frameModel.WorkerState
-		taskStatus  = &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
+		stage      = w.getStage()
+		code       frameModel.WorkerState
+		taskStatus = &runtime.TaskStatus{
+			Unit:             w.workerType,
+			Task:             w.taskID,
+			Stage:            stage,
+			StageUpdatedTime: time.Now(),
+			CfgModRevision:   w.cfgModRevision,
+		}
 		finalStatus any
 	)
 	if stage == metadata.StageFinished {
