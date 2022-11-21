@@ -282,6 +282,8 @@ func (n *sorterNode) start(
 			select {
 			case <-stdCtx.Done():
 				return nil
+			case <-metricsTicker.C:
+				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			default:
 			}
 			index, ok := n.batchRead(stdCtx, events)
@@ -303,8 +305,10 @@ func (n *sorterNode) start(
 					if e.CRTs < lastSentResolvedTs {
 						continue
 					}
-					tickMsg := message.ValueMessage(pmessage.TickMessage())
-					_ = tableActorRouter.Send(tableActorID, tickMsg)
+					if isTableActorMode {
+						msg := message.ValueMessage(pmessage.TickMessage())
+						_ = tableActorRouter.Send(tableActorID, msg)
+					}
 					lastSentResolvedTs = e.CRTs
 					lastSendResolvedTsTime = time.Now()
 					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
@@ -365,18 +369,14 @@ func (n *sorterNode) start(
 					} else {
 						ctx.Throw(err)
 					}
-					if isTableActorMode {
-						msg := message.ValueMessage(pmessage.TickMessage())
-						_ = tableActorRouter.Send(tableActorID, msg)
-					}
-					lastSentResolvedTs = msg.CRTs
-					lastSendResolvedTsTime = time.Now()
+					return nil
 				}
 				lastCRTs = e.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 			}
 		}
 	})
+	n.sorter = eventSorter
 	return nil
 }
 
