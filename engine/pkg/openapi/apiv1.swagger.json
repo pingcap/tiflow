@@ -419,6 +419,12 @@
         "Canceled"
       ]
     },
+    "QueryMetaStoreRequestStoreType": {
+      "type": "string",
+      "enum": [
+        "AppMetaStore"
+      ]
+    },
     "RecordRecordType": {
       "type": "string",
       "enum": [
@@ -451,22 +457,6 @@
     "enginepbCreateResourceResponse": {
       "type": "object"
     },
-    "enginepbExecWorkload": {
-      "type": "object",
-      "properties": {
-        "tp": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "usage": {
-          "type": "integer",
-          "format": "int32"
-        }
-      }
-    },
-    "enginepbExecWorkloadResponse": {
-      "type": "object"
-    },
     "enginepbExecutor": {
       "type": "object",
       "properties": {
@@ -480,10 +470,6 @@
         },
         "address": {
           "type": "string"
-        },
-        "capability": {
-          "type": "string",
-          "format": "int64"
         },
         "labels": {
           "type": "object",
@@ -643,8 +629,9 @@
     "enginepbQueryMetaStoreResponse": {
       "type": "object",
       "properties": {
-        "address": {
-          "type": "string"
+        "config": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },
@@ -666,7 +653,8 @@
       "type": "object",
       "properties": {
         "config": {
-          "type": "string"
+          "type": "string",
+          "format": "byte"
         }
       }
     },
@@ -721,9 +709,6 @@
         }
       }
     },
-    "enginepbRegisterMetaStoreResponse": {
-      "type": "object"
-    },
     "enginepbRemoveLocalResourceResponse": {
       "type": "object"
     },
@@ -765,12 +750,6 @@
           "$ref": "#/definitions/SelectorOp"
         }
       }
-    },
-    "enginepbStoreType": {
-      "type": "string",
-      "enum": [
-        "AppMetaStore"
-      ]
     },
     "enginepbWriteLinesResponse": {
       "type": "object",

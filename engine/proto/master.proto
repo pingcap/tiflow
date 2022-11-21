@@ -273,5 +273,5 @@ message QueryStorageConfigRequest {
 }
 
 message QueryStorageConfigResponse {
-    string config = 2;
+    bytes config = 2;
 }
