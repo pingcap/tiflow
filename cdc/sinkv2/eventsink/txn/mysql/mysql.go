@@ -47,11 +47,6 @@ const (
 	maxFlushInterval = 10 * time.Millisecond
 
 	defaultDMLMaxRetry uint64 = 8
-
-	// If the row number in a singleTableTxnEvent larger than this value,
-	// use the prepareBatchDMLs to prepare DMLs for this txn.
-	// TODO: choose a more reasonable value.
-	batchDMLThreshold = 0
 )
 
 type mysqlBackend struct {
@@ -320,15 +315,12 @@ func batchSingleTxnDmls(
 	if len(insertRows) > 0 {
 		if translateToInsert {
 			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, insertRows...)
-
 			sqls = append(sqls, sql)
 			values = append(values, value)
-
 		} else {
 			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, insertRows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
-
 		}
 	}
 
@@ -400,7 +392,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		// Determine whether to use batch dml feature here.
-		if s.cfg.BatchDMLEnable && len(event.Event.Rows) > batchDMLThreshold {
+		if s.cfg.BatchDMLEnable {
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
