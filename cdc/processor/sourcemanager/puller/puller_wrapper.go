@@ -101,7 +101,7 @@ func (n *Wrapper) Start(
 	go func() {
 		defer n.wg.Done()
 		err := n.p.Run(ctxC)
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			errChan <- err
 		}
 	}()
