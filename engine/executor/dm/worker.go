@@ -72,7 +72,7 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
 	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.Stringer("worker_type", f.workerType), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Any("task_config", cfg))
-	return newDMWorker(ctx, masterID, f.workerType, cfg), nil
+	return newDMWorker(ctx, masterID, f.workerType, cfg)
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
@@ -101,12 +101,21 @@ type dmWorker struct {
 	needExtStorage bool
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
+func newDMWorker(
+	ctx *dcontext.Context,
+	masterID frameModel.MasterID,
+	workerType framework.WorkerType,
+	cfg *config.TaskCfg,
+) (*dmWorker, error) {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
 	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
+	err := dmSubtaskCfg.Adjust(true)
+	if err != nil {
+		return nil, err
+	}
 	w := &dmWorker{
 		cfg:            dmSubtaskCfg,
 		stage:          metadata.StageInit,
@@ -124,7 +133,7 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 		w.messageHandlerManager = m
 		return m, nil
 	})
-	return w
+	return w, nil
 }
 
 // InitImpl implements lib.WorkerImpl.InitImpl
@@ -146,6 +155,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 }
 
 // Tick implements lib.WorkerImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.checkAndAutoResume(ctx); err != nil {
 		return err

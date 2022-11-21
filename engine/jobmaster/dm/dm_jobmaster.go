@@ -153,6 +153,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 }
 
 // Tick implements JobMasterImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
