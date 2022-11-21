@@ -1247,7 +1247,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				startTs:  []model.Ts{418658114257813514},
 				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
 				values:   [][]interface{}{{1, 1, 2, 2}},
-				rowCount: 1,
+				rowCount: 2,
 			},
 		},
 		{ // insert event
@@ -1291,7 +1291,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				startTs:  []model.Ts{418658114257813516},
 				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
 				values:   [][]interface{}{{1, 1, 2, 2}},
-				rowCount: 1,
+				rowCount: 2,
 			},
 		},
 		// update event
@@ -1358,7 +1358,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				startTs:  []model.Ts{418658114257813516},
 				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))"},
 				values:   [][]interface{}{{1, 1, 2, 3, 3, 4, 1, 1, 2, 3, 3, 4, 1, 1, 3, 3}},
-				rowCount: 1,
+				rowCount: 2,
 			},
 		},
 		// mixed event
@@ -1423,7 +1423,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:   [][]interface{}{{1, 1, 2, 2}, {2, 2}},
-				rowCount: 2,
+				rowCount: 3,
 			},
 		},
 	}

@@ -376,6 +376,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		if len(event.Event.Rows) == 0 {
 			continue
 		}
+		rowCount += len(event.Event.Rows)
 
 		firstRow := event.Event.Rows[0]
 		if len(startTs) == 0 || startTs[len(startTs)-1] != firstRow.StartTs {
@@ -404,7 +405,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				sql, value := batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
-				rowCount += len(sql)
 				continue
 			}
 		}
@@ -421,7 +421,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
-					rowCount++
 				}
 				continue
 			}
@@ -438,7 +437,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
-					rowCount++
 				}
 			}
 
@@ -458,14 +456,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 							replaces[query] = make([][]interface{}, 0)
 						}
 						replaces[query] = append(replaces[query], args)
-						rowCount++
 					}
 				} else {
 					query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
 					if query != "" {
 						sqls = append(sqls, query)
 						values = append(values, args)
-						rowCount++
 					}
 				}
 			}
