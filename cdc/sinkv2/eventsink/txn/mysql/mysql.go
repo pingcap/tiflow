@@ -45,6 +45,9 @@ const (
 	maxFlushInterval = 10 * time.Millisecond
 
 	defaultDMLMaxRetry uint64 = 8
+	// If a txn is larger than this value,
+	// we should log a message to help us debug.
+	bigTxnLogThreshold = 1024
 )
 
 type mysqlBackend struct {
@@ -215,6 +218,15 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
 	for _, event := range s.events {
+		if len(event.Event.Rows) >= bigTxnLogThreshold {
+			log.Info("execute a big transaction",
+				zap.String("changefeed", s.changefeed),
+				zap.Int("row count", len(event.Event.Rows)),
+				zap.Uint64("start ts", event.Event.StartTs),
+				zap.String("table", event.Event.Table.String()),
+			)
+		}
+
 		for _, row := range event.Event.Rows {
 			if !translateToInsert {
 				break

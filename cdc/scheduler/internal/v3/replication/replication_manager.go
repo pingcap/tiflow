@@ -14,7 +14,9 @@
 package replication
 
 import (
+	"container/heap"
 	"math"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,6 +30,10 @@ import (
 
 const (
 	checkpointCannotProceed = internal.CheckpointCannotProceed
+
+	defaultSlowTableHeapSize  = 16
+	logSlowTablesLagThreshold = 10 * time.Second
+	logSlowTablesInterval     = 1 * time.Minute
 )
 
 // Callback is invoked when something is done.
@@ -93,10 +99,13 @@ type Manager struct { //nolint:revive
 
 	changefeedID           model.ChangeFeedID
 	slowestTableID         model.TableID
+	slowTableHeap          ReplicationSetHeap
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
 	acceptMoveTableTask    int
 	acceptBurstBalanceTask int
+
+	lastLogSlowTablesTime time.Time
 }
 
 // NewReplicationManager returns a new replication manager.
@@ -104,10 +113,12 @@ func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
 	return &Manager{
-		tables:             make(map[int64]*ReplicationSet),
-		runningTasks:       make(map[int64]*ScheduleTask),
-		maxTaskConcurrency: maxTaskConcurrency,
-		changefeedID:       changefeedID,
+		tables:                make(map[int64]*ReplicationSet),
+		runningTasks:          make(map[int64]*ScheduleTask),
+		maxTaskConcurrency:    maxTaskConcurrency,
+		changefeedID:          changefeedID,
+		slowTableHeap:         make(ReplicationSetHeap, 0, 16),
+		lastLogSlowTablesTime: time.Now(),
 	}
 }
 
@@ -474,6 +485,7 @@ func (r *Manager) RunningTasks() map[model.TableID]*ScheduleTask {
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
 	currentTables []model.TableID,
+	currentTime time.Time,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestTableID := int64(0)
@@ -487,6 +499,8 @@ func (r *Manager) AdvanceCheckpoint(
 				zap.Int64("tableID", tableID))
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
+		// find the slow tables
+		heap.Push(&r.slowTableHeap, table)
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
@@ -499,7 +513,31 @@ func (r *Manager) AdvanceCheckpoint(
 	if slowestTableID != 0 {
 		r.slowestTableID = slowestTableID
 	}
+
+	r.logSlowTableInfo(newCheckpointTs, currentTime)
+
 	return newCheckpointTs, newResolvedTs
+}
+
+func (r *Manager) logSlowTableInfo(checkpointTs model.Ts, currentTime time.Time) {
+	checkpointLag := currentTime.Sub(oracle.GetTimeFromTS(checkpointTs))
+	if checkpointLag < logSlowTablesLagThreshold ||
+		time.Since(r.lastLogSlowTablesTime) < logSlowTablesInterval {
+		return
+	}
+	for _, table := range r.slowTableHeap {
+		if table.Checkpoint.CheckpointTs == checkpointTs {
+			log.Info("slow table",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID),
+				zap.Int64("tableID", table.TableID),
+				zap.String("table status", table.Stats.String()),
+				zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
+				zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
+				zap.Duration("checkpoint lag", currentTime.
+					Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
+		}
+	}
 }
 
 // CollectMetrics collects metrics.

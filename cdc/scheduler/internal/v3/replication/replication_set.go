@@ -917,3 +917,28 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	}
 	r.Stats = stats
 }
+
+type ReplicationSetHeap []*ReplicationSet
+
+func (h ReplicationSetHeap) Len() int { return len(h) }
+func (h ReplicationSetHeap) Less(i, j int) bool {
+	if h[i].Checkpoint.CheckpointTs < h[j].Checkpoint.CheckpointTs {
+		return true
+	}
+	if h[i].Checkpoint.CheckpointTs == h[j].Checkpoint.CheckpointTs {
+		return h[i].Checkpoint.ResolvedTs < h[j].Checkpoint.ResolvedTs
+	}
+	return false
+}
+func (h ReplicationSetHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h *ReplicationSetHeap) Push(x interface{}) {
+	*h = append(*h, x.(*ReplicationSet))
+}
+func (h *ReplicationSetHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	old[n-1] = nil
+	*h = old[0 : n-1]
+	return x
+}

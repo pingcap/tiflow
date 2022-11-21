@@ -215,7 +215,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		},
 		// new scheduler
 		func(
-			ctx cdcContext.Context, startTs uint64,
+			ctx cdcContext.Context, upstream *upstream.Upstream,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		})

@@ -15,6 +15,7 @@ package replication
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -589,13 +590,13 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 
 	// all table is replicating
 	currentTables := []model.TableID{1, 2}
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables)
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
 	currentTables = append(currentTables, 3)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
@@ -620,7 +621,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(3)] = rs
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
@@ -638,7 +639,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(4)] = rs
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 }

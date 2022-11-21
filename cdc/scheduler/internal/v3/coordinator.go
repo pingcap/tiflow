@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -53,6 +54,7 @@ type coordinator struct {
 	replicationM *replication.Manager
 	captureM     *member.CaptureManager
 	schedulerM   *scheduler.Manager
+	upstream     *upstream.Upstream
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -63,11 +65,11 @@ func NewCoordinator(
 	ctx context.Context,
 	captureID model.CaptureID,
 	changefeedID model.ChangeFeedID,
-	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
+	upstream *upstream.Upstream,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
 		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
@@ -76,6 +78,7 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
+	coord.upstream = upstream
 	return coord, nil
 }
 
@@ -103,11 +106,11 @@ func newCoordinator(
 // Tick implement the scheduler interface
 func (c *coordinator) Tick(
 	ctx context.Context,
-	// Latest global checkpoint of the changefeed
+// Latest global checkpoint of the changefeed
 	checkpointTs model.Ts,
-	// All tables that SHOULD be replicated (or started) at the current checkpoint.
+// All tables that SHOULD be replicated (or started) at the current checkpoint.
 	currentTables []model.TableID,
-	// All captures that are alive according to the latest Etcd states.
+// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
@@ -233,10 +236,10 @@ func (c *coordinator) Close(ctx context.Context) {
 		zap.String("changefeed", c.changefeedID.ID))
 }
 
-// ===========
-
 func (c *coordinator) poll(
-	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
+	ctx context.Context,
+	checkpointTs model.Ts,
+	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
@@ -260,10 +263,11 @@ func (c *coordinator) poll(
 	}
 	msgBuf = append(msgBuf, msgs...)
 
+	pdTime, err := c.upstream.PDClock.CurrentTime()
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime)
 		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
@@ -297,7 +301,7 @@ func (c *coordinator) poll(
 	}
 
 	// Checkpoint calculation
-	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime)
 	return newCheckpointTs, newResolvedTs, nil
 }
 
