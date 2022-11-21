@@ -14,10 +14,24 @@
 package sinkmanager
 
 import (
-	"context"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+)
+
+const (
+	// defaultRequestMemSize is the default memory usage for a request.
+	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
+	// Avoid update resolved ts too frequently, if there are too many small transactions.
+	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
+	// Limit the maximum size of a group of one batch, if there is a big translation.
+	defaultMaxBigTxnBatchSize = defaultMaxUpdateIntervalSize * 20 // 5MB
+)
+
+// Make these values be variables, so that we can mock them in unit tests.
+var (
+	requestMemSize        = defaultRequestMemSize
+	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
+	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
 )
 
 // Used to record the progress of the table.
@@ -45,22 +59,11 @@ type sinkTask struct {
 	isCanceled    isCanceled
 }
 
-type sinkWorker interface {
-	// Pull data from source manager for the table sink.
-	// We suppose that the worker only handle one task at a time.
-	handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error
-}
-
+// redoTask is a task for the redo log.
 type redoTask struct {
 	tableID       model.TableID
 	lowerBound    engine.Position
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
-}
-
-type redoWorker interface {
-	// Pull data from source manager for the table sink.
-	// We suppose that the worker only handle one task at a time.
-	handleTasks(ctx context.Context, taskChan <-chan *redoTask) error
 }
