@@ -116,7 +116,10 @@ func (f *SortEngineFactory) Close() (err error) {
 func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *SortEngineFactory {
 	manager := &SortEngineFactory{
 		engineType:      pebbleEngine,
+		dir:             dir,
 		memQuotaInBytes: memQuotaInBytes,
+		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+		closed:          make(chan struct{}),
 		pebbleConfig:    cfg,
 	}
 

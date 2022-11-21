@@ -38,7 +38,7 @@ type Wrapper struct {
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// wg is used to wait the puller to exit.
-	wg *sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 // NewPullerWrapper creates a new puller wrapper.
