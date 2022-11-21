@@ -465,7 +465,10 @@ func (t *testDMOpenAPISuite) TestJobMasterNotInitialized() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", baseURL+"config", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusServiceUnavailable, w.Code)
+	require.Equal(t.T(), errors.HTTPStatusCode(errors.ErrJobNotRunning), w.Code)
+	var httpErr engineOpenAPI.HTTPError
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &httpErr))
+	require.Equal(t.T(), string(errors.ErrJobNotRunning.RFCCode()), httpErr.Code)
 }
 
 func equalError(t *testing.T, expected string, body *bytes.Buffer) {
