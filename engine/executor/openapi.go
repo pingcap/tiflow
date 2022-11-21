@@ -21,12 +21,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-const jobAPIPrefix = "/api/v1/jobs/"
-
 func jobAPIBasePath(jobID engineModel.JobID) string {
-	return jobAPIPrefix + jobID + "/"
+	return openapi.JobAPIPrefix + jobID + "/"
 }
 
 type jobAPIServer struct {
@@ -41,27 +41,32 @@ func newJobAPIServer() *jobAPIServer {
 }
 
 func (s *jobAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h, ok := s.match(r.URL.Path); ok {
-		h.ServeHTTP(w, r)
-	} else {
-		http.NotFound(w, r)
+	h, err := s.matchHandler(r.URL.Path)
+	if err != nil {
+		openapi.WriteHTTPError(w, err)
+		return
 	}
+	h.ServeHTTP(w, r)
 }
 
-func (s *jobAPIServer) match(path string) (http.Handler, bool) {
-	if !strings.HasPrefix(path, jobAPIPrefix) {
-		return nil, false
+func (s *jobAPIServer) matchHandler(path string) (http.Handler, error) {
+	if !strings.HasPrefix(path, openapi.JobAPIPrefix) {
+		return nil, errors.ErrInvalidArgument.GenWithStack("invalid job api path: %s", path)
 	}
-	path = strings.TrimPrefix(path, jobAPIPrefix)
-	fields := strings.SplitN(path, "/", 2)
-	if len(fields) != 2 {
-		return nil, false
+	path = strings.TrimPrefix(path, openapi.JobAPIPrefix)
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 {
+		return nil, errors.ErrInvalidArgument.GenWithStack("invalid job api path: %s", path)
 	}
-	JobID := fields[0]
+	JobID := parts[0]
 	s.rwm.RLock()
 	h, ok := s.handlers[JobID]
 	s.rwm.RUnlock()
-	return h, ok
+	if !ok {
+		// We can't tell whether the job exists or not, but at least the job is not running.
+		return nil, errors.ErrJobNotRunning.GenWithStackByArgs(JobID)
+	}
+	return h, nil
 }
 
 func (s *jobAPIServer) initialize(jobID engineModel.JobID, f func(apiGroup *gin.RouterGroup)) {
