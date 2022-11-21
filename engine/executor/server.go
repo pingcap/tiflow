@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -578,7 +579,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
-		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+		mux.Handle(openapi.JobAPIPrefix, s.jobAPISrv)
 
 		httpSrv := &http.Server{
 			Handler:           mux,
