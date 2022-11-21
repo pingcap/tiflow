@@ -336,6 +336,11 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
+
+			log.Debug("Generate sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -398,6 +403,11 @@ func (m *SinkManager) generateRedoTasks() error {
 				return m.ctx.Err()
 			case m.redoTaskChan <- t:
 			}
+
+			log.Debug("Generate redo task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -441,6 +451,10 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 
 // StartTable sets the table(TableSink) state to replicating.
 func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
+	log.Info("Start table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID))
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
@@ -561,7 +575,10 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 
 // Close closes all workers.
 func (m *SinkManager) Close() error {
-	m.cancel()
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
 	m.memQuota.close()
 	err := m.sinkFactory.Close()
 	if err != nil {
