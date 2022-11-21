@@ -80,7 +80,12 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
+func (j dmJobMasterFactory) NewWorkerImpl(
+	dCtx *dcontext.Context,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
+	conf framework.WorkerConfig,
+) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
 		initJobCfg: conf.(*config.JobCfg),
@@ -153,6 +158,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 }
 
 // Tick implements JobMasterImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
@@ -182,6 +188,7 @@ func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	return jm.handleOnlineStatus(worker)
 }
 
+// handleOnlineStatus is used by OnWorkerOnline and OnWorkerStatusUpdated.
 func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
@@ -224,7 +231,8 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	unitStateStore := jm.metadata.UnitStateStore()
 	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
-		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
+		finishedTaskStatus.StageUpdatedTime = time.Now()
+		finishedTaskStatus.Duration = finishedTaskStatus.StageUpdatedTime.Sub(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
 		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
 			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
 			if status.Unit == taskStatus.Unit {
