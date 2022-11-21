@@ -15,7 +15,7 @@ function test_compression() {
 	TOPIC_NAME="ticdc-kafka-compression-$1-test"
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}&compression=$1"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $1
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" $1
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true"
 	run_sql_file $CUR/data/$1_data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	compression_algorithm=$(grep "Kafka producer uses $1 compression algorithm" "$WORK_DIR/cdc.log")
