@@ -26,7 +26,7 @@ function run() {
 		"start-task $cur/conf/dm-task.yaml --remove-meta"
 
 	echo "check full phase"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test" \
@@ -36,7 +36,7 @@ function run() {
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	echo "check incremental phase"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 
 	run_sql_tidb_with_retry "select count(1) from binlog_parse.t1;" "count(1): 4"
 
@@ -55,7 +55,7 @@ function run() {
 		"\"result\": true" 1
 
 	echo "check incremental phase 2"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 }
 
 cleanup_data $TEST_NAME
