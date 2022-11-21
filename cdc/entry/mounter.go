@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -71,7 +70,6 @@ type mounter struct {
 	tz              *time.Location
 	enableOldValue  bool
 	changefeedID    model.ChangeFeedID
-	filter          filter.Filter
 	metricTotalRows prometheus.Gauge
 }
 

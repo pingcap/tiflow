@@ -176,10 +176,8 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 				zap.String("tableName", n.tableName),
 				zap.Any("event", event))
 		}
-		if event.CRTs >= n.startTs {
-			result[idx] = event
-			idx++
-		}
+		result[idx] = event
+		idx++
 	}
 
 	for {
@@ -202,10 +200,8 @@ func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicE
 					zap.String("tableName", n.tableName),
 					zap.Any("event", event))
 			}
-			if event.CRTs >= n.startTs {
-				result[idx] = event
-				idx++
-			}
+			result[idx] = event
+			idx++
 			if idx == defaultBatchReadSize {
 				return idx, true
 			}
@@ -229,7 +225,7 @@ func (n *sorterNode) start(
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(n.sorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {

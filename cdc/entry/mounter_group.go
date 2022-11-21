@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -35,7 +34,6 @@ type mounterGroup struct {
 	schemaStorage  SchemaStorage
 	inputCh        []chan *model.PolymorphicEvent
 	tz             *time.Location
-	filter         filter.Filter
 	enableOldValue bool
 
 	workerNum int
@@ -55,7 +53,6 @@ func NewMounterGroup(
 	schemaStorage SchemaStorage,
 	workerNum int,
 	enableOldValue bool,
-	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
 ) *mounterGroup {
@@ -70,7 +67,6 @@ func NewMounterGroup(
 		schemaStorage:  schemaStorage,
 		inputCh:        inputCh,
 		enableOldValue: enableOldValue,
-		filter:         filter,
 		tz:             tz,
 
 		workerNum: workerNum,
