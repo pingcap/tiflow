@@ -126,7 +126,10 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 
 // Build Messages
 func (a *BatchEncoder) Build() (messages []*common.Message) {
-	result := a.result[:]
+	if a.result[0] == nil {
+		return nil
+	}
+	result := a.result[:1]
 	a.result = [1]*common.Message{}
 	return result
 }
