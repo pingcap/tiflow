@@ -60,7 +60,7 @@ func setupEncoderAndSchemaRegistry(
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		result:                     make([]*common.Message, 0, 1),
+		result:                     [1]*common.Message{},
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,
 		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
