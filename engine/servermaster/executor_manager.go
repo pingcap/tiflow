@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
@@ -66,8 +65,7 @@ type ExecutorManagerImpl struct {
 	initHeartbeatTTL  time.Duration
 	keepAliveInterval time.Duration
 
-	rescMgr resource.RescMgr
-	logRL   *rate.Limiter
+	logRL *rate.Limiter
 
 	notifier *notifier.Notifier[model.ExecutorStatusChange]
 }
@@ -79,7 +77,6 @@ func NewExecutorManagerImpl(metaClient orm.Client, initHeartbeatTTL, keepAliveIn
 		executors:         make(map[model.ExecutorID]*Executor),
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
-		rescMgr:           resource.NewCapRescMgr(),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 		notifier:          notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
@@ -94,15 +91,13 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 		// This executor has been removed
 		return errors.ErrUnknownExecutor.GenWithStackByArgs(id)
 	}
-	addr := exec.Address
 	delete(e.executors, id)
-	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
 
 	e.notifier.Notify(model.ExecutorStatusChange{
 		ID:   id,
 		Tp:   model.EventExecutorOffline,
-		Addr: addr,
+		Addr: exec.Address,
 	})
 
 	// Delete the executor from the database. This operation may take a long time,
@@ -142,12 +137,7 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	}
 	e.mu.Unlock()
 
-	status := model.ExecutorStatus(req.Status)
-	if err := exec.heartbeat(req.Ttl, status); err != nil {
-		return nil, err
-	}
-	usage := model.RescUnit(req.GetResourceUsage())
-	if err := e.rescMgr.Update(execID, usage, usage, status); err != nil {
+	if err := exec.heartbeat(req.Ttl); err != nil {
 		return nil, err
 	}
 	resp := &pb.HeartbeatResponse{}
@@ -171,7 +161,6 @@ func (e *ExecutorManagerImpl) registerExecLocked(executorMeta *ormModel.Executor
 		Tp:   model.EventExecutorOnline,
 		Addr: executorMeta.Address,
 	})
-	e.rescMgr.Register(exec.ID, exec.Address, model.RescUnit(exec.Capability))
 }
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
@@ -194,11 +183,10 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 		return nil, err
 	}
 	executorMeta := &ormModel.Executor{
-		ID:         executorID,
-		Name:       pbExecutor.GetName(),
-		Address:    pbExecutor.GetAddress(),
-		Capability: int(pbExecutor.GetCapability()),
-		Labels:     ormModel.LabelSet(labelSet),
+		ID:      executorID,
+		Name:    pbExecutor.GetName(),
+		Address: pbExecutor.GetAddress(),
+		Labels:  ormModel.LabelSet(labelSet),
 	}
 	e.registerExecLocked(executorMeta)
 	e.mu.Unlock()
@@ -262,7 +250,7 @@ func (e *Executor) checkAlive() bool {
 	return true
 }
 
-func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
+func (e *Executor) heartbeat(ttl uint64) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.status == model.Tombstone {
@@ -270,7 +258,7 @@ func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
 	}
 	e.lastUpdateTime = time.Now()
 	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond
-	e.status = status
+	e.status = model.Running
 	return nil
 }
 
@@ -399,14 +387,9 @@ func (e *ExecutorManagerImpl) GetExecutorInfos() map[model.ExecutorID]schedModel
 
 	ret := make(map[model.ExecutorID]schedModel.ExecutorInfo, len(e.executors))
 	for id, exec := range e.executors {
-		resStatus, ok := e.rescMgr.CapacityForExecutor(id)
-		if !ok {
-			continue
-		}
 		schedInfo := schedModel.ExecutorInfo{
-			ID:             id,
-			ResourceStatus: *resStatus,
-			Labels:         label.Set(exec.Labels),
+			ID:     id,
+			Labels: label.Set(exec.Labels),
 		}
 		ret[id] = schedInfo
 	}

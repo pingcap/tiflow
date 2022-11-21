@@ -168,10 +168,9 @@ func (c *WorkerCreator) buildScheduleTaskRequest(
 	}
 
 	return &pb.ScheduleTaskRequest{
-		TaskId:               workerID,
-		Cost:                 int64(opts.Cost),
-		ResourceRequirements: resModel.ToResourceRequirement(masterID, opts.Resources...),
-		Selectors:            selectors,
+		TaskId:    workerID,
+		Resources: resModel.ToResourceRequirement(masterID, opts.Resources...),
+		Selectors: selectors,
 	}, nil
 }
 

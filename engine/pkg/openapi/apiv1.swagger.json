@@ -419,12 +419,6 @@
         "Canceled"
       ]
     },
-    "QueryMetaStoreRequestStoreType": {
-      "type": "string",
-      "enum": [
-        "AppMetaStore"
-      ]
-    },
     "RecordRecordType": {
       "type": "string",
       "enum": [
@@ -750,6 +744,12 @@
           "$ref": "#/definitions/SelectorOp"
         }
       }
+    },
+    "enginepbStoreType": {
+      "type": "string",
+      "enum": [
+        "AppMetaStore"
+      ]
     },
     "enginepbWriteLinesResponse": {
       "type": "object",

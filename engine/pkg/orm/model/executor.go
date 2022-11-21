@@ -83,6 +83,7 @@ type Executor struct {
 	// 2. memory
 	// 3. disk cap
 	// TODO: So we should enrich the cap dimensions in the future.
+	// FIXME: removed
 	Capability int `json:"capability" gorm:"column:capability;type:int not null"`
 
 	// Labels store the label set for each executor.

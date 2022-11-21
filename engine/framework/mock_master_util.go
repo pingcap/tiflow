@@ -110,9 +110,8 @@ func MockBaseMasterCreateWorker(
 ) {
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
-		TaskId:               workerID,
-		Cost:                 int64(cost),
-		ResourceRequirements: resModel.ToResourceRequirement(masterID, resources...),
+		TaskId:    workerID,
+		Resources: resModel.ToResourceRequirement(masterID, resources...),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
 		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
@@ -159,7 +158,6 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId: workerID,
-		Cost:   int64(cost),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
 		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
