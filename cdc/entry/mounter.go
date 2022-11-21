@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -62,23 +63,6 @@ type rowKVEntry struct {
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-<<<<<<< HEAD
-	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
-}
-
-type mounterImpl struct {
-	schemaStorage  SchemaStorage
-	tz             *time.Location
-	workerNum      int
-	enableOldValue bool
-	changefeedID   model.ChangeFeedID
-
-	// index is an atomic variable to dispatch input events to workers.
-	index int64
-
-	metricMountDuration prometheus.Observer
-	metricTotalRows     prometheus.Gauge
-=======
 	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
@@ -88,10 +72,9 @@ type mounter struct {
 	tz                           *time.Location
 	enableOldValue               bool
 	changefeedID                 model.ChangeFeedID
-	filter                       pfilter.Filter
+	filter                       filter.Filter
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }
 
 // NewMounter creates a mounter
@@ -104,8 +87,6 @@ func NewMounter(schemaStorage SchemaStorage,
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
-		metricMountDuration: mountDuration.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz: tz,
@@ -114,25 +95,6 @@ func NewMounter(schemaStorage SchemaStorage,
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
-<<<<<<< HEAD
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
-	m.metricTotalRows.Inc()
-	if pEvent.IsResolved() {
-		return nil
-	}
-	start := time.Now()
-	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	pEvent.Row = rowEvent
-	pEvent.RawKV.Value = nil
-	pEvent.RawKV.OldValue = nil
-	duration := time.Since(start)
-	if duration > time.Second {
-		m.metricMountDuration.Observe(duration.Seconds())
-	}
-=======
 func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
 	if event.IsResolved() {
@@ -146,7 +108,6 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 	event.Row = row
 	event.RawKV.Value = nil
 	event.RawKV.OldValue = nil
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	return nil
 }
 
@@ -327,11 +288,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, nil
 }
 
-<<<<<<< HEAD
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
-=======
-func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
+func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column

@@ -178,7 +178,7 @@ const defaultRunnersSize = 4
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
 func NewTablePipeline(ctx cdcContext.Context,
-	mounter entry.Mounter,
+	mounter entry.MounterGroup,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,

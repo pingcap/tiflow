@@ -113,11 +113,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
-<<<<<<< HEAD
-=======
-	registry.MustRegister(tableMemoryHistogram)
-	registry.MustRegister(processorMemoryGauge)
-	registry.MustRegister(remainKVEventsGauge)
 	pipeline.InitMetrics(registry)
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 }
