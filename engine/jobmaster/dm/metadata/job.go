@@ -222,6 +222,7 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 		// task stage will not be updated.
 		if oldTask, ok := oldJob.Tasks[taskID]; ok {
 			newTask.Stage = oldTask.Stage
+			newTask.StageUpdatedTime = oldTask.StageUpdatedTime
 		}
 	}
 
