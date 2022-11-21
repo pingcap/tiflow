@@ -60,9 +60,10 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
-	upstreamDB     *conn.BaseDB
-	sourceStatus   *binlog.SourceStatus
-	sourceStatusMu sync.RWMutex
+	upstreamDB            *conn.BaseDB
+	sourceStatus          *binlog.SourceStatus
+	sourceStatusMu        sync.RWMutex
+	sourceStatusCheckTime time.Time
 
 	logger log.Logger
 	// use to access process(init/close/pause/resume)
@@ -271,9 +272,10 @@ func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
 
 // CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
 func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
-	sourceStatus := u.getSourceStatus()
-
-	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
+	u.fieldMu.Lock()
+	defer u.fieldMu.Unlock()
+	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
+		u.sourceStatusCheckTime = time.Now()
 		u.bgWg.Add(1)
 		go func() {
 			defer u.bgWg.Done()
