@@ -1421,7 +1421,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
 					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
-					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
+					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
+				},
 				values:   [][]interface{}{{1, 1, 2, 2}, {2, 2}},
 				rowCount: 3,
 			},

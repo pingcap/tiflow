@@ -198,8 +198,8 @@ type preparedDMLs struct {
 func convert2RowChanges(
 	row *model.RowChangedEvent,
 	tableInfo *timodel.TableInfo,
-	changeType sqlmodel.RowChangeType) *sqlmodel.RowChange {
-
+	changeType sqlmodel.RowChangeType,
+) *sqlmodel.RowChange {
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		if col == nil {
