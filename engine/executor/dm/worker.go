@@ -155,6 +155,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 }
 
 // Tick implements lib.WorkerImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.checkAndAutoResume(ctx); err != nil {
 		return err
