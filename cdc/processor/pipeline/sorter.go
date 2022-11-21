@@ -42,15 +42,9 @@ import (
 )
 
 const (
-<<<<<<< HEAD
 	flushMemoryMetricsDuration = time.Second * 5
-=======
-	// TODO determine a reasonable default value
-	// This is part of sink performance optimization
-	resolvedTsInterpolateInterval = 200 * time.Millisecond
 	// defaultBatchReadSize is the default batch size of read from sorter
 	defaultBatchReadSize = 256
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 )
 
 type sorterNode struct {
@@ -77,28 +71,16 @@ type sorterNode struct {
 
 	replConfig *config.ReplicaConfig
 
-<<<<<<< HEAD
 	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
 	isTableActorMode bool
-=======
-	redoLogEnabled bool
-	changefeed     model.ChangeFeedID
-	// remainEvents record the amount of event remain in sorter engine
-	remainEvents int64
-	startTs      model.Ts
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
+	changefeed       model.ChangeFeedID
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
-<<<<<<< HEAD
-	flowController tableFlowController, mounter entry.Mounter,
+	flowController tableFlowController, mounter entry.MounterGroup,
 	replConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
-=======
-	flowController tableFlowController, mg entry.MounterGroup,
-	state *tablepb.TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
@@ -239,12 +221,7 @@ func (n *sorterNode) start(
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 	eventSorter sorter.EventSorter,
 ) error {
-<<<<<<< HEAD
 	n.isTableActorMode = isTableActorMode
-=======
-	n.sorter = eventSorter
-
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -289,7 +266,6 @@ func (n *sorterNode) start(
 			if err != nil {
 				return errors.Trace(err)
 			}
-<<<<<<< HEAD
 			replicateTs = oracle.ComposeTS(phy, logic)
 			return nil
 		}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
@@ -305,48 +281,12 @@ func (n *sorterNode) start(
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", n.changefeed.Namespace),
 			zap.String("changefeed", n.changefeed.ID))
-=======
-			log.Info("table is replicating",
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID),
-				zap.Int64("tableID", n.tableID),
-				zap.String("tableName", n.tableName),
-				zap.Uint64("replicateTs", replicateTs),
-				zap.Duration("duration", time.Since(start)))
-			n.startTs = startTs
-		}
-
-		n.state.Store(tablepb.TableStateReplicating)
-		n.sorter.EmitStartTs(stdCtx, startTs)
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 
 		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
 		for {
 			select {
 			case <-stdCtx.Done():
 				return nil
-<<<<<<< HEAD
-			case <-metricsTicker.C:
-				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg, ok := <-output:
-				if !ok {
-					// sorter output channel closed
-					return nil
-				}
-				if msg == nil || msg.RawKV == nil {
-					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
-				}
-				if msg.RawKV.OpType != model.OpTypeResolved {
-					err := n.mounter.DecodeEvent(ctx, msg)
-					if err != nil {
-						return errors.Trace(err)
-					}
-
-					commitTs := msg.CRTs
-					// We interpolate a resolved-ts if none has been sent for some time.
-					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
-						resolvedTsInterpolateFunc(commitTs)
-=======
 			default:
 			}
 			index, ok := n.batchRead(stdCtx, events)
@@ -379,7 +319,6 @@ func (n *sorterNode) start(
 				if err := e.WaitFinished(ctx); err != nil {
 					if errors.Cause(err) != context.Canceled {
 						ctx.Throw(err)
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 					}
 					return errors.Trace(err)
 				}
@@ -387,45 +326,6 @@ func (n *sorterNode) start(
 					continue
 				}
 
-<<<<<<< HEAD
-					// For all rows, we add table replicate ts, so mysql sink can
-					// determine when to turn off safe-mode.
-					msg.Row.ReplicatingTs = replicateTs
-					// We calculate memory consumption by RowChangedEvent size.
-					// It's much larger than RawKVEntry.
-					size := uint64(msg.Row.ApproximateBytes())
-					// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
-					// means interrupting a transaction. Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
-						if commitTs > lastCRTs {
-							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
-							// Not sending a Resolved Event here will very likely deadlock the pipeline.
-							resolvedTsInterpolateFunc(commitTs)
-						} else if commitTs == lastCRTs {
-							// send batch resolve event
-							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
-							msg.Resolved = &model.ResolvedTs{
-								Ts:      commitTs,
-								Mode:    model.BatchResolvedMode,
-								BatchID: batchID,
-							}
-							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-						} else {
-							log.Panic("flow control blocked, report a bug",
-								zap.Uint64("commitTs", commitTs),
-								zap.Uint64("lastCommitTs", lastCRTs),
-								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
-						}
-						return nil
-					})
-					if err != nil {
-						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Info("flow control cancelled for table",
-								zap.Int64("tableID", n.tableID),
-								zap.String("tableName", n.tableName))
-						} else {
-							ctx.Throw(err)
-=======
 				commitTs := e.CRTs
 				// We interpolate a resolved-ts if none has been sent for some time.
 				if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
@@ -452,7 +352,6 @@ func (n *sorterNode) start(
 							Ts:      commitTs,
 							Mode:    model.BatchResolvedMode,
 							BatchID: batchID,
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 						}
 						ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 					} else {
@@ -471,16 +370,12 @@ func (n *sorterNode) start(
 					} else {
 						ctx.Throw(err)
 					}
-<<<<<<< HEAD
 					if isTableActorMode {
 						msg := message.ValueMessage(pmessage.TickMessage())
 						_ = tableActorRouter.Send(tableActorID, msg)
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
-=======
-					return nil
->>>>>>> 2e2ac7a610 (mounter(ticdc): add mounter group to accelerate generate events (#7458))
 				}
 				lastCRTs = e.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))

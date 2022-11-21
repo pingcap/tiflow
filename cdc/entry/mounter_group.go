@@ -94,7 +94,7 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 }
 
 func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.enableOldValue)
 	rawCh := m.inputCh[index]
 	metrics := mounterGroupInputChanSizeGauge.
 		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))

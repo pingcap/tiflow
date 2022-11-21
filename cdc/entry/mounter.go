@@ -63,18 +63,16 @@ type rowKVEntry struct {
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounter struct {
-	schemaStorage                SchemaStorage
-	tz                           *time.Location
-	enableOldValue               bool
-	changefeedID                 model.ChangeFeedID
-	filter                       filter.Filter
-	metricTotalRows              prometheus.Gauge
-	metricIgnoredDMLEventCounter prometheus.Counter
+	schemaStorage   SchemaStorage
+	tz              *time.Location
+	enableOldValue  bool
+	changefeedID    model.ChangeFeedID
+	filter          filter.Filter
+	metricTotalRows prometheus.Gauge
 }
 
 // NewMounter creates a mounter
@@ -104,7 +102,6 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	event.Row = row
 	event.RawKV.Value = nil
 	event.RawKV.OldValue = nil

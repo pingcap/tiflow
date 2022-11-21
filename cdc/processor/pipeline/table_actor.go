@@ -132,7 +132,7 @@ func NewTableActor(
 		tableName:     tableName,
 		cyclicEnabled: cyclicEnabled,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
-		upstream:      up,
+		upStream:      up,
 		mg:            mg,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
