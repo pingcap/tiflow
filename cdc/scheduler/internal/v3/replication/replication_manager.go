@@ -117,7 +117,7 @@ func NewReplicationManager(
 		runningTasks:          make(map[int64]*ScheduleTask),
 		maxTaskConcurrency:    maxTaskConcurrency,
 		changefeedID:          changefeedID,
-		slowTableHeap:         make(ReplicationSetHeap, 0, 16),
+		slowTableHeap:         make(ReplicationSetHeap, 0, defaultSlowTableHeapSize),
 		lastLogSlowTablesTime: time.Now(),
 	}
 }
@@ -527,7 +527,7 @@ func (r *Manager) logSlowTableInfo(checkpointTs model.Ts, currentTime time.Time)
 	}
 	for _, table := range r.slowTableHeap {
 		if table.Checkpoint.CheckpointTs == checkpointTs {
-			log.Info("slow table",
+			log.Info("schedulerv3: slow table",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Int64("tableID", table.TableID),
