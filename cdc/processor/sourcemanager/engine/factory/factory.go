@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package manager
+package factory
 
 import (
 	"strconv"
@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
 	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sorter"
-	ngpebble "github.com/pingcap/tiflow/pkg/sorter/pebble"
 	"go.uber.org/multierr"
 )
 
@@ -34,18 +34,18 @@ const (
 	// pebbleEngine details are in package document of pkg/sorter/pebble.
 	pebbleEngine sortEngineType = iota + 1
 
-	metricsCollectInterval time.Duration = 15 * time.Second
+	metricsCollectInterval = 15 * time.Second
 )
 
-// EventSortEngineManager is a manager to create or drop EventSortEngine.
-type EventSortEngineManager struct {
+// SortEngineFactory is a manager to create or drop SortEngine.
+type SortEngineFactory struct {
 	// Read-only fields.
 	engineType      sortEngineType
 	dir             string
 	memQuotaInBytes uint64
 
 	mu      sync.Mutex
-	engines map[model.ChangeFeedID]sorter.EventSortEngine
+	engines map[model.ChangeFeedID]engine.SortEngine
 
 	wg     sync.WaitGroup
 	closed chan struct{}
@@ -56,17 +56,17 @@ type EventSortEngineManager struct {
 	writeStalls  []writeStall
 }
 
-// Create creates an EventSortEngine. If an engine with same ID already exists,
+// Create creates a SortEngine. If an engine with same ID already exists,
 // it will be returned directly.
-func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.EventSortEngine, err error) {
+func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	switch f.engineType {
 	case pebbleEngine:
 		exists := false
-		if engine, exists = f.engines[ID]; exists {
-			return engine, nil
+		if e, exists = f.engines[ID]; exists {
+			return e, nil
 		}
 		if len(f.dbs) == 0 {
 			f.dbs, f.writeStalls, err = createPebbleDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
@@ -74,8 +74,8 @@ func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.Ev
 				return
 			}
 		}
-		engine = ngpebble.New(ID, f.dbs)
-		f.engines[ID] = engine
+		e = epebble.New(ID, f.dbs)
+		f.engines[ID] = e
 	default:
 		log.Panic("not implemented")
 	}
@@ -83,7 +83,7 @@ func (f *EventSortEngineManager) Create(ID model.ChangeFeedID) (engine sorter.Ev
 }
 
 // Drop cleans the given event sort engine.
-func (f *EventSortEngineManager) Drop(ID model.ChangeFeedID) error {
+func (f *SortEngineFactory) Drop(ID model.ChangeFeedID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -96,7 +96,7 @@ func (f *EventSortEngineManager) Drop(ID model.ChangeFeedID) error {
 }
 
 // Close will close all created engines and release all resources.
-func (f *EventSortEngineManager) Close() (err error) {
+func (f *SortEngineFactory) Close() (err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -112,11 +112,14 @@ func (f *EventSortEngineManager) Close() (err error) {
 	return
 }
 
-// NewForPebble will create a EventSortEngineManager for the pebble implementation.
-func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *EventSortEngineManager {
-	manager := &EventSortEngineManager{
+// NewForPebble will create a SortEngineFactory for the pebble implementation.
+func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *SortEngineFactory {
+	manager := &SortEngineFactory{
 		engineType:      pebbleEngine,
+		dir:             dir,
 		memQuotaInBytes: memQuotaInBytes,
+		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+		closed:          make(chan struct{}),
 		pebbleConfig:    cfg,
 	}
 
@@ -124,7 +127,7 @@ func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *Eve
 	return manager
 }
 
-func (f *EventSortEngineManager) startMetricsCollector() {
+func (f *SortEngineFactory) startMetricsCollector() {
 	f.wg.Add(1)
 	ticker := time.NewTicker(metricsCollectInterval)
 	go func() {
@@ -141,7 +144,7 @@ func (f *EventSortEngineManager) startMetricsCollector() {
 	}()
 }
 
-func (f *EventSortEngineManager) collectMetrics() {
+func (f *SortEngineFactory) collectMetrics() {
 	if f.engineType == pebbleEngine {
 		for i, db := range f.dbs {
 			stats := db.Metrics()

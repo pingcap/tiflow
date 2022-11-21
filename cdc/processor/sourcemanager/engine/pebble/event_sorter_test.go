@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,7 +68,7 @@ func TestNoResolvedTs(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.TableID(1), sorter.Position{}, sorter.Position{CommitTs: ts})
+		iter := s.FetchByTable(model.TableID(1), engine.Position{}, engine.Position{CommitTs: ts})
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -125,12 +125,12 @@ func TestEventFetch(t *testing.T) {
 	s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, 4))
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
-	sortedPositions := make([]sorter.Position, 0, len(inputEvents))
+	sortedPositions := make([]engine.Position, 0, len(inputEvents))
 
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.TableID(1), sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
+		iter := s.FetchByTable(model.TableID(1), engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)
@@ -150,7 +150,7 @@ func TestEventFetch(t *testing.T) {
 
 	require.Equal(t, inputEvents, sortedEvents)
 
-	expectPositions := []sorter.Position{
+	expectPositions := []engine.Position{
 		{CommitTs: 0, StartTs: 0},
 		{CommitTs: 2, StartTs: 1},
 		{CommitTs: 4, StartTs: 2},
@@ -172,6 +172,6 @@ func TestCleanData(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	s.AddTable(1)
-	require.Panics(t, func() { s.CleanByTable(2, sorter.Position{}) })
-	require.Nil(t, s.CleanByTable(1, sorter.Position{}))
+	require.Panics(t, func() { s.CleanByTable(2, engine.Position{}) })
+	require.Nil(t, s.CleanByTable(1, engine.Position{}))
 }

@@ -18,26 +18,27 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sorter"
-	"github.com/pingcap/tiflow/pkg/sorter/memory"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) sinkWorker {
-	sorterEngine := memory.New(context.Background())
+	sortEngine := memory.New(context.Background())
 	quota := newMemQuota(changefeedID, memQuota)
-	return newSinkWorker(changefeedID, sorterEngine, quota, nil, splitTxn, false)
+	return newSinkWorker(changefeedID, &entry.MockMountGroup{}, sortEngine, quota, nil, splitTxn, false)
 }
 
 // nolint:unparam
 // It is ok to use the same tableID in test.
-func addEventsToSorterEngine(t *testing.T, events []*model.PolymorphicEvent, sorterEngine sorter.EventSortEngine, tableID model.TableID) {
-	sorterEngine.AddTable(tableID)
+func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortEngine engine.SortEngine, tableID model.TableID) {
+	sortEngine.AddTable(tableID)
 	for _, event := range events {
-		err := sorterEngine.Add(tableID, event)
+		err := sortEngine.Add(tableID, event)
 		require.NoError(t, err)
 	}
 }
@@ -143,7 +144,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 	}
 
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -155,22 +156,22 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
-	lowerBoundPos := sorter.Position{
+	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() sorter.Position {
-		return sorter.Position{
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}
 	}
-	callback := func(lastWritePos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(suite.T(), sorter.Position{
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -258,7 +259,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -270,22 +271,22 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
-	lowerBoundPos := sorter.Position{
+	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() sorter.Position {
-		return sorter.Position{
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}
 	}
-	callback := func(lastWritePos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(suite.T(), sorter.Position{
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -385,7 +386,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -397,22 +398,22 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
-	lowerBoundPos := sorter.Position{
+	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() sorter.Position {
-		return sorter.Position{
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}
 	}
-	callback := func(lastWritePos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(suite.T(), sorter.Position{
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -511,7 +512,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -523,22 +524,22 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
-	lowerBoundPos := sorter.Position{
+	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() sorter.Position {
-		return sorter.Position{
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}
 	}
-	callback := func(lastWritePos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(suite.T(), sorter.Position{
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -636,7 +637,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSorterEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -648,22 +649,22 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
-	lowerBoundPos := sorter.Position{
+	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() sorter.Position {
-		return sorter.Position{
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}
 	}
-	callback := func(lastWritePos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(suite.T(), sorter.Position{
+		require.Equal(suite.T(), engine.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())

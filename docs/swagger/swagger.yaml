@@ -206,6 +206,7 @@ definitions:
   model.ProcessorDetail:
     properties:
       table_ids:
+        description: All table ids that this processor are replicating.
         items:
           type: integer
         type: array

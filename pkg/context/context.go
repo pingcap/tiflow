@@ -20,11 +20,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -42,7 +42,7 @@ type GlobalVars struct {
 	// TODO(qupeng): remove SorterSystem after all sorters are transformed
 	// to adapt pull-based sinks.
 	SorterSystem      *ssystem.System
-	SortEngineManager *sortmgr.EventSortEngineManager
+	SortEngineFactory *factory.SortEngineFactory
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64

@@ -130,3 +130,17 @@ func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEve
 		return nil
 	}
 }
+
+// MockMountGroup is used for tests.
+type MockMountGroup struct{}
+
+// Run implements MountGroup.
+func (m *MockMountGroup) Run(ctx context.Context) error {
+	return nil
+}
+
+// AddEvent implements MountGroup.
+func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
+	return nil
+}

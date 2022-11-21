@@ -23,15 +23,15 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	"github.com/pingcap/tiflow/pkg/chann"
-	"github.com/pingcap/tiflow/pkg/sorter"
-	"github.com/pingcap/tiflow/pkg/sorter/pebble/encoding"
 	"go.uber.org/zap"
 )
 
 var (
-	_ sorter.EventSortEngine = (*EventSorter)(nil)
-	_ sorter.EventIterator   = (*EventIter)(nil)
+	_ engine.SortEngine    = (*EventSorter)(nil)
+	_ engine.EventIterator = (*EventIter)(nil)
 )
 
 // EventSorter is an event sort engine.
@@ -49,6 +49,7 @@ type EventSorter struct {
 
 	// Following fields are protected by mu.
 	mu         sync.RWMutex
+	isClosed   bool
 	onResolves []func(model.TableID, model.Ts)
 	tables     map[model.TableID]*tableState
 }
@@ -165,8 +166,8 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 // FetchByTable implements sorter.EventSortEngine.
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
-	lowerBound, upperBound sorter.Position,
-) sorter.EventIterator {
+	lowerBound, upperBound engine.Position,
+) engine.EventIterator {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -189,7 +190,7 @@ func (s *EventSorter) FetchByTable(
 }
 
 // FetchAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIterator {
+func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))
@@ -197,7 +198,7 @@ func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIte
 }
 
 // CleanByTable implements sorter.EventSortEngine.
-func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound sorter.Position) error {
+func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -212,7 +213,7 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound sorter.Posi
 }
 
 // CleanAllTables implements sorter.EventSortEngine.
-func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
+func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 	log.Panic("CleanAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))
@@ -221,6 +222,14 @@ func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
 
 // Close implements sorter.EventSortEngine.
 func (s *EventSorter) Close() error {
+	s.mu.Lock()
+	if s.isClosed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.isClosed = true
+	s.mu.Unlock()
+
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
@@ -240,7 +249,7 @@ func (s *EventSorter) Close() error {
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, pos sorter.Position, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, err error) {
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
@@ -284,7 +293,7 @@ type tableState struct {
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
-	cleaned sorter.Position
+	cleaned engine.Position
 }
 
 func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
@@ -354,14 +363,14 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 }
 
 // cleanTable uses DeleteRange to clean data of the given table.
-func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upperBound ...sorter.Position) error {
-	var toClean sorter.Position
+func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upperBound ...engine.Position) error {
+	var toClean engine.Position
 	var start, end []byte
 
 	if len(upperBound) == 1 {
 		toClean = upperBound[0]
 	} else {
-		toClean = sorter.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
+		toClean = engine.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}
 
 	state.mu.RLock()
@@ -399,5 +408,5 @@ func getDB(tableID model.TableID, dbCount int) int {
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
 	h.Write(b[:])
-	return int(h.Sum64()) % dbCount
+	return int(h.Sum64() % uint64(dbCount))
 }

@@ -18,9 +18,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +49,8 @@ var (
 
 type sinkWorkerImpl struct {
 	changefeedID model.ChangeFeedID
-	sortEngine   sorter.EventSortEngine
+	mg           entry.MounterGroup
+	sortEngine   engine.SortEngine
 	memQuota     *memQuota
 	eventCache   *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
@@ -61,7 +63,8 @@ type sinkWorkerImpl struct {
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-	sortEngine sorter.EventSortEngine,
+	mg entry.MounterGroup,
+	sortEngine engine.SortEngine,
 	quota *memQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -69,6 +72,7 @@ func newSinkWorker(
 ) sinkWorker {
 	return &sinkWorkerImpl{
 		changefeedID:   changefeedID,
+		mg:             mg,
 		sortEngine:     sortEngine,
 		memQuota:       quota,
 		eventCache:     eventCache,
@@ -99,7 +103,7 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 
 			// Used to record the last written position.
 			// We need to use it to update the lower bound of the table sink.
-			var lastPos sorter.Position
+			var lastPos engine.Position
 			lastCommitTs := uint64(0)
 			currentTotalSize := uint64(0)
 			batchID := uint64(1)
@@ -125,9 +129,11 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 			}
 
 			// lowerBound and upperBound are both closed intervals.
-			iter := w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound)
+			iter := engine.NewMountedEventIter(
+				w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
+				w.mg, 256)
 			for !task.isCanceled() {
-				e, pos, err := iter.Next()
+				e, pos, err := iter.Next(ctx)
 				if err != nil {
 					iter.Close()
 					return errors.Trace(err)
@@ -252,6 +258,14 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 				)
 
 			} else {
+				if lastCommitTs == 0 {
+					lastCommitTs = upperBound.CommitTs
+					err := advanceTableSinkAndResetCurrentSize()
+					if err != nil {
+						return errors.Trace(err)
+					}
+					lastPos = upperBound
+				}
 				// This means that we append all the events to the table sink.
 				// But we have not updated the resolved ts.
 				// Because we do not reach the maxUpdateIntervalSize.
@@ -273,9 +287,9 @@ func (w *sinkWorkerImpl) handleTasks(ctx context.Context, taskChan <-chan *sinkT
 
 func (w *sinkWorkerImpl) fetchFromCache(
 	task *sinkTask, // task is read-only here.
-	lowerBound sorter.Position,
-	upperBound sorter.Position,
-) (sorter.Position, error) {
+	lowerBound engine.Position,
+	upperBound engine.Position,
+) (engine.Position, error) {
 	// Is it possible that after fetching something from cache, more events are
 	// pushed into cache immediately? It's unlikely and if it happens, new events
 	// are only available after resolvedTs has been advanced. So, here just pop one
@@ -286,7 +300,7 @@ func (w *sinkWorkerImpl) fetchFromCache(
 		w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
 		err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
 		if err != nil {
-			return sorter.Position{}, err
+			return engine.Position{}, err
 		}
 		return pos.Next(), nil
 	}
@@ -303,18 +317,27 @@ func (w *sinkWorkerImpl) appendEventsToTableSink(t *sinkTask, events []*model.Po
 }
 
 func (w *sinkWorkerImpl) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+	log.Debug("Advance table sink",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("commitTs", commitTs))
+
 	resolvedTs := model.NewResolvedTs(commitTs)
 	if w.splitTxn {
 		resolvedTs.Mode = model.BatchResolvedMode
 		resolvedTs.BatchID = batchID
 	}
-	w.memQuota.record(t.tableID, resolvedTs, size)
+	if size > 0 {
+		w.memQuota.record(t.tableID, resolvedTs, size)
+	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
 
 type redoWorkerImpl struct {
 	changefeedID   model.ChangeFeedID
-	sortEngine     sorter.EventSortEngine
+	mg             entry.MounterGroup
+	sortEngine     engine.SortEngine
 	memQuota       *memQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
@@ -324,7 +347,8 @@ type redoWorkerImpl struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-	sortEngine sorter.EventSortEngine,
+	mg entry.MounterGroup,
+	sortEngine engine.SortEngine,
 	quota *memQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
@@ -333,6 +357,7 @@ func newRedoWorker(
 ) redoWorker {
 	return &redoWorkerImpl{
 		changefeedID:   changefeedID,
+		mg:             mg,
 		sortEngine:     sortEngine,
 		memQuota:       quota,
 		redoManager:    redoManager,
@@ -367,7 +392,7 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 
 	memAllocated := true
 
-	var lastPos sorter.Position
+	var lastPos engine.Position
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
 		if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
 			return nil
@@ -403,10 +428,12 @@ func (w *redoWorkerImpl) handleTask(ctx context.Context, task *redoTask) error {
 	}
 
 	// lowerBound and upperBound are both closed intervals.
-	iter := w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound())
+	iter := engine.NewMountedEventIter(
+		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
+		w.mg, 256)
 	defer iter.Close()
 	for memAllocated {
-		e, pos, err := iter.Next()
+		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
