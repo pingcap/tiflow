@@ -128,24 +128,22 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 		)
 		result.Instruction = "set larger max_connections or adjust the configuration of dm"
 		result.State = StateFailure
-	} else {
+	} else if maxConn-usedConn < neededConn {
 		// if we don't have enough privilege to check the user's connection number,
 		// usedConn is 0
-		if maxConn-usedConn < neededConn {
-			result.State = StateWarning
-			result.Instruction = "set larger max_connections or adjust the configuration of dm"
-			result.Errors = append(
-				result.Errors,
-				NewError(
-					"database's max_connections: %d, used_connections: %d, available_connections: %d is less than %s needs: %d",
-					maxConn,
-					usedConn,
-					maxConn-usedConn,
-					c.workerName,
-					neededConn,
-				),
-			)
-		}
+		result.State = StateWarning
+		result.Instruction = "set larger max_connections or adjust the configuration of dm"
+		result.Errors = append(
+			result.Errors,
+			NewError(
+				"database's max_connections: %d, used_connections: %d, available_connections: %d is less than %s needs: %d",
+				maxConn,
+				usedConn,
+				maxConn-usedConn,
+				c.workerName,
+				neededConn,
+			),
+		)
 	}
 	return result
 }
