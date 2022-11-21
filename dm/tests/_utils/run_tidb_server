@@ -31,7 +31,7 @@ echo "Starting TiDB on port ${PORT}"
 bin/tidb-server \
 	-P ${PORT} \
 	--config "$tmp_config" \
-	--log-file "$TEST_DIR/tidb.log" &
+	--log-file "$TEST_DIR/downstream/tidb/log/tidb.log" &
 
 echo "Verifying TiDB is started..."
 i=0

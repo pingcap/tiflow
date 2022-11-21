@@ -110,7 +110,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
-	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err
@@ -153,6 +153,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 }
 
 // Tick implements JobMasterImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
@@ -289,8 +290,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) {
-	if err := jm.messageAgent.Close(ctx); err != nil {
-		jm.Logger().Error("failed to close message agent", zap.Error(err))
+	if jm.messageAgent != nil {
+		if err := jm.messageAgent.Close(ctx); err != nil {
+			jm.Logger().Error("failed to close message agent", zap.Error(err))
+		}
 	}
 }
 

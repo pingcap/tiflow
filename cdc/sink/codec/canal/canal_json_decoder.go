@@ -14,6 +14,8 @@
 package canal
 
 import (
+	"bytes"
+
 	"github.com/goccy/go-json"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -27,36 +29,59 @@ type batchDecoder struct {
 	data                []byte
 	msg                 canalJSONMessageInterface
 	enableTiDBExtension bool
+	terminator          string
 }
 
 // NewBatchDecoder return a decoder for canal-json
-func NewBatchDecoder(data []byte, enableTiDBExtension bool) codec.EventBatchDecoder {
+func NewBatchDecoder(data []byte,
+	enableTiDBExtension bool,
+	terminator string,
+) codec.EventBatchDecoder {
 	return &batchDecoder{
 		data:                data,
 		msg:                 nil,
 		enableTiDBExtension: enableTiDBExtension,
+		terminator:          terminator,
 	}
 }
 
 // HasNext implements the EventBatchDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if len(b.data) == 0 {
-		return model.MessageTypeUnknown, false, nil
-	}
-	var msg canalJSONMessageInterface = &JSONMessage{}
+	var (
+		msg         canalJSONMessageInterface = &JSONMessage{}
+		encodedData []byte
+	)
+
 	if b.enableTiDBExtension {
 		msg = &canalJSONMessageWithTiDBExtension{
 			JSONMessage: &JSONMessage{},
 			Extensions:  &tidbExtension{},
 		}
 	}
-	if err := json.Unmarshal(b.data, msg); err != nil {
+	if len(b.terminator) > 0 {
+		idx := bytes.IndexAny(b.data, b.terminator)
+		if idx >= 0 {
+			encodedData = b.data[:idx]
+			b.data = b.data[idx+len(b.terminator):]
+		} else {
+			encodedData = b.data
+			b.data = nil
+		}
+	} else {
+		encodedData = b.data
+		b.data = nil
+	}
+
+	if len(encodedData) == 0 {
+		return model.MessageTypeUnknown, false, nil
+	}
+
+	if err := json.Unmarshal(encodedData, msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err), zap.ByteString("data", b.data))
+			zap.Error(err), zap.ByteString("data", encodedData))
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
-	b.data = nil
 
 	return b.msg.messageType(), true, nil
 }

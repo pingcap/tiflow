@@ -60,9 +60,10 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
-	upstreamDB     *conn.BaseDB
-	sourceStatus   *binlog.SourceStatus
-	sourceStatusMu sync.RWMutex
+	upstreamDB            *conn.BaseDB
+	sourceStatus          *binlog.SourceStatus
+	sourceStatusMu        sync.RWMutex
+	sourceStatusCheckTime time.Time
 
 	logger log.Logger
 	// use to access process(init/close/pause/resume)
@@ -73,6 +74,9 @@ type unitHolderImpl struct {
 	runCtx    context.Context
 	runCancel context.CancelFunc
 	result    *pb.ProcessResult // TODO: check if framework can persist result
+
+	// used to run background task
+	bgWg sync.WaitGroup
 }
 
 var _ unitHolder = &unitHolderImpl{}
@@ -151,6 +155,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 	u.fieldMu.Lock()
 	u.runCancel()
 	u.fieldMu.Unlock()
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	// TODO: refactor unit.Syncer
 	// unit needs to manage its own life cycle
@@ -196,6 +201,7 @@ func (u *unitHolderImpl) Close(ctx context.Context) error {
 	}
 	u.fieldMu.Unlock()
 
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	if u.unit != nil {
 		u.unit.Close()
@@ -235,6 +241,11 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 // Status implement UnitHolder.Status. Each invocation will try to query upstream
 // once and calculate the status.
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
+	// nil sourceStatus is supported
+	return u.unit.Status(u.getSourceStatus())
+}
+
+func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) interface{} {
 	sourceStatus, err := binlog.GetSourceStatus(
 		tcontext.NewContext(ctx, u.logger),
 		u.upstreamDB,
@@ -243,22 +254,33 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 	if err != nil {
 		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
-	u.sourceStatusMu.Lock()
-	u.sourceStatus = sourceStatus
-	u.sourceStatusMu.Unlock()
-
-	// nil sourceStatus is supported
+	u.setSourceStatus(sourceStatus)
 	return u.unit.Status(sourceStatus)
+}
+
+func (u *unitHolderImpl) getSourceStatus() *binlog.SourceStatus {
+	u.sourceStatusMu.RLock()
+	defer u.sourceStatusMu.RUnlock()
+	return u.sourceStatus
+}
+
+func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
+	u.sourceStatusMu.Lock()
+	defer u.sourceStatusMu.Unlock()
+	u.sourceStatus = in
 }
 
 // CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
 func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
-	u.sourceStatusMu.RLock()
-	sourceStatus := u.sourceStatus
-	u.sourceStatusMu.RUnlock()
-
-	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
-		u.Status(ctx)
+	u.fieldMu.Lock()
+	defer u.fieldMu.Unlock()
+	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
+		u.sourceStatusCheckTime = time.Now()
+		u.bgWg.Add(1)
+		go func() {
+			defer u.bgWg.Done()
+			u.updateSourceStatus(ctx)
+		}()
 	}
 }
 

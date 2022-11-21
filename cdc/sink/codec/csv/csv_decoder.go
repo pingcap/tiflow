@@ -23,24 +23,24 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/worker"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const defaultIOConcurrency = 1
 
 type batchDecoder struct {
-	csvConfig *config.CSVConfig
-	parser    *mydump.CSVParser
-	data      []byte
-	msg       *csvMessage
-	tableInfo *model.TableInfo
-	closed    bool
+	codecConfig *common.Config
+	parser      *mydump.CSVParser
+	data        []byte
+	msg         *csvMessage
+	tableInfo   *model.TableInfo
+	closed      bool
 }
 
 // NewBatchDecoder creates a new BatchDecoder
 func NewBatchDecoder(ctx context.Context,
-	csvConfig *config.CSVConfig,
+	codecConfig *common.Config,
 	tableInfo *model.TableInfo,
 	value []byte,
 ) (codec.EventBatchDecoder, error) {
@@ -48,14 +48,14 @@ func NewBatchDecoder(ctx context.Context,
 
 	// if quote is not set in config, we should unespace backslash
 	// when parsing csv columns.
-	if len(csvConfig.Quote) == 0 {
+	if len(codecConfig.Quote) == 0 {
 		backslashEscape = true
 	}
 	cfg := &lconfig.CSVConfig{
-		Separator:       csvConfig.Delimiter,
-		Delimiter:       csvConfig.Quote,
-		Terminator:      csvConfig.Terminator,
-		Null:            csvConfig.NullString,
+		Separator:       codecConfig.Delimiter,
+		Delimiter:       codecConfig.Quote,
+		Terminator:      codecConfig.Terminator,
+		Null:            codecConfig.NullString,
 		BackslashEscape: backslashEscape,
 	}
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
@@ -66,11 +66,11 @@ func NewBatchDecoder(ctx context.Context,
 		return nil, err
 	}
 	return &batchDecoder{
-		csvConfig: csvConfig,
-		tableInfo: tableInfo,
-		data:      value,
-		msg:       newCSVMessage(csvConfig),
-		parser:    csvParser,
+		codecConfig: codecConfig,
+		tableInfo:   tableInfo,
+		data:        value,
+		msg:         newCSVMessage(codecConfig),
+		parser:      csvParser,
 	}, nil
 }
 

@@ -124,10 +124,11 @@ func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[s
 // FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
 func FetchTargetDoTables(
 	ctx context.Context,
+	source string,
 	db *sql.DB,
 	bw *filter.Filter,
 	router *regexprrouter.RouteTable,
-) (map[filter.Table][]filter.Table, error) {
+) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
 
@@ -137,29 +138,34 @@ func FetchTargetDoTables(
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	mapper := make(map[filter.Table][]filter.Table)
+	tableMapper := make(map[filter.Table][]filter.Table)
+	extendedColumnPerTable := make(map[filter.Table][]string)
 	for schema, tables := range sourceTables {
 		for _, table := range tables {
 			targetSchema, targetTable, err := router.Route(schema, table)
 			if err != nil {
-				return nil, terror.ErrGenTableRouter.Delegate(err)
+				return nil, nil, terror.ErrGenTableRouter.Delegate(err)
 			}
 
 			target := filter.Table{
 				Schema: targetSchema,
 				Name:   targetTable,
 			}
-			mapper[target] = append(mapper[target], filter.Table{
+			tableMapper[target] = append(tableMapper[target], filter.Table{
 				Schema: schema,
 				Name:   table,
 			})
+			col, _ := router.FetchExtendColumn(schema, table, source)
+			if len(col) > 0 {
+				extendedColumnPerTable[target] = col
+			}
 		}
 	}
 
-	return mapper, nil
+	return tableMapper, extendedColumnPerTable, nil
 }
 
 // LowerCaseTableNamesFlavor represents the type of db `lower_case_table_names` settings.
