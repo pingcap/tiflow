@@ -73,12 +73,11 @@ type sorterNode struct {
 
 	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
 	isTableActorMode bool
-	changefeed       model.ChangeFeedID
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
-	flowController tableFlowController, mounter entry.MounterGroup,
+	flowController tableFlowController, mg entry.MounterGroup,
 	replConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
 	pdClient pd.Client,
