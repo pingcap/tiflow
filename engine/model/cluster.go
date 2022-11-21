@@ -13,10 +13,6 @@
 
 package model
 
-// RescUnit is the min unit of resource that we count.
-// FIXME: removed
-type RescUnit int
-
 // DeployNodeID means the identify of a node
 type DeployNodeID string
 

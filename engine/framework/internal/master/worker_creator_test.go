@@ -171,7 +171,6 @@ func TestCreateWorkerNormal(t *testing.T) {
 		"worker-1",
 		[]byte("sample-config"),
 		CreateWorkerWithSelectors(additionalSelectors...),
-		CreateWorkerWithCost(10),
 		CreateWorkerWithResourceRequirements("/local/resource-1", "/local/resource-2"))
 	require.NoError(t, err)
 }

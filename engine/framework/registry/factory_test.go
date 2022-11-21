@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -70,10 +69,6 @@ type fakeWorkerConfig struct {
 type fakeWorker struct {
 	framework.WorkerImpl
 	framework.BaseWorker
-}
-
-func (w *fakeWorker) Workload() model.RescUnit {
-	return 0
 }
 
 func newFakeWorker(_ *dcontext.Context, _ frameModel.WorkerID, _ frameModel.MasterID, _ *fakeWorkerConfig) framework.WorkerImpl {
