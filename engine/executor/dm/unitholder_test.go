@@ -176,7 +176,6 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
 	unitHolder.upstreamDB = conn.NewBaseDB(db)
-	ctx := context.Background()
 
 	u.On("Status").Return(&pb.DumpStatus{})
 	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
@@ -186,7 +185,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	mock.ExpectQuery("SHOW BINARY LOGS").WillReturnRows(
 		sqlmock.NewRows([]string{"File", "Position"}).AddRow("mysql-bin.000001", "2345"),
 	)
-	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.CheckAndUpdateStatus()
 	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 	require.NotNil(t, unitHolder.sourceStatus)
@@ -194,7 +193,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 
 	// the second time CheckAndUpdateStatus, will not query upstreamDB
 	unitHolder.upstreamDB = nil
-	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.CheckAndUpdateStatus()
 	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 
@@ -215,7 +214,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 		sqlmock.NewRows([]string{"File", "Position"}).AddRow("mysql-bin.000001", "2345"),
 	)
 	u.On("Status").Return(&pb.DumpStatus{})
-	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.CheckAndUpdateStatus()
 	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -330,7 +329,7 @@ func (m *mockUnitHolder) Status(ctx context.Context) interface{} {
 }
 
 // CheckAndUpdateStatus implement Holder.CheckAndUpdateStatus
-func (m *mockUnitHolder) CheckAndUpdateStatus(ctx context.Context) {
+func (m *mockUnitHolder) CheckAndUpdateStatus() {
 	m.Lock()
 	defer m.Unlock()
 	m.Called()
