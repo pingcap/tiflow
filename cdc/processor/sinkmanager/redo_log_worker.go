@@ -135,7 +135,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		}
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
-			break
+			continue
 		}
 		if pos.Valid() {
 			lastPos = pos

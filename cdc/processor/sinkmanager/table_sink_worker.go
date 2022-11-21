@@ -121,7 +121,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				}
 				if e.Row == nil {
 					// NOTICE: This could happen when the event is filtered by the event filter.
-					break
+					continue
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
 					if !w.splitTxn {
