@@ -6,7 +6,6 @@ import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/empty.proto";
 
-import "engine/proto/metastore.proto";
 import "engine/proto/resources.proto";
 
 option go_package = "github.com/pingcap/tiflow/engine/enginepb";
@@ -38,14 +37,11 @@ service Discovery {
 
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
 
-    /* Metastore manager API */
-    // RegisterMetaStore is called from backend metastore and
-    // registers to server master metastore manager
-    rpc RegisterMetaStore(RegisterMetaStoreRequest) returns(RegisterMetaStoreResponse) {}
 
-    // QueryMetaStore queries metastore manager and returns
-    // the information of a matching metastore
+    // QueryMetaStore queries metastore manager and returns the information of a matching metastore.
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
+    
+    // QueryStorageConfig queries and returns external storage config.
     rpc QueryStorageConfig(QueryStorageConfigRequest) returns(QueryStorageConfigResponse) {}
 
     rpc GetLeader(GetLeaderRequest) returns(GetLeaderResponse) {
@@ -63,10 +59,6 @@ service Discovery {
 
 service TaskScheduler {
     rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
-
-    // ReportExecutorWorkload is called from executor to server master to report
-    // resource usage in executor.
-    rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
 }
 
 // Refer to: https://cloud.google.com/apis/design/standard_methods 
@@ -121,11 +113,8 @@ message Selector {
 
 message HeartbeatRequest {
     string executor_id = 1;
-    int32 resource_usage = 2;
-    int32 status = 3;
-
-    uint64 timestamp = 4;
-    uint64 ttl = 5;
+    uint64 timestamp = 2;
+    uint64 ttl = 3;
 }
 
 message HeartbeatResponse {
@@ -136,8 +125,7 @@ message Executor {
     // name is the readable name of the executor.
     string name = 2;
     string address = 3;
-    int64  capability = 4;
-    map<string, string> labels = 5;
+    map<string, string> labels = 4;
 }
 
 message RegisterExecutorRequest {
@@ -169,28 +157,14 @@ message ListMastersResponse {
 
 message ScheduleTaskRequest {
     string task_id = 1;
-    int64 cost = 2;
-    repeated ResourceKey resource_requirements = 3;
-    repeated Selector selectors = 4;
+    // resources required by the task.
+    repeated ResourceKey resources = 2;
+    repeated Selector selectors = 3;
 }
 
 message ScheduleTaskResponse {
     string executor_id = 1;
     string executor_addr = 2;
-}
-
-message ExecWorkload {
-    int32 tp = 1;
-    int32 usage = 2;
-}
-
-message ExecWorkloadRequest {
-    string executor_id = 1;
-    repeated ExecWorkload workloads = 2;
-    repeated string resource_id = 3;
-}
-
-message ExecWorkloadResponse {
 }
 
 message GetLeaderRequest {
@@ -281,6 +255,18 @@ message DeleteJobRequest {
     string id = 1;
     string tenant_id = 2;
     string project_id = 3;
+}
+
+message QueryMetaStoreRequest {
+    enum StoreType {
+        SystemMetaStore = 0;
+        AppMetaStore = 1;
+    }
+    StoreType tp = 1;
+}
+
+message QueryMetaStoreResponse {
+    bytes config = 1;
 }
 
 message QueryStorageConfigRequest {
