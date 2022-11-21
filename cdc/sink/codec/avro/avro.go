@@ -43,7 +43,7 @@ type BatchEncoder struct {
 	namespace          string
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
-	result             [1]*common.Message
+	result             []*common.Message
 
 	enableTiDBExtension        bool
 	decimalHandlingMode        string
@@ -110,7 +110,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		message.Key = nil
 	}
 	message.IncRowsCount()
-	a.result[0] = message
+	a.result = append(a.result, message)
 	return nil
 }
 
@@ -126,11 +126,8 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 
 // Build Messages
 func (a *BatchEncoder) Build() (messages []*common.Message) {
-	if a.result[0] == nil {
-		return nil
-	}
-	result := a.result[:1]
-	a.result = [1]*common.Message{}
+	result := a.result
+	a.result = nil
 	return result
 }
 
@@ -830,7 +827,7 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = [1]*common.Message{}
+	encoder.result = make([]*common.Message, 0, 1024)
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
