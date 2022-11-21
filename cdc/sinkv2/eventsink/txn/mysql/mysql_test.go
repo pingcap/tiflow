@@ -1250,8 +1250,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				rowCount: 1,
 			},
 		},
-		insert event
-		{
+		{ // insert event
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813516,
@@ -1295,7 +1294,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				rowCount: 1,
 			},
 		},
-		update event
+		// update event
 		{
 			input: []*model.RowChangedEvent{
 				{
@@ -1362,7 +1361,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				rowCount: 1,
 			},
 		},
-		mix event
+		// mixed event
 		{
 			input: []*model.RowChangedEvent{
 				{

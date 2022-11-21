@@ -16,7 +16,6 @@ package entry
 import (
 	"bytes"
 	"context"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
