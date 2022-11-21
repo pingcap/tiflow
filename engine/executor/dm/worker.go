@@ -164,7 +164,7 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 		return err
 	}
 	// update unit status periodically to update metrics
-	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.unitHolder.CheckAndUpdateStatus()
 	w.discardResource4Syncer(ctx)
 	return w.messageAgent.Tick(ctx)
 }
