@@ -36,7 +36,7 @@ func (s LabelSet) Value() (driver.Value, error) {
 	return string(data), nil
 }
 
-// ToMap converts a Set to a plain map.
+// ToMap converts a LabelSet to a plain map.
 func (s LabelSet) ToMap() map[string]string {
 	return label.Set(s).ToMap()
 }

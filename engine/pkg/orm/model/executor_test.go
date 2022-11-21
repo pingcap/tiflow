@@ -23,10 +23,10 @@ import (
 func TestSetToMap(t *testing.T) {
 	t.Parallel()
 
-	ls := LabelSet{}
-	require.Nil(t, ls.ToMap())
-
 	var m map[string]string
+	ls := LabelSet{}
+	require.Equal(t, m, ls.ToMap())
+
 	s, err := label.NewSetFromMap(m)
 	require.NoError(t, err)
 	require.Equal(t, m, LabelSet(s).ToMap())
