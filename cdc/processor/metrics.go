@@ -14,7 +14,6 @@
 package processor
 
 import (
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -113,5 +112,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
-	pipeline.InitMetrics(registry)
 }

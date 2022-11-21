@@ -221,11 +221,13 @@ func (n *sorterNode) start(
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 
+	n.sorter = eventSorter
+
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(n.sorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -376,7 +378,6 @@ func (n *sorterNode) start(
 			}
 		}
 	})
-	n.sorter = eventSorter
 	return nil
 }
 
