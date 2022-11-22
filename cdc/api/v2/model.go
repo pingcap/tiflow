@@ -311,9 +311,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Storage:           cloned.Consistent.Storage,
 		}
 	}
-	if c.Mounter != nil {
+	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
-			WorkerNum: c.Mounter.WorkerNum,
+			WorkerNum: cloned.Mounter.WorkerNum,
 		}
 	}
 	return res
