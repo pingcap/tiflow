@@ -355,8 +355,7 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 		var taskStatus runtime.TaskStatus
 		extBytes := workerHandle.Status().ExtBytes
 		if len(extBytes) == 0 {
-			jm.Logger().Warn("worker status extBytes is empty", zap.String(logutil.ConstFieldWorkerKey, workerHandle.ID()))
-			continue
+			return nil, nil, errors.Errorf("extBytes of %d is empty", workerHandle.ID())
 		}
 		err := json.Unmarshal(extBytes, &taskStatus)
 		if err != nil {
