@@ -208,7 +208,8 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	extBytes := worker.Status().ExtBytes
 	if len(extBytes) == 0 {
-		return errors.New("worker status extBytes is empty")
+		jm.Logger().Warn("worker status extBytes is empty", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
+		return nil
 	}
 	jm.Logger().Info("on worker offline", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	var taskStatus runtime.TaskStatus
