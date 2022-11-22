@@ -69,12 +69,12 @@ type SinkManager struct {
 	lastBarrierTs atomic.Uint64
 
 	// sinkWorkers used to pull data from source manager.
-	sinkWorkers []sinkWorker
+	sinkWorkers []*sinkWorker
 	// sinkTaskChan is used to send tasks to sinkWorkers.
 	sinkTaskChan chan *sinkTask
 
 	// redoWorkers used to pull data from source manager.
-	redoWorkers []redoWorker
+	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
 	redoTaskChan chan *redoTask
 
@@ -117,7 +117,7 @@ func New(
 		sortEngine:   sortEngine,
 
 		sinkProgressHeap: newTableProgresses(),
-		sinkWorkers:      make([]sinkWorker, 0, sinkWorkerNum),
+		sinkWorkers:      make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:     make(chan *sinkTask),
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
@@ -126,7 +126,7 @@ func New(
 	if redoManager != nil {
 		m.redoManager = redoManager
 		m.redoProgressHeap = newTableProgresses()
-		m.redoWorkers = make([]redoWorker, 0, redoWorkerNum)
+		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		// Use at most 1/3 memory quota for redo event cache.
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)

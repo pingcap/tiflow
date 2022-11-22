@@ -31,7 +31,8 @@ function run() {
 	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'route-rules global not exist in routes'"
 
 	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
-	# TODO: delete the job
+	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
+	curl "http://127.0.0.1:10245/api/v1/jobs/$job_id" | grep -q "ErrJobNotFound"
 
 	# test stop a wrongly configuration job
 
@@ -43,7 +44,7 @@ function run() {
 	exec_with_retry "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | grep -q 'Access denied'"
 
 	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
-	# TODO: delete the job
+	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
 
 	# happy path
 

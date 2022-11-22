@@ -114,7 +114,7 @@ func (c *WorkerCreator) CreateWorker(
 		c.logger.Warn("ScheduleTask returned error", zap.Error(err))
 		return err
 	}
-	c.logger.Debug("ScheduleTask succeeded", zap.Any("response", resp))
+	c.logger.Info("ScheduleTask succeeded", zap.Any("response", resp))
 
 	executorID := model.ExecutorID(resp.ExecutorId)
 	executorClient, err := c.executorGroup.GetExecutorClientB(ctx, executorID)
