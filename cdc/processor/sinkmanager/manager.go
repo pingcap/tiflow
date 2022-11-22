@@ -55,8 +55,7 @@ type SinkManager struct {
 	memQuota *memQuota
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
-	// redoManager was used to report the resolved ts of the table,
-	// if redo log is enabled.
+	// redoManager is used to report the resolved ts of the table if redo log is enabled.
 	redoManager redo.LogManager
 	// sortEngine is used by the sink manager to fetch data.
 	sortEngine engine.SortEngine
@@ -123,7 +122,7 @@ func New(
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 	}
 
-	if redoManager != nil {
+	if redoManager != nil && redoManager.Enabled() {
 		m.redoManager = redoManager
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
@@ -134,6 +133,12 @@ func New(
 
 	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
+
+	log.Info("QP sink manager is created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Bool("withRedoEnabled", m.redoManager != nil))
+
 	return m, nil
 }
 
@@ -337,7 +342,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			case m.sinkTaskChan <- t:
 			}
 
-			log.Debug("Generate sink task",
+			log.Info("QP Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
@@ -383,20 +388,25 @@ func (m *SinkManager) generateRedoTasks() error {
 				// Next time.
 				continue
 			}
-			callback := func(lastWrittenPos engine.Position) {
-				p := &progress{
-					tableID:           tableID,
-					nextLowerBoundPos: lastWrittenPos.Next(),
-				}
-				m.redoProgressHeap.push(p)
-			}
+
+			log.Info("QP MemoryQuotaTracing: try acquire memory for redo log task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("memory", requestMemSize))
 
 			t := &redoTask{
 				tableID:       tableID,
 				lowerBound:    slowestTableProgress.nextLowerBoundPos,
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink.(*tableSinkWrapper),
-				callback:      callback,
+				callback: func(lastWrittenPos engine.Position) {
+					p := &progress{
+						tableID:           tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+					}
+					m.redoProgressHeap.push(p)
+				},
 			}
 			select {
 			case <-m.ctx.Done():
@@ -404,7 +414,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			case m.redoTaskChan <- t:
 			}
 
-			log.Debug("Generate redo task",
+			log.Info("QP Generate redo task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
