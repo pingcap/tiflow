@@ -148,6 +148,15 @@ func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEven
 	return nil
 }
 
+func (mockMounter) Run(ctx context.Context) error {
+	return nil
+}
+
+func (mockMounter) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
+	return nil
+}
+
 func TestSorterReplicateTs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

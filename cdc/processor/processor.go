@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -70,7 +71,7 @@ type processor struct {
 	lastSchemaTs  model.Ts
 
 	filter      *filter.Filter
-	mounter     entry.Mounter
+	mg          entry.MounterGroup
 	sink        sink.Sink
 	redoManager redo.LogManager
 
@@ -459,6 +460,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 	}()
 
+	tz := contextutil.TimezoneFromCtx(ctx)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
@@ -473,10 +475,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage,
-		p.changefeedID,
-		contextutil.TimezoneFromCtx(ctx),
-		p.changefeed.Info.Config.EnableOldValue)
+	p.mg = entry.NewMounterGroup(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
+		p.changefeed.Info.Config.EnableOldValue,
+		tz, p.changefeedID)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.mg.Run(ctx))
+	}()
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
@@ -820,7 +827,7 @@ func (p *processor) createTablePipelineImpl(
 		table, err = tablepipeline.NewTableActor(
 			ctx,
 			p.upStream,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -833,7 +840,7 @@ func (p *processor) createTablePipelineImpl(
 	} else {
 		table = tablepipeline.NewTablePipeline(
 			ctx,
-			p.mounter,
+			p.mg,
 			tableID,
 			tableName,
 			replicaInfo,
@@ -943,6 +950,8 @@ func (p *processor) Close() error {
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
+	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	return nil
 }
 
