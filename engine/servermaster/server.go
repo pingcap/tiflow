@@ -251,11 +251,10 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	}
 
 	return &pb.Executor{
-		Id:         string(executorMeta.ID),
-		Name:       executorMeta.Name,
-		Address:    executorMeta.Address,
-		Capability: int64(executorMeta.Capability),
-		Labels:     label.Set(executorMeta.Labels).ToMap(),
+		Id:      string(executorMeta.ID),
+		Name:    executorMeta.Name,
+		Address: executorMeta.Address,
+		Labels:  label.Set(executorMeta.Labels).ToMap(),
 	}, nil
 }
 
@@ -270,11 +269,10 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 	executors := s.executorManager.ListExecutors()
 	for _, executor := range executors {
 		resp.Executors = append(resp.Executors, &pb.Executor{
-			Id:         string(executor.ID),
-			Name:       executor.Name,
-			Address:    executor.Address,
-			Capability: int64(executor.Capability),
-			Labels:     executor.Labels.ToMap(),
+			Id:      string(executor.ID),
+			Name:    executor.Name,
+			Address: executor.Address,
+			Labels:  executor.Labels.ToMap(),
 		})
 	}
 	sort.Slice(resp.Executors, func(i, j int) bool {
@@ -337,14 +335,6 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}, nil
 }
 
-// RegisterMetaStore registers backend metastore to server master,
-// but have not implemented yet.
-func (s *Server) RegisterMetaStore(
-	ctx context.Context, req *pb.RegisterMetaStoreRequest,
-) (*pb.RegisterMetaStoreResponse, error) {
-	return nil, nil
-}
-
 // QueryMetaStore implements gRPC interface
 func (s *Server) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest,
@@ -354,13 +344,13 @@ func (s *Server) QueryMetaStore(
 		if store == nil {
 			return nil, errors.ErrMetaStoreNotExists.GenWithStackByArgs(storeID)
 		}
-		b, err := json.Marshal(store)
+		config, err := json.Marshal(store)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
 		return &pb.QueryMetaStoreResponse{
-			Address: string(b),
+			Config: config,
 		}, nil
 	}
 
@@ -378,12 +368,12 @@ func (s *Server) QueryMetaStore(
 func (s *Server) QueryStorageConfig(
 	ctx context.Context, req *pb.QueryStorageConfigRequest,
 ) (*pb.QueryStorageConfigResponse, error) {
-	b, err := json.Marshal(s.cfg.Storage)
+	config, err := json.Marshal(s.cfg.Storage)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &pb.QueryStorageConfigResponse{
-		Config: string(b),
+		Config: config,
 	}, nil
 }
 
@@ -404,18 +394,6 @@ func (s *Server) ResignLeader(ctx context.Context, _ *pb.ResignLeaderRequest) (*
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
-}
-
-// ReportExecutorWorkload implements pb.MasterServer.ReportExecutorWorkload
-func (s *Server) ReportExecutorWorkload(
-	ctx context.Context, req *pb.ExecWorkloadRequest,
-) (*pb.ExecWorkloadResponse, error) {
-	// TODO: pass executor workload to capacity manager
-	log.Debug("receive workload report", zap.String("executor", req.ExecutorId))
-	for _, res := range req.GetWorkloads() {
-		log.Debug("workload", zap.Int32("type", res.GetTp()), zap.Int32("usage", res.GetUsage()))
-	}
-	return &pb.ExecWorkloadResponse{}, nil
 }
 
 // Run the server master.

@@ -83,13 +83,6 @@ type Executor struct {
 	Name    string                 `json:"name" gorm:"column:name;type:varchar(256) not null"`
 	Address string                 `json:"address" gorm:"column:address;type:varchar(256) not null"`
 
-	// The capability of executor, including
-	// 1. cpu (goroutines)
-	// 2. memory
-	// 3. disk cap
-	// TODO: So we should enrich the cap dimensions in the future.
-	Capability int `json:"capability" gorm:"column:capability;type:int not null"`
-
 	// Labels store the label set for each executor.
 	Labels LabelSet `json:"labels" gorm:"column:labels;type:json"`
 }
@@ -97,10 +90,9 @@ type Executor struct {
 // Map is used in gorm update.
 func (e *Executor) Map() map[string]interface{} {
 	return map[string]interface{}{
-		"id":         e.ID,
-		"name":       e.Name,
-		"address":    e.Address,
-		"capability": e.Capability,
-		"labels":     e.Labels,
+		"id":      e.ID,
+		"name":    e.Name,
+		"address": e.Address,
+		"labels":  e.Labels,
 	}
 }

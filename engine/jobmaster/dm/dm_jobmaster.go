@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -326,12 +325,6 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))
 	}
-}
-
-// Workload implements JobMasterImpl.Workload
-func (jm *JobMaster) Workload() model.RescUnit {
-	// TODO: implement workload
-	return 2
 }
 
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
