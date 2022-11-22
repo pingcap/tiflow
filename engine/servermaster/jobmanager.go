@@ -212,10 +212,6 @@ func (jm *JobManagerImpl) deleteJobMeta(ctx context.Context, jobID string) error
 	return nil
 }
 
-func (jm *JobManagerImpl) canQueryJobDetail(masterMeta *frameModel.MasterMeta) bool {
-	return masterMeta.State == frameModel.MasterStateInit || jm.JobFsm.QueryOnlineJob(masterMeta.ID) != nil
-}
-
 // GetJob implements JobManagerServer.GetJob.
 func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
 	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, req.Id)
@@ -230,19 +226,7 @@ func (jm *JobManagerImpl) GetJob(ctx context.Context, req *pb.GetJobRequest) (*p
 	if err != nil {
 		return nil, err
 	}
-
-	// if job status is running, forward the request to jobmaster openapi
-	if jm.canQueryJobDetail(masterMeta) {
-		detail, err := jm.jobHTTPClient.GetJobDetail(ctx, masterMeta.Addr, req.Id)
-		if err != nil {
-			job.Error = &pb.Job_Error{
-				Code:    "", // TODO: extract error code from err.
-				Message: err.Error(),
-			}
-		} else {
-			job.Detail = detail
-		}
-	}
+	jm.tryQueryJobDetail(ctx, masterMeta.Addr, job)
 
 	return job, nil
 }
@@ -407,19 +391,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 		if req.State != pb.Job_StateUnknown && job.State != req.State {
 			continue
 		}
-
-		// if job status is running, forward the request to jobmaster openapi
-		if jm.canQueryJobDetail(masterMetas[i]) {
-			detail, err := jm.jobHTTPClient.GetJobDetail(ctx, masterMetas[i].Addr, masterMetas[i].ID)
-			if err != nil {
-				job.Error = &pb.Job_Error{
-					Code:    "", // TODO: extract error code from err.
-					Message: err.Error(),
-				}
-			} else {
-				job.Detail = detail
-			}
-		}
+		jm.tryQueryJobDetail(ctx, masterMetas[i].Addr, job)
 
 		resp.Jobs = append(resp.Jobs, job)
 		if int32(len(resp.Jobs)) >= pageSize+1 {
@@ -432,6 +404,22 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 		resp.NextPageToken = resp.Jobs[pageSize-1].Id
 	}
 	return resp, nil
+}
+
+func (jm *JobManagerImpl) tryQueryJobDetail(ctx context.Context, jobMasterAddr string, job *pb.Job) {
+	// If job is not running, we can't query job detail from jobmaster.
+	if job.State != pb.Job_Running || jm.JobFsm.QueryOnlineJob(job.Id) == nil {
+		return
+	}
+	detail, err := jm.jobHTTPClient.GetJobDetail(ctx, jobMasterAddr, job.Id)
+	if err != nil {
+		job.Error = &pb.Job_Error{
+			Code:    "", // TODO: extract error code from err.
+			Message: err.Error(),
+		}
+	} else {
+		job.Detail = detail
+	}
 }
 
 func buildPBJob(masterMeta *frameModel.MasterMeta, includeConfig bool) (*pb.Job, error) {
