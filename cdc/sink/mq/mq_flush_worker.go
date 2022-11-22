@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
-	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
@@ -180,45 +179,70 @@ func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.Row
 }
 
 // asyncSend is responsible for sending messages to the Kafka producer.
-func (w *flushWorker) asyncSend(
-	ctx context.Context,
-	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
-) error {
-	for key, events := range partitionedRows {
-		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event)
-			if err != nil {
-				return err
-			}
-		}
+// func (w *flushWorker) asyncSend(
+// 	ctx context.Context,
+// 	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
+// ) error {
+// 	for key, events := range partitionedRows {
+// 		for _, event := range events {
+// 			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
 
-		err := w.statistics.RecordBatchExecution(func() (int, error) {
-			thisBatchSize := 0
-			for _, message := range w.encoder.Build() {
-				err := w.producer.AsyncSendMessage(ctx, key.topic, key.partition, message)
-				if err != nil {
-					return 0, err
-				}
-				thisBatchSize += message.GetRowsCount()
-			}
-			log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
-			return thisBatchSize, nil
-		})
-		if err != nil {
-			return err
-		}
-		w.statistics.ObserveRows(events...)
-	}
+// 		err := w.statistics.RecordBatchExecution(func() (int, error) {
+// 			thisBatchSize := 0
+// 			for _, message := range w.encoder.Build() {
+// 				err := w.producer.AsyncSendMessage(ctx, key.topic, key.partition, message)
+// 				if err != nil {
+// 					return 0, err
+// 				}
+// 				thisBatchSize += message.GetRowsCount()
+// 			}
+// 			log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
+// 			return thisBatchSize, nil
+// 		})
+// 		if err != nil {
+// 			return err
+// 		}
+// 		w.statistics.ObserveRows(events...)
+// 	}
 
-	// Wait for all messages to ack.
-	if w.needsFlush != nil {
-		if err := w.flushAndNotify(ctx); err != nil {
-			return errors.Trace(err)
-		}
-	}
+// 	// Wait for all messages to ack.
+// 	if w.needsFlush != nil {
+// 		if err := w.flushAndNotify(ctx); err != nil {
+// 			return errors.Trace(err)
+// 		}
+// 	}
 
-	return nil
-}
+// 	// eventsBuf := make([]mqEvent, flushBatchSize)
+// 	// for {
+// 	// 	endIndex, err := w.batch(ctx, eventsBuf)
+// 	// 	if err != nil {
+// 	// 		return errors.Trace(err)
+// 	// 	}
+// 	// 	if endIndex == 0 {
+// 	// 		if w.needsFlush != nil {
+// 	// 			// NOTICE: We still need to do a flush here.
+// 	// 			// This is because there may be some rows that
+// 	// 			// were sent that have not been confirmed yet.
+// 	// 			if err := w.flushAndNotify(ctx); err != nil {
+// 	// 				return errors.Trace(err)
+// 	// 			}
+// 	// 		}
+// 	// 		continue
+// 	// 	}
+// 	// 	msgs := eventsBuf[:endIndex]
+// 	// 	partitionedRows := w.group(msgs)
+// 	// 	err = w.asyncSend(ctx, partitionedRows)
+// 	// 	if err != nil {
+// 	// 		return errors.Trace(err)
+// 	// 	}
+// 	// }
+
+// 	return nil
+// }
 
 // run starts a loop that keeps collecting, sorting and sending messages
 // until it encounters an error or is interrupted.
@@ -243,31 +267,6 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		return w.sendMessages(ctx)
 	})
 	return g.Wait()
-
-	// eventsBuf := make([]mqEvent, flushBatchSize)
-	// for {
-	// 	endIndex, err := w.batch(ctx, eventsBuf)
-	// 	if err != nil {
-	// 		return errors.Trace(err)
-	// 	}
-	// 	if endIndex == 0 {
-	// 		if w.needsFlush != nil {
-	// 			// NOTICE: We still need to do a flush here.
-	// 			// This is because there may be some rows that
-	// 			// were sent that have not been confirmed yet.
-	// 			if err := w.flushAndNotify(ctx); err != nil {
-	// 				return errors.Trace(err)
-	// 			}
-	// 		}
-	// 		continue
-	// 	}
-	// 	msgs := eventsBuf[:endIndex]
-	// 	partitionedRows := w.group(msgs)
-	// 	err = w.asyncSend(ctx, partitionedRows)
-	// 	if err != nil {
-	// 		return errors.Trace(err)
-	// 	}
-	// }
 }
 
 // nonBatchEncodeRun add events to the encoder group immediately.
@@ -288,15 +287,7 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.String("changefeed", w.id.ID))
 				return nil
 			}
-			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-				event.rowEvent.Callback()
-				log.Debug("Skip event of stopped table",
-					zap.String("namespace", w.id.Namespace),
-					zap.String("changefeed", w.id.ID),
-					zap.Any("event", event))
-				continue
-			}
-			if err := w.encoderGroup.AddEvents(ctx, event.key.Topic, event.key.Partition, event.rowEvent); err != nil {
+			if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -327,7 +318,7 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 		msgs := eventsBuf[:endIndex]
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
-			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {
+			if err := w.encoderGroup.AddEvents(ctx, key.topic, key.partition, events...); err != nil {
 				return errors.Trace(err)
 			}
 		}

@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -40,7 +39,7 @@ type EncoderGroup interface {
 	Run(ctx context.Context) error
 	// AddEvents add events into the group, handled by one of the encoders
 	// all input events should belong to the same topic and partition, this should be guaranteed by the caller
-	AddEvents(ctx context.Context, topic string, partition int32, events ...*eventsink.RowChangeCallbackableEvent) error
+	AddEvents(ctx context.Context, topic string, partition int32, events ...*model.RowChangedEvent) error
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -126,7 +125,7 @@ func (g *encoderGroup) AddEvents(
 	ctx context.Context,
 	topic string,
 	partition int32,
-	events ...*eventsink.RowChangeCallbackableEvent,
+	events ...*model.RowChangedEvent,
 ) error {
 	future := newFuture(topic, partition, events...)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
@@ -152,13 +151,13 @@ func (g *encoderGroup) Output() <-chan *future {
 type future struct {
 	Topic     string
 	Partition int32
-	events    []*eventsink.RowChangeCallbackableEvent
+	events    []*model.RowChangedEvent
 	Messages  []*common.Message
 
 	done chan struct{}
 }
 
-func newFuture(topic string, partition int32, events ...*eventsink.RowChangeCallbackableEvent) *future {
+func newFuture(topic string, partition int32, events ...*model.RowChangedEvent) *future {
 	return &future{
 		Topic:     topic,
 		Partition: partition,
