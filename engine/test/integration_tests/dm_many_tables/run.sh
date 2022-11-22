@@ -53,6 +53,15 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
-trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
+function stop {
+	if [ ! -z $job_id ]; then
+		echo -e "\n\nquery job statu before stop dm_many_tables...\n"
+		curl "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" || true
+		curl "http://127.0.0.1:10245/api/v1/jobs/$job_id" || true
+	fi
+	stop_engine_cluster $WORK_DIR $CONFIG
+}
+
+trap stop EXIT
 run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
