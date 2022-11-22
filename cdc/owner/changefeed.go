@@ -291,6 +291,12 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// we must clean cached ddl and tables in changefeed initialization
+	// otherwise, the changefeed will loss tables that are needed to be replicated
+	// ref: https://github.com/pingcap/tiflow/issues/7682
+	c.ddlEventCache = nil
+	c.currentTables = nil
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -343,6 +349,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+<<<<<<< HEAD
 	c.cleanupRedoManager(ctx)
 	c.cleanupServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
@@ -356,6 +363,24 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
+=======
+	c.barriers = nil
+	c.initialized = false
+	c.isReleased = true
+
+	log.Info("changefeed closed",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+		zap.Any("status", c.state.Status),
+		zap.Stringer("info", c.state.Info),
+		zap.Bool("isRemoved", c.isRemoved))
+}
+
+func (c *changefeed) cleanupMetrics() {
+	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointLagDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
+>>>>>>> 719d27004b (changefeed (ticdc): fix data lost when pause and resume changefeed while executing DDL. (#7683))
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
 
