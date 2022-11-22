@@ -46,6 +46,7 @@ import (
 func newMySQLSink4Test(ctx context.Context) *mysqlSink {
 	params := defaultParams.Clone()
 	params.batchReplaceEnabled = false
+
 	return &mysqlSink{
 		txnCache:   newUnresolvedTxnCache(),
 		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),

@@ -615,10 +615,9 @@ func (s *Server) initClients() (err error) {
 func (s *Server) selfRegister(ctx context.Context) error {
 	registerReq := &pb.RegisterExecutorRequest{
 		Executor: &pb.Executor{
-			Name:       s.cfg.Name,
-			Address:    s.cfg.AdvertiseAddr,
-			Capability: defaultCapability,
-			Labels:     s.cfg.Labels,
+			Name:    s.cfg.Name,
+			Address: s.cfg.AdvertiseAddr,
+			Labels:  s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
@@ -647,7 +646,6 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.selfID),
-				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
 				// executor actually wait for a timeout when ttl is nearly up.

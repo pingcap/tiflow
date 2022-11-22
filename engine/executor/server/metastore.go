@@ -140,7 +140,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, discovery
 	}
 	log.Info("Obtained framework metastore endpoint", zap.Any("addr", resp))
 
-	conf := parseStoreConfig([]byte(resp.Address))
+	conf := parseStoreConfig(resp.Config)
 	cc, err := m.creator.CreateClientConnForFramework(ctx, conf)
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, discoveryC
 	}
 	log.Info("Obtained business metastore endpoint", zap.Any("addr", resp))
 
-	conf := parseStoreConfig([]byte(resp.Address))
+	conf := parseStoreConfig(resp.Config)
 	cc, err := m.creator.CreateClientConnForBusiness(ctx, conf)
 	if err != nil {
 		return err

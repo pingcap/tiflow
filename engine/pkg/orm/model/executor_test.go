@@ -14,15 +14,28 @@
 package model
 
 import (
-	"github.com/pingcap/tiflow/engine/model"
+	"testing"
+
 	"github.com/pingcap/tiflow/pkg/label"
+	"github.com/stretchr/testify/require"
 )
 
-// ExecutorInfo contains information about each executor
-// maintained internally to the scheduler.
-type ExecutorInfo struct {
-	// ID is the executorID.
-	ID model.ExecutorID
-	// Labels stores the labels configured for the given executor.
-	Labels label.Set
+func TestSetToMap(t *testing.T) {
+	t.Parallel()
+
+	var m map[string]string
+	ls := LabelSet{}
+	require.Equal(t, m, ls.ToMap())
+
+	s, err := label.NewSetFromMap(m)
+	require.NoError(t, err)
+	require.Equal(t, m, LabelSet(s).ToMap())
+
+	m = map[string]string{
+		"name":   "executor-1",
+		"region": "us-west-2",
+	}
+	s, err = label.NewSetFromMap(m)
+	require.NoError(t, err)
+	require.Equal(t, m, LabelSet(s).ToMap())
 }

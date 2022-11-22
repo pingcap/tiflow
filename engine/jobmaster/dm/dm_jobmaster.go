@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -80,7 +79,12 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
+func (j dmJobMasterFactory) NewWorkerImpl(
+	dCtx *dcontext.Context,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
+	conf framework.WorkerConfig,
+) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
 		initJobCfg: conf.(*config.JobCfg),
@@ -183,6 +187,7 @@ func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	return jm.handleOnlineStatus(worker)
 }
 
+// handleOnlineStatus is used by OnWorkerOnline and OnWorkerStatusUpdated.
 func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
@@ -225,7 +230,8 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	unitStateStore := jm.metadata.UnitStateStore()
 	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
-		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
+		finishedTaskStatus.StageUpdatedTime = time.Now()
+		finishedTaskStatus.Duration = finishedTaskStatus.StageUpdatedTime.Sub(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
 		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
 			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
 			if status.Unit == taskStatus.Unit {
@@ -319,12 +325,6 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))
 	}
-}
-
-// Workload implements JobMasterImpl.Workload
-func (jm *JobMaster) Workload() model.RescUnit {
-	// TODO: implement workload
-	return 2
 }
 
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl

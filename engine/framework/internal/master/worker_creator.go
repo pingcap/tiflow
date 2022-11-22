@@ -33,20 +33,12 @@ import (
 const genEpochTimeout = 5 * time.Second
 
 type createWorkerOpts struct {
-	Cost      model.RescUnit
 	Resources []resModel.ResourceID
 	Selectors []*label.Selector
 }
 
 // CreateWorkerOpt represents an option of creating a worker.
 type CreateWorkerOpt func(opts *createWorkerOpts)
-
-// CreateWorkerWithCost specifies the cost of a worker.
-func CreateWorkerWithCost(cost model.RescUnit) CreateWorkerOpt {
-	return func(opts *createWorkerOpts) {
-		opts.Cost = cost
-	}
-}
 
 // CreateWorkerWithResourceRequirements specifies the resource requirement of a worker.
 func CreateWorkerWithResourceRequirements(resources ...resModel.ResourceID) CreateWorkerOpt {
@@ -168,10 +160,9 @@ func (c *WorkerCreator) buildScheduleTaskRequest(
 	}
 
 	return &pb.ScheduleTaskRequest{
-		TaskId:               workerID,
-		Cost:                 int64(opts.Cost),
-		ResourceRequirements: resModel.ToResourceRequirement(masterID, opts.Resources...),
-		Selectors:            selectors,
+		TaskId:    workerID,
+		Resources: resModel.ToResourceRequirement(masterID, opts.Resources...),
+		Selectors: selectors,
 	}, nil
 }
 

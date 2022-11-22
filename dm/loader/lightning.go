@@ -471,18 +471,17 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
-	progress := percent(finished, total, l.finish.Load())
-	finishedForSpeed := finished
 	// we need finished bytes to calculate speed. For tidb backend, BytesStateRestored in metrics is the source file size
 	// that has been written to downstream DB. For local backend, we need to wait TiKV finishing ingest SST files, so we
 	// use the value from Status() instead.
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModeLogical {
 		m := l.core.Metrics()
 		if m != nil {
-			finishedForSpeed = int64(metric.ReadCounter(m.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+			finished = int64(metric.ReadCounter(m.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
 		}
 	}
-	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finishedForSpeed)))
+	progress := percent(finished, total, l.finish.Load())
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),

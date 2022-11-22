@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -125,7 +124,8 @@ func TestWorker(t *testing.T) {
 		},
 		NeedExtStorage: true,
 	}
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
@@ -151,7 +151,6 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dmWorker.Tick(context.Background()))
 
 	// placeholder
-	require.Equal(t, model.RescUnit(0), dmWorker.Workload())
 	require.NoError(t, dmWorker.OnMasterMessage(context.Background(), "", nil))
 
 	// Finished

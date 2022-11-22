@@ -47,12 +47,16 @@ type unitHolder interface {
 	Status(ctx context.Context) interface{}
 	// CheckAndUpdateStatus checks if the last update of source status is outdated,
 	// if so, it will call Status.
-	CheckAndUpdateStatus(ctx context.Context)
+	// this should be an async func.
+	CheckAndUpdateStatus()
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
 }
 
-var sourceStatusRefreshInterval = 30 * time.Second
+var (
+	sourceStatusRefreshInterval = 30 * time.Second
+	sourceStatusCtxTimeOut      = 20 * time.Second
+)
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
@@ -271,7 +275,7 @@ func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
 }
 
 // CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
-func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
+func (u *unitHolderImpl) CheckAndUpdateStatus() {
 	u.fieldMu.Lock()
 	defer u.fieldMu.Unlock()
 	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
@@ -279,7 +283,9 @@ func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
 		u.bgWg.Add(1)
 		go func() {
 			defer u.bgWg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), sourceStatusCtxTimeOut)
 			u.updateSourceStatus(ctx)
+			cancel()
 		}()
 	}
 }
