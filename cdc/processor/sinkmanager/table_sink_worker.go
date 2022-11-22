@@ -92,6 +92,12 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				if err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("append events to table sink",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("commitTs", events[len(events)-1].CRTs),
+					zap.Uint64("startTs", events[len(events)-1].StartTs))
 				currentTotalSize += size
 				events = events[:0]
 				return nil
@@ -101,6 +107,11 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				if err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("advance table sink",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("commitTs", lastCommitTs))
 				currentTotalSize = 0
 				return nil
 			}
@@ -118,6 +129,10 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				// There is no more data.
 				if e == nil {
 					break
+				}
+				if e.Row == nil {
+					// NOTICE: This could happen when the event is filtered by the event filter.
+					continue
 				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
 					if !w.splitTxn {
