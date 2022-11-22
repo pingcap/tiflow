@@ -18,6 +18,7 @@ import (
 	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -88,13 +89,9 @@ func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 	if err != nil {
 		panic(err)
 	}
-	encoder := builder.Build()
-	if err != nil {
-		panic(err)
-	}
 	producer := NewMockProducer()
-	return newFlushWorker(encoder, producer,
-		metrics.NewStatistics(ctx, metrics.SinkTypeMQ)), producer
+	return newFlushWorker(builder, producer,
+		metrics.NewStatistics(ctx, metrics.SinkTypeMQ), config.ProtocolOpen, 4, model.DefaultChangeFeedID("changefeed-test")), producer
 }
 
 //nolint:tparallel
@@ -283,7 +280,7 @@ func TestGroup(t *testing.T) {
 	require.Len(t, paritionedRows[key3], 1)
 }
 
-func TestAsyncSend(t *testing.T) {
+func TestSendMessages(t *testing.T) {
 	t.Parallel()
 
 	key1 := topicPartitionKey{
@@ -356,13 +353,36 @@ func TestAsyncSend(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedRows)
-	require.NoError(t, err)
-	require.Len(t, producer.mqEvent, 3)
-	require.Len(t, producer.mqEvent[key1], 3)
-	require.Len(t, producer.mqEvent[key2], 1)
-	require.Len(t, producer.mqEvent[key3], 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
+	for _, event := range events {
+		err := worker.addEvent(context.Background(), event)
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		return len(producer.mqEvent) == 3
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.mqEvent[key1]) == 3
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.mqEvent[key2]) == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.mqEvent[key3]) == 2
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestFlush(t *testing.T) {
@@ -416,27 +436,14 @@ func TestFlush(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		select {
-		case <-flushedChan:
-			flushed.Store(true)
-		}
+		_ = worker.run(ctx)
 	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		batchBuf := make([]mqEvent, 4)
-		ctx := context.Background()
-		endIndex, err := worker.batch(ctx, batchBuf)
-		require.NoError(t, err)
-		require.Equal(t, 3, endIndex)
-		require.NotNil(t, worker.needsFlush)
-		msgs := batchBuf[:endIndex]
-		paritionedRows := worker.group(msgs)
-		err = worker.asyncSend(ctx, paritionedRows)
-		require.NoError(t, err)
-		require.Equal(t, 1, producer.flushedTimes)
-		require.Nil(t, worker.needsFlush)
+		<-flushedChan
+		flushed.Store(true)
 	}()
 
 	for _, event := range events {
@@ -444,9 +451,21 @@ func TestFlush(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	wg.Wait()
 	// Make sure the flush event is processed and notify the flushedChan.
-	require.True(t, flushed.Load())
+	require.Eventually(t, func() bool {
+		return flushed.Load()
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return producer.flushedTimes == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return worker.needsFlush == nil
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestAbort(t *testing.T) {
