@@ -351,6 +351,10 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+	ErrNoQualifiedExecutor = errors.Normalize(
+		"no executor is available for scheduling",
+		errors.RFCCodeText("DFLOW:ErrNoQualifiedExecutor"),
+	)
 	ErrFilterNoResult = errors.Normalize(
 		"filter % returns no result",
 		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),

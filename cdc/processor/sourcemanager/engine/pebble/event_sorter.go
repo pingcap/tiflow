@@ -135,7 +135,7 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	for _, event := range events {
 		state.ch.In() <- eventWithTableID{tableID, event}
 		if event.IsResolved() {
-			atomic.StoreUint64(&s.tables[tableID].pendingResolved, event.CRTs)
+			atomic.StoreUint64(&state.pendingResolved, event.CRTs)
 		}
 	}
 	return
@@ -357,7 +357,11 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 			}
 			ts, ok := s.tables[table]
 			if !ok {
-				// Table is removed, skip.
+				log.Debug("Table is removed, skip updating resolved",
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID),
+					zap.Int64("table", table),
+					zap.Uint64("resolved", resolved))
 				s.mu.RUnlock()
 				continue
 			}
