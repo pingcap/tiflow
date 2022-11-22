@@ -272,6 +272,7 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 			Id:      string(executor.ID),
 			Name:    executor.Name,
 			Address: executor.Address,
+			Labels:  executor.Labels.ToMap(),
 		})
 	}
 	sort.Slice(resp.Executors, func(i, j int) bool {
