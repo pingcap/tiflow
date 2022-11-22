@@ -65,18 +65,12 @@ type Mounter interface {
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
-type mounterImpl struct {
-	schemaStorage  SchemaStorage
-	tz             *time.Location
-	workerNum      int
-	enableOldValue bool
-	changefeedID   model.ChangeFeedID
-
-	// index is an atomic variable to dispatch input events to workers.
-	index int64
-
-	metricMountDuration prometheus.Observer
-	metricTotalRows     prometheus.Gauge
+type mounter struct {
+	schemaStorage   SchemaStorage
+	tz              *time.Location
+	enableOldValue  bool
+	changefeedID    model.ChangeFeedID
+	metricTotalRows prometheus.Gauge
 }
 
 // NewMounter creates a mounter
@@ -85,12 +79,10 @@ func NewMounter(schemaStorage SchemaStorage,
 	tz *time.Location,
 	enableOldValue bool,
 ) Mounter {
-	return &mounterImpl{
+	return &mounter{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
-		metricMountDuration: mountDuration.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz: tz,
@@ -99,27 +91,22 @@ func NewMounter(schemaStorage SchemaStorage,
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
+func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
-	if pEvent.IsResolved() {
+	if event.IsResolved() {
 		return nil
 	}
-	start := time.Now()
-	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	row, err := m.unmarshalAndMountRowChanged(ctx, event.RawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	pEvent.Row = rowEvent
-	pEvent.RawKV.Value = nil
-	pEvent.RawKV.OldValue = nil
-	duration := time.Since(start)
-	if duration > time.Second {
-		m.metricMountDuration.Observe(duration.Seconds())
-	}
+	event.Row = row
+	event.RawKV.Value = nil
+	event.RawKV.OldValue = nil
 	return nil
 }
 
-func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -177,7 +164,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	recordID, err := tablecodec.DecodeRowKey(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -296,7 +283,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
+func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column

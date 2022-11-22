@@ -55,7 +55,7 @@ type tableActor struct {
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
-	mounter entry.Mounter
+	mg entry.MounterGroup
 	// backend tableSink
 	tableSink   sink.Sink
 	redoManager redo.LogManager
@@ -97,9 +97,10 @@ type tableActor struct {
 }
 
 // NewTableActor creates a table actor and starts it.
-func NewTableActor(cdcCtx cdcContext.Context,
-	upStream *upstream.Upstream,
-	mounter entry.Mounter,
+func NewTableActor(
+	cdcCtx cdcContext.Context,
+	up *upstream.Upstream,
+	mg entry.MounterGroup,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -131,8 +132,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableName:     tableName,
 		cyclicEnabled: cyclicEnabled,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
-		upStream:      upStream,
-		mounter:       mounter,
+		upStream:      up,
+		mg:            mg,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSink:     sink,
@@ -288,7 +289,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig, t.changefeedID, t.upStream.PDClient,
+		t.mg, t.replicaConfig, t.changefeedID, t.upStream.PDClient,
 	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,

@@ -291,7 +291,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
-		time.UTC, false).(*mounterImpl)
+		time.UTC, false).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 

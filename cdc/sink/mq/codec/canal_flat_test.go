@@ -91,13 +91,14 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 
 	message, err := encoder.newFlatMessageForDML(testCaseInsert)
 	require.Nil(t, err)
-	flatMessage, ok := message.(*canalFlatMessage)
-	require.True(t, ok)
+	flatMessage := &JSONMessage{}
+	err = json.Unmarshal(message.Value, flatMessage)
+	require.Nil(t, err)
 	require.NotNil(t, flatMessage.Data)
 	require.Nil(t, flatMessage.Old)
 	require.Equal(t, "INSERT", flatMessage.EventType)
 	require.Equal(t, convertToCanalTs(testCaseInsert.CommitTs), flatMessage.ExecutionTime)
-	require.Equal(t, testCaseInsert.CommitTs, flatMessage.tikvTs)
+	require.Equal(t, uint64(0), flatMessage.getCommitTs())
 	require.Equal(t, "cdc", flatMessage.Schema)
 	require.Equal(t, "person", flatMessage.Table)
 	require.False(t, flatMessage.IsDDL)
@@ -132,16 +133,18 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
-	flatMessage, ok = message.(*canalFlatMessage)
-	require.True(t, ok)
+	flatMessage = &JSONMessage{}
+	err = json.Unmarshal(message.Value, flatMessage)
+	require.Nil(t, err)
 	require.NotNil(t, flatMessage.Data)
 	require.NotNil(t, flatMessage.Old)
 	require.Equal(t, "UPDATE", flatMessage.EventType)
 
 	message, err = encoder.newFlatMessageForDML(testCaseDelete)
 	require.Nil(t, err)
-	flatMessage, ok = message.(*canalFlatMessage)
-	require.True(t, ok)
+	flatMessage = &JSONMessage{}
+	err = json.Unmarshal(message.Value, flatMessage)
+	require.Nil(t, err)
 	require.NotNil(t, flatMessage.Data)
 	require.Nil(t, flatMessage.Old)
 	require.Equal(t, "DELETE", flatMessage.EventType)
@@ -151,8 +154,9 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
 
-	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
-	require.True(t, ok)
+	withExtension := &canalFlatMessageWithTiDBExtension{}
+	err = json.Unmarshal(message.Value, withExtension)
+	require.Nil(t, err)
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
@@ -220,7 +224,7 @@ func TestNewCanalFlatMessageFromDDL(t *testing.T) {
 	message := encoder.newFlatMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
 
-	msg, ok := message.(*canalFlatMessage)
+	msg, ok := message.(*JSONMessage)
 	require.True(t, ok)
 	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
 	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
@@ -305,7 +309,7 @@ func TestBatching(t *testing.T) {
 			for j := range msgs {
 				require.Equal(t, 1, msgs[j].GetRowsCount())
 
-				var msg canalFlatMessage
+				var msg JSONMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				require.Nil(t, err)
 				require.Equal(t, "UPDATE", msg.EventType)
@@ -368,7 +372,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 	// Unmarshal from the data we have encoded.
 	flatMsg := canalFlatMessageWithTiDBExtension{
-		&canalFlatMessage{},
+		&JSONMessage{},
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &flatMsg)
