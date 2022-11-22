@@ -36,7 +36,7 @@ const (
 )
 
 // BinlogWriter is a binlog event writer which writes binlog events to a file.
-// Open/Write/Close cannot be called concurrently
+// Open/Write/Close cannot be called concurrently.
 type BinlogWriter struct {
 	offset   atomic.Int64
 	file     *os.File
