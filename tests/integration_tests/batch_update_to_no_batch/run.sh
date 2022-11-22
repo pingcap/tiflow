@@ -13,6 +13,11 @@ SINK_TYPE=$1
 # 2. cdc works well in no-batch mode
 # 3. cdc can switch from batch mode to no-batch mode and vice versa and works well
 function run() {
+  # batch mode only supports mysql sink
+  if [ "$SINK_TYPE" == "kafka" ]; then
+    return
+  fi
+
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -29,17 +34,10 @@ function run() {
 
 	# this test contains `recover table`, which requires super privilege, so we
 	# can't use the normal user
-	TOPIC_NAME="ticdc-batch-update-to-no-batch-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	*) SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true" ;;
-	esac
+  SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true"
+
 	changefeed_id="test"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c ${changefeed_id}
-
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	fi
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
