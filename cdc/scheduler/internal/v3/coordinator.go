@@ -106,11 +106,11 @@ func newCoordinator(
 // Tick implement the scheduler interface
 func (c *coordinator) Tick(
 	ctx context.Context,
-// Latest global checkpoint of the changefeed
+	// Latest global checkpoint of the changefeed
 	checkpointTs model.Ts,
-// All tables that SHOULD be replicated (or started) at the current checkpoint.
+	// All tables that SHOULD be replicated (or started) at the current checkpoint.
 	currentTables []model.TableID,
-// All captures that are alive according to the latest Etcd states.
+	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
