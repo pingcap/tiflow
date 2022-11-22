@@ -512,6 +512,7 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		firstCol := columns[colOffsets[0]]
 		if firstCol.Flag.IsPrimaryKey() {
 			indexInfo.Primary = true
+			indexInfo.Unique = true
 		}
 		if firstCol.Flag.IsUniqueKey() {
 			indexInfo.Unique = true
