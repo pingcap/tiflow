@@ -487,7 +487,7 @@ func (jm *JobManagerImpl) GetJobMasterForwardAddress(ctx context.Context, jobID 
 		}
 		return "", err
 	}
-	if masterMeta.State != frameModel.MasterStateInit || jm.JobFsm.QueryOnlineJob(jobID) == nil {
+	if masterMeta.State != frameModel.MasterStateInit && jm.JobFsm.QueryOnlineJob(jobID) == nil {
 		return "", errors.ErrJobNotRunning.GenWithStackByArgs(jobID)
 	}
 	return masterMeta.Addr, nil

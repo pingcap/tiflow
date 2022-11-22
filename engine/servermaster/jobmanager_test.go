@@ -478,14 +478,23 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	mockJobClient := jobMock.NewMockJobHTTPClient(mockCtrl)
 	mgr.jobHTTPClient = mockJobClient
 
-	// normal case, return job detail
-	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
+	masterMeta := &frameModel.MasterMeta{
 		ID:   "new-job",
 		Type: frameModel.FakeJobMaster,
 		// set state to running
 		State:    frameModel.MasterStateInit,
 		Addr:     "1.1.1.1:1",
 		ErrorMsg: "error_message",
+	}
+
+	// normal case, return job detail
+	err := mgr.frameMetaClient.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	mgr.JobFsm.JobDispatched(masterMeta, false)
+	err = mgr.JobFsm.JobOnline(&framework.MockHandle{
+		WorkerID:   "new-job",
+		ExecutorID: "executor-1",
 	})
 	require.NoError(t, err)
 
