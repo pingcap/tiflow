@@ -355,7 +355,6 @@ func (wm *WorkerManager) createWorker(
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
 	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg,
-		framework.CreateWorkerWithCost(1),
 		framework.CreateWorkerWithResourceRequirements(resources...))
 	if err != nil {
 		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Stringer("unit", unit), zap.Error(err))
