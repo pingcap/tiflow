@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
@@ -299,7 +300,6 @@ func TestSendMessages(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	worker, producer := newTestWorker(ctx)
 	defer worker.close()
 	events := []mqEvent{
@@ -394,7 +394,6 @@ func TestFlush(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	worker, producer := newTestWorker(ctx)
 	defer worker.close()
 	flushedChan := make(chan struct{})
@@ -529,10 +528,13 @@ func TestWorker(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	worker, producer := newTestWorker(ctx)
 	defer worker.close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		_ = worker.run(ctx)
 	}()
 
@@ -560,18 +562,18 @@ func TestWorker(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	var wg sync.WaitGroup
 
 	flushedChan1 := make(chan struct{})
 	flushed1 := atomic.NewBool(false)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan1:
-			flushed1.Store(true)
-		}
+
+		<-flushedChan1
+		flushed1.Store(true)
+		log.Info("flushed 1 received")
 	}()
+
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(100),
 		flushed:    flushedChan1,
@@ -583,10 +585,10 @@ func TestWorker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan2:
-			flushed2.Store(true)
-		}
+
+		<-flushedChan2
+		flushed2.Store(true)
+		log.Info("flushed 2 received")
 	}()
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(200),
@@ -594,10 +596,20 @@ func TestWorker(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	wg.Wait()
-
 	// Make sure we don't get a block even if we flush multiple times.
-	require.Equal(t, 2, producer.flushedTimes)
-	require.True(t, flushed1.Load())
-	require.True(t, flushed2.Load())
+
+	require.Eventually(t, func() bool {
+		return flushed1.Load()
+	}, 3*time.Second, 100*time.Millisecond)
+
+	//require.Eventually(t, func() bool {
+	//	return flushed2.Load()
+	//}, 3*time.Second, 100*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return producer.flushedTimes == 2
+	}, 3*time.Second, 100*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
