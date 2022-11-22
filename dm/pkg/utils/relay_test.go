@@ -22,8 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testUtilsSuite struct{}
-
 func TestParseUUIDIndex(t *testing.T) {
 	t.Parallel()
 
