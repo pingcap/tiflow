@@ -899,6 +899,8 @@ func TestGetAvroNamespace(t *testing.T) {
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
+    t.Parallel()
+
 	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
