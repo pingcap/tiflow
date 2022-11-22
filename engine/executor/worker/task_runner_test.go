@@ -58,7 +58,7 @@ func TestTaskRunnerBasics(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		t.Logf("taskNum %d", tr.Workload())
+		t.Logf("taskNum %d", tr.WorkerCount())
 		return tr.WorkerCount() == workerNum
 	}, 1*time.Second, 10*time.Millisecond)
 
