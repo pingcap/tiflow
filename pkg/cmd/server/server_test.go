@@ -179,9 +179,8 @@ func TestParseCfg(t *testing.T) {
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
-			EnablePullBasedSink: true,
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -254,8 +253,7 @@ sort-dir = "/tmp/just_a_test"
 region-retry-duration = "3s"
 
 [debug]
-enable-db-sorter = true
-enable-pull-based-sink = true
+enable-db-sorter = false
 [debug.db]
 count = 5
 concurrency = 6
@@ -336,9 +334,8 @@ check-balance-interval = "10s"
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:      true,
-			EnablePullBasedSink: true,
-			EnableNewScheduler:  true,
+			EnableDBSorter:     false,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -483,9 +480,8 @@ cert-allowed-cn = ["dd","ee"]
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
-			EnablePullBasedSink: true,
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -548,9 +544,8 @@ unknown3 = 3
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableDBSorter:      true,
-		EnableNewScheduler:  true,
-		EnablePullBasedSink: true,
+		EnableDBSorter:     true,
+		EnableNewScheduler: true,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
