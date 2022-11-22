@@ -31,11 +31,6 @@ func TestSelectorFilter(t *testing.T) {
 		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
 				ID: "executor-1",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "1",
 					"function": "1",
@@ -43,11 +38,6 @@ func TestSelectorFilter(t *testing.T) {
 			},
 			"executor-2": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "1",
@@ -55,11 +45,6 @@ func TestSelectorFilter(t *testing.T) {
 			},
 			"executor-3": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "2",
@@ -70,7 +55,6 @@ func TestSelectorFilter(t *testing.T) {
 	sf := newSelectorFilter(provider)
 
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
 		Selectors: []*label.Selector{
 			{
 				Key:    "type",
@@ -88,7 +72,6 @@ func TestSelectorFilter(t *testing.T) {
 	require.Equal(t, []model.ExecutorID{"executor-2"}, ret)
 
 	_, err = sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
 		Selectors: []*label.Selector{
 			{
 				Key:    "type",
@@ -113,11 +96,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
 				ID: "executor-1",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "1",
 					"function": "1",
@@ -125,11 +103,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 			},
 			"executor-2": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "1",
@@ -137,11 +110,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 			},
 			"executor-3": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "2",
@@ -151,7 +119,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 	}
 	sf := newSelectorFilter(provider)
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
 		Selectors: []*label.Selector{
 			{
 				Key:    "function",

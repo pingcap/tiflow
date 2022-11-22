@@ -131,7 +131,8 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "", frameModel.WorkerDMDump, taskCfg)
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 
@@ -184,13 +185,14 @@ func TestStopWorker(t *testing.T) {
 			},
 		},
 	}
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
 
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
-	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
+	err = dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
 	require.NoError(t, err)
 
 	// mock close by framework
@@ -221,7 +223,8 @@ func TestOperateTask(t *testing.T) {
 			},
 		},
 	}
-	dmWorker := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}

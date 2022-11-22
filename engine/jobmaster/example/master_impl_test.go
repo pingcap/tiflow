@@ -63,7 +63,6 @@ func TestExampleMaster(t *testing.T) {
 		master.DefaultBaseMaster,
 		exampleWorkerType,
 		exampleWorkerCfg,
-		exampleWorkerCost,
 		masterID,
 		workerID,
 		executorNodeID,

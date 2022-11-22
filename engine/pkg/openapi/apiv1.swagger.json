@@ -451,22 +451,6 @@
     "enginepbCreateResourceResponse": {
       "type": "object"
     },
-    "enginepbExecWorkload": {
-      "type": "object",
-      "properties": {
-        "tp": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "usage": {
-          "type": "integer",
-          "format": "int32"
-        }
-      }
-    },
-    "enginepbExecWorkloadResponse": {
-      "type": "object"
-    },
     "enginepbExecutor": {
       "type": "object",
       "properties": {
@@ -480,10 +464,6 @@
         },
         "address": {
           "type": "string"
-        },
-        "capability": {
-          "type": "string",
-          "format": "int64"
         },
         "labels": {
           "type": "object",
@@ -643,8 +623,9 @@
     "enginepbQueryMetaStoreResponse": {
       "type": "object",
       "properties": {
-        "address": {
-          "type": "string"
+        "config": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },
@@ -666,7 +647,8 @@
       "type": "object",
       "properties": {
         "config": {
-          "type": "string"
+          "type": "string",
+          "format": "byte"
         }
       }
     },
@@ -720,9 +702,6 @@
           "title": "for record time"
         }
       }
-    },
-    "enginepbRegisterMetaStoreResponse": {
-      "type": "object"
     },
     "enginepbRemoveLocalResourceResponse": {
       "type": "object"

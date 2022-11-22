@@ -23,9 +23,7 @@ import (
 
 // SchedulerRequest represents a request for an executor to run a given task.
 type SchedulerRequest struct {
-	TenantID string // reserved for future use.
-
-	Cost              ResourceUnit
+	TenantID          string // reserved for future use.
 	ExternalResources []resModel.ResourceKey
 	Selectors         []*label.Selector
 }
@@ -43,8 +41,7 @@ func NewSchedulerRequestFromPB(req *enginepb.ScheduleTaskRequest) (*SchedulerReq
 	}
 
 	schedulerReq := &SchedulerRequest{
-		Cost:              ResourceUnit(req.GetCost()),
-		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+		ExternalResources: resModel.ToResourceKeys(req.GetResources()),
 		Selectors:         selectors,
 	}
 	return schedulerReq, nil

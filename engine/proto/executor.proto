@@ -43,7 +43,8 @@ service BrokerService {
 
 message RemoveLocalResourceRequest {
     string resource_id = 1;
-    string creator_id = 2;
+    // creator of the resource
+    string worker_id = 2;
 }
 
 message RemoveLocalResourceResponse {}
