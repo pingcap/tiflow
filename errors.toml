@@ -1281,11 +1281,6 @@ error = '''
 0-length response with status code: %d
 '''
 
-["DFLOW:ErrCapacityNotEnough"]
-error = '''
-capacity not enough
-'''
-
 ["DFLOW:ErrCleaningLocalTempFiles"]
 error = '''
 errors is encountered when cleaning local temp files

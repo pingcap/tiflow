@@ -26,7 +26,7 @@ import (
 type BrokerServiceClient interface {
 	RemoveResource(
 		ctx context.Context,
-		creatorID frameModel.WorkerID,
+		WorkerID frameModel.WorkerID,
 		resourceID resModel.ResourceID,
 	) error
 }
@@ -43,14 +43,14 @@ func NewBrokerServiceClient(cli enginepb.BrokerServiceClient) BrokerServiceClien
 // RemoveResource removes a local file resource from an executor.
 func (c *brokerServiceClient) RemoveResource(
 	ctx context.Context,
-	creatorID frameModel.WorkerID,
+	WorkerID frameModel.WorkerID,
 	resourceID resModel.ResourceID,
 ) error {
 	call := internal.NewCall(
 		c.cli.RemoveResource,
 		&enginepb.RemoveLocalResourceRequest{
 			ResourceId: resourceID,
-			CreatorId:  creatorID,
+			WorkerId:   WorkerID,
 		})
 	_, err := call.Do(ctx)
 	return err

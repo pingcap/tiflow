@@ -139,8 +139,8 @@ func TestInitialize(t *testing.T) {
 		"CREATE TABLE `executors` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
 			"`id` varchar(256) not null,`name` varchar(256) not null," +
-			"`address` varchar(256) not null,`capability` int not null," +
-			"`labels` json,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uni_id` (`id`))"),
+			"`address` varchar(256) not null,`labels` json,PRIMARY KEY (`seq_id`)," +
+			"UNIQUE INDEX `uni_id` (`id`))"),
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
