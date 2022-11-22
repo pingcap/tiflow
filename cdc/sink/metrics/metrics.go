@@ -14,7 +14,7 @@
 package metrics
 
 import (
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
