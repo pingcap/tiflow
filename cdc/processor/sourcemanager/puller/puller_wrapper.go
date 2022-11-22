@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -96,7 +97,7 @@ func (n *Wrapper) Start(
 	go func() {
 		defer n.wg.Done()
 		err := n.p.Run(ctxC)
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			errChan <- err
 		}
 	}()
