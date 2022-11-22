@@ -98,6 +98,7 @@ type ReplicaConfig struct {
 	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
 	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
+	Mounter               *MounterConfig    `json:"mounter"`
 	Sink                  *SinkConfig       `json:"sink"`
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
@@ -198,6 +199,11 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			Terminator:               c.Sink.Terminator,
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
+		}
+	}
+	if c.Mounter != nil {
+		res.Mounter = &config.MounterConfig{
+			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
 	return res
@@ -305,6 +311,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Storage:           cloned.Consistent.Storage,
 		}
 	}
+	if c.Mounter != nil {
+		res.Mounter = &MounterConfig{
+			WorkerNum: c.Mounter.WorkerNum,
+		}
+	}
 	return res
 }
 
@@ -337,6 +348,11 @@ type FilterConfig struct {
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters"`
+}
+
+// MounterConfig represents mounter config for a changefeed
+type MounterConfig struct {
+	WorkerNum int `json:"worker_num"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
