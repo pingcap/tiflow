@@ -96,12 +96,12 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
-	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
 	// We have to create a new slice for the rest of the elements,
 	// otherwise we cannot GC the flushed values as soon as possible.
-	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
+	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
+	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
 		// We have to record the event ID for the callback.
 		ce := &eventsink.CallbackableEvent[E]{
