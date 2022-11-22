@@ -294,9 +294,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// worker1 online, worker2 dispatch error
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: nil}).Once()
+	require.NoError(t.T(), jm.OnWorkerOnline(workerHandle1))
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	require.NoError(t.T(), jm.OnWorkerOnline(workerHandle1))
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
