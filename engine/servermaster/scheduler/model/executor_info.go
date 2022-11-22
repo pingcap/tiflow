@@ -23,10 +23,6 @@ import (
 type ExecutorInfo struct {
 	// ID is the executorID.
 	ID model.ExecutorID
-
-	// ResourceStatus stores status related to computational resources.
-	ResourceStatus ExecutorResourceStatus
-
 	// Labels stores the labels configured for the given executor.
 	Labels label.Set
 }

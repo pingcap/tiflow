@@ -40,17 +40,13 @@ func TestExecutorManager(t *testing.T) {
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
 	registerReq := &pb.RegisterExecutorRequest{
-		Executor: &pb.Executor{
-			Address:    executorAddr,
-			Capability: 2,
-		},
+		Executor: &pb.Executor{Address: executorAddr},
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
-			require.Equal(t, 2, executor.Capability)
 			return nil
 		})
 
@@ -70,7 +66,6 @@ func TestExecutorManager(t *testing.T) {
 	newHeartbeatReq := func() *pb.HeartbeatRequest {
 		return &pb.HeartbeatRequest{
 			ExecutorId: string(executor.ID),
-			Status:     int32(model.Running),
 			Timestamp:  uint64(time.Now().Unix()),
 			Ttl:        uint64(10), // 10ms ttl
 		}
@@ -116,17 +111,13 @@ func TestExecutorManagerWatch(t *testing.T) {
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
 	registerReq := &pb.RegisterExecutorRequest{
-		Executor: &pb.Executor{
-			Address:    executorAddr,
-			Capability: 2,
-		},
+		Executor: &pb.Executor{Address: executorAddr},
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
-			require.Equal(t, 2, executor.Capability)
 			return nil
 		})
 	executor, err := mgr.AllocateNewExec(ctx, registerReq)
@@ -142,17 +133,13 @@ func TestExecutorManagerWatch(t *testing.T) {
 	// register another executor server
 	executorAddr = "127.0.0.1:10002"
 	registerReq = &pb.RegisterExecutorRequest{
-		Executor: &pb.Executor{
-			Address:    executorAddr,
-			Capability: 2,
-		},
+		Executor: &pb.Executor{Address: executorAddr},
 	}
 	metaClient.EXPECT().
 		CreateExecutor(gomock.Any(), gomock.Any()).Times(1).
 		DoAndReturn(func(ctx context.Context, executor *ormModel.Executor) error {
 			require.NotEmpty(t, executor.ID)
 			require.Equal(t, executorAddr, executor.Address)
-			require.Equal(t, 2, executor.Capability)
 			return nil
 		})
 	executor, err = mgr.AllocateNewExec(ctx, registerReq)
@@ -169,7 +156,6 @@ func TestExecutorManagerWatch(t *testing.T) {
 	newHeartbeatReq := func(executorID model.ExecutorID) *pb.HeartbeatRequest {
 		return &pb.HeartbeatRequest{
 			ExecutorId: string(executorID),
-			Status:     int32(model.Running),
 			Timestamp:  uint64(time.Now().Unix()),
 			Ttl:        uint64(100), // 10ms ttl
 		}

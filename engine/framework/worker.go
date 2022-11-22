@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
@@ -52,7 +51,6 @@ type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	ID() runtime.RunnableID
-	Workload() model.RescUnit
 	Close(ctx context.Context) error
 	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
@@ -78,9 +76,6 @@ type WorkerImpl interface {
 	// Concurrent safety:
 	// - this function may be concurrently called with OnMasterMessage.
 	Tick(ctx context.Context) error
-
-	// Workload returns the current workload of the worker.
-	Workload() model.RescUnit
 
 	// OnMasterMessage is called when worker receives master message, business developer
 	// does not need to implement it.
@@ -241,11 +236,6 @@ func NewBaseWorker(
 		metricFactory:        promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
 		logger:               frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}
-}
-
-// Workload implements BaseWorker.Workload
-func (w *DefaultBaseWorker) Workload() model.RescUnit {
-	return w.Impl.Workload()
 }
 
 // Init implements BaseWorker.Init
