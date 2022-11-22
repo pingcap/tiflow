@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -147,7 +148,7 @@ func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableO
 		go func() {
 			defer m.wg.Done()
 			err := w.handleTasks(m.ctx, m.sinkTaskChan)
-			if err != nil {
+			if err != nil && !cerrors.Is(err, context.Canceled) {
 				log.Error("Worker handles sink task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -176,7 +177,7 @@ func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableO
 		go func() {
 			defer m.wg.Done()
 			err := w.handleTasks(m.ctx, m.redoTaskChan)
-			if err != nil {
+			if err != nil && !cerrors.Is(err, context.Canceled) {
 				log.Error("Worker handles redo task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -200,7 +201,7 @@ func (m *SinkManager) startGenerateTasks() {
 	go func() {
 		defer m.wg.Done()
 		err := m.generateSinkTasks()
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Error("Generate sink tasks failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
@@ -224,7 +225,7 @@ func (m *SinkManager) startGenerateTasks() {
 	go func() {
 		defer m.wg.Done()
 		err := m.generateRedoTasks()
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Error("Generate redo tasks failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
@@ -488,7 +489,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.Int64("tableID", tableID))
 		}
 		err := tableSink.(*tableSinkWrapper).close(m.ctx)
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Warn("Failed to close table sink",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
