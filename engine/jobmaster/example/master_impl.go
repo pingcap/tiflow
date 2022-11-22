@@ -27,7 +27,6 @@ import (
 const (
 	exampleWorkerType = 999
 	exampleWorkerCfg  = "config"
-	exampleWorkerCost = 100
 )
 
 var _ framework.Master = &exampleMaster{}
@@ -51,8 +50,7 @@ type exampleMaster struct {
 func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
 	log.Info("InitImpl")
 	e.worker.mu.Lock()
-	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg,
-		framework.CreateWorkerWithCost(exampleWorkerCost))
+	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg)
 	e.worker.mu.Unlock()
 	return
 }

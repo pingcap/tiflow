@@ -32,7 +32,7 @@ func TestBrokerServiceClientNormal(t *testing.T) {
 
 	client.EXPECT().RemoveResource(gomock.Any(), gomock.Eq(&enginepb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})).Return(&enginepb.RemoveLocalResourceResponse{}, nil).Times(1)
 
 	err := serviceCli.RemoveResource(context.Background(), "worker-1", "/local/resource-1")

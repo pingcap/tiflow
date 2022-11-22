@@ -848,8 +848,8 @@ func TestFailoverWithCreateWorkerOpt(t *testing.T) {
 		{Key: "region", Target: "us-west-2", Op: label.OpEq},
 	}
 	checkOptsFn := func(opts ...framework.CreateWorkerOpt) {
-		// CreateWorkerOpt: 1 for cost opt, 1 for label selectors
-		require.Len(t, opts, 2)
+		// CreateWorkerOpt: 1 for label selectors
+		require.Len(t, opts, 1)
 	}
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "iter-pending-jobs-test")

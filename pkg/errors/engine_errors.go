@@ -355,10 +355,6 @@ var (
 		"filter % returns no result",
 		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),
 	)
-	ErrCapacityNotEnough = errors.Normalize(
-		"capacity not enough",
-		errors.RFCCodeText("DFLOW:ErrCapacityNotEnough"),
-	)
 	ErrSelectorUnsatisfied = errors.Normalize(
 		"selector %v is not satisfied",
 		errors.RFCCodeText("DFLOW:ErrSelectorUnsatisfied"),

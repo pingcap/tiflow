@@ -24,7 +24,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -131,14 +130,6 @@ func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic
 
 	args := m.Called(worker, topic, message)
 	return args.Error(0)
-}
-
-func (m *testJobMasterImpl) Workload() model.RescUnit {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0).(model.RescUnit)
 }
 
 func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {

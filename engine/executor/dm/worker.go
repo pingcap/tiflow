@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -164,15 +163,9 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 		return err
 	}
 	// update unit status periodically to update metrics
-	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.unitHolder.CheckAndUpdateStatus()
 	w.discardResource4Syncer(ctx)
 	return w.messageAgent.Tick(ctx)
-}
-
-// Workload implements lib.WorkerImpl.Worload
-func (w *dmWorker) Workload() model.RescUnit {
-	w.Logger().Info("dmworker.Workload")
-	return 0
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
@@ -273,9 +266,15 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 // workerStatus gets worker status.
 func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
 	var (
-		stage       = w.getStage()
-		code        frameModel.WorkerState
-		taskStatus  = &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
+		stage      = w.getStage()
+		code       frameModel.WorkerState
+		taskStatus = &runtime.TaskStatus{
+			Unit:             w.workerType,
+			Task:             w.taskID,
+			Stage:            stage,
+			StageUpdatedTime: time.Now(),
+			CfgModRevision:   w.cfgModRevision,
+		}
 		finalStatus any
 	)
 	if stage == metadata.StageFinished {
