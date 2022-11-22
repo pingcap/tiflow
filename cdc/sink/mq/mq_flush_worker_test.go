@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
@@ -571,7 +570,6 @@ func TestWorker(t *testing.T) {
 
 		<-flushedChan1
 		flushed1.Store(true)
-		log.Info("flushed 1 received")
 	}()
 
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
@@ -588,7 +586,6 @@ func TestWorker(t *testing.T) {
 
 		<-flushedChan2
 		flushed2.Store(true)
-		log.Info("flushed 2 received")
 	}()
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(200),
@@ -602,9 +599,9 @@ func TestWorker(t *testing.T) {
 		return flushed1.Load()
 	}, 3*time.Second, 100*time.Millisecond)
 
-	//require.Eventually(t, func() bool {
-	//	return flushed2.Load()
-	//}, 3*time.Second, 100*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return flushed2.Load()
+	}, 3*time.Second, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		return producer.flushedTimes == 2
