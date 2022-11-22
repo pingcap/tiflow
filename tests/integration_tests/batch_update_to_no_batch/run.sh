@@ -13,10 +13,10 @@ SINK_TYPE=$1
 # 2. cdc works well in no-batch mode
 # 3. cdc can switch from batch mode to no-batch mode and vice versa and works well
 function run() {
-  # batch mode only supports mysql sink
-  if [ "$SINK_TYPE" == "kafka" ]; then
-    return
-  fi
+	# batch mode only supports mysql sink
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		return
+	fi
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -34,7 +34,7 @@ function run() {
 
 	# this test contains `recover table`, which requires super privilege, so we
 	# can't use the normal user
-  SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true"
+	SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true"
 
 	changefeed_id="test"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c ${changefeed_id}
