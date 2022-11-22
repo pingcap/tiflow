@@ -203,35 +203,16 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		},
 		Protocol: "open-protocol",
 	}, cfg.Sink)
-<<<<<<< HEAD
 	require.Equal(t, &config.CyclicConfig{
 		Enable:          false,
 		ReplicaID:       1,
 		FilterReplicaID: []uint64{2, 3},
 		SyncDDL:         true,
 	}, cfg.Cyclic)
-=======
-}
 
-func TestAndWriteStorageSinkTOML(t *testing.T) {
-	cfg := config.GetDefaultReplicaConfig()
-	err := StrictDecodeFile("changefeed_storage_sink.toml", "cdc", &cfg)
-	require.Nil(t, err)
-
-	err = cfg.ValidateAndAdjust(nil)
-	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: 16,
-		CSVConfig: &config.CSVConfig{
-			Delimiter:       ",",
-			Quote:           "\"",
-			Terminator:      "\r\n",
-			NullString:      "\\N",
-			DateSeparator:   "day",
-			IncludeCommitTs: false,
-		},
 	}, cfg.Sink)
->>>>>>> 0ad56ca659 (mq(ticdc): introduce encoder group and encode pipeline to improve mq throughput. (#7463))
 }
 
 func TestAndWriteExampleServerTOML(t *testing.T) {
