@@ -1591,6 +1591,11 @@ error = '''
 metastore %s does not exist
 '''
 
+["DFLOW:ErrNoQualifiedExecutor"]
+error = '''
+no executor is available for scheduling
+'''
+
 ["DFLOW:ErrNoRPCClient"]
 error = '''
 no available RPC client
