@@ -36,6 +36,11 @@ func (s LabelSet) Value() (driver.Value, error) {
 	return string(data), nil
 }
 
+// ToMap converts a LabelSet to a plain map.
+func (s LabelSet) ToMap() map[string]string {
+	return label.Set(s).ToMap()
+}
+
 // Scan implements the sql.Scanner interface.
 func (s *LabelSet) Scan(rawInput interface{}) error {
 	*s = make(LabelSet)
