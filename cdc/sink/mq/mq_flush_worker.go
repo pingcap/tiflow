@@ -98,9 +98,9 @@ func newFlushWorker(
 		producer:     producer,
 		statistics:   statistics,
 
-		// metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
-		// metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
-		// metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
+		metricMQWorkerSendMessageDuration: workerSendMessageDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
+		metricMQWorkerBatchSize:           workerBatchSize.WithLabelValues(changefeed.Namespace, changefeed.ID),
+		metricMQWorkerBatchDuration:       workerBatchDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}
 	return w
 }
@@ -178,72 +178,6 @@ func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.Row
 	return partitionedRows
 }
 
-// asyncSend is responsible for sending messages to the Kafka producer.
-// func (w *flushWorker) asyncSend(
-// 	ctx context.Context,
-// 	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
-// ) error {
-// 	for key, events := range partitionedRows {
-// 		for _, event := range events {
-// 			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event)
-// 			if err != nil {
-// 				return err
-// 			}
-// 		}
-
-// 		err := w.statistics.RecordBatchExecution(func() (int, error) {
-// 			thisBatchSize := 0
-// 			for _, message := range w.encoder.Build() {
-// 				err := w.producer.AsyncSendMessage(ctx, key.topic, key.partition, message)
-// 				if err != nil {
-// 					return 0, err
-// 				}
-// 				thisBatchSize += message.GetRowsCount()
-// 			}
-// 			log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
-// 			return thisBatchSize, nil
-// 		})
-// 		if err != nil {
-// 			return err
-// 		}
-// 		w.statistics.ObserveRows(events...)
-// 	}
-
-// 	// Wait for all messages to ack.
-// 	if w.needsFlush != nil {
-// 		if err := w.flushAndNotify(ctx); err != nil {
-// 			return errors.Trace(err)
-// 		}
-// 	}
-
-// 	// eventsBuf := make([]mqEvent, flushBatchSize)
-// 	// for {
-// 	// 	endIndex, err := w.batch(ctx, eventsBuf)
-// 	// 	if err != nil {
-// 	// 		return errors.Trace(err)
-// 	// 	}
-// 	// 	if endIndex == 0 {
-// 	// 		if w.needsFlush != nil {
-// 	// 			// NOTICE: We still need to do a flush here.
-// 	// 			// This is because there may be some rows that
-// 	// 			// were sent that have not been confirmed yet.
-// 	// 			if err := w.flushAndNotify(ctx); err != nil {
-// 	// 				return errors.Trace(err)
-// 	// 			}
-// 	// 		}
-// 	// 		continue
-// 	// 	}
-// 	// 	msgs := eventsBuf[:endIndex]
-// 	// 	partitionedRows := w.group(msgs)
-// 	// 	err = w.asyncSend(ctx, partitionedRows)
-// 	// 	if err != nil {
-// 	// 		return errors.Trace(err)
-// 	// 	}
-// 	// }
-
-// 	return nil
-// }
-
 // run starts a loop that keeps collecting, sorting and sending messages
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) (retErr error) {
@@ -310,6 +244,14 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 			return errors.Trace(err)
 		}
 		if endIndex == 0 {
+			if w.needsFlush != nil {
+				// NOTICE: We still need to do a flush here.
+				// This is because there may be some rows that
+				// were sent that have not been confirmed yet.
+				if err := w.flushAndNotify(ctx); err != nil {
+					return errors.Trace(err)
+				}
+			}
 			continue
 		}
 
@@ -363,6 +305,12 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 				}
 				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
+			// Wait for all messages to ack.
+			if w.needsFlush != nil {
+				if err := w.flushAndNotify(ctx); err != nil {
+					return errors.Trace(err)
+				}
+			}
 		}
 	}
 }
@@ -405,4 +353,8 @@ func (w *flushWorker) close() {
 	for range w.msgChan.Out() {
 		// Do nothing. We do not care about the data.
 	}
+
+	workerSendMessageDuration.DeleteLabelValues(w.id.Namespace, w.id.ID)
+	workerBatchSize.DeleteLabelValues(w.id.Namespace, w.id.ID)
+	workerBatchDuration.DeleteLabelValues(w.id.Namespace, w.id.ID)
 }

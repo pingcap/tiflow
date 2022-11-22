@@ -86,7 +86,8 @@ func newMqSink(
 	role := contextutil.RoleFromCtx(ctx)
 
 	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
-	flushWorker := newFlushWorker(encoderBuilder, mqProducer, statistics)
+	flushWorker := newFlushWorker(encoderBuilder, mqProducer, statistics, encoderConfig.Protocol(),
+		replicaConfig.Sink.EncoderConcurrency, changefeedID)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,

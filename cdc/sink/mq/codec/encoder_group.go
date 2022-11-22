@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -110,7 +109,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
 			for _, event := range future.events {
-				err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback)
+				err := encoder.AppendRowChangedEvent(ctx, future.Topic, event)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -152,7 +151,7 @@ type future struct {
 	Topic     string
 	Partition int32
 	events    []*model.RowChangedEvent
-	Messages  []*common.Message
+	Messages  []*MQMessage
 
 	done chan struct{}
 }

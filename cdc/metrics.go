@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
@@ -63,7 +63,7 @@ func init() {
 	leveldb.InitMetrics(registry)
 	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
-	kafka.InitMetrics(registry)
+	mq.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.
 	originalRegistry := prometheus.DefaultRegisterer
 	prometheus.DefaultRegisterer = registry
