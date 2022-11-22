@@ -112,12 +112,15 @@ type Manager struct { //nolint:revive
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
+	slowTableHeap := make(ReplicationSetHeap, 0, defaultSlowTableHeapSize)
+	heap.Init(&slowTableHeap)
+
 	return &Manager{
 		tables:                make(map[int64]*ReplicationSet),
 		runningTasks:          make(map[int64]*ScheduleTask),
 		maxTaskConcurrency:    maxTaskConcurrency,
 		changefeedID:          changefeedID,
-		slowTableHeap:         make(ReplicationSetHeap, 0, defaultSlowTableHeapSize),
+		slowTableHeap:         slowTableHeap,
 		lastLogSlowTablesTime: time.Now(),
 	}
 }
@@ -501,6 +504,9 @@ func (r *Manager) AdvanceCheckpoint(
 		}
 		// find the slow tables
 		heap.Push(&r.slowTableHeap, table)
+		if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
+			heap.Pop(&r.slowTableHeap)
+		}
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
@@ -525,18 +531,17 @@ func (r *Manager) logSlowTableInfo(checkpointTs model.Ts, currentTime time.Time)
 		time.Since(r.lastLogSlowTablesTime) < logSlowTablesInterval {
 		return
 	}
-	for _, table := range r.slowTableHeap {
-		if table.Checkpoint.CheckpointTs == checkpointTs {
-			log.Info("schedulerv3: slow table",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Int64("tableID", table.TableID),
-				zap.String("table status", table.Stats.String()),
-				zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
-				zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
-				zap.Duration("checkpoint lag", currentTime.
-					Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
-		}
+	for i := 0; i < defaultSlowTableHeapSize; i++ {
+		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
+		log.Info("schedulerv3: slow table",
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID),
+			zap.Int64("tableID", table.TableID),
+			zap.String("table status", table.Stats.String()),
+			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
+			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
+			zap.Duration("checkpoint lag", currentTime.
+				Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
 	}
 }
 

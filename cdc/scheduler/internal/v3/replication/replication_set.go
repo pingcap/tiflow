@@ -918,22 +918,40 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	r.Stats = stats
 }
 
+// ReplicationSetHeap is a max-heap, it implements heap.Interface.
 type ReplicationSetHeap []*ReplicationSet
 
+// NewReplicationSetHeap creates a new ReplicationSetHeap.
+func NewReplicationSetHeap(capacity int) ReplicationSetHeap {
+	if capacity <= 0 {
+		panic("capacity must be positive")
+	}
+	return make(ReplicationSetHeap, 0, capacity)
+}
+
+// Len returns the length of the heap.
 func (h ReplicationSetHeap) Len() int { return len(h) }
+
+// Less returns true if the element at i is less than the element at j.
 func (h ReplicationSetHeap) Less(i, j int) bool {
-	if h[i].Checkpoint.CheckpointTs < h[j].Checkpoint.CheckpointTs {
+	if h[i].Checkpoint.CheckpointTs > h[j].Checkpoint.CheckpointTs {
 		return true
 	}
 	if h[i].Checkpoint.CheckpointTs == h[j].Checkpoint.CheckpointTs {
-		return h[i].Checkpoint.ResolvedTs < h[j].Checkpoint.ResolvedTs
+		return h[i].Checkpoint.ResolvedTs > h[j].Checkpoint.ResolvedTs
 	}
 	return false
 }
+
+// Swap swaps the elements with indexes i and j.
 func (h ReplicationSetHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+// Push pushes an element to the heap.
 func (h *ReplicationSetHeap) Push(x interface{}) {
 	*h = append(*h, x.(*ReplicationSet))
 }
+
+// Pop pops an element from the heap.
 func (h *ReplicationSetHeap) Pop() interface{} {
 	old := *h
 	n := len(old)

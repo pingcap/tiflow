@@ -263,7 +263,15 @@ func (c *coordinator) poll(
 	}
 	msgBuf = append(msgBuf, msgs...)
 
-	pdTime, err := c.upstream.PDClock.CurrentTime()
+	pdTime := time.Now()
+	// only nil in unit test
+	if c.upstream != nil {
+		pdTime, err = c.upstream.PDClock.CurrentTime()
+		if err != nil {
+			log.Warn("schedulerv3: failed to get pd time", zap.Error(err))
+		}
+	}
+
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.

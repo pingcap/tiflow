@@ -222,6 +222,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			log.Info("execute a big transaction",
 				zap.String("changefeed", s.changefeed),
 				zap.Int("row count", len(event.Event.Rows)),
+				zap.Uint64("commit ts", event.Event.CommitTs),
 				zap.Uint64("start ts", event.Event.StartTs),
 				zap.String("table", event.Event.Table.String()),
 			)
