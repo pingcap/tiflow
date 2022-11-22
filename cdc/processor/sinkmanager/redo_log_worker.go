@@ -65,7 +65,7 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 			return ctx.Err()
 		case task := <-taskChan:
 			if err := w.handleTask(ctx, task); err != nil {
-				log.Error("QP redo worker meets error",
+				log.Error("redo worker meets error",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID))
@@ -93,7 +93,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		// If used memory size exceeds the required limit, do force require.
 		if usedMemSize > availableMemSize {
 			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
-			log.Info("QP MemoryQuotaTracing: force acquire memory for redo log task",
+			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
@@ -105,7 +105,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			// There is no more events and some required memory isn't used.
 			if availableMemSize > usedMemSize {
 				w.memQuota.refund(availableMemSize - usedMemSize)
-				log.Info("QP MemoryQuotaTracing: refund memory for redo log task",
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -115,7 +115,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			if txnFinished {
 				if w.memQuota.tryAcquire(requestMemSize) {
 					availableMemSize += requestMemSize
-					log.Info("QP MemoryQuotaTracing: try acquire memory for redo log task",
+					log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
 						zap.Int64("tableID", task.tableID),
@@ -124,7 +124,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			} else {
 				w.memQuota.forceAcquire(requestMemSize)
 				availableMemSize += requestMemSize
-				log.Info("QP MemoryQuotaTracing: force acquire memory for redo log task",
+				log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -137,7 +137,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			releaseMem := func() { w.memQuota.refund(rowsSize - cachedSize) }
 			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
 			if err != nil {
-				log.Info("QP MemoryQuotaTracing: refund memory for redo log task",
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -149,7 +149,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("QP update resolved ts to redo",
+				log.Debug("update resolved ts to redo",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -174,16 +174,14 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 	defer func() {
 		if err := iter.Close(); err != nil {
-			log.Error(
-				"sink redo worker fails to close iterator",
+			log.Error("sink redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Error(err))
-
 		}
 
-		log.Info("QP redo task finished",
+		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Int64("tableID", task.tableID),

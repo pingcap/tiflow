@@ -365,8 +365,8 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				s.mu.RUnlock()
 				continue
 			}
-			atomic.StoreUint64(&ts.sortedResolved, resolved)
 			s.mu.RUnlock()
+			atomic.StoreUint64(&ts.sortedResolved, resolved)
 		}
 		newResolved = make(map[model.TableID]model.Ts)
 	}

@@ -92,7 +92,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("QP append events to table sink",
+				log.Debug("append events to table sink",
+                    zap.String("namespace", w.changefeedID.Namespace),
+                    zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
 					zap.Uint64("commitTs", events[len(events)-1].CRTs),
 					zap.Uint64("startTs", events[len(events)-1].StartTs))
@@ -105,7 +107,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("QP advance table sink",
+				log.Debug("advance table sink",
+                    zap.String("namespace", w.changefeedID.Namespace),
+                    zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
 					zap.Uint64("commitTs", lastCommitTs))
 				currentTotalSize = 0

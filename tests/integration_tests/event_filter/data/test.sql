@@ -59,5 +59,3 @@ VALUES (3, 'xigua', "japan", "tokyo", 2, "male");
 
 INSERT INTO t2
 VALUES (4, 'yuko', "japan", "nagoya", 33, "female");
-
-create table finish_mark(id int primary key);

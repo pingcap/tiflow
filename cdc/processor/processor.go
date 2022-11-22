@@ -1095,7 +1095,7 @@ func (p *processor) handlePosition(currentTs int64) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-            log.Info("QP sink manager table stats",
+            log.Debug("sink manager gets table stats",
                 zap.String("namespace", p.changefeedID.Namespace),
                 zap.String("changefeed", p.changefeedID.ID),
                 zap.Int64("tableID", tableID),

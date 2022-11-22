@@ -135,7 +135,7 @@ func New(
 	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 
-	log.Info("QP sink manager is created",
+	log.Info("sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoManager != nil))
@@ -343,7 +343,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			case m.sinkTaskChan <- t:
 			}
 
-			log.Info("QP Generate sink task",
+			log.Debug("Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
@@ -390,7 +390,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				continue
 			}
 
-			log.Info("QP MemoryQuotaTracing: try acquire memory for redo log task",
+			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
@@ -415,7 +415,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			case m.redoTaskChan <- t:
 			}
 
-			log.Info("QP Generate redo task",
+			log.Debug("Generate redo task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
