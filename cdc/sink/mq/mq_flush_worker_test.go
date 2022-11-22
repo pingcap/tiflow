@@ -459,7 +459,7 @@ func TestFlush(t *testing.T) {
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return worker.needsFlush == nil
+		return len(worker.flushChes) == 0
 	}, 3*time.Second, 10*time.Millisecond)
 
 	cancel()

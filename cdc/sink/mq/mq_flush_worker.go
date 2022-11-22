@@ -64,7 +64,7 @@ type flushWorker struct {
 	ticker  *time.Ticker
 	// needsFlush is used to indicate whether the flush worker needs to flush the messages.
 	// It is also used to notify that the flush has completed.
-	needsFlush chan<- struct{}
+	flushChes chan chan<- struct{}
 
 	protocol config.Protocol
 
@@ -98,6 +98,8 @@ func newFlushWorker(
 		producer:     producer,
 		statistics:   statistics,
 
+		flushChes: make(chan chan<- struct{}, 1),
+
 		metricMQWorkerSendMessageDuration: workerSendMessageDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
 		metricMQWorkerBatchSize:           workerBatchSize.WithLabelValues(changefeed.Namespace, changefeed.ID),
 		metricMQWorkerBatchDuration:       workerBatchDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
@@ -124,7 +126,7 @@ func (w *flushWorker) batch(
 		// When the flush event is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.flush != nil {
-			w.needsFlush = msg.flush.flushed
+			w.flushChes <- msg.flush.flushed
 			return index, nil
 		}
 
@@ -148,7 +150,7 @@ func (w *flushWorker) batch(
 			// When the flush event is received,
 			// we need to write the previous data to the producer as soon as possible.
 			if msg.flush != nil {
-				w.needsFlush = msg.flush.flushed
+				w.flushChes <- msg.flush.flushed
 				return index, nil
 			}
 
@@ -244,13 +246,20 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 			return errors.Trace(err)
 		}
 		if endIndex == 0 {
-			if w.needsFlush != nil {
+			var flush chan<- struct{}
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case flush = <-w.flushChes:
 				// NOTICE: We still need to do a flush here.
 				// This is because there may be some rows that
 				// were sent that have not been confirmed yet.
-				if err := w.flushAndNotify(ctx); err != nil {
-					return errors.Trace(err)
+				if flush != nil {
+					if err := w.flushAndNotify(ctx, flush); err != nil {
+						return errors.Trace(err)
+					}
 				}
+			default:
 			}
 			continue
 		}
@@ -305,9 +314,10 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 				}
 				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
+		case flush := <-w.flushChes:
 			// Wait for all messages to ack.
-			if w.needsFlush != nil {
-				if err := w.flushAndNotify(ctx); err != nil {
+			if flush != nil {
+				if err := w.flushAndNotify(ctx, flush); err != nil {
 					return errors.Trace(err)
 				}
 			}
@@ -327,21 +337,15 @@ func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
 
 // flushAndNotify is used to flush all events
 // and notify the mqSink that all events has been flushed.
-func (w *flushWorker) flushAndNotify(ctx context.Context) error {
+func (w *flushWorker) flushAndNotify(ctx context.Context, flush chan<- struct{}) error {
 	start := time.Now()
 	err := w.producer.Flush(ctx)
 	if err != nil {
 		return err
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case w.needsFlush <- struct{}{}:
-		close(w.needsFlush)
-		// NOTICE: Do not forget to reset the needsFlush.
-		w.needsFlush = nil
-		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
-	}
+
+	close(flush)
+	log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
 
 	return nil
 }
