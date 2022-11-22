@@ -53,7 +53,7 @@ func (s *Scheduler) ScheduleTask(
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		return nil, errors.ErrNoQualifiedExecutor.FastGenByArgs()
+		return nil, errors.ErrNoQualifiedExecutor.GenWithStackByArgs()
 	}
 	executorID := candidates[rand.Intn(len(candidates))]
 	return &schedModel.SchedulerResponse{ExecutorID: executorID}, nil
