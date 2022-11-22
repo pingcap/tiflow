@@ -119,6 +119,10 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 				if e == nil {
 					break
 				}
+				if e.Row == nil {
+					// NOTICE: This could happen when the event is filtered by the event filter.
+					continue
+				}
 				for availableMem-e.Row.ApproximateBytes() < 0 {
 					if !w.splitTxn {
 						// If we do not split the transaction, we do not need to wait for the memory quota.
