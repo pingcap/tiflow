@@ -354,7 +354,6 @@ func convertSelectors(req *pb.CreateJobRequest) ([]*label.Selector, error) {
 
 // ListJobs implements JobManagerServer.ListJobs.
 func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
-	var err error
 	masterMetas, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err
