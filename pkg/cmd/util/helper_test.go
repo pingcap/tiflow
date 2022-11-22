@@ -209,10 +209,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		FilterReplicaID: []uint64{2, 3},
 		SyncDDL:         true,
 	}, cfg.Cyclic)
-
-	require.Equal(t, &config.SinkConfig{
-		EncoderConcurrency: 16,
-	}, cfg.Sink)
 }
 
 func TestAndWriteExampleServerTOML(t *testing.T) {
