@@ -81,9 +81,9 @@ func (r *redoEventCache) pop(
 			}
 			return pos.Compare(upperBound[0]) > 0
 		})
-        if fetchCount == 0 {
-            return nil, 0, engine.Position{}
-        }
+		if fetchCount == 0 {
+			return nil, 0, engine.Position{}
+		}
 	}
 
 	events := item.events[0:fetchCount]
