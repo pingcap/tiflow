@@ -355,8 +355,14 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 			for _, onResolve := range s.onResolves {
 				onResolve(table, resolved)
 			}
+			ts, ok := s.tables[table]
+			if !ok {
+				// Table is removed, skip.
+				s.mu.RUnlock()
+				continue
+			}
+			atomic.StoreUint64(&ts.sortedResolved, resolved)
 			s.mu.RUnlock()
-			atomic.StoreUint64(&s.tables[table].sortedResolved, resolved)
 		}
 		newResolved = make(map[model.TableID]model.Ts)
 	}
