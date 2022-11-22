@@ -120,3 +120,13 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.ErrResourceConflict))
 }
+
+func TestSchedulerNoQualifiedExecutor(t *testing.T) {
+	sched := NewScheduler(
+		&mockExecutorInfoProvider{infos: map[model.ExecutorID]schedModel.ExecutorInfo{}},
+		&MockPlacementConstrainer{},
+	)
+
+	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{})
+	require.ErrorIs(t, err, errors.ErrNoQualifiedExecutor)
+}
