@@ -246,6 +246,12 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// we must clean cached ddl and tables in changefeed initialization
+	// otherwise, the changefeed will loss tables that are needed to be replicated
+	// ref: https://github.com/pingcap/tiflow/issues/7682
+	c.ddlEventCache = nil
+	c.currentTables = nil
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -283,6 +289,7 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+<<<<<<< HEAD
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -290,6 +297,19 @@ func (c *changefeed) releaseResources() {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
+=======
+	c.barriers = nil
+	c.initialized = false
+	c.isReleased = true
+
+	log.Info("changefeed closed",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+		zap.Any("status", c.state.Status),
+		zap.Stringer("info", c.state.Info),
+		zap.Bool("isRemoved", c.isRemoved))
+}
+>>>>>>> 719d27004b (changefeed (ticdc): fix data lost when pause and resume changefeed while executing DDL. (#7683))
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
