@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	jobopMock "github.com/pingcap/tiflow/engine/servermaster/jobop/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/mock"
@@ -666,6 +667,20 @@ func TestJobOperatorBgLoop(t *testing.T) {
 	require.NoError(t, mgr.wg.Wait())
 }
 
+// TODO: refine the interface of JobManager and use mock JobManager in test
+func dispatchJobAndMeetError(
+	ctx context.Context, t *testing.T, mgr *JobManagerImpl, meta *frameModel.MasterMeta,
+) {
+	err := mgr.frameMetaClient.UpsertJob(ctx, meta)
+	require.NoError(t, err)
+
+	// dispatch job, meet error and move it to pending job list
+	mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: meta.ID}, false)
+	require.NotNil(t, mgr.QueryJob(meta.ID))
+	mockHandle := &framework.MockHandle{WorkerID: meta.ID}
+	mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
+}
+
 func TestJobManagerIterPendingJobs(t *testing.T) {
 	t.Parallel()
 
@@ -693,20 +708,11 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.NoError(t, err)
 
-	dispatchJobAndMeetError := func(jobID string) {
-		// save job master meta
-		meta := &frameModel.MasterMeta{
+	newMasterMeta := func(jobID string) *frameModel.MasterMeta {
+		return &frameModel.MasterMeta{
 			ID:    jobID,
 			State: frameModel.MasterStateInit,
 		}
-		err = mgr.frameMetaClient.UpsertJob(ctx, meta)
-		require.NoError(t, err)
-
-		// dispatch job, meet error and move it to pending job list
-		mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: jobID}, false)
-		require.NotNil(t, mgr.QueryJob(jobID))
-		mockHandle := &framework.MockHandle{WorkerID: jobID}
-		mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
 	}
 
 	jobMgrTickAndCheckJobState := func(jobID string, state frameModel.MasterState) {
@@ -719,7 +725,7 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 
 	{
 		jobID := "job-backoff-test-1"
-		dispatchJobAndMeetError(jobID)
+		dispatchJobAndMeetError(ctx, t, mgr, newMasterMeta(jobID))
 
 		// job is being backoff
 		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
@@ -736,12 +742,79 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 
 	{
 		jobID := "job-backoff-test-2"
-		dispatchJobAndMeetError(jobID)
+		dispatchJobAndMeetError(ctx, t, mgr, newMasterMeta(jobID))
 
 		// job will be terminated because it is canceled
 		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(true)
 		jobMgrTickAndCheckJobState(jobID, frameModel.MasterStateStopped)
 	}
+}
+
+func TestFailoverWithCreateWorkerOpt(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	selectors := []*label.Selector{
+		{Key: "name", Target: "executor.*", Op: label.OpRegex},
+		{Key: "region", Target: "us-west-2", Op: label.OpEq},
+	}
+	checkOptsFn := func(opts ...framework.CreateWorkerOpt) {
+		// CreateWorkerOpt: 1 for label selectors
+		require.Len(t, opts, 1)
+	}
+
+	masterImpl := framework.NewMockMasterImpl(t, "", "iter-pending-jobs-test")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
+	mockMaster := &mockBaseMasterCheckCreateOpts{
+		MockMasterImpl: masterImpl,
+		checkOptsFn:    checkOptsFn,
+	}
+	ctrl := gomock.NewController(t)
+	mockBackoffMgr := jobopMock.NewMockBackoffManager(ctrl)
+	mockJobOperator := jobopMock.NewMockJobOperator(ctrl)
+	mgr := &JobManagerImpl{
+		BaseMaster:      mockMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		jobHTTPClient:   jobMock.NewMockNilReturnJobHTTPClient(),
+		JobBackoffMgr:   mockBackoffMgr,
+		jobOperator:     mockJobOperator,
+	}
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.NoError(t, err)
+
+	{
+		job := &frameModel.MasterMeta{
+			ID:    "failover-job-with-label",
+			State: frameModel.MasterStateInit,
+			Ext:   frameModel.MasterMetaExt{Selectors: selectors},
+		}
+		dispatchJobAndMeetError(ctx, t, mgr, job)
+
+		mockJobOperator.EXPECT().IsJobCanceling(ctx, job.ID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Terminate(job.ID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Allow(job.ID).Times(1).Return(true)
+		err := mgr.Tick(ctx)
+		require.NoError(t, err)
+	}
+}
+
+type mockBaseMasterCheckCreateOpts struct {
+	*framework.MockMasterImpl
+	checkOptsFn func(opts ...framework.CreateWorkerOpt)
+}
+
+func (m *mockBaseMasterCheckCreateOpts) CreateWorker(
+	workerType framework.WorkerType,
+	config framework.WorkerConfig,
+	opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	m.checkOptsFn(opts...)
+	return uuid.NewGenerator().NewString(), nil
 }
 
 func TestIsJobTerminated(t *testing.T) {

@@ -70,8 +70,8 @@ func TestJobConfig(t *testing.T) {
 func TestConfig(t *testing.T) {
 	configs := []zapcore.ObjectMarshaler{
 		&PreDispatchTaskRequest{TaskConfig: []byte(config)},
-		&QueryMetaStoreResponse{Address: config},
-		&QueryStorageConfigResponse{Config: config},
+		&QueryMetaStoreResponse{Config: []byte(config)},
+		&QueryStorageConfigResponse{Config: []byte(config)},
 	}
 
 	var buffer zaptest.Buffer

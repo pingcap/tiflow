@@ -49,6 +49,7 @@ type EventSorter struct {
 
 	// Following fields are protected by mu.
 	mu         sync.RWMutex
+	isClosed   bool
 	onResolves []func(model.TableID, model.Ts)
 	tables     map[model.TableID]*tableState
 }
@@ -221,6 +222,14 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 
 // Close implements sorter.EventSortEngine.
 func (s *EventSorter) Close() error {
+	s.mu.Lock()
+	if s.isClosed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.isClosed = true
+	s.mu.Unlock()
+
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
@@ -346,8 +355,18 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 			for _, onResolve := range s.onResolves {
 				onResolve(table, resolved)
 			}
+			ts, ok := s.tables[table]
+			if !ok {
+				log.Debug("Table is removed, skip updating resolved",
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID),
+					zap.Int64("table", table),
+					zap.Uint64("resolved", resolved))
+				s.mu.RUnlock()
+				continue
+			}
+			atomic.StoreUint64(&ts.sortedResolved, resolved)
 			s.mu.RUnlock()
-			atomic.StoreUint64(&s.tables[table].sortedResolved, resolved)
 		}
 		newResolved = make(map[model.TableID]model.Ts)
 	}
@@ -399,5 +418,5 @@ func getDB(tableID model.TableID, dbCount int) int {
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], uint64(tableID))
 	h.Write(b[:])
-	return int(h.Sum64()) % dbCount
+	return int(h.Sum64() % uint64(dbCount))
 }

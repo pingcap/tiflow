@@ -293,7 +293,6 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 	checkS3ResourceForWorker(t, rootStrorage, "worker-1", "/s3/test-2", fileNotExists, testFiles...)
 }
 
-// FIXME: this test is unstable, fix it after removing the index design
 func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 	t.Parallel()
 	brk, cli, _, rootStrorage, s3Prefix := newBrokerForS3(t, s3.MockExecutorID)

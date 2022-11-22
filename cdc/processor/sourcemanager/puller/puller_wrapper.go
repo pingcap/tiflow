@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -38,7 +39,7 @@ type Wrapper struct {
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// wg is used to wait the puller to exit.
-	wg *sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -96,7 +97,7 @@ func (n *Wrapper) Start(
 	go func() {
 		defer n.wg.Done()
 		err := n.p.Run(ctxC)
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			errChan <- err
 		}
 	}()

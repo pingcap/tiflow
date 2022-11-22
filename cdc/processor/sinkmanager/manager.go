@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -69,12 +70,12 @@ type SinkManager struct {
 	lastBarrierTs atomic.Uint64
 
 	// sinkWorkers used to pull data from source manager.
-	sinkWorkers []sinkWorker
+	sinkWorkers []*sinkWorker
 	// sinkTaskChan is used to send tasks to sinkWorkers.
 	sinkTaskChan chan *sinkTask
 
 	// redoWorkers used to pull data from source manager.
-	redoWorkers []redoWorker
+	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
 	redoTaskChan chan *redoTask
 
@@ -117,7 +118,7 @@ func New(
 		sortEngine:   sortEngine,
 
 		sinkProgressHeap: newTableProgresses(),
-		sinkWorkers:      make([]sinkWorker, 0, sinkWorkerNum),
+		sinkWorkers:      make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:     make(chan *sinkTask),
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
@@ -126,7 +127,7 @@ func New(
 	if redoManager != nil {
 		m.redoManager = redoManager
 		m.redoProgressHeap = newTableProgresses()
-		m.redoWorkers = make([]redoWorker, 0, redoWorkerNum)
+		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		// Use at most 1/3 memory quota for redo event cache.
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
@@ -147,7 +148,7 @@ func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableO
 		go func() {
 			defer m.wg.Done()
 			err := w.handleTasks(m.ctx, m.sinkTaskChan)
-			if err != nil {
+			if err != nil && !cerrors.Is(err, context.Canceled) {
 				log.Error("Worker handles sink task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -176,7 +177,7 @@ func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableO
 		go func() {
 			defer m.wg.Done()
 			err := w.handleTasks(m.ctx, m.redoTaskChan)
-			if err != nil {
+			if err != nil && !cerrors.Is(err, context.Canceled) {
 				log.Error("Worker handles redo task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -200,7 +201,7 @@ func (m *SinkManager) startGenerateTasks() {
 	go func() {
 		defer m.wg.Done()
 		err := m.generateSinkTasks()
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Error("Generate sink tasks failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
@@ -224,7 +225,7 @@ func (m *SinkManager) startGenerateTasks() {
 	go func() {
 		defer m.wg.Done()
 		err := m.generateRedoTasks()
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Error("Generate redo tasks failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
@@ -336,6 +337,11 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
+
+			log.Debug("Generate sink task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -398,6 +404,11 @@ func (m *SinkManager) generateRedoTasks() error {
 				return m.ctx.Err()
 			case m.redoTaskChan <- t:
 			}
+
+			log.Debug("Generate redo task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID))
 		}
 	}
 }
@@ -441,6 +452,10 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 
 // StartTable sets the table(TableSink) state to replicating.
 func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
+	log.Info("Start table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID))
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
@@ -474,7 +489,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.Int64("tableID", tableID))
 		}
 		err := tableSink.(*tableSinkWrapper).close(m.ctx)
-		if err != nil {
+		if err != nil && !cerrors.Is(err, context.Canceled) {
 			log.Warn("Failed to close table sink",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
@@ -561,7 +576,10 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 
 // Close closes all workers.
 func (m *SinkManager) Close() error {
-	m.cancel()
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
 	m.memQuota.close()
 	err := m.sinkFactory.Close()
 	if err != nil {

@@ -43,13 +43,6 @@ type DiscoveryClient interface {
 		request *pb.HeartbeatRequest,
 	) (*pb.HeartbeatResponse, error)
 
-	// RegisterMetaStore registers a new metastore.
-	// Deprecated
-	RegisterMetaStore(
-		ctx context.Context,
-		request *pb.RegisterMetaStoreRequest,
-	) error
-
 	// QueryMetaStore queries the details of a metastore.
 	QueryMetaStore(
 		ctx context.Context,
@@ -126,17 +119,6 @@ func (c *discoveryClient) Heartbeat(
 		// No need to retry heartbeats
 		internal.WithForceNoRetry())
 	return call.Do(ctx)
-}
-
-func (c *discoveryClient) RegisterMetaStore(
-	ctx context.Context,
-	request *pb.RegisterMetaStoreRequest,
-) error {
-	call := internal.NewCall(
-		c.cli.RegisterMetaStore,
-		request)
-	_, err := call.Do(ctx)
-	return err
 }
 
 func (c *discoveryClient) QueryMetaStore(
