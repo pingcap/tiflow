@@ -24,7 +24,7 @@ const (
 	// can keep at least one failed record.
 	defaultBackoffResetInterval = 2 * defaultBackoffMaxInterval
 	// with 1.2 as multiplier, it will cost approximately 32 minutes to reach max interval 5min,
-	// and it will keep trying for every 5min untill approximate 48 hours. Then, it will quit.
+	// and it will keep trying for every 5min until approximate 48 hours. Then, it will quit.
 	defaultBackoffMaxTryTime = 600
 )
 
