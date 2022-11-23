@@ -64,7 +64,7 @@ type flushWorker struct {
 	ticker  *time.Ticker
 	// needsFlush is used to indicate whether the flush worker needs to flush the messages.
 	// It is also used to notify that the flush has completed.
-	flushChes chan chan<- struct{}
+	needsFlush chan<- struct{}
 
 	protocol config.Protocol
 
@@ -90,16 +90,13 @@ func newFlushWorker(
 	changefeed model.ChangeFeedID,
 ) *flushWorker {
 	w := &flushWorker{
-		id:           changefeed,
-		msgChan:      chann.New[mqEvent](),
-		ticker:       time.NewTicker(flushInterval),
-		protocol:     protocol,
-		encoderGroup: codec.NewEncoderGroup(builder, encoderConcurrency, changefeed),
-		producer:     producer,
-		statistics:   statistics,
-
-		flushChes: make(chan chan<- struct{}, 1),
-
+		id:                                changefeed,
+		msgChan:                           chann.New[mqEvent](),
+		ticker:                            time.NewTicker(flushInterval),
+		protocol:                          protocol,
+		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, changefeed),
+		producer:                          producer,
+		statistics:                        statistics,
 		metricMQWorkerSendMessageDuration: workerSendMessageDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
 		metricMQWorkerBatchSize:           workerBatchSize.WithLabelValues(changefeed.Namespace, changefeed.ID),
 		metricMQWorkerBatchDuration:       workerBatchDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
@@ -124,10 +121,10 @@ func (w *flushWorker) batch(
 			return index, nil
 		}
 
+		// When the flush event is received,
+		// we need to write the previous data to the producer as soon as possible.
 		if msg.flush != nil {
-			if err := w.encoderGroup.AddFlush(ctx, msg.flush.flushed); err != nil {
-				return index, errors.Trace(err)
-			}
+			w.needsFlush = msg.flush.flushed
 			return index, nil
 		}
 
@@ -152,10 +149,8 @@ func (w *flushWorker) batch(
 
 			// When the flush event is received,
 			// we need to write the previous data to the producer as soon as possible.
-			// the flush event is the last one in the batch, should be checked by the caller.
 			if msg.flush != nil {
-				events[index] = msg
-				index++
+				w.needsFlush = msg.flush.flushed
 				return index, nil
 			}
 
@@ -261,19 +256,21 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 		// when the endIndex is 0, it indicates the first message is a flush message.
 		if endIndex == 0 {
+			if w.needsFlush != nil {
+				// NOTICE: We still need to do a flush here.
+				// This is because there may be some rows that
+				// were sent that have not been confirmed yet.
+				if err := w.encoderGroup.AddFlush(ctx, w.needsFlush); err != nil {
+					return errors.Trace(err)
+				}
+				w.needsFlush = nil
+			}
 			continue
 		}
 
 		w.metricMQWorkerBatchSize.Observe(float64(endIndex))
 		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
 		msgs := eventsBuf[:endIndex]
-
-		// when batch many messages, the last one might be the flush message,
-		// pick it out and handle it separately.
-		lastEvent := msgs[endIndex-1]
-		if lastEvent.flush != nil {
-			msgs = msgs[:endIndex-1]
-		}
 
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
@@ -282,10 +279,11 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 			}
 		}
 
-		if lastEvent.flush != nil {
-			if err := w.encoderGroup.AddFlush(ctx, lastEvent.flush.flushed); err != nil {
+		if w.needsFlush != nil {
+			if err := w.encoderGroup.AddFlush(ctx, w.needsFlush); err != nil {
 				return errors.Trace(err)
 			}
+			w.needsFlush = nil
 		}
 	}
 }

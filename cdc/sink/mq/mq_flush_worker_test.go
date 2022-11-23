@@ -180,13 +180,6 @@ func TestBatchFlushEventAtFirst(t *testing.T) {
 		},
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = worker.encoderGroup.Run(ctx)
-	}()
-
 	for _, event := range events {
 		err := worker.addEvent(ctx, event)
 		require.NoError(t, err)
@@ -196,10 +189,7 @@ func TestBatchFlushEventAtFirst(t *testing.T) {
 	endIndex, err := worker.batch(ctx, batch)
 	require.NoError(t, err)
 	require.Equal(t, 0, endIndex)
-
-	future := <-worker.encoderGroup.Output()
-	require.NoError(t, future.Ready(ctx))
-	require.NotNil(t, future.Flush)
+	require.NotNil(t, worker.needsFlush)
 }
 
 func TestBatchFlushEventInTheMiddle(t *testing.T) {
@@ -242,11 +232,7 @@ func TestBatchFlushEventInTheMiddle(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_ = worker.batchEncodeRun(ctx)
-	}()
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		_ = worker.encoderGroup.Run(ctx)
@@ -257,13 +243,11 @@ func TestBatchFlushEventInTheMiddle(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	future := <-worker.encoderGroup.Output()
-	require.NoError(t, future.Ready(ctx))
-	require.Len(t, future.Messages, 1)
-
-	future = <-worker.encoderGroup.Output()
-	require.NoError(t, future.Ready(ctx))
-	require.NotNil(t, future.Flush)
+	batch := make([]mqEvent, 1)
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 1, endIndex)
+	require.NotNil(t, worker.needsFlush)
 }
 
 func TestGroup(t *testing.T) {
@@ -328,17 +312,17 @@ func TestGroup(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	require.Len(t, paritionedRows, 3)
-	require.Len(t, paritionedRows[key1], 3)
+	partitionedRows := worker.group(events)
+	require.Len(t, partitionedRows, 3)
+	require.Len(t, partitionedRows[key1], 3)
 	// We must ensure that the sequence is not broken.
 	require.LessOrEqual(
 		t,
-		paritionedRows[key1][0].CommitTs, paritionedRows[key1][1].CommitTs,
-		paritionedRows[key1][2].CommitTs,
+		partitionedRows[key1][0].CommitTs, partitionedRows[key1][1].CommitTs,
+		partitionedRows[key1][2].CommitTs,
 	)
-	require.Len(t, paritionedRows[key2], 1)
-	require.Len(t, paritionedRows[key3], 1)
+	require.Len(t, partitionedRows[key2], 1)
+	require.Len(t, partitionedRows[key3], 1)
 }
 
 func TestSendMessages(t *testing.T) {
@@ -517,10 +501,6 @@ func TestFlush(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return producer.getFlushedTimes() == 1
-	}, 3*time.Second, 10*time.Millisecond)
-
-	require.Eventually(t, func() bool {
-		return len(worker.flushChes) == 0
 	}, 3*time.Second, 10*time.Millisecond)
 
 	cancel()
