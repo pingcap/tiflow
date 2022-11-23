@@ -30,6 +30,7 @@ import (
 )
 
 type mockProducer struct {
+	mu           sync.RWMutex
 	mqEvent      map[topicPartitionKey][]*codec.MQMessage
 	flushedTimes int
 
@@ -49,6 +50,9 @@ func (m *mockProducer) AsyncSendMessage(
 		topic:     topic,
 		partition: partition,
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.mqEvent[key]; !ok {
 		m.mqEvent[key] = make([]*codec.MQMessage, 0)
 	}
@@ -63,6 +67,8 @@ func (m *mockProducer) SyncBroadcastMessage(
 }
 
 func (m *mockProducer) Flush(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.flushedTimes += 1
 	return nil
 }
@@ -73,6 +79,24 @@ func (m *mockProducer) Close() error {
 
 func (m *mockProducer) InjectError(err error) {
 	m.mockErr <- err
+}
+
+func (m *mockProducer) getFlushedTimes() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.flushedTimes
+}
+
+func (m *mockProducer) getEventsByKey(key topicPartitionKey) []*codec.MQMessage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.mqEvent[key]
+}
+
+func (m *mockProducer) getKeysCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.mqEvent)
 }
 
 func NewMockProducer() *mockProducer {
@@ -365,19 +389,19 @@ func TestSendMessages(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		return len(producer.mqEvent) == 3
+		return producer.getKeysCount() == 3
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return len(producer.mqEvent[key1]) == 3
+		return len(producer.getEventsByKey(key1)) == 3
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return len(producer.mqEvent[key2]) == 1
+		return len(producer.getEventsByKey(key2)) == 1
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return len(producer.mqEvent[key3]) == 2
+		return len(producer.getEventsByKey(key3)) == 2
 	}, 3*time.Second, 10*time.Millisecond)
 
 	cancel()
@@ -455,7 +479,7 @@ func TestFlush(t *testing.T) {
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return producer.flushedTimes == 1
+		return producer.getFlushedTimes() == 1
 	}, 3*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
@@ -604,7 +628,7 @@ func TestWorker(t *testing.T) {
 	}, 3*time.Second, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return producer.flushedTimes == 2
+		return producer.getFlushedTimes() == 2
 	}, 3*time.Second, 100*time.Millisecond)
 
 	cancel()
