@@ -36,7 +36,7 @@ const (
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
 	ConnNumberChecking           = "conn_number"
-	// lighting prechecks
+	// lighting prechecks.
 	LightningEmptyRegionChecking        = "lightning_empty_region"
 	LightningRegionDistributionChecking = "lightning_region_distribution"
 	LightningDownstreamVersionChecking  = "lightning_downstream_version"

@@ -42,6 +42,7 @@ func (m mockPrecheckItem) GetCheckItemID() restore.CheckItemID {
 	return "mock"
 }
 
+// nolint:dupl
 func TestEmptyRegionChecker(t *testing.T) {
 	ctx := context.Background()
 	c := &LightningEmptyRegionChecker{inner: mockPrecheckItem{pass: true}}
@@ -77,6 +78,7 @@ func TestEmptyRegionChecker(t *testing.T) {
 	require.Len(t, result.Errors, 0)
 }
 
+// nolint:dupl
 func TestRegionUnbalanced(t *testing.T) {
 	ctx := context.Background()
 	c := &LightningRegionDistributionChecker{inner: mockPrecheckItem{pass: true}}
