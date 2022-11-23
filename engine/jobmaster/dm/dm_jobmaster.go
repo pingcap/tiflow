@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -80,7 +79,12 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
+func (j dmJobMasterFactory) NewWorkerImpl(
+	dCtx *dcontext.Context,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
+	conf framework.WorkerConfig,
+) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
 		initJobCfg: conf.(*config.JobCfg),
@@ -110,7 +114,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
-	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	return err
@@ -153,6 +157,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 }
 
 // Tick implements JobMasterImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
@@ -182,6 +187,7 @@ func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	return jm.handleOnlineStatus(worker)
 }
 
+// handleOnlineStatus is used by OnWorkerOnline and OnWorkerStatusUpdated.
 func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
@@ -224,7 +230,8 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	unitStateStore := jm.metadata.UnitStateStore()
 	err := unitStateStore.ReadModifyWrite(context.TODO(), func(state *metadata.UnitState) error {
-		finishedTaskStatus.Duration = time.Since(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
+		finishedTaskStatus.StageUpdatedTime = time.Now()
+		finishedTaskStatus.Duration = finishedTaskStatus.StageUpdatedTime.Sub(state.CurrentUnitStatus[taskStatus.Task].CreatedTime)
 		for i, status := range state.FinishedUnitStatus[taskStatus.Task] {
 			// when the unit is restarted by update-cfg or something, overwrite the old status and truncate
 			if status.Unit == taskStatus.Unit {
@@ -289,8 +296,10 @@ func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, messa
 
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) {
-	if err := jm.messageAgent.Close(ctx); err != nil {
-		jm.Logger().Error("failed to close message agent", zap.Error(err))
+	if jm.messageAgent != nil {
+		if err := jm.messageAgent.Close(ctx); err != nil {
+			jm.Logger().Error("failed to close message agent", zap.Error(err))
+		}
 	}
 }
 
@@ -316,12 +325,6 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))
 	}
-}
-
-// Workload implements JobMasterImpl.Workload
-func (jm *JobMaster) Workload() model.RescUnit {
-	// TODO: implement workload
-	return 2
 }
 
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl

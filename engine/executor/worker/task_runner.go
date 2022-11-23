@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -33,8 +32,6 @@ type (
 	Runnable = internal.Runnable
 	// RunnableID alias internal.RunnableID
 	RunnableID = internal.RunnableID
-	// Workloader alias internal.Workloader
-	Workloader = internal.Workloader
 )
 
 // TaskRunner receives RunnableContainer in a FIFO way, and runs them in
@@ -113,25 +110,6 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// Workload returns total workload of task runner
-func (r *TaskRunner) Workload() (ret model.RescUnit) {
-	r.tasks.Range(func(key, value interface{}) bool {
-		container := value.(*taskEntry).RunnableContainer
-		if container.Status() != internal.TaskRunning {
-			// Skip tasks that are not currently running
-			return true
-		}
-		workloader, ok := container.Runnable.(Workloader)
-		if !ok {
-			return true
-		}
-		workload := workloader.Workload()
-		ret += workload
-		return true
-	})
-	return
 }
 
 // WorkerCount returns the number of currently running workers.

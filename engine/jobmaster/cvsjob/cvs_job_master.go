@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -163,7 +162,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		// check if need to recreate worker
 		if workerInfo.needCreate.Load() {
 			workerID, err := jm.CreateWorker(frameModel.CvsTask,
-				getTaskConfig(jm.jobStatus, idx), framework.CreateWorkerWithCost(10))
+				getTaskConfig(jm.jobStatus, idx))
 			if err != nil {
 				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
@@ -344,11 +343,6 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {}
 // ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {
 	return jm.workerID
-}
-
-// Workload implements JobMasterImpl.Workload
-func (jm *JobMaster) Workload() model.RescUnit {
-	return 2
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage

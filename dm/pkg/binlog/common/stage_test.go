@@ -16,18 +16,10 @@ package common
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testCommonSuite{})
-
-type testCommonSuite struct{}
-
-func (t *testCommonSuite) TestStageString(c *C) {
+func TestStageString(t *testing.T) {
 	cases := []struct {
 		stage Stage
 		str   string
@@ -51,6 +43,6 @@ func (t *testCommonSuite) TestStageString(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(cs.stage.String(), Equals, cs.str)
+		require.Equal(t, cs.str, cs.stage.String())
 	}
 }

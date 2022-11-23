@@ -16,16 +16,14 @@ package binlog
 import (
 	"os"
 	"path/filepath"
+	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testFileSuite{})
-
-type testFileSuite struct{}
-
-func (t *testFileSuite) TestReadSortedBinlogFromDir(c *C) {
-	dir := c.MkDir()
+func TestReadSortedBinlogFromDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
 	filenames := []string{
 		"bin.000001", "bin.000002", "bin.100000", "bin.100001", "bin.1000000", "bin.1000001", "bin.999999", "relay.meta",
 	}
@@ -33,9 +31,9 @@ func (t *testFileSuite) TestReadSortedBinlogFromDir(c *C) {
 		"bin.000001", "bin.000002", "bin.100000", "bin.100001", "bin.999999", "bin.1000000", "bin.1000001",
 	}
 	for _, f := range filenames {
-		c.Assert(os.WriteFile(filepath.Join(dir, f), nil, 0o600), IsNil)
+		require.Nil(t, os.WriteFile(filepath.Join(dir, f), nil, 0o600))
 	}
 	ret, err := ReadSortedBinlogFromDir(dir)
-	c.Assert(err, IsNil)
-	c.Assert(ret, DeepEquals, expected)
+	require.Nil(t, err)
+	require.Equal(t, expected, ret)
 }

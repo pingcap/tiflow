@@ -23,7 +23,6 @@ import (
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -121,8 +120,6 @@ type DefaultBaseJobMaster struct {
 type JobMasterImpl interface {
 	MasterImpl
 
-	// Workload return the resource unit of the job master itself
-	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
 	// TODO: when it returns error, framework should close this jobmaster.
@@ -315,11 +312,6 @@ func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status frameMod
 	return d.worker.UpdateStatus(ctx, status)
 }
 
-// Workload delegates the Workload of inner worker
-func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
-	return d.worker.Workload()
-}
-
 // ID delegates the ID of inner worker
 func (d *DefaultBaseJobMaster) ID() runtime.RunnableID {
 	// JobMaster is a combination of 'master' and 'worker'
@@ -397,10 +389,6 @@ func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
 func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 	log.Panic("unexpected Poll call")
 	return nil
-}
-
-func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
-	return j.inner.Workload()
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
