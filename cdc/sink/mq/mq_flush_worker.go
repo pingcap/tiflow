@@ -223,6 +223,16 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.String("changefeed", w.id.ID))
 				return nil
 			}
+
+			if event.flush != nil {
+				w.flushChes <- event.flush.flushed
+				continue
+			}
+
+			if event.row == nil {
+				continue
+			}
+
 			if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
 				return errors.Trace(err)
 			}
@@ -246,21 +256,6 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 			return errors.Trace(err)
 		}
 		if endIndex == 0 {
-			var flush chan<- struct{}
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case flush = <-w.flushChes:
-				// NOTICE: We still need to do a flush here.
-				// This is because there may be some rows that
-				// were sent that have not been confirmed yet.
-				if flush != nil {
-					if err := w.flushAndNotify(ctx, flush); err != nil {
-						return errors.Trace(err)
-					}
-				}
-			default:
-			}
 			continue
 		}
 
@@ -314,6 +309,11 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 				}
 				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
 		case flush := <-w.flushChes:
 			// Wait for all messages to ack.
 			if flush != nil {
@@ -321,6 +321,7 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			}
+		default:
 		}
 	}
 }
