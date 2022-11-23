@@ -19,15 +19,6 @@ import (
 )
 
 var (
-	// workerSendMessageDuration records the duration of flushing a group messages.
-	workerSendMessageDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkv2",
-			Name:      "mq_worker_send_message_duration",
-			Help:      "Send Message duration(s) for MQ worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
-		}, []string{"namespace", "changefeed"})
 	// workerBatchSize record the size of each batched messages.
 	workerBatchSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -50,7 +41,6 @@ var (
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(workerSendMessageDuration)
 	registry.MustRegister(workerBatchSize)
 	registry.MustRegister(workerBatchDuration)
 	kafka.InitMetrics(registry)

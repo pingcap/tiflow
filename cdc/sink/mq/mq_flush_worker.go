@@ -72,8 +72,6 @@ type flushWorker struct {
 	producer     producer.Producer
 	statistics   *metrics.Statistics
 
-	// metricMQWorkerSendMessageDuration tracks the time duration cost on send messages.
-	metricMQWorkerSendMessageDuration prometheus.Observer
 	// metricMQWorkerBatchSize tracks each batch's size.
 	metricMQWorkerBatchSize prometheus.Observer
 	// metricMQWorkerBatchDuration tracks the time duration cost on batch messages.
@@ -90,16 +88,15 @@ func newFlushWorker(
 	changefeed model.ChangeFeedID,
 ) *flushWorker {
 	w := &flushWorker{
-		id:                                changefeed,
-		msgChan:                           chann.New[mqEvent](),
-		ticker:                            time.NewTicker(flushInterval),
-		protocol:                          protocol,
-		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, changefeed),
-		producer:                          producer,
-		statistics:                        statistics,
-		metricMQWorkerSendMessageDuration: workerSendMessageDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
-		metricMQWorkerBatchSize:           workerBatchSize.WithLabelValues(changefeed.Namespace, changefeed.ID),
-		metricMQWorkerBatchDuration:       workerBatchDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
+		id:                          changefeed,
+		msgChan:                     chann.New[mqEvent](),
+		ticker:                      time.NewTicker(flushInterval),
+		protocol:                    protocol,
+		encoderGroup:                codec.NewEncoderGroup(builder, encoderConcurrency, changefeed),
+		producer:                    producer,
+		statistics:                  statistics,
+		metricMQWorkerBatchSize:     workerBatchSize.WithLabelValues(changefeed.Namespace, changefeed.ID),
+		metricMQWorkerBatchDuration: workerBatchDuration.WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}
 	return w
 }
@@ -316,7 +313,6 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 			}
 
 			for _, message := range future.Messages {
-				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
@@ -325,7 +321,6 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 				}); err != nil {
 					return err
 				}
-				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
 
 			// When the flush event is received,
@@ -371,8 +366,6 @@ func (w *flushWorker) close() {
 	for range w.msgChan.Out() {
 		// Do nothing. We do not care about the data.
 	}
-
-	workerSendMessageDuration.DeleteLabelValues(w.id.Namespace, w.id.ID)
 	workerBatchSize.DeleteLabelValues(w.id.Namespace, w.id.ID)
 	workerBatchDuration.DeleteLabelValues(w.id.Namespace, w.id.ID)
 }
