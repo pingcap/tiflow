@@ -16,7 +16,9 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"net"
 	"net/url"
 	"strconv"
@@ -58,6 +60,7 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 		username = "root"
 	}
 	password, _ := sinkURI.User.Password()
+
 	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if port == "" {
@@ -85,7 +88,7 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 	dsn.Params["timeout"] = cfg.DialTimeout
 
 	var testDB *sql.DB
-	testDB, err = dbConnFactory(ctx, dsn.FormatDSN())
+	testDB, err = CheckAndAdjustPassword(ctx, dsn, dbConnFactory)
 	if err != nil {
 		return
 	}
@@ -234,4 +237,28 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	}
 	// session variable not exists, return "" to ignore it
 	return "", nil
+}
+
+func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
+	password := dbConfig.Passwd
+	if dbConnFactory == nil {
+		dbConnFactory = CreateMySQLDBConn
+	}
+	testDB, err := dbConnFactory(ctx, dbConfig.FormatDSN())
+	if err != nil {
+		// If access is denied and password is encoded by base64, try to decoded password.
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && mysqlErr.Number == tmysql.ErrAccessDenied {
+			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
+				log.Info("fizz decode password", zap.String("password", password), zap.String("decode password", string(dePassword)))
+				dbConfig.Passwd = string(dePassword)
+				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
+				if err != nil {
+					return testDB, err
+				}
+			}
+		} else {
+			return nil, err
+		}
+	}
+	return testDB, nil
 }
