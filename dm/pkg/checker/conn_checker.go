@@ -166,9 +166,10 @@ func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
 				// because lightning doesn't need to keep connections while restoring.
 				result.Errors = append(
 					result.Errors,
-					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
+					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning."),
 				)
 				result.State = StateWarning
+				result.Instruction = "please set a sufficiently large connections for TiDB."
 				break
 			}
 		}

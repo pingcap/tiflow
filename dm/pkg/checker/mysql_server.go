@@ -65,6 +65,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 	err2 := pc.checkVersion(value, result)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
+		result.Instruction = "It is recommended that you select a database version that meets the requirements before performing data migration, otherwise data inconsistency or task exceptions may occur."
 	}
 	return result
 }

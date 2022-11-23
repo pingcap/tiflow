@@ -165,6 +165,15 @@ func (c *TablesChecker) Name() string {
 }
 
 func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
+	// extract same instruction from Errors to Result.Instruction
+	resultInstructions := map[string]interface{}{}
+	defer func() {
+		c.reMu.Lock()
+		for k := range resultInstructions {
+			r.Instruction += k + "; "
+		}
+		c.reMu.Unlock()
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -182,12 +191,16 @@ func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
 				}
 				e := NewError(tableMsg + opt.errMessage)
 				e.Severity = StateWarning
-				e.Instruction = opt.instruction
+				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+					resultInstructions[opt.instruction] = ""
+				}
 				r.Errors = append(r.Errors, e)
 			case StateFailure:
 				r.State = StateFailure
 				e := NewError(tableMsg + opt.errMessage)
-				e.Instruction = opt.instruction
+				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+					resultInstructions[opt.instruction] = ""
+				}
 				r.Errors = append(r.Errors, e)
 			}
 			c.reMu.Unlock()
@@ -382,7 +395,8 @@ func (c *TablesChecker) checkTableStructurePair(
 		!strings.EqualFold(upstreamCharset, downstreamCharset) &&
 		!strings.EqualFold(downstreamCharset, mysql.UTF8MB4Charset) {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the charsets are the same between upstream and downstream. Or the data might be inconsistent.",
 			errMessage: fmt.Sprintf("charset is not same, upstream: (%s %s), downstream: (%s %s)",
 				upstream.Table.Name.O, upstreamCharset,
 				downstream.Table.Name.O, downstreamCharset),
@@ -395,7 +409,8 @@ func (c *TablesChecker) checkTableStructurePair(
 	if upstreamCollation != "" && downstreamCollation != "" &&
 		!strings.EqualFold(upstreamCollation, downstreamCollation) {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the collations are the same between upstream and downstream. Or the query results from the two databases would be different.",
 			errMessage: fmt.Sprintf("collation is not same, upstream: (%s %s), downstream: (%s %s)",
 				upstream.Table.Name.O, upstreamCollation,
 				downstream.Table.Name.O, downstreamCollation),
@@ -417,14 +432,16 @@ func (c *TablesChecker) checkTableStructurePair(
 	}
 	for idxName, cols := range upstreamPKUK {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the index columns are the same. Or the migration might fail or cause data inconsistency.",
 			errMessage: fmt.Sprintf("upstream has more PK or NOT NULL UK than downstream, index name: %s, columns: %v",
 				idxName, utils.SetToSlice(cols)),
 		})
 	}
 	for idxName, cols := range downstreamPKUK {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the index columns are the same. Or the migration might fail or cause data inconsistency.",
 			errMessage: fmt.Sprintf("downstream has more PK or NOT NULL UK than upstream, table name: %s, index name: %s, columns: %v",
 				downstream.Table.Name.O, idxName, utils.SetToSlice(cols)),
 		})
@@ -471,7 +488,8 @@ func (c *TablesChecker) checkTableStructurePair(
 
 	if len(upstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the column number are the same. Or the migration might fail.",
 			errMessage: fmt.Sprintf("upstream has more columns than downstream, columns: %v",
 				maps.Keys(upstreamCols)),
 		})
@@ -483,7 +501,8 @@ func (c *TablesChecker) checkTableStructurePair(
 	}
 	if len(downstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Please make sure the column number are the same. Or the migration might fail.",
 			errMessage: fmt.Sprintf("downstream has more columns than upstream that require values to insert records, table name: %s, columns: %v",
 				downstream.Table.Name.O, maps.Keys(downstreamCols)),
 		})

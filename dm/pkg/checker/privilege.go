@@ -109,6 +109,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	err2 := verifyPrivilegesWithResult(result, grants, dumpRequiredPrivs)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
+		result.Instruction = "Please grant the required privileges to the account."
 	} else {
 		result.State = StateSuccess
 	}
@@ -156,6 +157,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
+		result.Instruction = "Please grant the required privileges to the account."
 	}
 	return result
 }

@@ -237,7 +237,8 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		}
 		if len(c.schemas) > 0 {
 			dbs := utils.SetToSlice(c.schemas)
-			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db[%s]", strings.Join(dbs, ","), binlogDoDB)
+			result.Errors = append(result.Errors, NewWarn("these dbs [%s] are not in binlog_do_db[%s]", strings.Join(dbs, ","), binlogDoDB))
+			result.Instruction = "Please check if the do_dbs contains the dbs you want to migrate."
 			return result
 		}
 	} else {
@@ -248,7 +249,8 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 			}
 		}
 		if len(ignoreDBs) > 0 {
-			result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db[%s]", strings.Join(ignoreDBs, ","), binlogIgnoreDB)
+			result.Errors = append(result.Errors, NewWarn("these dbs [%s] are in binlog_ignore_db[%s]", strings.Join(ignoreDBs, ","), binlogIgnoreDB))
+			result.Instruction = "Please check if the ignore_dbs not contains the dbs you want to migrate"
 			return result
 		}
 	}
