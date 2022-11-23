@@ -212,6 +212,9 @@ func (p *processor) AddTable(
 
 	if p.pullBasedSinking {
 		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		if p.redoManager.Enabled() {
+			p.redoManager.AddTable(tableID, startTs)
+		}
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if !isPrepare {
 			p.sinkManager.StartTable(tableID, startTs)
@@ -436,6 +439,9 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 		}
 		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
+		if p.redoManager.Enabled() {
+			p.redoManager.RemoveTable(tableID)
+		}
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -851,6 +857,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
 	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
+
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
+	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+
 	if p.pullBasedSinking {
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		sortEngine, err := engineFactory.Create(p.changefeedID)
@@ -919,15 +935,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeed.ID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
-
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
-	if err != nil {
-		return err
-	}
-	log.Info("processor creates redo manager",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
@@ -1088,6 +1095,11 @@ func (p *processor) handlePosition(currentTs int64) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Debug("sink manager gets table stats",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Any("stats", stats))
 			if stats.ResolvedTs < minResolvedTs {
 				minResolvedTs = stats.ResolvedTs
 				minResolvedTableID = tableID
