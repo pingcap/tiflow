@@ -82,7 +82,6 @@ func NewEncoderGroup(builder EncoderBuilder, count int, changefeedID model.Chang
 func (g *encoderGroup) Run(ctx context.Context) error {
 	defer func() {
 		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
-		close(g.outputCh)
 		log.Info("encoder group exited",
 			zap.String("namespace", g.changefeedID.Namespace),
 			zap.String("changefeed", g.changefeedID.ID))
