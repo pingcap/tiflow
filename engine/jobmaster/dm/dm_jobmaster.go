@@ -430,7 +430,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
-	newCtx, cancel := context.WithTimeout(ctx, 2*runtime.HeartbeatInterval)
+	newCtx, cancel := context.WithTimeout(ctx, 10*runtime.HeartbeatInterval)
 	defer cancel()
 	// wait all worker exit
 	jm.workerManager.SetNextCheckTime(time.Now())
