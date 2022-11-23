@@ -548,10 +548,10 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Int64("tableID", table.TableID),
-			zap.String("table status", table.Stats.String()),
+			zap.String("tableStatus", table.Stats.String()),
 			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
-			zap.Duration("checkpoint lag", lag))
+			zap.Duration("checkpointLag", lag))
 	}
 }
 
