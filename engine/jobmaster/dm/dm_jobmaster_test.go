@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -49,6 +48,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/mock"
@@ -186,7 +186,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
-	mockBaseJobmaster := &MockBaseJobmaster{}
+	mockBaseJobmaster := &MockBaseJobmaster{t: t.T()}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
@@ -367,7 +367,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage(context.Background(), "", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&framework.MockWorkerHandler{}, "", ""))
-	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
 	jm.CloseImpl(context.Background())
@@ -410,7 +409,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 func TestDuplicateFinishedState(t *testing.T) {
 	ctx := context.Background()
 	metaKVClient := kvmock.NewMetaMock()
-	mockBaseJobmaster := &MockBaseJobmaster{}
+	mockBaseJobmaster := &MockBaseJobmaster{t: t}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
@@ -494,6 +493,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 type MockBaseJobmaster struct {
 	mu sync.Mutex
 	mock.Mock
+	t *testing.T
 
 	framework.BaseJobMaster
 }
@@ -542,6 +542,10 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 
 func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
 	return false
+}
+
+func (m *MockBaseJobmaster) MetricFactory() promutil.Factory {
+	return promutil.NewFactory4Test(m.t.TempDir())
 }
 
 type MockCheckpointAgent struct {

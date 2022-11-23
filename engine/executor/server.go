@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -392,6 +393,7 @@ func (s *Server) Run(ctx context.Context) error {
 			zap.Uint64("memory limit", limit),
 			zap.Uint64("threshold", threshold))
 		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.SetMinGCPercent(20)
 		gctuner.Tuning(threshold)
 	}
 
@@ -577,7 +579,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
-		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+		mux.Handle(openapi.JobAPIPrefix, s.jobAPISrv)
 
 		httpSrv := &http.Server{
 			Handler:           mux,
@@ -613,10 +615,9 @@ func (s *Server) initClients() (err error) {
 func (s *Server) selfRegister(ctx context.Context) error {
 	registerReq := &pb.RegisterExecutorRequest{
 		Executor: &pb.Executor{
-			Name:       s.cfg.Name,
-			Address:    s.cfg.AdvertiseAddr,
-			Capability: defaultCapability,
-			Labels:     s.cfg.Labels,
+			Name:    s.cfg.Name,
+			Address: s.cfg.AdvertiseAddr,
+			Labels:  s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
@@ -645,7 +646,6 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.selfID),
-				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
 				// executor actually wait for a timeout when ttl is nearly up.

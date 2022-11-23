@@ -58,12 +58,12 @@ type executorClientStub struct {
 
 func (c *executorClientStub) RemoveResource(
 	ctx context.Context,
-	creatorID model.WorkerID,
+	creatorWorkerID model.WorkerID,
 	resourceID resModel.ResourceID,
 ) error {
 	_, err := c.brk.RemoveResource(ctx, &pb.RemoveLocalResourceRequest{
 		ResourceId: resourceID,
-		CreatorId:  creatorID,
+		WorkerId:   creatorWorkerID,
 	})
 	return err
 }

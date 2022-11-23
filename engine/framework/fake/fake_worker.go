@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -191,10 +190,6 @@ func (d *dummyWorker) Status() frameModel.WorkerStatus {
 		}
 	}
 	return frameModel.WorkerStatus{State: frameModel.WorkerStateCreated}
-}
-
-func (d *dummyWorker) Workload() model.RescUnit {
-	return model.RescUnit(10)
 }
 
 func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {

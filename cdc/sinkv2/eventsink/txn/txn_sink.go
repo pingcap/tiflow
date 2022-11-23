@@ -91,20 +91,20 @@ func NewMySQLSink(
 }
 
 // WriteEvents writes events to the sink.
-func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
+func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 	if atomic.LoadInt32(&s.closed) != 0 {
 		return errors.Trace(errors.New("closed sink"))
 	}
 
-	for _, row := range rows {
-		if row.GetTableSinkState() != state.TableSinkSinking {
+	for _, txn := range txnEvents {
+		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
 			// to drop the event directly.
-			row.Callback()
+			txn.Callback()
 			continue
 		}
 
-		s.conflictDetector.Add(newTxnEvent(row))
+		s.conflictDetector.Add(newTxnEvent(txn))
 	}
 	return nil
 }

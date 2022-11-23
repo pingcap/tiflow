@@ -27,11 +27,6 @@ type TaskSchedulerClient interface {
 		ctx context.Context,
 		request *enginepb.ScheduleTaskRequest,
 	) (*enginepb.ScheduleTaskResponse, error)
-
-	ReportExecutorWorkload(
-		ctx context.Context,
-		request *enginepb.ExecWorkloadRequest,
-	) error
 }
 
 type taskSchedulerClient struct {
@@ -51,15 +46,4 @@ func (c *taskSchedulerClient) ScheduleTask(
 		c.cli.ScheduleTask,
 		request)
 	return call.Do(ctx)
-}
-
-func (c *taskSchedulerClient) ReportExecutorWorkload(
-	ctx context.Context,
-	request *enginepb.ExecWorkloadRequest,
-) error {
-	call := internal.NewCall(
-		c.cli.ReportExecutorWorkload,
-		request)
-	_, err := call.Do(ctx)
-	return err
 }

@@ -149,8 +149,9 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:     NewDefaultSchedulerConfig(),
-		EnableNewSink: true,
+		Scheduler:           NewDefaultSchedulerConfig(),
+		EnableNewSink:       true,
+		EnablePullBasedSink: false,
 	},
 	ClusterID: "default",
 }

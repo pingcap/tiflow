@@ -22,8 +22,6 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	globalLog "github.com/pingcap/log"
-	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -56,15 +54,6 @@ func main() {
 	}
 
 	utils.LogHTTPProxies(true)
-
-	// currently only schema tracker use global logger(std logger), simply replace it with `error` level
-	// may be we should support config logger in mock tidb later
-	conf := &globalLog.Config{Level: "error", File: globalLog.FileLogConfig{}}
-	lg, r, _ := globalLog.InitLogger(conf)
-	lg = lg.With(zap.String("component", "ddl tracker"))
-	globalLog.ReplaceGlobals(lg, r)
-	lightningLogger := lg.With(zap.String("component", "lightning"))
-	lightningLog.SetAppLogger(lightningLogger)
 
 	version.LogVersionInfo("dm-worker")
 	log.L().Info("", zap.Stringer("dm-worker config", cfg))
