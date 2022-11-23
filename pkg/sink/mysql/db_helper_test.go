@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package mysql
 
 import (
@@ -11,9 +24,6 @@ import (
 func TestDecodePassword(t *testing.T) {
 	t.Parallel()
 
-	type args struct {
-		password string
-	}
 	tests := []struct {
 		name       string
 		password   string
@@ -61,6 +71,6 @@ func TestDecodePassword(t *testing.T) {
 			c.password, err = url.QueryUnescape(c.password)
 			require.NoError(t, err, c.name)
 		}
-		require.Equal(t, c.want, string(c.password))
+		require.Equal(t, c.want, c.password)
 	}
 }
