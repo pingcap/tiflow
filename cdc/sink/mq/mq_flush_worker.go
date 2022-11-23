@@ -123,10 +123,11 @@ func (w *flushWorker) batch(
 			log.Warn("MQ sink flush worker channel closed")
 			return index, nil
 		}
-		// When the flush event is received,
-		// we need to write the previous data to the producer as soon as possible.
+
 		if msg.flush != nil {
-			w.flushChes <- msg.flush.flushed
+			if err := w.encoderGroup.AddFlush(ctx, msg.flush.flushed); err != nil {
+				return index, errors.Trace(err)
+			}
 			return index, nil
 		}
 
@@ -134,6 +135,7 @@ func (w *flushWorker) batch(
 			events[index] = msg
 			index++
 		}
+
 	}
 
 	// Start a new tick to flush the batch.
@@ -147,10 +149,13 @@ func (w *flushWorker) batch(
 				log.Warn("MQ sink flush worker channel closed")
 				return index, nil
 			}
+
 			// When the flush event is received,
 			// we need to write the previous data to the producer as soon as possible.
+			// the flush event is the last one in the batch, should be checked by the caller.
 			if msg.flush != nil {
-				w.flushChes <- msg.flush.flushed
+				events[index] = msg
+				index++
 				return index, nil
 			}
 
@@ -225,11 +230,9 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 			}
 
 			if event.flush != nil {
-				w.flushChes <- event.flush.flushed
-				continue
-			}
-
-			if event.row == nil {
+				if err := w.encoderGroup.AddFlush(ctx, event.flush.flushed); err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			}
 
@@ -255,6 +258,8 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		// when the endIndex is 0, it indicates the first message is a flush message.
 		if endIndex == 0 {
 			continue
 		}
@@ -262,9 +267,23 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 		w.metricMQWorkerBatchSize.Observe(float64(endIndex))
 		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
 		msgs := eventsBuf[:endIndex]
+
+		// when batch many messages, the last one might be the flush message,
+		// pick it out and handle it separately.
+		lastEvent := msgs[endIndex-1]
+		if lastEvent.flush != nil {
+			msgs = msgs[:endIndex-1]
+		}
+
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
 			if err := w.encoderGroup.AddEvents(ctx, key.topic, key.partition, events...); err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		if lastEvent.flush != nil {
+			if err := w.encoderGroup.AddFlush(ctx, lastEvent.flush.flushed); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -297,6 +316,7 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 			if err := future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
+
 			for _, message := range future.Messages {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
@@ -309,19 +329,14 @@ func (w *flushWorker) sendMessages(ctx context.Context) error {
 				}
 				w.metricMQWorkerSendMessageDuration.Observe(time.Since(start).Seconds())
 			}
-		}
 
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case flush := <-w.flushChes:
-			// Wait for all messages to ack.
-			if flush != nil {
-				if err := w.flushAndNotify(ctx, flush); err != nil {
+			// When the flush event is received,
+			// we need to write the previous data to the producer as soon as possible.
+			if future.Flush != nil {
+				if err := w.flushAndNotify(ctx, future.Flush); err != nil {
 					return errors.Trace(err)
 				}
 			}
-		default:
 		}
 	}
 }

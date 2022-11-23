@@ -39,6 +39,9 @@ type EncoderGroup interface {
 	// AddEvents add events into the group, handled by one of the encoders
 	// all input events should belong to the same topic and partition, this should be guaranteed by the caller
 	AddEvents(ctx context.Context, topic string, partition int32, events ...*model.RowChangedEvent) error
+
+	AddFlush(ctx context.Context, flush chan<- struct{}) error
+
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -143,6 +146,17 @@ func (g *encoderGroup) AddEvents(
 	return nil
 }
 
+func (g *encoderGroup) AddFlush(ctx context.Context, flush chan<- struct{}) error {
+	future := newFlushFuture(flush)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case g.outputCh <- future:
+	}
+	close(future.done)
+	return nil
+}
+
 func (g *encoderGroup) Output() <-chan *future {
 	return g.outputCh
 }
@@ -151,7 +165,9 @@ type future struct {
 	Topic     string
 	Partition int32
 	events    []*model.RowChangedEvent
-	Messages  []*MQMessage
+
+	Messages []*MQMessage
+	Flush    chan<- struct{}
 
 	done chan struct{}
 }
@@ -163,6 +179,13 @@ func newFuture(topic string, partition int32, events ...*model.RowChangedEvent) 
 		events:    events,
 
 		done: make(chan struct{}),
+	}
+}
+
+func newFlushFuture(flush chan<- struct{}) *future {
+	return &future{
+		Flush: flush,
+		done:  make(chan struct{}),
 	}
 }
 
