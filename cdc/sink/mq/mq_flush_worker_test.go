@@ -118,8 +118,7 @@ func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 		metrics.NewStatistics(ctx, metrics.SinkTypeMQ), config.ProtocolOpen, 4, model.DefaultChangeFeedID("changefeed-test")), producer
 }
 
-//nolint:tparallel
-func TestBatch(t *testing.T) {
+func TestBatchNormal(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -131,102 +130,140 @@ func TestBatch(t *testing.T) {
 		partition: 1,
 	}
 
-	tests := []struct {
-		name      string
-		events    []mqEvent
-		expectedN int
-	}{
+	events := []mqEvent{
 		{
-			name: "Normal batching",
-			events: []mqEvent{
-				{
-					flush: nil,
-				},
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 1,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-					},
-					key: key,
-				},
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 2,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-					},
-					key: key,
-				},
-			},
-			expectedN: 2,
+			flush: nil,
 		},
 		{
-			name: "No row change events",
-			events: []mqEvent{
-				{
-					flush: &flushEvent{
-						resolvedTs: model.NewResolvedTs(1),
-						flushed:    make(chan struct{}),
-					},
-				},
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			expectedN: 0,
+			key: key,
 		},
 		{
-			name: "The resolved ts event appears in the middle",
-			events: []mqEvent{
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 1,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-					},
-					key: key,
-				},
-				{
-					flush: &flushEvent{
-						resolvedTs: model.NewResolvedTs(1),
-						flushed:    make(chan struct{}),
-					},
-				},
-				{
-					row: &model.RowChangedEvent{
-						// Indicates that this event is not expected to be processed
-						CommitTs: math.MaxUint64,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-					},
-					key: key,
-				},
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			expectedN: 1,
+			key: key,
+		},
+	}
+
+	batch := make([]mqEvent, 3)
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
+	}
+
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 2, endIndex)
+}
+
+func TestBatchFlushEventAtFirst(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx)
+	defer worker.close()
+
+	events := []mqEvent{
+		{
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    make(chan struct{}),
+			},
 		},
 	}
 
 	var wg sync.WaitGroup
-	batch := make([]mqEvent, 3)
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Can not be parallel, it tests reusing the same batch.
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				endIndex, err := worker.batch(ctx, batch)
-				require.NoError(t, err)
-				require.Equal(t, test.expectedN, endIndex)
-			}()
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for _, event := range test.events {
-					err := worker.addEvent(ctx, event)
-					require.NoError(t, err)
-				}
-			}()
-			wg.Wait()
-		})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.encoderGroup.Run(ctx)
+	}()
+
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
 	}
+
+	batch := make([]mqEvent, 0)
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 0, endIndex)
+
+	future := <-worker.encoderGroup.Output()
+	require.NoError(t, future.Ready(ctx))
+	require.NotNil(t, future.Flush)
+}
+
+func TestBatchFlushEventInTheMiddle(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker, _ := newTestWorker(ctx)
+	defer worker.close()
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	events := []mqEvent{
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			},
+			key: key,
+		},
+		{
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    make(chan struct{}),
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				// Indicates that this event is not expected to be processed
+				CommitTs: math.MaxUint64,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			key: key,
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_ = worker.batchEncodeRun(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		_ = worker.encoderGroup.Run(ctx)
+	}()
+
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
+	}
+
+	future := <-worker.encoderGroup.Output()
+	require.NoError(t, future.Ready(ctx))
+	require.Len(t, future.Messages, 1)
+
+	future = <-worker.encoderGroup.Output()
+	require.NoError(t, future.Ready(ctx))
+	require.NotNil(t, future.Flush)
 }
 
 func TestGroup(t *testing.T) {
