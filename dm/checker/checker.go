@@ -225,7 +225,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 	}
-
+	// check target DB's privilege
+	if _, ok := c.checkingItems[config.TargetDBPrivilegeChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
+			c.instances[0].targetDB.DB,
+			c.instances[0].targetDBInfo,
+		))
+	}
 	// sourceID -> DB
 	upstreamDBs := make(map[string]*sql.DB)
 	for i, instance := range c.instances {

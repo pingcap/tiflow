@@ -36,6 +36,7 @@ const (
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
 	ConnNumberChecking           = "conn_number"
+	TargetDBPrivilegeChecking    = "target_privilege"
 	// lighting prechecks.
 	LightningEmptyRegionChecking        = "lightning_empty_region"
 	LightningRegionDistributionChecking = "lightning_region_distribution"
@@ -58,6 +59,7 @@ var AllCheckingItems = map[string]string{
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
 	ConnNumberChecking:           "connection number checking item",
+	TargetDBPrivilegeChecking:    "privileges of target DB checking item",
 	// lightning prechecks
 	LightningEmptyRegionChecking:        "lightning empty region checking item",
 	LightningRegionDistributionChecking: "lightning region distribution checking item",
