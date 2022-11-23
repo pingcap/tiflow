@@ -168,7 +168,7 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.checkAndAutoResume(ctx); err != nil {
 		return err
 	}
-	if err := w.tryUpdateStatus(ctx); err != nil {
+	if err := w.updateStatusWhenStageChange(ctx); err != nil {
 		return err
 	}
 	// update unit status periodically to update metrics
@@ -236,8 +236,8 @@ func (w *dmWorker) persistStorage(ctx context.Context) error {
 	return w.storageWriteHandle.Persist(ctx)
 }
 
-// tryUpdateStatus updates status when task stage changed.
-func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
+// updateStatusWhenStageChange updates status when task stage changed.
+func (w *dmWorker) updateStatusWhenStageChange(ctx context.Context) error {
 	currentStage, _ := w.unitHolder.Stage()
 	previousStage := w.getStage()
 	if currentStage == previousStage {
