@@ -21,15 +21,14 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableName(t *testing.T) {
@@ -205,7 +204,7 @@ func TestIsFresh(t *testing.T) {
 	taskCfg := jobCfg.ToTaskCfgs()[source1]
 	checkpointAgent := NewAgentImpl(jobID, log.L())
 
-	isFresh, err := checkpointAgent.IsFresh(context.Background(), framework.WorkerDMDump, &metadata.Task{Cfg: taskCfg})
+	isFresh, err := checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMDump, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
@@ -215,35 +214,35 @@ func TestIsFresh(t *testing.T) {
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("init"))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("running"))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(sql.ErrNoRows)
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(errors.New("invalid connection"))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(errors.New("invalid connection"))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
 
@@ -251,21 +250,21 @@ func TestIsFresh(t *testing.T) {
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnError(sql.ErrNoRows)
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnError(errors.New("invalid connection"))
-	isFresh, err = checkpointAgent.IsFresh(context.Background(), framework.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
+	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
 }

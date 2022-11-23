@@ -14,77 +14,100 @@
 package internal
 
 import (
-	"container/list"
+	"math"
 	"sync"
 )
 
-// Eq describes objects that can be compared for equality.
-type Eq[T any] interface {
-	Equals(other T) bool
+type slot[E SlotNode[E]] struct {
+	nodes map[uint64]E
+	mu    sync.Mutex
+}
+
+// SlotNode describes objects that can be compared for equality.
+type SlotNode[T any] interface {
+	// NodeID tells the node's ID.
+	NodeID() int64
+	// Construct a dependency on `others`.
+	DependOn(unresolvedDeps map[int64]T, resolvedDeps int)
+	// Remove the node itself and notify all dependers.
+	Remove()
+	// Free the node itself and remove it from the graph.
+	Free()
 }
 
 // Slots implements slot-based conflict detection.
 // It holds references to E, which can be used to build
 // a DAG of dependency.
-type Slots[E Eq[E]] struct {
-	mu    sync.Mutex
-	slots map[int64]*list.List
-
-	numSlots int64
+type Slots[E SlotNode[E]] struct {
+	slots    []slot[E]
+	numSlots uint64
 }
 
 // NewSlots creates a new Slots.
-func NewSlots[E Eq[E]](numSlots int64) *Slots[E] {
+func NewSlots[E SlotNode[E]](numSlots uint64) *Slots[E] {
+	slots := make([]slot[E], numSlots)
+	for i := uint64(0); i < numSlots; i++ {
+		slots[i].nodes = make(map[uint64]E, 8)
+	}
 	return &Slots[E]{
-		slots:    make(map[int64]*list.List),
+		slots:    slots,
 		numSlots: numSlots,
 	}
 }
 
-// Add adds an elem to the slots and calls onConflict for each case
-// where elem is conflicting with an existing element.
-// Note that onConflict can be called multiple times with the same
-// dependee.
-func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// Add adds an elem to the slots and calls DependOn for elem.
+func (s *Slots[E]) Add(elem E, keys []uint64) {
+	unresolvedDeps := make(map[int64]E, len(keys))
+	resolvedDeps := 0
 
+	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		needInsert := true
-		if elemList, ok := s.slots[key%s.numSlots]; ok {
-			if elemList.Len() > 0 {
-				lastElem := elemList.Back().Value.(E)
-				if lastElem.Equals(elem) {
-					needInsert = false
-				} else {
-					onConflict(lastElem)
-				}
-			}
-		} else {
-			s.slots[key%s.numSlots] = list.New()
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Lock()
+			lastSlot = slotIdx
 		}
+		if tail, ok := s.slots[slotIdx].nodes[key]; ok {
+			prevID := tail.NodeID()
+			unresolvedDeps[prevID] = tail
+		} else {
+			resolvedDeps += 1
+		}
+		s.slots[slotIdx].nodes[key] = elem
+	}
+	elem.DependOn(unresolvedDeps, resolvedDeps)
 
-		if needInsert {
-			s.slots[key%s.numSlots].PushBack(elem)
+	// Lock those slots one by one and then unlock them one by one, so that
+	// we can avoid 2 transactions get executed interleaved.
+	lastSlot = math.MaxUint64
+	for _, key := range keys {
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Unlock()
+			lastSlot = slotIdx
 		}
 	}
 }
 
-// Remove removes an element from the Slots.
-func (s *Slots[E]) Remove(elem E, keys []int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// Free removes an element from the Slots.
+func (s *Slots[E]) Free(elem E, keys []uint64) {
+	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
-		elemList, ok := s.slots[key%s.numSlots]
-		if !ok {
-			panic("elem list is not found")
+		slotIdx := getSlot(key, s.numSlots)
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Lock()
 		}
-		for e := elemList.Front(); e != nil; e = e.Next() {
-			if elem.Equals(e.Value.(E)) {
-				elemList.Remove(e)
-				break
-			}
+		if tail, ok := s.slots[slotIdx].nodes[key]; ok && tail.NodeID() == elem.NodeID() {
+			delete(s.slots[slotIdx].nodes, key)
+		}
+		if lastSlot != slotIdx {
+			s.slots[slotIdx].mu.Unlock()
+			lastSlot = slotIdx
 		}
 	}
+	elem.Free()
+}
+
+func getSlot(key, numSlots uint64) uint64 {
+	return key % numSlots
 }

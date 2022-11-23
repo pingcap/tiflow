@@ -14,21 +14,18 @@
 package event
 
 import (
+	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testHelperSuite{})
-
-type testHelperSuite struct{}
-
-func (t *testHelperSuite) TestGTIDsFromPreviousGTIDsEvent(c *C) {
+func TestGTIDsFromPreviousGTIDsEvent(t *testing.T) {
+	t.Parallel()
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -39,23 +36,24 @@ func (t *testHelperSuite) TestGTIDsFromPreviousGTIDsEvent(c *C) {
 
 	// invalid binlog type, QueryEvent
 	queryEv, err := GenQueryEvent(header, latestPos, 0, 0, 0, nil, []byte("schema"), []byte("BEGIN"))
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSet, err := GTIDsFromPreviousGTIDsEvent(queryEv)
-	c.Assert(terror.ErrBinlogPrevGTIDEvNotValid.Equal(err), IsTrue)
-	c.Assert(gSet, IsNil)
+	require.True(t, terror.ErrBinlogPrevGTIDEvNotValid.Equal(err))
+	require.Nil(t, gSet)
 
 	// valid MySQL GTIDs
 	gtidStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14,406a3f61-690d-11e7-87c5-6c92bf46f384:1-94321383"
 	gSetExpect, err := gtid.ParserGTID(gmysql.MySQLFlavor, gtidStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	previousGTIDEv, err := GenPreviousGTIDsEvent(header, latestPos, gSetExpect)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSet, err = GTIDsFromPreviousGTIDsEvent(previousGTIDEv)
-	c.Assert(err, IsNil)
-	c.Assert(gSet, DeepEquals, gSetExpect)
+	require.Nil(t, err)
+	require.Equal(t, gSetExpect, gSet)
 }
 
-func (t *testHelperSuite) TestGTIDsFromMariaDBGTIDListEvent(c *C) {
+func TestGTIDsFromMariaDBGTIDListEvent(t *testing.T) {
+	t.Parallel()
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -66,18 +64,18 @@ func (t *testHelperSuite) TestGTIDsFromMariaDBGTIDListEvent(c *C) {
 
 	// invalid binlog type, QueryEvent
 	queryEv, err := GenQueryEvent(header, latestPos, 0, 0, 0, nil, []byte("schema"), []byte("BEGIN"))
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSet, err := GTIDsFromMariaDBGTIDListEvent(queryEv)
-	c.Assert(err, ErrorMatches, ".*should be a MariadbGTIDListEvent.*")
-	c.Assert(gSet, IsNil)
+	require.Regexp(t, ".*should be a MariadbGTIDListEvent.*", err)
+	require.Nil(t, gSet)
 
 	// valid MariaDB GTIDs
 	gtidStr := "1-1-1,2-2-2"
 	gSetExpect, err := gtid.ParserGTID(gmysql.MariaDBFlavor, gtidStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	mariaGTIDListEv, err := GenMariaDBGTIDListEvent(header, latestPos, gSetExpect)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSet, err = GTIDsFromMariaDBGTIDListEvent(mariaGTIDListEv)
-	c.Assert(err, IsNil)
-	c.Assert(gSet, DeepEquals, gSetExpect)
+	require.Nil(t, err)
+	require.Equal(t, gSetExpect, gSet)
 }

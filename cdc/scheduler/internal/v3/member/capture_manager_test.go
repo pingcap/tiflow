@@ -17,8 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,13 +92,13 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 		Header: &schedulepb.Message_Header{}, From: "2",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{{TableID: 1}},
+			Tables: []tablepb.TableStatus{{TableID: 1}},
 		},
 	}, {
 		Header: &schedulepb.Message_Header{}, From: "3",
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
-			Tables: []schedulepb.TableStatus{{TableID: 2}},
+			Tables: []tablepb.TableStatus{{TableID: 2}},
 		},
 	}})
 	require.False(t, cm.CheckAllCaptureInitialized())
@@ -105,7 +106,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.True(t, cm.CheckAllCaptureInitialized())
 	require.EqualValues(t, &CaptureChanges{
-		Init: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}, "3": {{TableID: 2}}},
+		Init: map[string][]tablepb.TableStatus{"2": {{TableID: 1}}, "3": {{TableID: 2}}},
 	}, cm.TakeChanges())
 
 	// Add a new node and remove an old node.
@@ -116,7 +117,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 		{To: "4", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 	}, msgs)
 	require.Equal(t, &CaptureChanges{
-		Removed: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}},
+		Removed: map[string][]tablepb.TableStatus{"2": {{TableID: 1}}},
 	}, cm.TakeChanges())
 	require.False(t, cm.CheckAllCaptureInitialized())
 }

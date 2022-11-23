@@ -31,7 +31,6 @@ import (
 type jobCreateOptions struct {
 	generalOpts *jobGeneralOptions
 
-	jobTypeStr   string
 	jobConfigStr string
 
 	jobID     string
@@ -91,8 +90,8 @@ func (v *jobTypeValue) Type() string {
 }
 
 // validate checks that the provided job options are valid.
-func (o *jobCreateOptions) validate(ctx context.Context, cmd *cobra.Command) error {
-	if err := o.generalOpts.validate(ctx, cmd); err != nil {
+func (o *jobCreateOptions) validate(ctx context.Context) error {
+	if err := o.generalOpts.validate(ctx); err != nil {
 		return errors.WrapError(errors.ErrInvalidCliParameter, err)
 	}
 
@@ -119,7 +118,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 }
 
 // run the `cli job create` command.
-func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobCreateOptions) run(ctx context.Context) error {
 	job, err := o.generalOpts.jobManagerCli.CreateJob(ctx, &enginepb.CreateJobRequest{
 		Job: &enginepb.Job{
 			Type:   o.jobType,
@@ -145,11 +144,11 @@ func newCmdJobCreate(generalOpts *jobGeneralOptions) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
-			if err := o.validate(ctx, cmd); err != nil {
+			if err := o.validate(ctx); err != nil {
 				return err
 			}
 
-			return o.run(ctx, cmd)
+			return o.run(ctx)
 		},
 	}
 

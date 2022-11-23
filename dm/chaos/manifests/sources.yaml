@@ -87,7 +87,7 @@ spec:
     spec:
       containers:
         - name: mysql8
-          image: mysql:8.0.23 # use latest after TiDB support utf8mb3
+          image: mysql:latest
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: "/var/lib/mysql"
@@ -135,7 +135,7 @@ spec:
     spec:
       containers:
         - name: mariadb
-          image: mariadb:10.6.0 # use latest after TiDB support utf8mb3
+          image: mariadb:latest
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: "/var/lib/mysql"

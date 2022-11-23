@@ -1,0 +1,8 @@
+{
+  "job-name": "test_job_finished",
+  "worker-count": 2,
+  "target-tick": 100,
+  "etcd-watch-enable": true,
+  "etcd-endpoints": ["etcd-standalone:2379"],
+  "etcd-watch-prefix": "/test_job_finished_100/"
+}

@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt cdc kafka_consumer coverage \
+.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -27,7 +27,7 @@ FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
-export PATH := $(CURDIR)/bin:$(path_to_add):$(PATH)
+export PATH := $(CURDIR)/bin:$(CURDIR)/tools/bin:$(path_to_add):$(PATH)
 
 SHELL := /usr/bin/env bash
 
@@ -51,7 +51,7 @@ MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow/tests|integration|testing_utils|pb|pbmock|tiflow/bin'
 PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/cmd|github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock'
 PACKAGES := $$($(PACKAGE_LIST))
@@ -77,12 +77,12 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.3.0-master
+	RELEASE_VERSION := v6.5.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
-	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
 		# If we are in release branch, try to use tag version.
-		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+		ifneq ($(shell git describe --tags --dirty | grep -E $(release_version_regex)),)
 			RELEASE_VERSION := $(shell git describe --tags --dirty)
 		endif
 	else ifneq ($(shell git status --porcelain),)
@@ -141,10 +141,13 @@ cdc:
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
 
+storage_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
+
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
+unit_test: check_failpoint_ctl generate_mock go-generate generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -227,8 +230,13 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code tiflow-generate-mock
-	@echo "gofmt (simplify)"
+integration_test_storage: check_third_party_binary
+	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
+
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
+	@echo "run gci (format imports)"
+	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run gofumports"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
@@ -264,9 +272,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@./scripts/check-diff-line-width.sh
 endif
 
-generate-msgp-code: tools/bin/msgp
-	@echo "generate-msgp-code"
-	./scripts/generate-msgp-code.sh
+go-generate: ## Run go generate on all packages.
+go-generate: tools/bin/msgp tools/bin/stringer tools/bin/mockery
+	@echo "go generate"
+	@go generate ./...
 
 generate-protobuf: ## Generate code from protobuf files.
 generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster \
@@ -286,13 +295,13 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
+	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
 	swagger-spec check-makefiles check_engine_integration_test
-	@git --no-pager diff --exit-code || echo "Please add changed files!"
+	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
@@ -314,15 +323,9 @@ data-flow-diagram: docs/data-flow.dot
 swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
+generate_mock: ## Generate mock code.
 generate_mock: tools/bin/mockgen
-	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
-	tools/bin/mockgen -source cdc/owner/status_provider.go -destination cdc/owner/mock/status_provider_mock.go
-	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
-	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
-	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
-	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
-	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
-	tools/bin/mockgen -source cdc/sinkv2/eventsink/txn/backend.go -destination cdc/sinkv2/eventsink/txn/mock/backend_mock.go
+	scripts/generate-mock.sh
 
 clean:
 	go clean -i ./...
@@ -355,9 +358,6 @@ dm-chaos-case:
 
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
-
-dm_generate_mock: tools/bin/mockgen
-	./dm/tests/generate-mock.sh
 
 dm_generate_openapi: tools/bin/oapi-codegen
 	@echo "generate_openapi"
@@ -483,7 +483,7 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow tiflow-demo
+engine: tiflow
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
@@ -494,15 +494,12 @@ tiflow-demo:
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
 
-tiflow-generate-mock: tools/bin/mockgen
-	scripts/generate-engine-mock.sh
-
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
 engine_integration_test: check_third_party_binary_for_engine
 	mkdir -p /tmp/tiflow_engine_test || true
-	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" | tee /tmp/tiflow_engine_test/engine_it.log
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
 	./engine/test/utils/check_log.sh
 
 check_third_party_binary_for_engine:
@@ -511,9 +508,14 @@ check_third_party_binary_for_engine:
 	@which go || (echo "go not found in ${PATH}"; exit 1)
 	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 	@which jq || (echo "jq not found in ${PATH}"; exit 1)
+	@which mc || (echo "mc not found in ${PATH}, you can use 'make bin/mc' and move bin/mc to ${PATH}"; exit 1)
+	@which bin/sync_diff_inspector || (echo "run 'make bin/sync_diff_inspector' to download it if you need")
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
+
+bin/mc:
+	./scripts/download-mc.sh
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

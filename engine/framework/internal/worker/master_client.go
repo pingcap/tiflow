@@ -18,10 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -29,6 +25,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -131,7 +130,9 @@ func (m *MasterClient) asyncReloadMasterInfo(ctx context.Context) <-chan error {
 		metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
 		masterMeta, err := metaClient.Load(timeoutCtx)
 		if err != nil {
+			log.Warn("async reload master info failed", zap.Error(err))
 			errCh <- err
+			return
 		}
 
 		m.putMasterInfo(masterMeta.NodeID, masterMeta.Epoch)

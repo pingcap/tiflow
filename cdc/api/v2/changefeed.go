@@ -218,7 +218,6 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	}
 
 	updateCfConfig := &ChangefeedConfig{}
-	updateCfConfig.SyncPointEnabled = cfInfo.SyncPointEnabled
 	updateCfConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
 	if err = c.BindJSON(updateCfConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
@@ -396,21 +395,19 @@ func toAPIModel(info *model.ChangeFeedInfo, maskSinkURI bool) *ChangeFeedInfo {
 	}
 
 	apiInfoModel := &ChangeFeedInfo{
-		UpstreamID:        info.UpstreamID,
-		Namespace:         info.Namespace,
-		ID:                info.ID,
-		SinkURI:           sinkURI,
-		CreateTime:        info.CreateTime,
-		StartTs:           info.StartTs,
-		TargetTs:          info.TargetTs,
-		AdminJobType:      info.AdminJobType,
-		Engine:            info.Engine,
-		Config:            ToAPIReplicaConfig(info.Config),
-		State:             info.State,
-		Error:             runningError,
-		SyncPointEnabled:  info.SyncPointEnabled,
-		SyncPointInterval: info.SyncPointInterval,
-		CreatorVersion:    info.CreatorVersion,
+		UpstreamID:     info.UpstreamID,
+		Namespace:      info.Namespace,
+		ID:             info.ID,
+		SinkURI:        sinkURI,
+		CreateTime:     info.CreateTime,
+		StartTs:        info.StartTs,
+		TargetTs:       info.TargetTs,
+		AdminJobType:   info.AdminJobType,
+		Engine:         info.Engine,
+		Config:         ToAPIReplicaConfig(info.Config),
+		State:          info.State,
+		Error:          runningError,
+		CreatorVersion: info.CreatorVersion,
 	}
 	return apiInfoModel
 }

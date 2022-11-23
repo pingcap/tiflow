@@ -16,27 +16,24 @@ package cvs
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/log"
 	cvsTask "github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Config records all configurations of cvs job
@@ -81,7 +78,7 @@ type JobMaster struct {
 	launchedWorkers sync.Map
 	statusCode      struct {
 		sync.RWMutex
-		code frameModel.WorkerStatusCode
+		code frameModel.WorkerState
 	}
 	ctx     context.Context
 	clocker clock.Clock
@@ -92,7 +89,7 @@ var _ framework.JobMasterImpl = (*JobMaster)(nil)
 // RegisterWorker is used to register cvs job master into global registry
 func RegisterWorker() {
 	factory := registry.NewSimpleWorkerFactory(NewCVSJobMaster)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.CvsJobMaster, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.CvsJobMaster, factory)
 }
 
 // NewCVSJobMaster creates a new cvs job master
@@ -114,7 +111,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, master
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	log.Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
-	jm.setStatusCode(frameModel.WorkerStatusInit)
+	jm.setState(frameModel.WorkerStateInit)
 	filesNum := jm.jobStatus.Config.FileNum
 	if filesNum == 0 {
 		return errors.New("no file found under the folder")
@@ -139,7 +136,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	jm.setStatusCode(frameModel.WorkerStatusNormal)
+	jm.setState(frameModel.WorkerStateNormal)
 	return nil
 }
 
@@ -156,15 +153,16 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.Lock()
 	defer jm.Unlock()
 	if 0 == len(jm.jobStatus.FileInfos) {
-		jm.setStatusCode(frameModel.WorkerStatusFinished)
+		jm.setState(frameModel.WorkerStateFinished)
 		log.Info("cvs job master finished")
 		status := jm.Status()
-		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonFinished, nil, string(status.ExtBytes))
+		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonFinished, nil, status.ExtBytes)
 	}
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
 		if workerInfo.needCreate.Load() {
-			workerID, err := jm.CreateWorker(framework.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
+			workerID, err := jm.CreateWorker(frameModel.CvsTask,
+				getTaskConfig(jm.jobStatus, idx))
 			if err != nil {
 				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
@@ -181,8 +179,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		// update job status
 		handle := *(*framework.WorkerHandle)(workerInfo.handle.Load())
 		status := handle.Status()
-		switch status.Code {
-		case frameModel.WorkerStatusNormal, frameModel.WorkerStatusFinished, frameModel.WorkerStatusStopped:
+		switch status.State {
+		case frameModel.WorkerStateNormal, frameModel.WorkerStateFinished, frameModel.WorkerStateStopped:
 			taskStatus := &cvsTask.Status{}
 			err := json.Unmarshal(status.ExtBytes, taskStatus)
 			if err != nil {
@@ -193,7 +191,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			jm.counter += taskStatus.Count
 
 			log.Debug("cvs job tmp num ", zap.Any("id", idx), zap.Any("status", string(status.ExtBytes)))
-		case frameModel.WorkerStatusError:
+		case frameModel.WorkerStateError:
 			log.Error("sync file failed ", zap.Any("idx", idx))
 		default:
 			log.Info("worker status abnormal", zap.Any("status", status))
@@ -209,12 +207,12 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		if err != nil {
 			log.Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
-		log.Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
+		log.Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getState()))
 	}
-	if jm.getStatusCode() == frameModel.WorkerStatusStopped {
+	if jm.getState() == frameModel.WorkerStateStopped {
 		log.Info("cvs job master stopped")
 		status := jm.Status()
-		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, string(status.ExtBytes))
+		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, status.ExtBytes)
 	}
 	return nil
 }
@@ -315,7 +313,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 	id := val.(int)
 	jm.Lock()
 	defer jm.Unlock()
-	if derrors.ErrWorkerFinish.Equal(reason) {
+	if errors.Is(reason, errors.ErrWorkerFinish) {
 		delete(jm.syncFilesInfo, id)
 		delete(jm.jobStatus.FileInfos, id)
 		log.Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
@@ -337,68 +335,55 @@ func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.To
 }
 
 // CloseImpl is called when the master is being closed
-func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return nil
-}
+func (jm *JobMaster) CloseImpl(ctx context.Context) {}
+
+// StopImpl is called when the master is being canceled
+func (jm *JobMaster) StopImpl(ctx context.Context) {}
 
 // ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {
 	return jm.workerID
 }
 
-// Workload implements JobMasterImpl.Workload
-func (jm *JobMaster) Workload() model.RescUnit {
-	return 2
-}
-
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	return nil
 }
 
-// OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
-func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.Info("cvs jobmaster: OnJobManagerMessage", zap.Any("message", message))
-	jm.Lock()
-	defer jm.Unlock()
-	switch msg := message.(type) {
-	case *frameModel.StatusChangeRequest:
-		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			jm.setStatusCode(frameModel.WorkerStatusStopped)
-			for _, worker := range jm.syncFilesInfo {
-				if worker.handle.Load() == nil {
-					continue
-				}
-				handle := *(*framework.WorkerHandle)(worker.handle.Load())
-				workerID := handle.ID()
-				wTopic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
-				wMessage := &frameModel.StatusChangeRequest{
-					SendTime:     jm.clocker.Mono(),
-					FromMasterID: jm.BaseJobMaster.ID(),
-					Epoch:        jm.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  frameModel.WorkerStatusStopped,
-				}
+// OnCancel implements JobMasterImpl.OnCancel
+func (jm *JobMaster) OnCancel(ctx context.Context) error {
+	log.Info("cvs jobmaster: OnCancel")
+	return jm.cancelWorkers()
+}
 
-				if handle := handle.Unwrap(); handle != nil {
-					ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
-					if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
-						cancel()
-						return err
-					}
-					log.Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
-					cancel()
-				} else {
-					log.Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
-				}
-			}
-		default:
-			log.Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+func (jm *JobMaster) cancelWorkers() error {
+	jm.setState(frameModel.WorkerStateStopped)
+	for _, worker := range jm.syncFilesInfo {
+		if worker.handle.Load() == nil {
+			continue
 		}
-	default:
-		log.Info("unsupported message", zap.Any("message", message))
-	}
+		handle := *(*framework.WorkerHandle)(worker.handle.Load())
+		workerID := handle.ID()
+		wTopic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseJobMaster.ID(), handle.ID())
+		wMessage := &frameModel.StatusChangeRequest{
+			SendTime:     jm.clocker.Mono(),
+			FromMasterID: jm.BaseJobMaster.ID(),
+			Epoch:        jm.BaseJobMaster.CurrentEpoch(),
+			ExpectState:  frameModel.WorkerStateStopped,
+		}
 
+		if handle := handle.Unwrap(); handle != nil {
+			ctx, cancel := context.WithTimeout(jm.ctx, time.Second*2)
+			if err := handle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+				cancel()
+				return err
+			}
+			log.Info("sent message to worker", zap.String("topic", wTopic), zap.Any("message", wMessage))
+			cancel()
+		} else {
+			log.Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
+		}
+	}
 	return nil
 }
 
@@ -412,7 +397,7 @@ func (jm *JobMaster) Status() frameModel.WorkerStatus {
 		log.Panic("get status failed", zap.String("id", jm.workerID), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
-		Code:     jm.getStatusCode(),
+		State:    jm.getState(),
 		ExtBytes: status,
 	}
 }
@@ -422,13 +407,13 @@ func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
-func (jm *JobMaster) setStatusCode(code frameModel.WorkerStatusCode) {
+func (jm *JobMaster) setState(code frameModel.WorkerState) {
 	jm.statusCode.Lock()
 	defer jm.statusCode.Unlock()
 	jm.statusCode.code = code
 }
 
-func (jm *JobMaster) getStatusCode() frameModel.WorkerStatusCode {
+func (jm *JobMaster) getState() frameModel.WorkerState {
 	jm.statusCode.RLock()
 	defer jm.statusCode.RUnlock()
 	return jm.statusCode.code

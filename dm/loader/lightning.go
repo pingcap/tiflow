@@ -24,13 +24,9 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/lightning/metric"
+	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -38,8 +34,14 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -73,6 +75,8 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+
+	speedRecorder *export.SpeedRecorder
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -89,6 +93,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		speedRecorder:         export.NewSpeedRecorder(),
 	}
 	return loader
 }
@@ -96,17 +101,18 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
-		lightningCfg.Security.CAPath = cfg.To.Security.SSLCA
-		lightningCfg.Security.CertPath = cfg.To.Security.SSLCert
-		lightningCfg.Security.KeyPath = cfg.To.Security.SSLKey
-		// use task name as tls config name to prevent multiple subtasks from conflicting with each other
-		lightningCfg.Security.TLSConfigName = cfg.Name
+		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
+		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
+		lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
 	}
 	lightningCfg.TiDB.Host = cfg.To.Host
 	lightningCfg.TiDB.Psw = cfg.To.Password
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
+	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
+	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
@@ -251,6 +257,8 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 	if l.cfg.FrameworkLogger != nil {
 		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
+	} else {
+		opts = append(opts, lightning.WithLogger(l.logger.Logger))
 	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
@@ -265,7 +273,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	return err
+	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
 func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
@@ -303,6 +311,7 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
 	}
+	cfg.Mydumper.SourceID = l.cfg.SourceID
 	return cfg, nil
 }
 
@@ -462,11 +471,23 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
+	// we need finished bytes to calculate speed. For tidb backend, BytesStateRestored in metrics is the source file size
+	// that has been written to downstream DB. For local backend, we need to wait TiKV finishing ingest SST files, so we
+	// use the value from Status() instead.
+	if l.cfg.LoaderConfig.ImportMode == config.LoadModeLogical {
+		m := l.core.Metrics()
+		if m != nil {
+			finished = int64(metric.ReadCounter(m.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+		}
+	}
 	progress := percent(finished, total, l.finish.Load())
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
+
 	l.logger.Info("progress status of lightning",
 		zap.Int64("finished_bytes", finished),
 		zap.Int64("total_bytes", total),
 		zap.String("progress", progress),
+		zap.Int64("current speed (bytes / seconds)", currentSpeed),
 	)
 	s := &pb.LoadStatus{
 		FinishedBytes:  finished,
@@ -474,6 +495,7 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 		Progress:       progress,
 		MetaBinlog:     l.metaBinlog.Load(),
 		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		Bps:            currentSpeed,
 	}
 	return s
 }

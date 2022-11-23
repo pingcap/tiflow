@@ -52,6 +52,7 @@ func TestNewKey(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
+			t.Parallel()
 			res, err := NewKey(tc.str)
 			if tc.allowed {
 				require.NoError(t, err)
@@ -68,6 +69,7 @@ func TestNewValue(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
+			t.Parallel()
 			res, err := NewValue(tc.str)
 			if tc.allowed {
 				require.NoError(t, err)
@@ -104,4 +106,33 @@ func TestSet(t *testing.T) {
 	require.Panics(t, func() {
 		set.Get(invalidLabelKey)
 	})
+}
+
+func TestNewSetFromMap(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewSetFromMap(map[string]string{
+		"type":      "executor",
+		"09AZaz-_.": "asdf",
+	})
+	require.ErrorContains(t, err, "label string has wrong format")
+
+	_, err = NewSetFromMap(map[string]string{
+		"type": "executor",
+		"good": "~",
+	})
+	require.ErrorContains(t, err, "label string has wrong format")
+
+	set, err := NewSetFromMap(map[string]string{
+		"label1": "value1",
+		"label2": "value2",
+	})
+	require.NoError(t, err)
+	val, ok := set.Get("label1")
+	require.True(t, ok)
+	require.Equal(t, Value("value1"), val)
+
+	val, ok = set.Get("label2")
+	require.True(t, ok)
+	require.Equal(t, Value("value2"), val)
 }

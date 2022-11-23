@@ -20,7 +20,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -30,11 +34,6 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DefaultCDCClusterID is the default value of cdc cluster id
@@ -221,7 +220,7 @@ func (c *CDCEtcdClientImpl) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyVal
 }
 
 // CheckMultipleCDCClusterExist checks if other cdc clusters exists,
-// and returns an error is so, and user should uses --server instead
+// and returns an error is so, and user should use --server instead
 func (c *CDCEtcdClientImpl) CheckMultipleCDCClusterExist(ctx context.Context) error {
 	resp, err := c.Client.Get(ctx, BaseKey(""),
 		clientv3.WithPrefix(),
@@ -244,8 +243,6 @@ func (c *CDCEtcdClientImpl) CheckMultipleCDCClusterExist(ctx context.Context) er
 			}
 		}
 		if isReserved {
-			log.Warn("found etcd key with reserved cluster id",
-				zap.String("key", key))
 			continue
 		}
 		return cerror.ErrMultipleCDCClustersExist.GenWithStackByArgs()
@@ -321,33 +318,6 @@ func (c *CDCEtcdClientImpl) DeleteChangeFeedInfo(ctx context.Context,
 	key := GetEtcdKeyChangeFeedInfo(c.ClusterID, id)
 	_, err := c.Client.Delete(ctx, key)
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-}
-
-// GetAllChangeFeedStatus queries all changefeed job status
-func (c *CDCEtcdClientImpl) GetAllChangeFeedStatus(ctx context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
-) {
-	// todo: support namespace
-	key := ChangefeedStatusKeyPrefix(c.ClusterID, model.DefaultNamespace)
-
-	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	statuses := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, resp.Count)
-	for _, rawKv := range resp.Kvs {
-		changefeedID, err := extractKeySuffix(string(rawKv.Key))
-		if err != nil {
-			return nil, err
-		}
-		status := &model.ChangeFeedStatus{}
-		err = status.Unmarshal(rawKv.Value)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		statuses[model.DefaultChangeFeedID(changefeedID)] = status
-	}
-	return statuses, nil
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
@@ -561,91 +531,6 @@ func (c *CDCEtcdClientImpl) SaveChangeFeedInfo(ctx context.Context,
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
-// GetProcessors queries all processors of the cdc cluster,
-// and returns a slice of ProcInfoSnap(without table info)
-func (c *CDCEtcdClientImpl) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
-	// todo: support namespace
-	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix(c.ClusterID, model.DefaultNamespace),
-		clientv3.WithPrefix())
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	infos := make([]*model.ProcInfoSnap, 0, resp.Count)
-	for _, rawKv := range resp.Kvs {
-		changefeedID, err := extractKeySuffix(string(rawKv.Key))
-		if err != nil {
-			return nil, err
-		}
-		endIndex := len(rawKv.Key) - len(changefeedID) - 1
-		captureID, err := extractKeySuffix(string(rawKv.Key[0:endIndex]))
-		if err != nil {
-			return nil, err
-		}
-		info := &model.ProcInfoSnap{
-			CfID:      model.DefaultChangeFeedID(changefeedID),
-			CaptureID: captureID,
-		}
-		infos = append(infos, info)
-	}
-	return infos, nil
-}
-
-// GetAllTaskPositions queries all task positions of a changefeed, and returns a map
-// mapping from captureID to TaskPositions
-func (c *CDCEtcdClientImpl) GetAllTaskPositions(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-) (map[string]*model.TaskPosition, error) {
-	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix(c.ClusterID, changefeedID.Namespace),
-		clientv3.WithPrefix())
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	positions := make(map[string]*model.TaskPosition, resp.Count)
-	for _, rawKv := range resp.Kvs {
-		changeFeed, err := extractKeySuffix(string(rawKv.Key))
-		if err != nil {
-			return nil, err
-		}
-		endIndex := len(rawKv.Key) - len(changeFeed) - 1
-		captureID, err := extractKeySuffix(string(rawKv.Key[0:endIndex]))
-		if err != nil {
-			return nil, err
-		}
-		if changeFeed != changefeedID.ID {
-			continue
-		}
-		info := &model.TaskPosition{}
-		err = info.Unmarshal(rawKv.Value)
-		if err != nil {
-			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("failed to unmarshal task position: %s", err)
-		}
-		positions[captureID] = info
-	}
-	return positions, nil
-}
-
-// GetTaskPosition queries task process from etcd, returns
-//   - ModRevision of the given key
-//   - *model.TaskPosition unmarshaled from the value
-//   - error if error happens
-func (c *CDCEtcdClientImpl) GetTaskPosition(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	captureID string,
-) (int64, *model.TaskPosition, error) {
-	key := GetEtcdKeyTaskPosition(c.ClusterID, changefeedID, captureID)
-	resp, err := c.Client.Get(ctx, key)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	if resp.Count == 0 {
-		return 0, nil, cerror.ErrTaskPositionNotExists.GenWithStackByArgs(key)
-	}
-	info := &model.TaskPosition{}
-	err = info.Unmarshal(resp.Kvs[0].Value)
-	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
-}
-
 // PutCaptureInfo put capture info into etcd,
 // this happens when the capture starts.
 func (c *CDCEtcdClientImpl) PutCaptureInfo(
@@ -661,10 +546,26 @@ func (c *CDCEtcdClientImpl) PutCaptureInfo(
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
-// DeleteCaptureInfo delete capture info from etcd.
-func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, id string) error {
-	key := GetEtcdKeyCaptureInfo(c.ClusterID, id)
+// DeleteCaptureInfo delete all capture related info from etcd.
+func (c *CDCEtcdClientImpl) DeleteCaptureInfo(ctx context.Context, captureID string) error {
+	key := GetEtcdKeyCaptureInfo(c.ClusterID, captureID)
 	_, err := c.Client.Delete(ctx, key)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	// we need to clean all task position related to this capture when the capture is offline
+	// otherwise the task positions may leak
+	// FIXME (dongmen 2022.9.28): find a way to use changefeed's namespace
+	taskKey := TaskPositionKeyPrefix(c.ClusterID, model.DefaultNamespace)
+	// the taskKey format is /tidb/cdc/{clusterID}/{namespace}/task/position/{captureID}
+	taskKey = fmt.Sprintf("%s/%s", taskKey, captureID)
+	_, err = c.Client.Delete(ctx, taskKey, clientv3.WithPrefix())
+	if err != nil {
+		log.Warn("delete task position failed",
+			zap.String("clusterID", c.ClusterID),
+			zap.String("captureID", captureID),
+			zap.String("key", key), zap.Error(err))
+	}
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 

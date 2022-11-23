@@ -24,3 +24,6 @@ type Model struct {
 	CreatedAt time.Time `json:"created-at"`
 	UpdatedAt time.Time `json:"updated-at"`
 }
+
+// KeyValueMap alias to key value map when updating data in gorm
+type KeyValueMap = map[string]interface{}

@@ -23,12 +23,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"go.uber.org/zap"
 )
 
 // dbConn holds a connection to a database and supports to reset the connection.
@@ -111,7 +110,7 @@ func dropDatabase(ctx context.Context, conn2 *dbConn, name string) error {
 
 // createDatabase creates a database if not exists.
 func createDatabase(ctx context.Context, conn2 *dbConn, name string) error {
-	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(name))
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s CHARSET latin1", dbutil.ColumnName(name))
 	return conn2.execSQLs(ctx, query)
 }
 

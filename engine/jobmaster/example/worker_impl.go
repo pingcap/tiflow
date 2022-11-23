@@ -20,11 +20,10 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 var _ framework.Worker = &exampleWorker{}
@@ -101,24 +100,23 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 
 func (w *exampleWorker) Status() frameModel.WorkerStatus {
 	log.Info("Status")
-	code := frameModel.WorkerStatusNormal
+	code := frameModel.WorkerStateNormal
 	w.work.mu.Lock()
 	finished := w.work.finished
 	w.work.mu.Unlock()
 
 	if finished {
-		code = frameModel.WorkerStatusFinished
+		code = frameModel.WorkerStateFinished
 	}
-	return frameModel.WorkerStatus{Code: code}
+	return frameModel.WorkerStatus{State: code}
 }
 
-func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *exampleWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("OnMasterMessage", zap.Any("message", message))
 	return nil
 }
 
-func (w *exampleWorker) CloseImpl(ctx context.Context) error {
+func (w *exampleWorker) CloseImpl(ctx context.Context) {
 	log.Info("CloseImpl")
 	w.wg.Wait()
-	return nil
 }

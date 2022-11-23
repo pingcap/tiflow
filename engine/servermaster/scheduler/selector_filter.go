@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 )
@@ -60,10 +61,7 @@ func (f *selectorFilter) GetEligibleExecutors(
 			log.Info("no executor matches selector",
 				zap.Any("selector", selector),
 				zap.Any("request", request))
-			return nil, ErrSelectorUnsatisfied.GenWithStack(
-				&SelectorUnsatisfiedError{
-					Selector: selector,
-				})
+			return nil, errors.ErrSelectorUnsatisfied.GenWithStackByArgs(selector)
 		}
 	}
 

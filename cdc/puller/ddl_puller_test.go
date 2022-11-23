@@ -52,6 +52,7 @@ func (m *mockPuller) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error)
 	return entry.ParseDDLJob(nil, rawKV, 0)
 }
 
+//nolint:unparam
 func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {
 	return &mockPuller{
 		t:          t,
@@ -81,8 +82,8 @@ func (m *mockPuller) Output() <-chan *model.RawKVEntry {
 	return m.outCh
 }
 
-func (m *mockPuller) IsInitialized() bool {
-	return true
+func (m *mockPuller) Stats() Stats {
+	return Stats{}
 }
 
 func (m *mockPuller) append(e *model.RawKVEntry) {
@@ -347,6 +348,11 @@ func TestHandleJob(t *testing.T) {
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
+
+		job = helper.DDL2Job("create database test3")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
 	}
 
 	// test drop databases
@@ -375,6 +381,12 @@ func TestHandleJob(t *testing.T) {
 		require.True(t, skip)
 
 		job = helper.DDL2Job("create table test1.t4(id int) partition by range(id) (partition p0 values less than (10))")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		// make sure no schema not found error
+		job = helper.DDL2Job("create table test3.t1(id int) partition by range(id) (partition p0 values less than (10))")
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)

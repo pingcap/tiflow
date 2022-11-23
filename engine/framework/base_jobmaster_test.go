@@ -23,18 +23,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/errors"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -70,12 +70,18 @@ func (m *testJobMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.Called(ctx)
+}
+
+func (m *testJobMasterImpl) StopImpl(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Called(ctx)
 }
 
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
@@ -126,22 +132,6 @@ func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) Workload() model.RescUnit {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0).(model.RescUnit)
-}
-
-func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(topic, message)
-	return args.Error(0)
-}
-
 func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
 	apiGroup.GET("/status", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
@@ -154,15 +144,23 @@ func (m *testJobMasterImpl) IsJobMasterImpl() {
 
 func (m *testJobMasterImpl) Status() frameModel.WorkerStatus {
 	return frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 	}
+}
+
+func (m *testJobMasterImpl) OnCancel(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 // simulate the job manager to insert a job record first since job master will only update the job
 func prepareInsertJob(ctx context.Context, cli pkgOrm.Client, jobID string) error {
-	return cli.UpsertJob(ctx, &frameModel.MasterMetaKVData{
-		ID:         jobID,
-		StatusCode: frameModel.MasterStatusUninit,
+	return cli.UpsertJob(ctx, &frameModel.MasterMeta{
+		ID:    jobID,
+		State: frameModel.MasterStateUninit,
 	})
 }
 
@@ -184,9 +182,26 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 	require.NoError(t, err)
 
 	ctx := dcontext.Background()
-	ctx = ctx.WithDeps(dp)
-
 	epoch, err := params.FrameMetaClient.GenEpoch(ctx)
+	require.NoError(t, err)
+
+	ctx = ctx.WithDeps(dp)
+	ctx.Environ.NodeID = "test-node-id"
+	ctx.Environ.Addr = "127.0.0.1:10000"
+	ctx.ProjectInfo = tenant.TestProjectInfo
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		Addr:      ctx.Environ.Addr,
+		NodeID:    ctx.Environ.NodeID,
+		ID:        jobMasterID,
+		Type:      frameModel.FakeJobMaster,
+		Epoch:     epoch,
+		State:     frameModel.MasterStateUninit,
+	}
+	masterMetaBytes, err := masterMeta.Marshal()
+	require.NoError(t, err)
+	ctx.Environ.MasterMetaBytes = masterMetaBytes
+	err = cli.UpsertJob(ctx, masterMeta)
 	require.NoError(t, err)
 
 	return NewBaseJobMaster(
@@ -194,7 +209,7 @@ func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobM
 		impl,
 		jobManagerID,
 		jobMasterID,
-		FakeTask,
+		frameModel.FakeTask,
 		epoch,
 	).(*DefaultBaseJobMaster)
 }
@@ -236,11 +251,11 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.ExpectedCalls = nil
 	jobMaster.Calls = nil
 
-	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.On("CloseImpl", mock.Anything).Return()
 	jobMaster.mu.Unlock()
 
 	status := jobMaster.Status()
-	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, string(status.ExtBytes))
+	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, status.ExtBytes)
 	require.NoError(t, err)
 
 	err = jobMaster.base.Close(ctx)
@@ -275,58 +290,58 @@ func TestJobMasterExit(t *testing.T) {
 	cases := []struct {
 		exitReason       ExitReason
 		err              error
-		extMsg           string
-		expectedStatus   frameModel.MasterStatusCode
+		detail           string
+		expectedState    frameModel.MasterState
 		expectedErrorMsg string
-		expectedExtMsg   string
+		expectedDetail   string
 	}{
 		{
 			exitReason:       ExitReasonFinished,
 			err:              nil,
-			extMsg:           "test finished",
-			expectedStatus:   frameModel.MasterStatusFinished,
+			detail:           "test finished",
+			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test finished",
+			expectedDetail:   "test finished",
 		},
 		{
 			exitReason:       ExitReasonFinished,
 			err:              errors.New("test finished with error"),
-			extMsg:           "test finished",
-			expectedStatus:   frameModel.MasterStatusFinished,
+			detail:           "test finished",
+			expectedState:    frameModel.MasterStateFinished,
 			expectedErrorMsg: "test finished with error",
-			expectedExtMsg:   "test finished",
+			expectedDetail:   "test finished",
 		},
 		{
 			exitReason:       ExitReasonCanceled,
 			err:              nil,
-			extMsg:           "test canceled",
-			expectedStatus:   frameModel.MasterStatusStopped,
+			detail:           "test canceled",
+			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test canceled",
+			expectedDetail:   "test canceled",
 		},
 		{
 			exitReason:       ExitReasonCanceled,
 			err:              errors.New("test canceled with error"),
-			extMsg:           "test canceled",
-			expectedStatus:   frameModel.MasterStatusStopped,
+			detail:           "test canceled",
+			expectedState:    frameModel.MasterStateStopped,
 			expectedErrorMsg: "test canceled with error",
-			expectedExtMsg:   "test canceled",
+			expectedDetail:   "test canceled",
 		},
 		{
 			exitReason:       ExitReasonFailed,
 			err:              nil,
-			extMsg:           "test failed",
-			expectedStatus:   frameModel.MasterStatusFailed,
+			detail:           "test failed",
+			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "",
-			expectedExtMsg:   "test failed",
+			expectedDetail:   "test failed",
 		},
 		{
 			exitReason:       ExitReasonFailed,
 			err:              errors.New("test failed with error"),
-			extMsg:           "test failed",
-			expectedStatus:   frameModel.MasterStatusFailed,
+			detail:           "test failed",
+			expectedState:    frameModel.MasterStateFailed,
 			expectedErrorMsg: "test failed with error",
-			expectedExtMsg:   "test failed",
+			expectedDetail:   "test failed",
 		},
 	}
 
@@ -373,17 +388,16 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.ExpectedCalls = nil
 		jobMaster.Calls = nil
 
-		jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+		jobMaster.On("CloseImpl", mock.Anything).Return()
 		jobMaster.mu.Unlock()
 
 		// test exit status
-		err = jobMaster.base.Exit(ctx, cs.exitReason, cs.err, cs.extMsg)
+		err = jobMaster.base.Exit(ctx, cs.exitReason, cs.err, []byte(cs.detail))
 		require.NoError(t, err)
 		meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
 		require.NoError(t, err)
-		require.Equal(t, cs.expectedStatus, meta.StatusCode)
-		require.Equal(t, cs.expectedExtMsg, meta.ExtMsg)
-
+		require.Equal(t, cs.expectedState, meta.State)
+		require.Equal(t, []byte(cs.expectedDetail), meta.Detail)
 		err = jobMaster.base.Close(ctx)
 		require.NoError(t, err)
 
@@ -391,4 +405,139 @@ func TestJobMasterExit(t *testing.T) {
 		jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
 		jobMaster.mu.Unlock()
 	}
+}
+
+func TestJobMasterInitReturnError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	initError := errors.New("init impl error")
+	jobMaster.mu.Lock()
+	jobMaster.On("InitImpl", mock.Anything).Return(initError)
+	jobMaster.mu.Unlock()
+
+	err := jobMaster.base.Init(ctx)
+	require.Error(t, err)
+	require.Equal(t, initError, err)
+
+	jobMaster.mu.Lock()
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.On("CloseImpl", mock.Anything).Return()
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Close(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.mu.Unlock()
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateUninit, meta.State)
+	require.Equal(t, initError.Error(), meta.ErrorMsg)
+}
+
+func TestJobMasterPollReturnError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	jobMaster.mu.Lock()
+	jobMaster.On("InitImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err := jobMaster.base.Init(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.mu.Unlock()
+
+	pollError := errors.New("master impl poll error")
+	jobMaster.mu.Lock()
+	jobMaster.On("Tick", mock.Anything).Return(pollError)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Poll(ctx)
+	require.Error(t, err)
+	require.Equal(t, pollError, err)
+
+	jobMaster.mu.Lock()
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.On("CloseImpl", mock.Anything).Return()
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Close(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.mu.Unlock()
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateInit, meta.State)
+	require.Equal(t, pollError.Error(), meta.ErrorMsg)
+}
+
+func TestJobMasterExitClearOldError(t *testing.T) {
+	t.Parallel()
+
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// simulate job failed in last round, and failover again
+	err := jobMaster.base.master.frameMetaClient.UpdateJob(
+		ctx, jobMasterID, ormModel.KeyValueMap{
+			"state":         frameModel.MasterStateInit,
+			"error_message": "error in last period",
+		})
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.On("OnMasterRecovered", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Init(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "OnMasterRecovered", 1)
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+	jobMaster.mu.Unlock()
+
+	status := jobMaster.Status()
+	jobMaster.base.Exit(ctx, ExitReasonFinished, nil, status.ExtBytes)
+	require.NoError(t, err)
+
+	meta, err := jobMaster.base.master.frameMetaClient.GetJobByID(ctx, jobMaster.base.ID())
+	require.NoError(t, err)
+	require.Equal(t, frameModel.MasterStateFinished, meta.State)
+	require.Equal(t, status.ExtBytes, meta.Detail)
+	require.Empty(t, meta.ErrorMsg)
 }

@@ -21,12 +21,11 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/stretchr/testify/require"
 )
 
 func newMysqlErr(number uint16, message string) *mysql.MySQLError {
@@ -148,7 +147,7 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	for _, cs := range cases {
-		err2 := syncer.handleSpecialDDLError(tctx, cs.err, cs.ddls, cs.index, conn2)
+		err2 := syncer.handleSpecialDDLError(tctx, cs.err, cs.ddls, cs.index, conn2, -1)
 		if cs.handled {
 			require.NoError(t, err2)
 		} else {
@@ -183,7 +182,7 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	mock.ExpectExec(dropColumnWithIndex).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	handledErr := syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2)
+	handledErr := syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2, -1)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, handledErr)
 
@@ -193,7 +192,7 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	mock.ExpectQuery("SELECT count\\(\\*\\) FROM information_schema.statistics WHERE.*").WillReturnRows(
 		sqlmock.NewRows([]string{"count(*)"}).AddRow(2))
 
-	handledErr = syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2)
+	handledErr = syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2, -1)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.Error(t, execErr, handledErr)
 }

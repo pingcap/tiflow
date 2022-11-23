@@ -91,7 +91,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		{
 			sinkURI:       "mysql://normal:123456@127.0.0.1:3306",
 			expectedErr:   "",
-			expectedLevel: tableTxnAtomicity,
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
@@ -126,12 +126,6 @@ func TestValidateApplyParameter(t *testing.T) {
 		},
 		{
 			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=none" +
-				"&protocol=open-protocol",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
-		},
-		{
-			sinkURI: "pulsar://127.0.0.1:9092?transaction-atomicity=table" +
 				"&protocol=open-protocol",
 			expectedErr:   "",
 			expectedLevel: noneTxnAtomicity,
@@ -192,5 +186,80 @@ func TestApplyParameter(t *testing.T) {
 		require.Nil(t, err)
 		c.sinkConfig.applyParameter(parsedSinkURI)
 		require.Equal(t, c.result, c.sinkConfig.Protocol)
+	}
+}
+
+func TestValidateAndAdjustCSVConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  *CSVConfig
+		wantErr string
+	}{
+		{
+			name: "valid quote",
+			config: &CSVConfig{
+				Quote:     "\"",
+				Delimiter: ",",
+			},
+			wantErr: "",
+		},
+		{
+			name: "quote has multiple characters",
+			config: &CSVConfig{
+				Quote: "***",
+			},
+			wantErr: "csv config quote contains more than one character",
+		},
+		{
+			name: "quote contains line break character",
+			config: &CSVConfig{
+				Quote: "\n",
+			},
+			wantErr: "csv config quote cannot be line break character",
+		},
+		{
+			name: "valid delimiter1",
+			config: &CSVConfig{
+				Quote:     "\"",
+				Delimiter: ",",
+			},
+			wantErr: "",
+		},
+		{
+			name: "delimiter is empty",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "",
+			},
+			wantErr: "csv config delimiter cannot be empty",
+		},
+		{
+			name: "delimiter contains line break character",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "\r",
+			},
+			wantErr: "csv config delimiter contains line break characters",
+		},
+		{
+			name: "delimiter and quote are same",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "'",
+			},
+			wantErr: "csv config quote and delimiter cannot be the same",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &SinkConfig{
+				CSVConfig: tc.config,
+			}
+			if tc.wantErr == "" {
+				require.Nil(t, s.validateAndAdjustCSVConfig())
+			} else {
+				require.Regexp(t, tc.wantErr, s.validateAndAdjustCSVConfig())
+			}
+		})
 	}
 }

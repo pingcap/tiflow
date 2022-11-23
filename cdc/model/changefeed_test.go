@@ -145,9 +145,12 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			CaseSensitive:    true,
-			EnableOldValue:   true,
-			CheckGCSafePoint: true,
+			MemoryQuota:        2147483648,
+			CaseSensitive:      true,
+			EnableOldValue:     true,
+			CheckGCSafePoint:   true,
+			SyncPointInterval:  time.Minute * 10,
+			SyncPointRetention: time.Hour * 24,
 		},
 	}
 
@@ -326,8 +329,7 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 		if tc.expectedProtocolStr != "" {
 			require.Equal(t, tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
 		} else {
-			var protocol config.Protocol
-			err := protocol.FromString(tc.info.Config.Sink.Protocol)
+			_, err := config.ParseSinkProtocolFromString(tc.info.Config.Sink.Protocol)
 			if strings.Contains(tc.info.SinkURI, "kafka") {
 				require.NoError(t, err)
 			} else {
@@ -637,8 +639,7 @@ func TestFixMQSinkProtocol(t *testing.T) {
 
 	for _, tc := range configTestCases {
 		tc.info.fixMQSinkProtocol()
-		var protocol config.Protocol
-		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+		protocol, err := config.ParseSinkProtocolFromString(tc.info.Config.Sink.Protocol)
 		require.Nil(t, err)
 		require.Equal(t, tc.expectedProtocol, protocol)
 	}
@@ -751,21 +752,21 @@ func TestChangefeedInfoStringer(t *testing.T) {
 				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
+			`.*mysql://root:xxxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
+			`.*mysql://root@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://root:xxxx@127.0.0.1:3306/.*`,
+			`.*mysql://root:xxxxx@127.0.0.1:3306/.*`,
 		},
 	}
 

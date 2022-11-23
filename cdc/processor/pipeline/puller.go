@@ -31,6 +31,7 @@ import (
 type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
+	plr        puller.Puller
 	tableID    model.TableID
 	startTs    model.Ts
 	changefeed model.ChangeFeedID
@@ -59,20 +60,18 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 	return spans
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext,
+func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
 ) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	ctxC = contextutil.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.New(
+	n.plr = puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,
@@ -83,9 +82,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		n.tableSpan(),
 		kvCfg,
 		n.changefeed,
+		n.tableID,
+		n.tableName,
 	)
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(plr.Run(ctxC)))
+		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))
 		return nil
 	})
 	n.wg.Go(func() error {
@@ -93,7 +94,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 			select {
 			case <-ctxC.Done():
 				return nil
-			case rawKV := <-plr.Output():
+			case rawKV := <-n.plr.Output():
 				if rawKV == nil {
 					continue
 				}

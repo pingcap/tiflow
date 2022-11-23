@@ -17,15 +17,14 @@ import (
 	"context"
 	"sync"
 
-	"github.com/stretchr/testify/mock"
-	"go.uber.org/atomic"
-	"go.uber.org/dig"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
 )
 
 type mockWorkerImpl struct {
@@ -39,8 +38,7 @@ type mockWorkerImpl struct {
 	messageSender         *p2p.MockMessageSender
 	metaClient            pkgOrm.Client
 
-	failoverCount atomic.Int64
-	closed        atomic.Bool
+	closed atomic.Bool
 }
 
 type workerParamListForTest struct {
@@ -94,15 +92,15 @@ func (w *mockWorkerImpl) Status() frameModel.WorkerStatus {
 	return args.Get(0).(frameModel.WorkerStatus)
 }
 
-func (w *mockWorkerImpl) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *mockWorkerImpl) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called(topic, message)
+	args := w.Called(ctx, topic, message)
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
+func (w *mockWorkerImpl) CloseImpl(ctx context.Context) {
 	if w.closed.Swap(true) {
 		panic("CloseImpl called twice")
 	}
@@ -110,6 +108,5 @@ func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called()
-	return args.Error(0)
+	w.Called()
 }

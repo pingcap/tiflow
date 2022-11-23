@@ -18,10 +18,10 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/stretchr/testify/require"
-
+	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetBinlogDB(t *testing.T) {
@@ -59,4 +59,68 @@ func TestGetBinlogDB(t *testing.T) {
 	require.Equal(t, binlogDoDB, "do_db")
 	require.Equal(t, binlogIgnoreDB, "ignore_db")
 	require.Nil(t, mock.ExpectationsWereMet())
+}
+
+func TestGetMasterStatus(t *testing.T) {
+	ctx := context.Background()
+	tctx := tcontext.NewContext(ctx, log.L())
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	baseDB := NewBaseDB(db)
+
+	cases := []struct {
+		rows           *sqlmock.Rows
+		binlogName     string
+		pos            uint32
+		binlogDoDB     string
+		binlogIgnoreDB string
+		gtidStr        string
+		err            error
+		flavor         string
+	}{
+		// For MySQL
+		{
+			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+				AddRow("ON.000001", 4822, "", "", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46"),
+			"ON.000001",
+			4822,
+			"",
+			"",
+			"85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46",
+			nil,
+			gmysql.MySQLFlavor,
+		},
+		// For MariaDB
+		{
+			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).
+				AddRow("mariadb-bin.000016", 475, "", ""),
+			"mariadb-bin.000016",
+			475,
+			"",
+			"",
+			"0-1-2",
+			nil,
+			gmysql.MariaDBFlavor,
+		},
+	}
+
+	for _, ca := range cases {
+		mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(ca.rows)
+		// For MariaDB
+		if ca.flavor == gmysql.MariaDBFlavor {
+			mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'").WillReturnRows(
+				sqlmock.NewRows([]string{"Variable_name", "Value"}).
+					AddRow("gtid_binlog_pos", "0-1-2"),
+			)
+		}
+		binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err := GetMasterStatus(tctx, baseDB, ca.flavor)
+		require.NoError(t, err)
+		require.Equal(t, ca.binlogName, binlogName)
+		require.Equal(t, ca.pos, pos)
+		require.Equal(t, ca.binlogDoDB, binlogDoDB)
+		require.Equal(t, ca.binlogIgnoreDB, binlogIgnoreDB)
+		require.Equal(t, ca.gtidStr, gtidStr)
+		require.NoError(t, mock.ExpectationsWereMet())
+	}
 }

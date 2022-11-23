@@ -229,7 +229,7 @@ type KeyValue struct {
 	// Key is the key in bytes. An empty key is not allowed.
 	Key []byte `gorm:"column:meta_key;type:varbinary(2048) not null;uniqueIndex:uidx_jk,priority:2"`
 	// Value is the value held by the key, in bytes.
-	Value []byte `gorm:"column:meta_value;type:blob"`
+	Value []byte `gorm:"column:meta_value;type:longblob"`
 }
 
 // String only for debug

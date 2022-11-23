@@ -154,11 +154,11 @@ func InitLogger(cfg *Config, opts ...LoggerOpt) error {
 	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
 	log.ReplaceGlobals(lg, globalP)
 
-	return initOptionalComponent(&op, lg, cfg)
+	return initOptionalComponent(&op, cfg)
 }
 
 // initOptionalComponent initializes some optional components
-func initOptionalComponent(op *loggerOp, logger *zap.Logger, cfg *Config) error {
+func initOptionalComponent(op *loggerOp, cfg *Config) error {
 	var level zapcore.Level
 	if op.isInitGRPCLogger || op.isInitSaramaLogger {
 		err := level.UnmarshalText([]byte(cfg.Level))
@@ -300,5 +300,5 @@ func ShortError(err error) zap.Field {
 
 // WithComponent return a logger with specified component scope
 func WithComponent(component string) *zap.Logger {
-	return log.With(zap.String("component", component))
+	return log.L().With(zap.String("component", component))
 }

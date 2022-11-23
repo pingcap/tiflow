@@ -18,30 +18,40 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/pingcap/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"gorm.io/gorm"
 )
 
 type (
-	// MasterStatusCode is used in framework to manage job status
-	MasterStatusCode int8
+	// MasterState is used in framework to manage job status
+	MasterState int8
 )
 
 // Job master statuses
 // NOTICE: DO NOT CHANGE the previous status code
-// Modify the MasterMetaKVData.StatusCode comment IF you add some new status code
+// Modify the MasterMeta.State comment IF you add some new status code
 const (
-	MasterStatusUninit   = MasterStatusCode(1)
-	MasterStatusInit     = MasterStatusCode(2)
-	MasterStatusFinished = MasterStatusCode(3)
-	MasterStatusStopped  = MasterStatusCode(4)
-	MasterStatusFailed   = MasterStatusCode(5)
+	MasterStateUninit   = MasterState(1)
+	MasterStateInit     = MasterState(2)
+	MasterStateFinished = MasterState(3)
+	MasterStateStopped  = MasterState(4)
+	MasterStateFailed   = MasterState(5)
 	// extend the status code here
 )
+
+// IsTerminatedState checks whether master state is terminated
+func (code MasterState) IsTerminatedState() bool {
+	switch code {
+	case MasterStateFinished, MasterStateStopped, MasterStateFailed:
+		return true
+	default:
+		return false
+	}
+}
 
 // MasterMetaExt stores some attributes of job masters that do not need
 // to be indexed.
@@ -96,16 +106,16 @@ func (e *MasterMetaExt) Scan(rawInput interface{}) error {
 	return nil
 }
 
-// MasterMetaKVData defines the metadata of job master
-type MasterMetaKVData struct {
+// MasterMeta defines the metadata of job master
+type MasterMeta struct {
 	ormModel.Model
-	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;index:idx_mst,priority:1"`
-	ID         MasterID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_mid"`
-	Tp         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)"`
-	StatusCode MasterStatusCode `json:"status" gorm:"column:status;type:tinyint not null;index:idx_mst,priority:2;comment:Uninit(1),Init(2),Finished(3),Stopped(4)"`
-	NodeID     p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(128) not null"`
-	Addr       string           `json:"addr" gorm:"column:address;type:varchar(256) not null"`
-	Epoch      Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
+	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;index:idx_mst,priority:1"`
+	ID        MasterID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_mid"`
+	Type      WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)"`
+	State     MasterState      `json:"state" gorm:"column:state;type:tinyint not null;index:idx_mst,priority:2;comment:Uninit(1),Init(2),Finished(3),Stopped(4),Failed(5)"`
+	NodeID    p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(128) not null"`
+	Addr      string           `json:"addr" gorm:"column:address;type:varchar(256) not null"`
+	Epoch     Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
 
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
@@ -113,8 +123,8 @@ type MasterMetaKVData struct {
 	// error message for the job
 	ErrorMsg string `json:"error-message" gorm:"column:error_message;type:text"`
 
-	// if job is finished or canceled, business logic can set self-defined job info to `ExtMsg`
-	ExtMsg string `json:"extend-message" gorm:"column:extend_message;type:text"`
+	// if job is finished or canceled, business logic can set self-defined job info to `Detail`
+	Detail []byte `json:"detail" gorm:"column:detail;type:blob"`
 
 	Ext MasterMetaExt `json:"ext" gorm:"column:ext;type:JSON"`
 
@@ -123,30 +133,45 @@ type MasterMetaKVData struct {
 	Deleted gorm.DeletedAt
 }
 
-// Marshal returns the JSON encoding of MasterMetaKVData.
-func (m *MasterMetaKVData) Marshal() ([]byte, error) {
+// Marshal returns the JSON encoding of MasterMeta.
+func (m *MasterMeta) Marshal() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// Unmarshal parses the JSON-encoded data and stores the result to MasterMetaKVData
-func (m *MasterMetaKVData) Unmarshal(data []byte) error {
+// Unmarshal parses the JSON-encoded data and stores the result to MasterMeta
+func (m *MasterMeta) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
-// Map is used for update the orm model
-func (m *MasterMetaKVData) Map() map[string]interface{} {
-	return map[string]interface{}{
-		"project_id":     m.ProjectID,
-		"id":             m.ID,
-		"type":           m.Tp,
-		"status":         m.StatusCode,
-		"node_id":        m.NodeID,
-		"address":        m.Addr,
-		"epoch":          m.Epoch,
-		"config":         m.Config,
-		"error_message":  m.ErrorMsg,
-		"extend_message": m.ExtMsg,
-		"ext":            m.Ext,
+// RefreshValues is used to generate orm value map when refreshing metadata.
+func (m *MasterMeta) RefreshValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"node_id": m.NodeID,
+		"address": m.Addr,
+		"epoch":   m.Epoch,
+	}
+}
+
+// UpdateStateValues is used to generate orm value map when updating state of master meta.
+func (m *MasterMeta) UpdateStateValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"state": m.State,
+	}
+}
+
+// UpdateErrorValues is used to generate orm value map when job master meets error and records it.
+func (m *MasterMeta) UpdateErrorValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"error_message": m.ErrorMsg,
+	}
+}
+
+// ExitValues is used to generate orm value map when job master exits.
+func (m *MasterMeta) ExitValues() ormModel.KeyValueMap {
+	return ormModel.KeyValueMap{
+		"state":         m.State,
+		"error_message": m.ErrorMsg,
+		"detail":        m.Detail,
 	}
 }
 
@@ -158,12 +183,12 @@ var MasterUpdateColumns = []string{
 	"project_id",
 	"id",
 	"type",
-	"status",
+	"state",
 	"node_id",
 	"address",
 	"epoch",
 	"config",
 	"error_message",
-	"extend_message",
+	"detail",
 	"ext",
 }

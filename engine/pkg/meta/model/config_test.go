@@ -26,11 +26,12 @@ func TestGenerateDSNByParams(t *testing.T) {
 
 	sf := DefaultStoreConfig()
 	sf.Endpoints = []string{"1.1.1.1"}
-	sf.Auth.User = "user"
-	sf.Auth.Passwd = "passwd"
-	dsn := GenerateDSNByParams(sf, map[string]string{
+	sf.User = "user"
+	sf.Password = "passwd"
+	dsn, err := GenerateDSNByParams(sf, map[string]string{
 		"sql_model": dbutil.GetSQLStrictMode(),
 	})
+	require.NoError(t, err)
 	require.Equal(t, "user:passwd@tcp(1.1.1.1)/?interpolateParams=true&"+
 		"loc=Local&parseTime=true&readTimeout=3s&sql_model=STRICT_TRANS_TABLES%2CSTRIC"+
 		"T_ALL_TABLES%2CERROR_FOR_DIVISION_BY_ZERO&timeout=3s&writeTimeout=3s", dsn)

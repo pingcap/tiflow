@@ -16,25 +16,25 @@ package registry
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework"
-	frame "github.com/pingcap/tiflow/engine/framework"
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
-var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
+var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(newFakeWorker)
 
 const (
-	fakeWorkerType = frame.FakeJobMaster
+	fakeWorkerType = frameModel.FakeJobMaster
 )
 
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
-	ctx := makeCtxWithMockDeps(t)
+	ctx, cancel := makeCtxWithMockDeps(t)
+	defer cancel()
 	metaCli, err := ctx.Deps().Construct(
 		func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 			return cli, nil
@@ -55,8 +55,8 @@ func TestGlobalRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, &framework.DefaultBaseWorker{}, worker)
 	impl := worker.(*framework.DefaultBaseWorker).Impl
-	require.IsType(t, &fake.Worker{}, impl)
-	require.NotNil(t, impl.(*fake.Worker).BaseWorker)
+	require.IsType(t, &fakeWorker{}, impl)
+	require.NotNil(t, impl.(*fakeWorker).BaseWorker)
 	require.Equal(t, "worker-1", worker.ID())
 }
 
@@ -79,13 +79,6 @@ func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1",
 		[]byte(`{"Val"":0}`), int64(2))
 	require.Error(t, err)
-}
-
-func TestLoadFake(t *testing.T) {
-	registry := NewRegistry()
-	require.NotPanics(t, func() {
-		RegisterFake(registry)
-	})
 }
 
 func TestGetTypeNameOfVarPtr(t *testing.T) {
@@ -128,4 +121,26 @@ func TestSetImplMember(t *testing.T) {
 
 	setImplMember(iface, "MyBase", 2)
 	require.Equal(t, 2, iface.(*myImpl).MyBase.(int))
+}
+
+func TestIsRetryableError(t *testing.T) {
+	t.Parallel()
+
+	registry := NewRegistry()
+	ok := registry.RegisterWorkerType(frameModel.FakeJobMaster, NewSimpleWorkerFactory(newFakeWorker))
+	require.True(t, ok)
+
+	testCases := []struct {
+		err         error
+		isRetryable bool
+	}{
+		{errors.ErrDeserializeConfig.GenWithStackByArgs(), false},
+		{errors.New("normal error"), true},
+	}
+
+	for _, tc := range testCases {
+		retryable, err := registry.IsRetryableError(tc.err, frameModel.FakeJobMaster)
+		require.NoError(t, err)
+		require.Equal(t, tc.isRetryable, retryable)
+	}
 }

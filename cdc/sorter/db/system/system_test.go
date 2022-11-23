@@ -35,10 +35,8 @@ func TestSystemStartStop(t *testing.T) {
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 
-	// Close it again.
-	require.Nil(t, sys.Stop())
 	// Start a closed system.
 	require.Error(t, sys.Start(ctx))
 }
@@ -49,7 +47,7 @@ func TestSystemStopUnstarted(t *testing.T) {
 	cfg.Count = 1
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 func TestCollectMetrics(t *testing.T) {
@@ -61,7 +59,7 @@ func TestCollectMetrics(t *testing.T) {
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
 	collectMetrics(sys.dbs)
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 func TestDBActorID(t *testing.T) {
@@ -76,7 +74,7 @@ func TestDBActorID(t *testing.T) {
 	id2 := sys.DBActorID(1)
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 // Slow actor should not block system.Stop() forever.
@@ -90,7 +88,7 @@ func TestSystemStopSlowly(t *testing.T) {
 	require.Nil(t, sys.Start(ctx))
 	msg := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
 	sys.DBRouter.Broadcast(ctx, actormsg.ValueMessage(msg))
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 // Mailbox full should not cause system.Stop() being blocked forever.
@@ -110,7 +108,7 @@ func TestSystemStopMailboxFull(t *testing.T) {
 			break
 		}
 	}
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
@@ -164,5 +162,5 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 		}
 	}
 	// Close system.
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }

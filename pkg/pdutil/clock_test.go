@@ -53,3 +53,25 @@ func TestTimeFromPD(t *testing.T) {
 	// should return new time
 	require.NotEqual(t, t1, t2)
 }
+
+func TestEventTimeAndProcessingTime(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockPDClient := &MockPDClient{}
+	clock, err := NewClock(ctx, mockPDClient)
+	require.NoError(t, err)
+
+	// Disable update in test by setting a very long update interval.
+	clock.updateInterval = time.Hour
+	go clock.Run(ctx)
+	defer clock.Stop()
+
+	sleep := time.Second
+	time.Sleep(sleep)
+	t1, err := clock.CurrentTime()
+	now := time.Now()
+	require.Nil(t, err)
+	require.Less(t, now.Sub(t1), sleep/2)
+}

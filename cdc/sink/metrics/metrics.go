@@ -14,6 +14,7 @@
 package metrics
 
 import (
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -47,11 +48,11 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "large_row_changed_event_size",
-			Help:      "The size of all received row changed events (in bytes)",
+			Help:      "The size of all received large size row changed events (in bytes)",
 			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecDDLHistogram records the exexution time of a DDL.
+	// ExecDDLHistogram records the execution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -129,4 +130,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
+	codec.InitMetrics(registry)
 }

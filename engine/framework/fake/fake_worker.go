@@ -18,23 +18,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
-
-	"github.com/pingcap/tiflow/engine/framework"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
-	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 var _ framework.Worker = (*dummyWorker)(nil)
@@ -59,18 +56,19 @@ type (
 	dummyWorker struct {
 		framework.BaseWorker
 
-		init   bool
-		cancel context.CancelFunc
-		closed int32
-		status *dummyWorkerStatus
-		config *WorkerConfig
-		errCh  chan error
+		init      bool
+		cancel    context.CancelFunc
+		status    *dummyWorkerStatus
+		config    *WorkerConfig
+		errCh     chan error
+		closed    *atomic.Bool
+		canceling *atomic.Bool
 
 		statusRateLimiter *rate.Limiter
 
 		statusCode struct {
 			sync.RWMutex
-			code frameModel.WorkerStatusCode
+			code frameModel.WorkerState
 		}
 
 		startTime time.Time
@@ -121,7 +119,7 @@ func (d *dummyWorker) InitImpl(_ context.Context) error {
 			d.cancel = cancel
 		}
 		d.init = true
-		d.setStatusCode(frameModel.WorkerStatusNormal)
+		d.setState(frameModel.WorkerStateNormal)
 		d.startTime = time.Now()
 		return nil
 	}
@@ -144,25 +142,32 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	if d.statusRateLimiter.Allow() {
 		log.Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
 		err := d.BaseWorker.UpdateStatus(ctx, d.Status())
-		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			log.Warn("update status try again later", zap.String("error", err.Error()))
-			return nil
+		if err != nil {
+			if errors.Is(err, errors.ErrWorkerUpdateStatusTryAgain) {
+				log.Warn("update status try again later", zap.String("error", err.Error()))
+				return nil
+			}
+			return err
 		}
-		return err
 	}
 
-	if atomic.LoadInt32(&d.closed) == 1 {
+	if d.closed.Load() {
 		return nil
 	}
 
-	if d.getStatusCode() == frameModel.WorkerStatusStopped {
-		d.setStatusCode(frameModel.WorkerStatusStopped)
-		return d.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("worker has been canceled"))
+	extMsg, err := d.status.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if d.canceling.Load() {
+		d.setState(frameModel.WorkerStateStopped)
+		return d.Exit(ctx, framework.ExitReasonCanceled, nil, extMsg)
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
-		d.setStatusCode(frameModel.WorkerStatusFinished)
-		return d.Exit(ctx, framework.ExitReasonFinished, nil, []byte("worker has reached target tick"))
+		d.setState(frameModel.WorkerStateFinished)
+		return d.Exit(ctx, framework.ExitReasonFinished, nil, extMsg)
 	}
 
 	if d.config.InjectErrorInterval != 0 {
@@ -180,24 +185,20 @@ func (d *dummyWorker) Status() frameModel.WorkerStatus {
 			log.Panic("unexpected error", zap.Error(err))
 		}
 		return frameModel.WorkerStatus{
-			Code:     d.getStatusCode(),
+			State:    d.getState(),
 			ExtBytes: extBytes,
 		}
 	}
-	return frameModel.WorkerStatus{Code: frameModel.WorkerStatusCreated}
+	return frameModel.WorkerStatus{State: frameModel.WorkerStateCreated}
 }
 
-func (d *dummyWorker) Workload() model.RescUnit {
-	return model.RescUnit(10)
-}
-
-func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (d *dummyWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case frameModel.WorkerStatusStopped:
-			d.setStatusCode(frameModel.WorkerStatusStopped)
+		case frameModel.WorkerStateStopped:
+			d.canceling.Store(true)
 		default:
 			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -208,22 +209,21 @@ func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue)
 	return nil
 }
 
-func (d *dummyWorker) CloseImpl(ctx context.Context) error {
-	if atomic.CompareAndSwapInt32(&d.closed, 0, 1) {
+func (d *dummyWorker) CloseImpl(ctx context.Context) {
+	if d.closed.CompareAndSwap(false, true) {
 		if d.cancel != nil {
 			d.cancel()
 		}
 	}
-	return nil
 }
 
-func (d *dummyWorker) setStatusCode(code frameModel.WorkerStatusCode) {
+func (d *dummyWorker) setState(code frameModel.WorkerState) {
 	d.statusCode.Lock()
 	defer d.statusCode.Unlock()
 	d.statusCode.code = code
 }
 
-func (d *dummyWorker) getStatusCode() frameModel.WorkerStatusCode {
+func (d *dummyWorker) getState() frameModel.WorkerState {
 	d.statusCode.RLock()
 	defer d.statusCode.RUnlock()
 	return d.statusCode.code
@@ -311,5 +311,7 @@ func NewDummyWorker(
 		status:            status,
 		config:            wcfg,
 		errCh:             make(chan error, 1),
+		closed:            atomic.NewBool(false),
+		canceling:         atomic.NewBool(false),
 	}
 }

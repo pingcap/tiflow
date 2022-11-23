@@ -1,0 +1,12 @@
+# executor config
+name = "executor-test"              # Corresponding command line:  --name
+addr = "127.0.0.1:10340"            # Corresponding command line:  --addr
+advertise-addr = "127.0.0.1:10340"  # Corresponding command line:  --advertise-addr
+join = ["127.0.0.1:10240"]          # Corresponding command line:  --join
+
+keepalive-ttl = "20s"
+keepalive-interval = "500ms"
+
+[log] 
+level = "info"              # Corresponding command line:  --log-level
+file = "/log/executor.log"  # Corresponding command line:  --log-file

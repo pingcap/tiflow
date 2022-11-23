@@ -14,18 +14,18 @@
 package dumpling
 
 import (
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 type metricProxies struct {
-	dumplingExitWithErrorCounter *metricsproxy.CounterVecProxy
+	dumplingExitWithErrorCounter *prometheus.CounterVec
 }
 
+var f = &promutil.PromFactory{}
+
 var defaultMetricProxies = &metricProxies{
-	dumplingExitWithErrorCounter: metricsproxy.NewCounterVec(
-		&promutil.PromFactory{},
+	dumplingExitWithErrorCounter: f.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "dumpling",
@@ -41,5 +41,5 @@ func RegisterMetrics(registry *prometheus.Registry) {
 
 func (m *Dumpling) removeLabelValuesWithTaskInMetrics(task, source string) {
 	labels := prometheus.Labels{"task": task, "source_id": source}
-	m.metricProxies.dumplingExitWithErrorCounter.DeleteAllAboutLabels(labels)
+	m.metricProxies.dumplingExitWithErrorCounter.DeletePartialMatch(labels)
 }

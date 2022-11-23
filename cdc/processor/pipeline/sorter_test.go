@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -62,20 +63,21 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
-	state := TableStatePreparing
+	state := tablepb.TableStatePreparing
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
 		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
 	sn.sorter = memory.NewEntrySorter()
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
-	require.Equal(t, TableStatePreparing, sn.State())
+	require.Equal(t, tablepb.TableStatePreparing, sn.State())
 
 	msg := model.NewResolvedPolymorphicEvent(0, 2)
 	sn.handleRawEvent(context.Background(), msg)
 	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
-	require.Equal(t, TableStatePrepared, sn.State())
+	require.Equal(t, tablepb.TableStatePrepared, sn.State())
 }
 
 type checkSorter struct {
+	sorter.EventSorter
 	ch chan *model.PolymorphicEvent
 }
 
@@ -134,8 +136,17 @@ type mockMounter struct {
 	entry.Mounter
 }
 
-func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error) {
-	return false, nil
+func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	return nil
+}
+
+func (mockMounter) Run(ctx context.Context) error {
+	return nil
+}
+
+func (mockMounter) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
+	return nil
 }
 
 func TestSorterReplicateTs(t *testing.T) {
@@ -144,13 +155,13 @@ func TestSorterReplicateTs(t *testing.T) {
 
 	p := &mockPD{ts: 1}
 	ts := oracle.ComposeTS(1, 1)
-	state := TableStatePreparing
+	state := tablepb.TableStatePreparing
 	sn := newSorterNode(t.Name(), 1, 1, &mockFlowController{}, mockMounter{}, &state,
 		model.DefaultChangeFeedID(t.Name()), false, p)
 	sn.sorter = memory.NewEntrySorter()
 
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
-	require.Equal(t, TableStatePreparing, sn.State())
+	require.Equal(t, tablepb.TableStatePreparing, sn.State())
 
 	eg := &errgroup.Group{}
 	router := actor.NewRouter[pmessage.Message](t.Name())
@@ -181,7 +192,7 @@ func TestSorterReplicateTs(t *testing.T) {
 	}
 
 	// Preparing -> Prepared.
-	sn.state.Store(TableStatePrepared)
+	sn.state.Store(tablepb.TableStatePrepared)
 	close(sn.preparedCh)
 	// Prepared -> Replicating.
 	sn.startTsCh <- 1
@@ -197,7 +208,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
-	state := TableStatePreparing
+	state := tablepb.TableStatePreparing
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
 		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
 	sn.sorter = s
@@ -207,7 +218,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
 	sn.handleRawEvent(context.Background(), resolvedTs1)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
-	require.Equal(t, TableStatePrepared, sn.State())
+	require.Equal(t, tablepb.TableStatePrepared, sn.State())
 
 	// Advance barrier ts.
 	sn.updateBarrierTs(2)

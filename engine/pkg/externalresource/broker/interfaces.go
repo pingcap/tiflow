@@ -17,8 +17,7 @@ import (
 	"context"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -34,9 +33,10 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
+		opts ...OpenStorageOption,
 	) (Handle, error)
 
-	// OnWorkerClosed in called when a worker is closing.
+	// OnWorkerClosed is called when a worker is closing.
 	// The implementation should do necessary garbage collection
 	// for the worker, especially local temporary files.
 	OnWorkerClosed(
@@ -44,30 +44,22 @@ type Broker interface {
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 	)
+
+	IsS3StorageEnabled() bool
+
+	Close()
 }
 
-// FileManager abstracts the operations on local resources that
-// a Broker needs to perform.
-type FileManager interface {
-	CreateResource(
-		creator frameModel.WorkerID,
-		resName resModel.ResourceName,
-	) (*LocalFileResourceDescriptor, error)
+type openStorageOptions struct {
+	cleanBeforeOpen bool
+}
 
-	GetPersistedResource(
-		creator frameModel.WorkerID,
-		resName resModel.ResourceName,
-	) (*LocalFileResourceDescriptor, error)
+// OpenStorageOption is an option for OpenStorage.
+type OpenStorageOption func(*openStorageOptions)
 
-	RemoveTemporaryFiles(creator frameModel.WorkerID) error
-
-	RemoveResource(
-		creator frameModel.WorkerID,
-		resName resModel.ResourceName,
-	) error
-
-	SetPersisted(
-		creator frameModel.WorkerID,
-		resName resModel.ResourceName,
-	)
+// WithCleanBeforeOpen indicates that the storage should be cleaned before open.
+func WithCleanBeforeOpen() OpenStorageOption {
+	return func(opts *openStorageOptions) {
+		opts.cleanBeforeOpen = true
+	}
 }

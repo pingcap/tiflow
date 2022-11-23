@@ -17,12 +17,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -54,7 +52,6 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 
 	watchStart := time.Now()
 	snap, updates, err := watcher.WatchExecutors(ctx)
-	defer updates.Close()
 
 	if duration := time.Since(watchStart); duration >= 100*time.Millisecond {
 		log.Warn("WatchExecutors took too long",
@@ -64,6 +61,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 	if err != nil {
 		return errors.Annotate(err, "watch executors")
 	}
+	defer updates.Close()
 
 	log.Info("update executor list", zap.Any("list", snap))
 	if err := user.UpdateExecutorList(snap); err != nil {
@@ -82,12 +80,12 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		}
 
 		if !ok {
-			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
+			return errors.ErrExecutorWatcherClosed.GenWithStackByArgs()
 		}
 		if change.Tp == model.EventExecutorOnline {
 			err := user.AddExecutor(change.ID, change.Addr)
 			if err != nil {
-				if pkgClient.ErrExecutorAlreadyExists.Is(err) {
+				if errors.Is(err, errors.ErrExecutorAlreadyExists) {
 					log.Warn("unexpected EventExecutorOnline",
 						zap.Error(err))
 					continue
@@ -100,7 +98,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		} else if change.Tp == model.EventExecutorOffline {
 			err := user.RemoveExecutor(change.ID)
 			if err != nil {
-				if pkgClient.ErrExecutorNotFound.Is(err) {
+				if errors.Is(err, errors.ErrExecutorNotFound) || errors.Is(err, errors.ErrTombstoneExecutor) {
 					log.Warn("unexpected EventExecutorOffline",
 						zap.Error(err))
 					continue

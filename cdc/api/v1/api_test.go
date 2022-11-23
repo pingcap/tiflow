@@ -79,11 +79,6 @@ func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedI
 	return args.Get(0).(map[model.CaptureID]*model.TaskStatus), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	args := p.Called(ctx)
-	return args.Get(0).(map[model.CaptureID]*model.TaskPosition), args.Error(1)
-}
-
 func (p *mockStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
 	args := p.Called(ctx)
 	return args.Get(0).([]*model.ProcInfoSnap), args.Error(1)
@@ -116,11 +111,6 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
-
-	statusProvider.On("GetTaskPositions", mock.Anything).
-		Return(map[model.CaptureID]*model.TaskPosition{
-			captureID: {Error: &model.RunningError{Message: "test"}},
-		}, nil)
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
@@ -200,7 +190,10 @@ func TestGetChangefeed(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 
 	// test get changefeed succeeded
@@ -713,10 +706,6 @@ func TestGetProcessor(t *testing.T) {
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
-	processorDetail := &model.ProcessorDetail{}
-	err := json.NewDecoder(w.Body).Decode(processorDetail)
-	require.Nil(t, err)
-	require.Equal(t, "test", processorDetail.Error.Message)
 
 	// test get processor fail due to capture ID error
 	api = testCase{
@@ -728,7 +717,7 @@ func TestGetProcessor(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	httpError := &model.HTTPError{}
-	err = json.NewDecoder(w.Body).Decode(httpError)
+	err := json.NewDecoder(w.Body).Decode(httpError)
 	require.Nil(t, err)
 	require.Contains(t, httpError.Error, "capture not exists, non-exist-capture")
 }
@@ -755,7 +744,10 @@ func TestListCapture(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	cp := capture.NewCapture4Test(mo)
+	cp.EtcdClient = etcdClient
 	router := newRouter(cp, newStatusProvider())
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/captures", method: "GET"}
@@ -896,9 +888,10 @@ func TestHealth(t *testing.T) {
 	// capture is owner
 	ctrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCapture(ctrl)
+
+	api := testCase{url: "/api/v1/health", method: "GET"}
 	sp := mock_owner.NewMockStatusProvider(ctrl)
 	ownerRouter := newRouter(cp, sp)
-	api := testCase{url: "/api/v1/health", method: "GET"}
 
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {

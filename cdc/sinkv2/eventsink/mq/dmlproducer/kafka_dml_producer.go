@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
+	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -120,13 +120,15 @@ func NewKafkaDMLProducer(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
-				log.Error("Kafka DML producer run error", zap.Error(err),
+				log.Error("Kafka DML producer run error",
 					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID))
+					zap.String("changefeed", k.id.ID),
+					zap.Error(err))
 			default:
-				log.Error("Error channel is full in kafka DML producer", zap.Error(err),
+				log.Error("Error channel is full in kafka DML producer",
 					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID))
+					zap.String("changefeed", k.id.ID),
+					zap.Error(err))
 			}
 		}
 	}()
@@ -249,9 +251,10 @@ func (k *kafkaDMLProducer) run(ctx context.Context) error {
 			return nil
 		case err := <-k.failpointCh:
 			log.Warn("Receive from failpoint chan in kafka "+
-				"DML producer", zap.Error(err),
+				"DML producer",
 				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
+				zap.String("changefeed", k.id.ID),
+				zap.Error(err))
 			return errors.Trace(err)
 		case ack := <-k.asyncProducer.Successes():
 			if ack != nil {

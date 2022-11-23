@@ -16,8 +16,9 @@ package member
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"go.uber.org/zap"
 )
 
@@ -57,7 +58,7 @@ type CaptureStatus struct {
 	OwnerRev schedulepb.OwnerRevision
 	Epoch    schedulepb.ProcessorEpoch
 	State    CaptureState
-	Tables   []schedulepb.TableStatus
+	Tables   []tablepb.TableStatus
 	ID       model.CaptureID
 	Addr     string
 	IsOwner  bool
@@ -107,8 +108,8 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 
 // CaptureChanges wraps changes of captures.
 type CaptureChanges struct {
-	Init    map[model.CaptureID][]schedulepb.TableStatus
-	Removed map[model.CaptureID][]schedulepb.TableStatus
+	Init    map[model.CaptureID][]tablepb.TableStatus
+	Removed map[model.CaptureID][]tablepb.TableStatus
 }
 
 // CaptureManager manages capture status.
@@ -156,10 +157,7 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 			return false
 		}
 	}
-	if len(c.Captures) == 0 {
-		return false
-	}
-	return true
+	return len(c.Captures) != 0
 }
 
 // Tick advances the logical lock of capture manager and produce heartbeat when
@@ -249,7 +247,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				c.changes = &CaptureChanges{}
 			}
 			if c.changes.Removed == nil {
-				c.changes.Removed = make(map[string][]schedulepb.TableStatus)
+				c.changes.Removed = make(map[string][]tablepb.TableStatus)
 			}
 			c.changes.Removed[id] = capture.Tables
 
@@ -260,7 +258,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 
 	// Check if this is the first time all captures are initialized.
 	if !c.initialized && c.checkAllCaptureInitialized() {
-		c.changes = &CaptureChanges{Init: make(map[string][]schedulepb.TableStatus)}
+		c.changes = &CaptureChanges{Init: make(map[string][]tablepb.TableStatus)}
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}

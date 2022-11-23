@@ -1,15 +1,20 @@
-addr = "0.0.0.0:10240"
-
-etcd-endpoints = ["etcd-standalone:2379"]
-
-[framework-metastore-conf]
+[framework-meta]
 endpoints = ["mysql-standalone:3306"]
 schema = "test_framework"
-auth.user = "root"
-auth.passwd = ""
+user = "root"
+password = ""
 
-[business-metastore-conf]
+[business-meta]
 endpoints = ["mysql-standalone:3306"]
 schema = "test_business"
-auth.user = "root"
-auth.passwd = ""
+user = "root"
+password = ""
+
+[log]
+level = "debug"
+
+[job-backoff]
+reset-interval = "2s"
+initial-interval = "1s"
+max-interval = "15s"
+max-try-time = 100

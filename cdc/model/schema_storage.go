@@ -16,13 +16,11 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
-	"go.uber.org/zap"
 )
 
 const (
@@ -65,9 +63,13 @@ type TableInfo struct {
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
 func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *model.TableInfo) *TableInfo {
 	ti := &TableInfo{
-		TableInfo:        info,
-		SchemaID:         schemaID,
-		TableName:        TableName{Schema: schemaName, Table: info.Name.O},
+		TableInfo: info,
+		SchemaID:  schemaID,
+		TableName: TableName{
+			Schema:  schemaName,
+			Table:   info.Name.O,
+			TableID: info.ID,
+		},
 		TableInfoVersion: version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
@@ -138,7 +140,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("wrapped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
@@ -206,7 +207,7 @@ func (ti *TableInfo) initColumnsFlag() {
 	// See https://dev.mysql.com/doc/refman/5.7/en/show-columns.html.
 	// Yet if an index has multiple columns, we would like to easily determine that all those columns are indexed,
 	// which is crucial for the completeness of the information we pass to the downstream.
-	// Therefore, instead of using the MySql standard,
+	// Therefore, instead of using the MySQL standard,
 	// we made our own decision to mark all columns in an index with the appropriate flag(s).
 	for _, idxInfo := range ti.Indices {
 		for _, idxCol := range idxInfo.Columns {

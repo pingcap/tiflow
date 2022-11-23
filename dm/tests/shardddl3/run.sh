@@ -126,7 +126,7 @@ function DM_079_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Unsupported drop primary key when the table's pkIsHandle is true" 1
+		"Unsupported drop primary key" 1
 }
 
 function DM_079() {
@@ -456,6 +456,10 @@ function DM_097_CASE() {
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+
+	# Task may be paused by error because master has restarted
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

@@ -18,6 +18,7 @@ mysql-instances:
       - "update_old_lt_100"
       - "update_new_lt_100"
       - "update_old_and_new"
+      - "only_muller"
 
 expression-filter:
   even_c:
@@ -45,7 +46,10 @@ expression-filter:
     table: "t5"
     update-old-value-expr: "c = 1"
     update-new-value-expr: "c = 2"
-
+  only_muller:
+    schema: "expr_filter"
+    table: "t6"
+    insert-value-expr: "name != 'Müller'"
 
 black-white-list: # compatible with deprecated config
   instance:

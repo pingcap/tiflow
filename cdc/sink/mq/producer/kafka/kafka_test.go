@@ -121,6 +121,8 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -128,6 +130,7 @@ func TestNewSaramaProducer(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	require.Nil(t, err)
 
@@ -333,8 +336,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
 	require.Nil(t, err)
 	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{ReplicationFactor: 1}, false)
-	require.Regexp(t, ".*kafka server: Request parameters do not satisfy the configured policy.",
-		err.Error())
+	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.
@@ -408,6 +410,8 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -415,6 +419,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	defer func() {
 		err := producer.Close()
@@ -488,6 +493,8 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewKafkaSaramaProducer(
 		ctx,
 		client,
@@ -495,6 +502,7 @@ func TestProducerDoubleClose(t *testing.T) {
 		config,
 		saramaConfig,
 		errCh,
+		changefeedID,
 	)
 	defer func() {
 		err := producer.Close()

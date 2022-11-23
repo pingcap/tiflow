@@ -176,6 +176,10 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 
 // CreateTopic adds topic into map.
 func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.TopicDetail, _ bool) error {
+	if detail.ReplicationFactor > defaultReplicationFactor {
+		return sarama.ErrInvalidReplicationFactor
+	}
+
 	minInsyncReplicaConfigFound := false
 
 	for _, config := range c.brokerConfigs {

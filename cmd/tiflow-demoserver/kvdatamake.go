@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -126,6 +127,7 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	s.dbMap = make(map[string]dbBuckets)
 	s.mu.Unlock()
 	log.Info("Start to generate data ...")
+	start := time.Now()
 
 	fileNum := int(req.FileNum)
 	batches := make([]db.Batch, 0, fileNum)
@@ -159,7 +161,8 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	s.dbMap[demoDir] = bucket
 	s.mu.Unlock()
 
-	log.Info("files have been created", zap.Any("filenumber", fileNum))
+	log.Info("files have been created", zap.Any("filenumber", fileNum),
+		zap.Duration("duration", time.Since(start)))
 	close(ready)
 	return &pb.GenerateDataResponse{}, nil
 }
@@ -200,7 +203,7 @@ func startDataService(ctx context.Context) {
 		log.Info("preparing data...", zap.Any("num", dataNum))
 		resp, _ := s.GenerateData(ctx, &pb.GenerateDataRequest{ // nolint: errcheck
 			FileNum:   10,
-			RecordNum: int32(dataNum),
+			RecordNum: int32(dataNum), //nolint:gosec
 		})
 		if len(resp.ErrMsg) > 0 {
 			log.Error("generate data failed", zap.String("err", resp.ErrMsg))

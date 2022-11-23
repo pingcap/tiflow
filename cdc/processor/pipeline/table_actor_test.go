@@ -22,16 +22,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,20 +53,20 @@ func TestAsyncStopFailed(t *testing.T) {
 		redoManager: redo.NewDisabledManager(),
 		cancel:      func() {},
 		reportErr:   func(err error) {},
-		state:       TableStatePreparing,
+		state:       tablepb.TableStatePreparing,
 		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
 		0, 0, &mockFlowController{}, tbl.redoManager,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
-	require.True(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop())
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
 	tableActorSystem.Stop()
-	require.True(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop())
 }
 
 func TestTableActorInterface(t *testing.T) {
@@ -73,9 +74,9 @@ func TestTableActorInterface(t *testing.T) {
 		tableID:     1,
 		redoManager: redo.NewDisabledManager(),
 		tableName:   "t1",
-		state:       TableStatePreparing,
-		replicaConfig: &serverConfig.ReplicaConfig{
-			Consistent: &serverConfig.ConsistentConfig{
+		state:       tablepb.TableStatePreparing,
+		replicaConfig: &config.ReplicaConfig{
+			Consistent: &config.ConsistentConfig{
 				Level: "node",
 			},
 		},
@@ -87,12 +88,10 @@ func TestTableActorInterface(t *testing.T) {
 	tableID := table.ID()
 	require.Equal(t, int64(1), tableID)
 	require.Equal(t, "t1", table.Name())
-	require.Equal(t, TableStatePreparing, table.State())
+	require.Equal(t, tablepb.TableStatePreparing, table.State())
 
-	table.sortNode.state.Store(TableStatePrepared)
-	require.Equal(t, TableStatePrepared, table.State())
-
-	require.Equal(t, uint64(1), table.Workload().Workload)
+	table.sortNode.state.Store(tablepb.TableStatePrepared)
+	require.Equal(t, tablepb.TableStatePrepared, table.State())
 
 	table.sinkNode.checkpointTs.Store(model.NewResolvedTs(3))
 	require.Equal(t, model.Ts(3), table.CheckpointTs())
@@ -108,8 +107,8 @@ func TestTableActorInterface(t *testing.T) {
 		time.Second*5, time.Millisecond*500)
 	table.redoManager.Cleanup(ctx)
 
-	table.sinkNode.state.Store(TableStateStopped)
-	require.Equal(t, TableStateStopped, table.State())
+	table.sinkNode.state.Store(tablepb.TableStateStopped)
+	require.Equal(t, tablepb.TableStateStopped, table.State())
 }
 
 func TestTableActorCancel(t *testing.T) {
@@ -123,7 +122,7 @@ func TestTableActorCancel(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		state:       TableStatePreparing,
+		state:       tablepb.TableStatePreparing,
 		stopped:     0,
 		tableID:     1,
 		redoManager: redo.NewDisabledManager(),
@@ -143,7 +142,7 @@ func TestTableActorCancel(t *testing.T) {
 	tbl.mb = mb
 	tbl.Cancel()
 	require.Equal(t, stopped, tbl.stopped)
-	require.Equal(t, TableStateStopped, tbl.State())
+	require.Equal(t, tablepb.TableStateStopped, tbl.State())
 }
 
 func TestTableActorWait(t *testing.T) {
@@ -175,7 +174,7 @@ func TestHandleError(t *testing.T) {
 			reporterErr = true
 		},
 
-		state:   TableStateReplicating,
+		state:   tablepb.TableStateReplicating,
 		stopped: stopped,
 	}
 	flowController := &mockFlowController{}
@@ -190,7 +189,7 @@ func TestHandleError(t *testing.T) {
 
 	// table is already stopped
 	table.handleError(nil)
-	require.Equal(t, TableStateReplicating, table.sinkNode.state.Load())
+	require.Equal(t, tablepb.TableStateReplicating, table.sinkNode.state.Load())
 	require.False(t, canceled)
 	require.True(t, reporterErr)
 
@@ -200,7 +199,7 @@ func TestHandleError(t *testing.T) {
 	require.True(t, canceled)
 	require.True(t, reporterErr)
 	require.Equal(t, stopped, table.stopped)
-	require.Equal(t, TableStateStopped, table.sinkNode.state.Load())
+	require.Equal(t, tablepb.TableStateStopped, table.sinkNode.state.Load())
 }
 
 func TestPollStoppedActor(t *testing.T) {
@@ -216,7 +215,7 @@ func TestPollStoppedActor(t *testing.T) {
 func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
 	table := tableActor{
-		state:             TableStatePreparing,
+		state:             tablepb.TableStatePreparing,
 		lastFlushSinkTime: time.Now().Add(-2 * sinkFlushInterval),
 		cancel:            func() {},
 		reportErr:         func(err error) {},
@@ -241,32 +240,44 @@ func TestPollTickMessage(t *testing.T) {
 	}))
 	require.True(t, table.lastFlushSinkTime.Equal(startTime))
 	table.lastFlushSinkTime = time.Now().Add(-2 * sinkFlushInterval)
-	table.state.Store(TableStateStopped)
+	table.state.Store(tablepb.TableStateStopped)
 	require.False(t, table.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
 	}))
 }
 
-func TestPollStopMessage(t *testing.T) {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 	tbl := tableActor{
-		state: TableStateStopped,
-		cancel: func() {
-			wg.Done()
-		},
+		state:     tablepb.TableStateReplicating,
+		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
+	s := mocksink.NewNormalMockSink()
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
-		sinkV1:         mocksink.NewNormalMockSink(),
+		sinkV1:         s,
 		flowController: &mockFlowController{},
 	}
+
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.StopMessage[pmessage.Message](),
 	})
-	wg.Wait()
-	require.Equal(t, stopped, tbl.stopped)
+	require.Eventually(t, func() bool {
+		return tbl.state.Load() == tablepb.TableStateStopped
+	}, 10*time.Second, 10*time.Millisecond)
+	require.True(t, tbl.sinkStopped.Load())
+	// Try to stop again, should not block and return immediately.
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
+	// Check it immediately, should no more goroutine to call sink.Close.
+	require.Equal(t, 1, s.CloseTimes)
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {
@@ -304,7 +315,7 @@ func TestPollDataFailed(t *testing.T) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
-		state:             TableStatePreparing,
+		state:             tablepb.TableStatePreparing,
 		cancel:            func() {},
 		reportErr:         func(err error) {},
 		lastFlushSinkTime: time.Now(),
@@ -355,7 +366,7 @@ func TestPollDataAfterSinkStopped(t *testing.T) {
 				messageProcessor: dp,
 			},
 		},
-		sinkStopped: true,
+		sinkStopped: *atomic.NewBool(true),
 	}
 	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
@@ -375,7 +386,7 @@ func TestNewTableActor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}
@@ -401,7 +412,7 @@ func TestNewTableActor(t *testing.T) {
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
-	require.Equal(t, TableStatePreparing, tbl.State())
+	require.Equal(t, tablepb.TableStatePreparing, tbl.State())
 	require.NotPanics(t, func() {
 		tbl.UpdateBarrierTs(model.Ts(5))
 	})
@@ -426,7 +437,7 @@ func TestTableActorStart(t *testing.T) {
 	realStartSorterFunc := startSorter
 	ctx, cancel := context.WithCancel(context.TODO())
 	sys := system.NewSystem()
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}

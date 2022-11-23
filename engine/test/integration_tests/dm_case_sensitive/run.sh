@@ -5,7 +5,7 @@ set -eu
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORK_DIR=$OUT_DIR/$TEST_NAME
 
-CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG="$DOCKER_COMPOSE_DIR/3m3e_with_s3.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 TABLE_NUM=500
@@ -24,14 +24,9 @@ function run() {
 	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS \`UPPER_DB_ROUTE\`'
 
 	# create job
-
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
-
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_case_sensitive")
 	# wait for job finished
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.status == \"Finished\"'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 
 	# check data
 
@@ -44,5 +39,5 @@ function run() {
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
-# run $*
+run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

@@ -50,10 +50,15 @@ func NewClient(credential *security.Credential) (*Client, error) {
 	}, nil
 }
 
-// Timeout specifies a time limit for requests made by this Client.
-// See http.Client.Timeout.
+// Timeout returns the timeout of the client.
 func (c *Client) Timeout() time.Duration {
 	return c.client.Timeout
+}
+
+// SetTimeout specifies a time limit for requests made by this Client.
+// See http.Client.Timeout.
+func (c *Client) SetTimeout(timeout time.Duration) {
+	c.client.Timeout = timeout
 }
 
 // Get issues a GET to the specified URL with context.
@@ -112,7 +117,8 @@ func (c *Client) DoRequest(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if resp.StatusCode != http.StatusOK {
+	// treat http 2xx as valid
+	if resp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("[%d] %s", resp.StatusCode, content)
 	}
 	return content, nil

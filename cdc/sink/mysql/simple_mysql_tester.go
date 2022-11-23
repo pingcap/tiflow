@@ -168,10 +168,10 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 // EmitDDLEvent should execute DDL to downstream synchronously
 func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	var sql string
-	if len(ddl.TableInfo.Table) == 0 {
+	if len(ddl.TableInfo.TableName.Table) == 0 {
 		sql = ddl.Query
 	} else {
-		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
+		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.TableName.Schema, ddl.Query)
 	}
 	_, err := s.db.ExecContext(ctx, sql)
 	if err != nil && errorutil.IsIgnorableMySQLDDLError(err) {

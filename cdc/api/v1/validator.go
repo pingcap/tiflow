@@ -132,17 +132,15 @@ func verifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
-		UpstreamID:        up.ID,
-		SinkURI:           changefeedConfig.SinkURI,
-		CreateTime:        time.Now(),
-		StartTs:           changefeedConfig.StartTS,
-		TargetTs:          changefeedConfig.TargetTS,
-		Config:            replicaConfig,
-		Engine:            sortEngine,
-		State:             model.StateNormal,
-		SyncPointEnabled:  false,
-		SyncPointInterval: 10 * time.Minute,
-		CreatorVersion:    version.ReleaseVersion,
+		UpstreamID:     up.ID,
+		SinkURI:        changefeedConfig.SinkURI,
+		CreateTime:     time.Now(),
+		StartTs:        changefeedConfig.StartTS,
+		TargetTs:       changefeedConfig.TargetTS,
+		Config:         replicaConfig,
+		Engine:         sortEngine,
+		State:          model.StateNormal,
+		CreatorVersion: version.ReleaseVersion,
 	}
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {

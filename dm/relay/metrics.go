@@ -18,18 +18,16 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
-	relayLogPosGauge = metricsproxy.NewGaugeVec(
-		&promutil.PromFactory{},
+	f                = &promutil.PromFactory{}
+	relayLogPosGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "relay",
@@ -37,8 +35,7 @@ var (
 			Help:      "current binlog pos in current binlog file",
 		}, []string{"node"})
 
-	relayLogFileGauge = metricsproxy.NewGaugeVec(
-		&promutil.PromFactory{},
+	relayLogFileGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "relay",
@@ -48,8 +45,7 @@ var (
 
 	// split sub directory info from relayLogPosGauge / relayLogFileGauge
 	// to make compare relayLogFileGauge for master / relay more easier.
-	relaySubDirIndex = metricsproxy.NewGaugeVec(
-		&promutil.PromFactory{},
+	relaySubDirIndex = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "relay",
@@ -58,8 +54,7 @@ var (
 		}, []string{"node", "uuid"})
 
 	// should alert if available space < 10G.
-	relayLogSpaceGauge = metricsproxy.NewGaugeVec(
-		&promutil.PromFactory{},
+	relayLogSpaceGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "relay",

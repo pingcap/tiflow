@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 count=10
 interval_sec=1
@@ -31,7 +32,7 @@ i=0
 while ! eval $cmd; do
 	i=$((i + 1))
 	if [ "$i" -gt "$count" ]; then
-		echo "failed to execute cmd: $cmd"
+		echo -e "\nfailed to execute cmd for $count times: $cmd\n"
 		exit 2
 	fi
 	sleep $interval_sec

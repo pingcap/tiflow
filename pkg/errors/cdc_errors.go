@@ -271,14 +271,6 @@ var (
 	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
 		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
 	)
-	ErrPulsarNewProducer = errors.Normalize(
-		"new pulsar producer",
-		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
-	)
-	ErrPulsarSendMessage = errors.Normalize(
-		"pulsar send message failed",
-		errors.RFCCodeText("CDC:ErrPulsarSendMessage"),
-	)
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
 		errors.RFCCodeText("CDC:ErrRedoConfigInvalid"),
@@ -414,6 +406,26 @@ var (
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
+	)
+	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
+		"date separator in cloud storage sink is invalid",
+		errors.RFCCodeText("CDC:ErrStorageSinkInvalidDateSeparator"),
+	)
+	ErrCSVEncodeFailed = errors.Normalize(
+		"csv encode failed",
+		errors.RFCCodeText("CDC:ErrCSVEncodeFailed"),
+	)
+	ErrCSVDecodeFailed = errors.Normalize(
+		"csv decode failed",
+		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
+	)
+	ErrCloudStorageInvalidConfig = errors.Normalize(
+		"cloud storage config invalid",
+		errors.RFCCodeText("CDC:ErrCloudStorageInvalidConfig"),
+	)
+	ErrCloudStorageDefragmentFailed = errors.Normalize(
+		"cloud storage defragment encoded messages failed",
+		errors.RFCCodeText("CDC:ErrCloudStorageDefragmentFailed"),
 	)
 
 	// utilities related errors
@@ -563,6 +575,10 @@ var (
 	ErrInvalidDDLJob = errors.Normalize(
 		"invalid ddl job(%d)",
 		errors.RFCCodeText("CDC:ErrInvalidDDLJob"),
+	)
+	ErrExchangePartition = errors.Normalize(
+		"exchange partition failed, %s",
+		errors.RFCCodeText("CDC:ErrExchangePartition"),
 	)
 
 	// puller related errors
@@ -792,6 +808,11 @@ var (
 		"etcd meta data migrate failed:%s",
 		errors.RFCCodeText("CDC:ErrEtcdMigrateFailed"),
 	)
+	ErrChangefeedUnretryable = errors.Normalize(
+		"changefeed is in unretryable state, please check the error message"+
+			", and you should manually handle it",
+		errors.RFCCodeText("CDC:ErrChangefeedUnretryable"),
+	)
 
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize(
@@ -905,6 +926,12 @@ var (
 	ErrSorterClosed = errors.Normalize(
 		"sorter is closed",
 		errors.RFCCodeText("CDC:ErrSorterClosed"),
+	)
+
+	// Pull based sink config error.
+	ErrInvalidPullBasedSinkConfig = errors.Normalize(
+		"invalid pull based sink config: %s",
+		errors.RFCCodeText("CDC:ErrInvalidPullBasedSinkConfig"),
 	)
 
 	// processor errors
@@ -1042,10 +1069,13 @@ var (
 		"upstream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
-
 	ErrUpstreamManagerNotReady = errors.Normalize(
 		"upstream manager not ready",
 		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
+	)
+	ErrUpstreamClosed = errors.Normalize(
+		"upstream has been closed",
+		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
 	)
 
 	// ReplicationSet error
@@ -1112,5 +1142,11 @@ var (
 			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
 			"if you want to replicate this table, please add its old name to filter rule.",
 		errors.RFCCodeText("CDC:ErrSyncRenameTableFailed"),
+	)
+
+	// changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
 )

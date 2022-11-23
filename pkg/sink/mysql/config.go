@@ -52,14 +52,17 @@ const (
 	defaultReadTimeout         = "2m"
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
-	defaultSafeMode            = true
-	defaultTxnIsolationRC      = "READ-COMMITTED"
-	defaultCharacterSet        = "utf8mb4"
+	// Note(dongmen): defaultSafeMode is set to false since v6.4.0.
+	defaultSafeMode       = false
+	defaultTxnIsolationRC = "READ-COMMITTED"
+	defaultCharacterSet   = "utf8mb4"
 
 	// BackoffBaseDelay indicates the base delay time for retrying.
 	BackoffBaseDelay = 500 * time.Millisecond
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
+
+	defaultBatchDMLEnable = true
 )
 
 // Config is the configs for MySQL backend.
@@ -77,6 +80,7 @@ type Config struct {
 	TLS                 string
 	ForceReplicate      bool
 	EnableOldValue      bool
+	BatchDMLEnable      bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -91,6 +95,7 @@ func NewConfig() *Config {
 		WriteTimeout:        defaultWriteTimeout,
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
+		BatchDMLEnable:      defaultBatchDMLEnable,
 	}
 }
 
@@ -140,7 +145,9 @@ func (c *Config) Apply(
 	if err = getDuration(query, "timeout", &c.DialTimeout); err != nil {
 		return err
 	}
-
+	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 
@@ -307,5 +314,17 @@ func getDuration(values url.Values, key string, target *string) error {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
 	*target = s
+	return nil
+}
+
+func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
+	s := values.Get("batch-dml-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*batchDMLEnable = enable
+	}
 	return nil
 }

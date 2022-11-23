@@ -20,7 +20,9 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -31,12 +33,11 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // Online DDL Scheme.
@@ -100,6 +101,7 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
+	defaultSafeModeDuration        = strconv.Itoa(2*defaultCheckpointFlushInterval) + "s"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -237,9 +239,15 @@ type LoadMode string
 
 const (
 	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
+	// deprecated, use LoadModeLogical instead.
 	LoadModeSQL LoadMode = "sql"
 	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	// deprecated, loader will be removed in future.
 	LoadModeLoader = "loader"
+	// LoadModeLogical means use tidb backend of lightning to load data, which uses SQL to load data.
+	LoadModeLogical = "logical"
+	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
+	LoadModePhysical = "physical"
 )
 
 // DuplicateResolveType defines the duplication resolution when meet duplicate rows.
@@ -258,7 +266,7 @@ const (
 type LoaderConfig struct {
 	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
 	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 }
@@ -268,7 +276,7 @@ func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
 		PoolSize:    defaultPoolSize,
 		Dir:         defaultDir,
-		ImportMode:  LoadModeSQL,
+		ImportMode:  LoadModeLogical,
 		OnDuplicate: OnDuplicateReplace,
 	}
 }
@@ -288,10 +296,15 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
-		m.ImportMode = LoadModeSQL
+		m.ImportMode = LoadModeLogical
+	}
+	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) {
+		m.ImportMode = LoadModeLogical
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
-	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
+	switch m.ImportMode {
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 
@@ -325,8 +338,9 @@ type SyncerConfig struct {
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
-	DisableCausality bool `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
-	SafeMode         bool `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	DisableCausality bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
+	SafeMode         bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
@@ -338,6 +352,7 @@ func DefaultSyncerConfig() SyncerConfig {
 		Batch:                   defaultBatch,
 		QueueSize:               defaultQueueSize,
 		CheckpointFlushInterval: defaultCheckpointFlushInterval,
+		SafeModeDuration:        defaultSafeModeDuration,
 	}
 }
 
@@ -792,6 +807,20 @@ func (c *TaskConfig) adjust() error {
 			defaultCfg := DefaultSyncerConfig()
 			inst.Syncer = &defaultCfg
 		}
+		if inst.Syncer.QueueSize == 0 {
+			inst.Syncer.QueueSize = defaultQueueSize
+		}
+		if inst.Syncer.CheckpointFlushInterval == 0 {
+			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
+		}
+		if inst.Syncer.SafeModeDuration == "" {
+			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
+		}
+		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
+			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
+		} else if inst.Syncer.SafeMode && duration == 0 {
+			return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
+		}
 		if inst.SyncerThread != 0 {
 			inst.Syncer.WorkerCount = inst.SyncerThread
 		}
@@ -980,11 +1009,16 @@ func AdjustDBTimeZone(config *DBConfig, timeZone string) {
 	config.Session["time_zone"] = timeZone
 }
 
-var defaultParser = parser.New()
+var (
+	defaultParser = parser.New()
+	parserMu      sync.Mutex
+)
 
 func checkValidExpr(expr string) error {
 	expr = "select " + expr
+	parserMu.Lock()
 	_, _, err := defaultParser.Parse(expr, "", "")
+	parserMu.Unlock()
 	return err
 }
 
@@ -1089,8 +1123,9 @@ type SyncerConfigForDowngrade struct {
 	SafeMode                bool   `yaml:"safe-mode"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
-	Compact      bool `yaml:"compact,omitempty"`
-	MultipleRows bool `yaml:"multipleRows,omitempty"`
+	SafeModeDuration string `yaml:"safe-mode-duration,omitempty"`
+	Compact          bool   `yaml:"compact,omitempty"`
+	MultipleRows     bool   `yaml:"multipleRows,omitempty"`
 }
 
 // NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
@@ -1107,6 +1142,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
+			SafeModeDuration:        syncerConfig.SafeModeDuration,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,
@@ -1114,6 +1150,15 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 		syncerConfigsForDowngrade[configName] = newSyncerConfig
 	}
 	return syncerConfigsForDowngrade
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SyncerConfigForDowngrade) omitDefaultVals() {
+	if c.SafeModeDuration == strconv.Itoa(2*c.CheckpointFlushInterval)+"s" {
+		c.SafeModeDuration = ""
+	}
 }
 
 // TaskConfigForDowngrade is the base configuration for task in v2.0.
@@ -1196,6 +1241,9 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	}
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
+	}
+	for _, s := range c.Syncers {
+		s.omitDefaultVals()
 	}
 	c.OnlineDDL = false
 }

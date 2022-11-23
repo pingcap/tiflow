@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
-	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -39,7 +39,7 @@ func NewKafkaDMLSink(
 	adminClientCreator pkafka.ClusterAdminClientCreator,
 	producerCreator dmlproducer.Factory,
 ) (_ *dmlSink, err error) {
-	topic, err := mqutil.GetTopic(sinkURI)
+	topic, err := util.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -61,9 +61,9 @@ func NewKafkaDMLSink(
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
 		if err != nil {
-			if err = adminClient.Close(); err != nil {
+			if closeErr := adminClient.Close(); closeErr != nil {
 				log.Error("Close admin client failed in kafka "+
-					"DML sink", zap.Error(err))
+					"DML sink", zap.Error(closeErr))
 			}
 		}
 	}()
@@ -72,7 +72,7 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := mqutil.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -96,7 +96,7 @@ func NewKafkaDMLSink(
 		}
 	}()
 
-	topicManager, err := mqutil.GetTopicManagerAndTryCreateTopic(
+	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		topic,
 		baseConfig.DeriveTopicConfig(),
 		client,
@@ -111,13 +111,14 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := mqutil.GetEncoderConfig(sinkURI, protocol, replicaConfig,
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
 		saramaConfig.Producer.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, errCh)
+	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig,
+		replicaConfig.Sink.EncoderConcurrency, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

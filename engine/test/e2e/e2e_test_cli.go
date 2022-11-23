@@ -23,7 +23,6 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
@@ -31,6 +30,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	server "github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -126,13 +126,13 @@ func (cli *ChaosCli) CancelJob(ctx context.Context, jobID string) error {
 
 // CheckJobStatus checks job status is as expected.
 func (cli *ChaosCli) CheckJobStatus(
-	ctx context.Context, jobID string, expectedStatus pb.Job_Status,
+	ctx context.Context, jobID string, expectedStatus pb.Job_State,
 ) (bool, error) {
 	job, err := QueryJobViaHTTP(ctx, cli.masterAddrs[0], cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	return job.Status == expectedStatus, nil
+	return job.State == expectedStatus, nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job

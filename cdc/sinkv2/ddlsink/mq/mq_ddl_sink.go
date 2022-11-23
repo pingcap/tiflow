@@ -83,8 +83,6 @@ func newDDLSink(ctx context.Context,
 }
 
 func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	k.statistics.AddDDLCount()
-
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
@@ -111,7 +109,9 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		err = k.statistics.RecordDDLExecution(func() error {
+			return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		})
 		return errors.Trace(err)
 	}
 	// Notice: We must call GetPartitionNum here,
@@ -122,12 +122,14 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = k.producer.SyncSendMessage(ctx, topic, dispatcher.PartitionZero, msg)
+	err = k.statistics.RecordDDLExecution(func() error {
+		return k.producer.SyncSendMessage(ctx, topic, dispatcher.PartitionZero, msg)
+	})
 	return errors.Trace(err)
 }
 
 func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
-	ts uint64, tables []model.TableName,
+	ts uint64, tables []*model.TableInfo,
 ) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -151,7 +153,11 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	topics := k.eventRouter.GetActiveTopics(tables)
+	var tableNames []model.TableName
+	for _, table := range tables {
+		tableNames = append(tableNames, table.TableName)
+	}
+	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {

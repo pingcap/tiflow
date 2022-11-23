@@ -17,10 +17,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Call represents a grpc call.
@@ -48,8 +49,8 @@ func WithForceNoRetry() CallOption {
 }
 
 // NewCall creates a new Call.
-func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), ReqT any, RespT any](f F,
-	req ReqT, ops ...CallOption,
+func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), ReqT any, RespT any](
+	f F, req ReqT, ops ...CallOption,
 ) *Call[ReqT, RespT, F] {
 	opts := &callerOpts{}
 
@@ -71,39 +72,24 @@ func (c *Call[ReqT, RespT, F]) Do(
 	var resp RespT
 	err := retry.Do(ctx, func() error {
 		var err error
-		resp, err = c.callOnce(ctx)
+		resp, err = c.f(ctx, c.request)
 		return err
 	}, retry.WithIsRetryableErr(c.isRetryable),
 		retry.WithBackoffBaseDelay(10),
 		retry.WithBackoffMaxDelay(1000),
 		retry.WithTotalRetryDuratoin(10*time.Second))
-	return resp, err
-}
-
-func (c *Call[ReqT, RespT, F]) callOnce(ctx context.Context) (RespT, error) {
-	var zeroResp RespT
-
-	resp, err := c.f(ctx, c.request)
-	if err != nil {
-		return zeroResp, rpcerror.FromGRPCError(err)
-	}
-
-	return resp, nil
+	return resp, rpcutil.FromGRPCError(err)
 }
 
 func (c *Call[ReqT, RespT, F]) isRetryable(errIn error) bool {
-	if rpcerror.IsManagedError(errIn) {
-		return rpcerror.IsRetryable(errIn)
-	}
-
 	if c.opts.forceNoRetry {
 		return false
 	}
 
-	stCode, ok := rpcerror.GRPCStatusCode(errIn)
+	s, ok := status.FromError(errIn)
 	if !ok {
 		return false
 	}
 
-	return stCode == codes.Unavailable || stCode == codes.DeadlineExceeded
+	return s.Code() == codes.Unavailable || s.Code() == codes.DeadlineExceeded
 }

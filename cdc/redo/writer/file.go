@@ -28,17 +28,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/uber-go/atomic"
-	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
-	"go.uber.org/multierr"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/uber-go/atomic"
+	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 const (
@@ -46,7 +45,7 @@ const (
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
 	pageBytes        = 8 * common.MinSectorSize
-	defaultS3Timeout = 3 * time.Second
+	defaultS3Timeout = 15 * time.Second
 )
 
 var (
@@ -55,7 +54,7 @@ var (
 	defaultMaxLogSize       = 64 * megabyte
 )
 
-//go:generate mockery --name=fileWriter --inpackage
+//go:generate mockery --name=fileWriter --inpackage --quiet
 type fileWriter interface {
 	io.WriteCloser
 	flusher
@@ -348,7 +347,7 @@ func (w *Writer) close() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	defer dirFile.Close()
-	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	// sync the dir to guarantee the renamed file is persisted to disk.
 	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

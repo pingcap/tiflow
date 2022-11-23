@@ -1,5 +1,5 @@
 run:
-  go: 1.18
+  go: "1.19"
 linters:
   enable:
     - unconvert
@@ -9,12 +9,8 @@ linters:
     - misspell
     - ineffassign
     - typecheck
-    - varcheck
     - unused
-    - structcheck
-    - deadcode
     - gosimple
-    - goimports
     - errcheck
     - staticcheck
     - stylecheck
@@ -55,8 +51,8 @@ linters-settings:
       - name: unreachable-code
 
   depguard:
-    list-type: blacklist
-    include-go-root: false
+    list-type: denylist
+    include-go-root: true
     packages:
       - log
       - github.com/juju/errors
@@ -64,6 +60,18 @@ linters-settings:
       # specify an error message to output when a blacklisted package is used
       - log: "logging is allowed only by pingcap/log"
       - github.com/juju/errors: "error handling is allowed only by pingcap/errors"
+    additional-guards:
+      - list-type: denylist
+        include-go-root: true
+        packages:
+          - errors
+          - github.com/pingcap/errors
+        packages-with-error-message:
+          - errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
+          - github.com/pingcap/errors: "error handling is allowed only by github.com/pingcap/tiflow/pkg/errors"
+        ignore-file-rules:
+          - "!**/tiflow/engine/**"
+          - "**/engine/pkg/rpcutil/*.go"
   staticcheck:
     checks:
       [
@@ -101,6 +109,11 @@ issues:
         - errcheck
         - gosec
         - makezero
+    # G113 Potential uncontrolled memory consumption in Rat.SetString (CVE-2022-23772)
+    # only affects gp < 1.16.14. and go < 1.17.7
+    - text: "(G113)"
+      linters:
+        - gosec
   include:
     - EXC0012 # exported (.+) should have comment( \(or a comment on this block\))? or be unexported)
     - EXC0014 # comment on exported (.+) should be of the form "(.+)..."

@@ -15,14 +15,13 @@ package mock
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/pingcap/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 var container *grpcContainer
@@ -78,82 +77,6 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 	}
 	return nil, errors.New("unknown request")
 }
-
-type masterServerClient struct {
-	conn Conn
-}
-
-func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest, opts ...grpc.CallOption) (*pb.ScheduleTaskResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.ScheduleTaskResponse), err
-}
-
-func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.Executor, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.Executor), err
-}
-
-func (c *masterServerClient) CreateJob(ctx context.Context, req *pb.CreateJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.Job), err
-}
-
-func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.Job), err
-}
-
-func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.HeartbeatResponse), err
-}
-
-func (c *masterServerClient) RegisterMetaStore(
-	ctx context.Context, req *pb.RegisterMetaStoreRequest, opts ...grpc.CallOption,
-) (*pb.RegisterMetaStoreResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.RegisterMetaStoreResponse), nil
-}
-
-func (c *masterServerClient) QueryMetaStore(
-	ctx context.Context, req *pb.QueryMetaStoreRequest, opts ...grpc.CallOption,
-) (*pb.QueryMetaStoreResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.QueryMetaStoreResponse), nil
-}
-
-func (c *masterServerClient) GetJob(
-	ctx context.Context, req *pb.GetJobRequest, opts ...grpc.CallOption,
-) (*pb.Job, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.Job), nil
-}
-
-func (c *masterServerClient) ReportExecutorWorkload(
-	ctx context.Context, req *pb.ExecWorkloadRequest, opts ...grpc.CallOption,
-) (*pb.ExecWorkloadResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.ExecWorkloadResponse), nil
-}
-
-/*
-// NewMasterClient creates a new master client based on Conn
-func NewMasterClient(conn Conn) pb.MasterClient {
-	return &masterServerClient{conn}
-}
-*/
 
 type executorServer struct {
 	*baseServer

@@ -26,16 +26,11 @@ import (
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1)
-	require.NotNil(
-		t,
-		tracker.pendingEventAndResolvedTs,
-		"pendingEventAndResolvedTs should not be nil",
-	)
+	tracker := newProgressTracker(1, defaultBufferSize)
 	require.Equal(
 		t,
 		uint64(0),
-		tracker.minTs().Ts,
+		tracker.advance().Ts,
 		"init lastMinResolvedTs should be 0",
 	)
 }
@@ -43,10 +38,10 @@ func TestNewProgressTracker(t *testing.T) {
 func TestAddEvent(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addEvent(2)
-	tracker.addEvent(3)
+	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker.addEvent()
+	tracker.addEvent()
+	tracker.addEvent()
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 }
 
@@ -54,129 +49,188 @@ func TestAddResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
-	tracker := newProgressTracker(1)
-	tracker.addResolvedTs(1, model.NewResolvedTs(1))
-	tracker.addResolvedTs(2, model.NewResolvedTs(2))
-	tracker.addResolvedTs(3, model.NewResolvedTs(3))
-	require.Equal(t, 0, tracker.pendingEventAndResolvedTs.Size(), "resolved ts should not be added")
-	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
+	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 0, tracker.trackingCount(), "resolved ts should not be added")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
-	tracker = newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addResolvedTs(2, model.NewResolvedTs(2))
-	tracker.addResolvedTs(3, model.NewResolvedTs(3))
-	require.Equal(t, 3, tracker.pendingEventAndResolvedTs.Size(), "resolved ts should be added")
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	tracker = newProgressTracker(1, defaultBufferSize)
+	tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 1, tracker.trackingCount(), "resolved ts should be added")
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 }
 
 func TestRemove(t *testing.T) {
 	t.Parallel()
+	var cb1, cb2, cb4, cb5 func()
 
 	// Only event.
-	tracker := newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addEvent(2)
-	tracker.addEvent(3)
-	tracker.remove(2)
-	require.Equal(t, 2, tracker.pendingEventAndResolvedTs.Size(), "event2 should be removed")
-	// Only resolved ts.
-	tracker = newProgressTracker(1)
-	tracker.addResolvedTs(1, model.NewResolvedTs(1))
-	tracker.addResolvedTs(2, model.NewResolvedTs(2))
-	tracker.addResolvedTs(3, model.NewResolvedTs(3))
-	// Hack here to trigger the remove. Actually, we don't have this key in the tracker.
-	tracker.remove(4)
-	require.Equal(
-		t,
-		0,
-		tracker.pendingEventAndResolvedTs.Size(),
-		"all resolved ts should be removed",
-	)
-	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
+	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker.addEvent()
+	cb2 = tracker.addEvent()
+	tracker.addEvent()
+	cb2()
+	tracker.advance()
+	require.Equal(t, 3, tracker.trackingCount(), "not advanced")
+
 	// Both event and resolved ts.
-	tracker = newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addEvent(2)
-	tracker.addResolvedTs(3, model.NewResolvedTs(3))
-	tracker.addEvent(4)
-	tracker.addEvent(5)
-	tracker.addResolvedTs(6, model.NewResolvedTs(6))
-	tracker.addResolvedTs(7, model.NewResolvedTs(7))
-	tracker.addResolvedTs(8, model.NewResolvedTs(8))
+	tracker = newProgressTracker(1, defaultBufferSize)
+	cb1 = tracker.addEvent()
+	cb2 = tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	cb4 = tracker.addEvent()
+	cb5 = tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(6))
+	tracker.addResolvedTs(model.NewResolvedTs(7))
+	tracker.addResolvedTs(model.NewResolvedTs(8))
 	// Remove one event.
-	tracker.remove(2)
-	require.Equal(t, 7, tracker.pendingEventAndResolvedTs.Size(), "event2 should be removed")
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	cb2()
+	tracker.advance()
+	require.Equal(t, 4, tracker.trackingCount())
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 	// Remove one more event.
-	tracker.remove(4)
-	require.Equal(t, 6, tracker.pendingEventAndResolvedTs.Size(), "event4 should be removed")
-	require.Equal(t, uint64(0), tracker.minTs().Ts, "lastMinResolvedTs should not be updated")
+	cb4()
+	tracker.advance()
+	require.Equal(t, 4, tracker.trackingCount())
+	require.Equal(t, uint64(0), tracker.advance().Ts, "lastMinResolvedTs should not be updated")
 	// Remove one more event.
-	tracker.remove(1)
-	require.Equal(t, 4, tracker.pendingEventAndResolvedTs.Size(), "event1 should be removed")
-	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be advanced")
+	cb1()
+	tracker.advance()
+	require.Equal(t, 1, tracker.trackingCount())
+	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be advanced")
 	// Remove the last event.
-	tracker.remove(5)
-	require.Equal(
-		t,
-		0,
-		tracker.pendingEventAndResolvedTs.Size(),
-		"all events and resolved ts should be removed",
-	)
-	require.Equal(t, uint64(8), tracker.minTs().Ts, "lastMinResolvedTs should be 8")
+	cb5()
+	tracker.advance()
+	require.Equal(t, 0, tracker.trackingCount())
+	require.Equal(t, uint64(8), tracker.advance().Ts, "lastMinResolvedTs should be 8")
 }
 
 func TestCloseTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addResolvedTs(2, model.NewResolvedTs(1))
-	tracker.addEvent(3)
-	tracker.addResolvedTs(4, model.NewResolvedTs(2))
-	tracker.addEvent(5)
-	tracker.addResolvedTs(6, model.NewResolvedTs(3))
-	require.Equal(t, 6, tracker.trackingCount(), "event should be added")
+	tracker := newProgressTracker(1, defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
+
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
+		tracker.freezeProcess()
 		err := tracker.close(context.Background())
 		require.Nil(t, err, "close should not return error")
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return tracker.closed.Load()
-	}, time.Second, time.Millisecond*10, "tracker should be closed")
-	tracker.remove(1)
-	tracker.remove(3)
-	tracker.remove(5)
+
+	cb1()
+	cb2()
+	cb3()
 	wg.Wait()
-	require.Equal(t, 0, tracker.trackingCount(), "all events should be removed")
+	require.Eventually(t, func() bool {
+		return tracker.trackingCount() == 0
+	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
 }
 
 func TestCloseTrackerCancellable(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1)
-	tracker.addEvent(1)
-	tracker.addResolvedTs(2, model.NewResolvedTs(1))
-	tracker.addEvent(3)
-	tracker.addResolvedTs(4, model.NewResolvedTs(2))
-	tracker.addEvent(5)
-	tracker.addResolvedTs(6, model.NewResolvedTs(3))
-	require.Equal(t, 6, tracker.trackingCount(), "event should be added")
+	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
+
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
+		tracker.freezeProcess()
 		err := tracker.close(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return tracker.closed.Load()
-	}, time.Second, time.Millisecond*10, "tracker should be closed")
 	wg.Wait()
+}
+
+func TestTrackerBufferBoundary(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1, 8)
+
+	cbs := make([]func(), 0)
+	for i := 0; i < 65; i++ {
+		cbs = append(cbs, tracker.addEvent())
+	}
+	require.Equal(t, 2, len(tracker.pendingEvents))
+	require.Equal(t, 1, len(tracker.pendingEvents[0]))
+	require.Equal(t, 1, len(tracker.pendingEvents[1]))
+	for i, cb := range cbs {
+		cb()
+		tracker.advance()
+		require.Equal(t, 65-i-1, tracker.trackingCount())
+	}
+	require.Equal(t, 1, len(tracker.pendingEvents))
+
+	cbs = nil
+	for i := 65; i < 128; i++ {
+		cbs = append(cbs, tracker.addEvent())
+		require.Equal(t, 1, len(tracker.pendingEvents))
+		require.Equal(t, 1, len(tracker.pendingEvents[0]))
+	}
+	for i, cb := range cbs {
+		cb()
+		tracker.advance()
+		require.Equal(t, 63-i-1, tracker.trackingCount())
+	}
+	require.Equal(t, 0, len(tracker.pendingEvents))
+}
+
+func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1, defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		tracker.freezeProcess()
+		err := tracker.close(context.Background())
+		require.Nil(t, err, "close should not return error")
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		return tracker.closed
+	}, 3*time.Second, 100*time.Millisecond, "state of tracker should be closed")
+	currentTs := tracker.advance()
+	cb1()
+	cb2()
+	cb3()
+	wg.Wait()
+	require.Eventually(t, func() bool {
+		return tracker.trackingCount() == 0
+	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
+	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
 }

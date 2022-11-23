@@ -21,11 +21,11 @@ import (
 )
 
 type txnForTest struct {
-	keys []int64
+	keys []uint64
 	done func()
 }
 
-func (t *txnForTest) ConflictKeys() []int64 {
+func (t *txnForTest) ConflictKeys(numSlots uint64) []uint64 {
 	return t.keys
 }
 

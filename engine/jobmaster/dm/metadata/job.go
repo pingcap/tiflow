@@ -15,38 +15,87 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
-
-	"github.com/pingcap/errors"
-	"go.uber.org/zap"
+	"time"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
-type TaskStage string
+type TaskStage int
 
 // These stages may be updated in later pr.
 const (
-	StageInit     TaskStage = "init"
-	StageRunning  TaskStage = "running"
-	StagePaused   TaskStage = "paused"
-	StageFinished TaskStage = "finished"
-	StageError    TaskStage = "error"
-	StagePausing  TaskStage = "pausing"
+	StageInit TaskStage = iota + 1
+	StageRunning
+	StagePaused
+	StageFinished
+	StageError
+	StagePausing
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled TaskStage = "unscheduled"
+	StageUnscheduled
 )
+
+var typesStringify = [...]string{
+	0:                "",
+	StageInit:        "Initing",
+	StageRunning:     "Running",
+	StagePaused:      "Paused",
+	StageFinished:    "Finished",
+	StageError:       "Error",
+	StagePausing:     "Pausing",
+	StageUnscheduled: "Unscheduled",
+}
+
+var toTaskStage map[string]TaskStage
+
+func init() {
+	toTaskStage = make(map[string]TaskStage, len(typesStringify))
+	for i, s := range typesStringify {
+		toTaskStage[s] = TaskStage(i)
+	}
+}
+
+// String implements fmt.Stringer interface
+func (ts TaskStage) String() string {
+	if int(ts) >= len(typesStringify) || ts < 0 {
+		return fmt.Sprintf("Unknown TaskStage %d", ts)
+	}
+	return typesStringify[ts]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (ts TaskStage) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.String())
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (ts *TaskStage) UnmarshalJSON(b []byte) error {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
+		return err
+	}
+	*ts, ok = toTaskStage[j]
+	if !ok {
+		return errors.Errorf("Unknown TaskStage %s", j)
+	}
+	return nil
+}
 
 // Job represents the state of a job.
 type Job struct {
-	State
-
 	// taskID -> task
 	Tasks map[string]*Task
 
@@ -70,21 +119,23 @@ func NewJob(jobCfg *config.JobCfg) *Job {
 // Task is the minimum working unit of a job.
 // A job may contain multiple upstream and it will be converted into multiple tasks.
 type Task struct {
-	Cfg   *config.TaskCfg
-	Stage TaskStage
+	Cfg              *config.TaskCfg
+	Stage            TaskStage
+	StageUpdatedTime time.Time
 }
 
 // NewTask creates a new Task instance
 func NewTask(taskCfg *config.TaskCfg) *Task {
 	return &Task{
-		Cfg:   taskCfg,
-		Stage: StageRunning, // TODO: support set stage when create task.
+		Cfg:              taskCfg,
+		Stage:            StageRunning, // TODO: support set stage when create task.
+		StageUpdatedTime: time.Now(),
 	}
 }
 
 // JobStore manages the state of a job.
 type JobStore struct {
-	*TomlStore
+	*frameworkMetaStore
 	*bootstrap.DefaultUpgrader
 
 	mu     sync.Mutex
@@ -95,22 +146,22 @@ type JobStore struct {
 func NewJobStore(kvClient metaModel.KVClient, pLogger *zap.Logger) *JobStore {
 	logger := pLogger.With(zap.String("component", "job_store"))
 	jobStore := &JobStore{
-		TomlStore:       NewTomlStore(kvClient),
-		DefaultUpgrader: bootstrap.NewDefaultUpgrader(logger),
-		logger:          logger,
+		frameworkMetaStore: newTOMLFrameworkMetaStore(kvClient),
+		DefaultUpgrader:    bootstrap.NewDefaultUpgrader(logger),
+		logger:             logger,
 	}
-	jobStore.TomlStore.Store = jobStore
+	jobStore.frameworkMetaStore.stateFactory = jobStore
 	jobStore.DefaultUpgrader.Upgrader = jobStore
 	return jobStore
 }
 
 // CreateState returns an empty Job object
-func (jobStore *JobStore) CreateState() State {
+func (jobStore *JobStore) createState() state {
 	return &Job{}
 }
 
 // Key returns encoded key for job store
-func (jobStore *JobStore) Key() string {
+func (jobStore *JobStore) key() string {
 	return adapter.DMJobKeyAdapter.Encode()
 }
 
@@ -133,11 +184,12 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 		}
 	}
 	for _, taskID := range taskIDs {
-		if _, ok := job.Tasks[taskID]; !ok {
+		t, ok := job.Tasks[taskID]
+		if !ok {
 			return errors.Errorf("task %s not found", taskID)
 		}
-		t := job.Tasks[taskID]
 		t.Stage = stage
+		t.StageUpdatedTime = time.Now()
 	}
 
 	return jobStore.Put(ctx, job)
@@ -170,6 +222,7 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 		// task stage will not be updated.
 		if oldTask, ok := oldJob.Tasks[taskID]; ok {
 			newTask.Stage = oldTask.Stage
+			newTask.StageUpdatedTime = oldTask.StageUpdatedTime
 		}
 	}
 

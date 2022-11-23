@@ -15,19 +15,16 @@ package event
 
 import (
 	"fmt"
+	"testing"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testDMLSuite{})
-
-type testDMLSuite struct{}
-
-func (t *testDMLSuite) TestGenDMLEvent(c *C) {
+func TestGenDMLEvent(t *testing.T) {
+	t.Parallel()
 	var (
 		serverID  uint32 = 101
 		latestPos uint32 = 123
@@ -38,12 +35,12 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	flavor := gmysql.MySQLFlavor
 	gSetStr := "03fc0263-28c7-11e7-a653-6c0b84d59f30:123"
 	latestGTID, err := gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// empty data
 	result, err := GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, nil, true, false, 0)
-	c.Assert(err, NotNil)
-	c.Assert(result, IsNil)
+	require.NotNil(t, err)
+	require.Nil(t, result)
 
 	// single INSERT without batch
 	insertRows1 := make([][]interface{}, 0, 1)
@@ -59,13 +56,13 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	}
 	eventType := replication.WRITE_ROWS_EVENTv2
 	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, insertDMLData, true, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
-	c.Assert(result.Events, HasLen, 3+2*len(insertDMLData))
+	require.Nil(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Events, 3+2*len(insertDMLData))
 	// simply check here, more check did in `event_test.go`
-	c.Assert(result.Events[3].Header.EventType, Equals, eventType)
-	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, "03fc0263-28c7-11e7-a653-6c0b84d59f30:124")
+	require.Equal(t, eventType, result.Events[3].Header.EventType)
+	require.Equal(t, latestPos+uint32(len(result.Data)), result.LatestPos)
+	require.Equal(t, "03fc0263-28c7-11e7-a653-6c0b84d59f30:124", result.LatestGTID.String())
 
 	latestPos = result.LatestPos // update latest pos
 	latestGTID = result.LatestGTID
@@ -82,12 +79,12 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 		Rows:       insertRows2,
 	})
 	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, xid, insertDMLData, true, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
-	c.Assert(result.Events, HasLen, 3+2*len(insertDMLData)) // 2 more events for insertRows2
-	c.Assert(result.Events[3+2].Header.EventType, Equals, eventType)
-	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, "03fc0263-28c7-11e7-a653-6c0b84d59f30:125")
+	require.Nil(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Events, 3+2*len(insertDMLData)) // 2 more events for insertRows2
+	require.Equal(t, eventType, result.Events[3+2].Header.EventType)
+	require.Equal(t, latestPos+uint32(len(result.Data)), result.LatestPos)
+	require.Equal(t, "03fc0263-28c7-11e7-a653-6c0b84d59f30:125", result.LatestGTID.String())
 
 	latestPos = result.LatestPos // update latest pos
 	latestGTID = result.LatestGTID
@@ -107,12 +104,12 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	}
 	eventType = replication.UPDATE_ROWS_EVENTv2
 	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, updateDMLData, true, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
-	c.Assert(result.Events, HasLen, 3+2*len(updateDMLData))
-	c.Assert(result.Events[3].Header.EventType, Equals, eventType)
-	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, "03fc0263-28c7-11e7-a653-6c0b84d59f30:126")
+	require.Nil(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Events, 3+2*len(updateDMLData))
+	require.Equal(t, eventType, result.Events[3].Header.EventType)
+	require.Equal(t, latestPos+uint32(len(result.Data)), result.LatestPos)
+	require.Equal(t, "03fc0263-28c7-11e7-a653-6c0b84d59f30:126", result.LatestGTID.String())
 
 	latestPos = result.LatestPos // update latest pos
 	xid++
@@ -121,7 +118,7 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	flavor = gmysql.MariaDBFlavor
 	gSetStr = fmt.Sprintf("1-%d-3", serverID)
 	latestGTID, err = gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// single DELETE
 	deleteRows := make([][]interface{}, 0, 1)
@@ -137,10 +134,10 @@ func (t *testDMLSuite) TestGenDMLEvent(c *C) {
 	}
 	eventType = replication.DELETE_ROWS_EVENTv2
 	result, err = GenDMLEvents(flavor, serverID, latestPos, latestGTID, eventType, xid, deleteDMLData, true, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(result, NotNil)
-	c.Assert(result.Events, HasLen, 3+2*(len(deleteDMLData)))
-	c.Assert(result.Events[3].Header.EventType, Equals, eventType)
-	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, fmt.Sprintf("1-%d-4", serverID))
+	require.Nil(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Events, 3+2*len(deleteDMLData))
+	require.Equal(t, eventType, result.Events[3].Header.EventType)
+	require.Equal(t, latestPos+uint32(len(result.Data)), result.LatestPos)
+	require.Equal(t, fmt.Sprintf("1-%d-4", serverID), result.LatestGTID.String())
 }

@@ -18,9 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -29,11 +26,15 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // unitHolder hold a unit of DM
@@ -46,12 +47,16 @@ type unitHolder interface {
 	Status(ctx context.Context) interface{}
 	// CheckAndUpdateStatus checks if the last update of source status is outdated,
 	// if so, it will call Status.
-	CheckAndUpdateStatus(ctx context.Context)
+	// this should be an async func.
+	CheckAndUpdateStatus()
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
 }
 
-var sourceStatusRefreshInterval = 30 * time.Second
+var (
+	sourceStatusRefreshInterval = 30 * time.Second
+	sourceStatusCtxTimeOut      = 20 * time.Second
+)
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
@@ -59,9 +64,10 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
-	upstreamDB     *conn.BaseDB
-	sourceStatus   *binlog.SourceStatus
-	sourceStatusMu sync.RWMutex
+	upstreamDB            *conn.BaseDB
+	sourceStatus          *binlog.SourceStatus
+	sourceStatusMu        sync.RWMutex
+	sourceStatusCheckTime time.Time
 
 	logger log.Logger
 	// use to access process(init/close/pause/resume)
@@ -72,6 +78,9 @@ type unitHolderImpl struct {
 	runCtx    context.Context
 	runCancel context.CancelFunc
 	result    *pb.ProcessResult // TODO: check if framework can persist result
+
+	// used to run background task
+	bgWg sync.WaitGroup
 }
 
 var _ unitHolder = &unitHolderImpl{}
@@ -89,26 +98,36 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.processMu.Lock()
 	defer u.processMu.Unlock()
 
-	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
-	switch u.tp {
-	case framework.WorkerDMDump:
-		u.unit = dumpling.NewDumpling(u.cfg)
-	case framework.WorkerDMLoad:
-		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
-	case framework.WorkerDMSync:
-		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
-	}
-
 	var err error
-	if err = u.unit.Init(ctx); err != nil {
+	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
+	if err != nil {
 		return err
 	}
-
 	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
 		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
 	)
-	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
-	if err != nil {
+
+	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
+	switch u.tp {
+	case frameModel.WorkerDMDump:
+		u.unit = dumpling.NewDumpling(u.cfg)
+	case frameModel.WorkerDMLoad:
+		sqlMode, err2 := utils.GetGlobalVariable(ctx, u.upstreamDB.DB, "sql_mode")
+		if err2 != nil {
+			u.logger.Error("get global sql_mode from upstream failed",
+				zap.String("db", u.cfg.From.Host),
+				zap.Int("port", u.cfg.From.Port),
+				zap.String("user", u.cfg.From.User),
+				zap.Error(err))
+			return err2
+		}
+		u.cfg.LoaderConfig.SQLMode = sqlMode
+		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
+	case frameModel.WorkerDMSync:
+		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
+	}
+
+	if err = u.unit.Init(ctx); err != nil {
 		return err
 	}
 
@@ -140,6 +159,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 	u.fieldMu.Lock()
 	u.runCancel()
 	u.fieldMu.Unlock()
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	// TODO: refactor unit.Syncer
 	// unit needs to manage its own life cycle
@@ -185,6 +205,7 @@ func (u *unitHolderImpl) Close(ctx context.Context) error {
 	}
 	u.fieldMu.Unlock()
 
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	if u.unit != nil {
 		u.unit.Close()
@@ -224,6 +245,11 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 // Status implement UnitHolder.Status. Each invocation will try to query upstream
 // once and calculate the status.
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
+	// nil sourceStatus is supported
+	return u.unit.Status(u.getSourceStatus())
+}
+
+func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) interface{} {
 	sourceStatus, err := binlog.GetSourceStatus(
 		tcontext.NewContext(ctx, u.logger),
 		u.upstreamDB,
@@ -232,22 +258,35 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 	if err != nil {
 		u.logger.Warn("failed to get source status", zap.Error(err))
 	}
-	u.sourceStatusMu.Lock()
-	u.sourceStatus = sourceStatus
-	u.sourceStatusMu.Unlock()
-
-	// nil sourceStatus is supported
+	u.setSourceStatus(sourceStatus)
 	return u.unit.Status(sourceStatus)
 }
 
-// CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
-func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
+func (u *unitHolderImpl) getSourceStatus() *binlog.SourceStatus {
 	u.sourceStatusMu.RLock()
-	sourceStatus := u.sourceStatus
-	u.sourceStatusMu.RUnlock()
+	defer u.sourceStatusMu.RUnlock()
+	return u.sourceStatus
+}
 
-	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
-		u.Status(ctx)
+func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
+	u.sourceStatusMu.Lock()
+	defer u.sourceStatusMu.Unlock()
+	u.sourceStatus = in
+}
+
+// CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
+func (u *unitHolderImpl) CheckAndUpdateStatus() {
+	u.fieldMu.Lock()
+	defer u.fieldMu.Unlock()
+	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
+		u.sourceStatusCheckTime = time.Now()
+		u.bgWg.Add(1)
+		go func() {
+			defer u.bgWg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), sourceStatusCtxTimeOut)
+			u.updateSourceStatus(ctx)
+			cancel()
+		}()
 	}
 }
 

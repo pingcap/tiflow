@@ -26,6 +26,7 @@ type MetaData struct {
 	clusterInfoStore *ClusterInfoStore
 	jobStore         *JobStore
 	ddlStore         *DDLStore
+	unitStateStore   *UnitStateStore
 }
 
 // NewMetaData creates a new MetaData instance
@@ -34,6 +35,7 @@ func NewMetaData(kvClient metaModel.KVClient, pLogger *zap.Logger) *MetaData {
 		clusterInfoStore: NewClusterInfoStore(kvClient),
 		jobStore:         NewJobStore(kvClient, pLogger),
 		ddlStore:         NewDDLStore(kvClient),
+		unitStateStore:   NewUnitStateStore(kvClient),
 	}
 }
 
@@ -50,6 +52,11 @@ func (m *MetaData) JobStore() *JobStore {
 // DDLStore returns internal ddlStore
 func (m *MetaData) DDLStore() *DDLStore {
 	return m.ddlStore
+}
+
+// UnitStateStore returns internal unitStateStore
+func (m *MetaData) UnitStateStore() *UnitStateStore {
+	return m.unitStateStore
 }
 
 // Upgrade upgrades metadata.

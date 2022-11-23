@@ -16,12 +16,11 @@ package worker
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/tests/v3/integration"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 func TestGetExpectValidatorStage(t *testing.T) {

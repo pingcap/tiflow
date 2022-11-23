@@ -15,14 +15,12 @@ package capture
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -32,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -86,10 +83,9 @@ func TestInfo(t *testing.T) {
 	require.NotPanics(t, func() { cp.Info() })
 }
 
-func TestDrainImmediately(t *testing.T) {
+func TestDrainCaptureBySignal(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
 	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
@@ -102,19 +98,9 @@ func TestDrainImmediately(t *testing.T) {
 		config:           config.GetDefaultServerConfig(),
 		EtcdClient:       me,
 	}
-
-	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
-	// Drain completes immediately.
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
-	mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 0
-			close(done)
-		})
-	done := cp.Drain(ctx)
+	done := cp.Drain()
 	select {
 	case <-done:
 		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
@@ -123,63 +109,9 @@ func TestDrainImmediately(t *testing.T) {
 	}
 }
 
-func TestDrainWaitsTables(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	mm := mock_processor.NewMockManager(ctrl)
-	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
-	cp := &captureImpl{
-		EtcdClient: me,
-		info: &model.CaptureInfo{
-			ID:            "capture-for-test",
-			AdvertiseAddr: "127.0.0.1", Version: "test",
-		},
-		processorManager: mm,
-		config:           config.GetDefaultServerConfig(),
-	}
-	cp.config.Debug.EnableSchedulerV3 = true
-	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-
-	// Drain waits for moving out all tables.
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
-	calls := 0
-	t2 := mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 2
-			calls = 1
-			close(done)
-		})
-	t1 := mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 1
-			calls = 2
-			close(done)
-		}).After(t2)
-	mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 0
-			calls = 3
-			close(done)
-		}).After(t1)
-	done := cp.Drain(ctx)
-	select {
-	case <-done:
-		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
-		require.EqualValues(t, 3, calls)
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	}
-}
-
 func TestDrainWaitsOwnerResign(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
@@ -194,208 +126,11 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 		owner:            mo,
 		config:           config.GetDefaultServerConfig(),
 	}
-	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
-	ownerStopCh := make(chan struct{}, 1)
-	mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
-		query *owner.Query, done chan<- error,
-	) {
-		// Two captures to allow owner resign.
-		query.Data = []*model.CaptureInfo{{}, {}}
-		close(done)
-	}).AnyTimes()
-	mo.EXPECT().AsyncStop().Do(func() {
-		select {
-		case ownerStopCh <- struct{}{}:
-		default:
-		}
-	}).AnyTimes()
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
-	mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 0
-			close(done)
-		})
+	mo.EXPECT().AsyncStop().Do(func() {}).AnyTimes()
 
-	done := cp.Drain(ctx)
-
-	// Must wait owner resign by wait for async close.
-	select {
-	case <-ownerStopCh:
-		// Simulate owner has resigned.
-		require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-		cp.setOwner(nil)
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	case <-done:
-		require.Fail(t, "unexpected")
-	}
-
-	select {
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	case <-done:
-		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
-	}
-}
-
-func TestDrainOneCapture(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockOwner(ctrl)
-	mm := mock_processor.NewMockManager(ctrl)
-	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
-	cp := &captureImpl{
-		EtcdClient: me,
-		info: &model.CaptureInfo{
-			ID:            "capture-for-test",
-			AdvertiseAddr: "127.0.0.1", Version: "test",
-		},
-		processorManager: mm,
-		owner:            mo,
-		config:           config.GetDefaultServerConfig(),
-	}
-
-	cp.config.Debug.EnableSchedulerV3 = true
-	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-
-	mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
-		query *owner.Query, done chan<- error,
-	) {
-		// Only one capture, skip drain.
-		query.Data = []*model.CaptureInfo{{}}
-		close(done)
-	}).AnyTimes()
-
-	done := cp.Drain(ctx)
-
-	select {
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	case <-done:
-	}
-}
-
-func TestDrainErrors(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockOwner(ctrl)
-	mm := mock_processor.NewMockManager(ctrl)
-	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
-	cp := &captureImpl{
-		EtcdClient: me,
-		info: &model.CaptureInfo{
-			ID:            "capture-for-test",
-			AdvertiseAddr: "127.0.0.1", Version: "test",
-		},
-		processorManager: mm,
-		owner:            mo,
-		config:           config.GetDefaultServerConfig(),
-	}
-
-	cp.config.Debug.EnableSchedulerV3 = true
-	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-
-	errQueryCall := mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
-		query *owner.Query, done chan<- error,
-	) {
-		done <- fmt.Errorf("test")
-		close(done)
-	})
-	ownerStopCh := make(chan struct{}, 1)
-	okQueryCall := mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
-		query *owner.Query, done chan<- error,
-	) {
-		// Two captures to allow owner resign.
-		query.Data = []*model.CaptureInfo{{}, {}}
-		close(done)
-	}).AnyTimes().After(errQueryCall)
-	mo.EXPECT().AsyncStop().Do(func() {
-		select {
-		case ownerStopCh <- struct{}{}:
-		default:
-		}
-	}).AnyTimes().After(okQueryCall)
-
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).AnyTimes()
-	errTableCall := mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			done <- fmt.Errorf("test")
-			close(done)
-		}).After(okQueryCall)
-	mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 0
-			close(done)
-		}).After(errTableCall)
-
-	done := cp.Drain(ctx)
-
-	// Must wait owner resign by wait for async close.
-	select {
-	case <-ownerStopCh:
-		// Simulate owner has resigned.
-		require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-		cp.setOwner(nil)
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	case <-done:
-		require.Fail(t, "unexpected")
-	}
-
-	select {
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "timeout")
-	case <-done:
-		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
-	}
-}
-
-func TestDrainSkipNoOwner(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	mm := mock_processor.NewMockManager(ctrl)
-	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
-	cp := &captureImpl{
-		EtcdClient: me,
-		info: &model.CaptureInfo{
-			ID:            "capture-for-test",
-			AdvertiseAddr: "127.0.0.1", Version: "test",
-		},
-		processorManager: mm,
-		config:           config.GetDefaultServerConfig(),
-	}
-
-	cp.config.Debug.EnableSchedulerV3 = true
-	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-
-	hasOwnerCall := me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
-	oneTableCall := mm.EXPECT().
-		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
-			tableCh <- 1
-			close(done)
-		}).After(hasOwnerCall).Times(1)
-
-	// Retry if GetOwnerID returns error.
-	errOwnerCall := me.EXPECT().GetOwnerID(gomock.Any()).
-		Return("", fmt.Errorf("error retry")).Times(1).After(oneTableCall)
-	// Skip drain when there is no owner.
-	me.EXPECT().GetOwnerID(gomock.Any()).
-		Return("", concurrency.ErrElectionNoLeader).Times(1).After(errOwnerCall)
-
-	done := cp.Drain(ctx)
-
+	done := cp.Drain()
 	select {
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timeout")

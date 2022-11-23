@@ -15,12 +15,12 @@ package rpcutil
 
 import (
 	"context"
-	gerrors "errors"
 	"sync"
 	"testing"
 	"time"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -81,13 +81,8 @@ type (
 	}
 )
 
-type mockRPCRespWithErrField struct {
-	Err *pb.Error
-}
-
 type mockRPCClientIface interface {
 	MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error)
-	MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error)
 }
 
 type mockRPCClientImpl struct {
@@ -96,16 +91,9 @@ type mockRPCClientImpl struct {
 
 func (m *mockRPCClientImpl) MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error) {
 	if m.fail {
-		return nil, gerrors.New("mock failed")
+		return nil, errors.New("mock failed")
 	}
 	return &mockRPCResp{2}, nil
-}
-
-func (m *mockRPCClientImpl) MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error) {
-	if m.fail {
-		return nil, gerrors.New("mock failed")
-	}
-	return &mockRPCRespWithErrField{}, nil
 }
 
 type mockRPCServer struct {
@@ -122,35 +110,28 @@ func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...gr
 	return &mockRPCResp{1}, nil
 }
 
-func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCRespWithErrField, error) {
-	resp2 := &mockRPCRespWithErrField{}
-	shouldRet, err := s.hook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return &mockRPCRespWithErrField{}, nil
-}
-
 // newMockRPCServer returns a mockRPCServer that is ready to use.
-func newMockRPCServer() *mockRPCServer {
+func newMockRPCServer(t *testing.T) (*mockRPCServer, *mock.MockFeatureChecker) {
 	serverID := "server1"
 	rpcLim := newRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
+	mockFeatureChecker := mock.NewMockFeatureChecker(gomock.NewController(t))
 	h := &preRPCHookImpl[mockRPCClientIface]{
-		id:          serverID,
-		leader:      &atomic.Value{},
-		leaderCli:   &LeaderClientWithLock[mockRPCClientIface]{},
-		initialized: atomic.NewBool(true),
-		limiter:     rpcLim,
+		id:             serverID,
+		leader:         &atomic.Value{},
+		leaderCli:      &LeaderClientWithLock[mockRPCClientIface]{},
+		featureChecker: mockFeatureChecker,
+		limiter:        rpcLim,
 	}
 	h.leader.Store(&Member{Name: serverID})
-	return &mockRPCServer{hook: h}
+	return &mockRPCServer{hook: h}, mockFeatureChecker
 }
 
 func TestForwardToLeader(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := newMockRPCServer()
+	s, mockFeatureChecker := newMockRPCServer(t)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true).AnyTimes()
 	req := &mockRPCReq{}
 	resp, err := s.MockRPC(ctx, req)
 	require.NoError(t, err)
@@ -169,20 +150,20 @@ func TestForwardToLeader(t *testing.T) {
 
 	s.hook.leader = &atomic.Value{}
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// the server is not leader, and cluster has no leader
 
 	s.hook.leader.Store(&Member{})
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// the server is not leader, cluster has a leader but the forwarding client is empty due to network problems
 
 	s.hook.leader.Store(&Member{Name: "another"})
 	s.hook.leaderCli.inner = nil
 	resp, err = s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
+	require.True(t, errors.Is(err, errors.ErrMasterRPCNotForward))
 
 	// forwarding returns error
 	cli = &mockRPCClientImpl{fail: true}
@@ -191,20 +172,23 @@ func TestForwardToLeader(t *testing.T) {
 	require.ErrorContains(t, err, "mock failed")
 }
 
-func TestCheckInitialized(t *testing.T) {
+func TestFeatureChecker(t *testing.T) {
 	t.Parallel()
 
-	s := newMockRPCServer()
+	s, _ := newMockRPCServer(t)
 	ctx := context.Background()
 	req := &mockRPCReq{}
 
-	s.hook.initialized.Store(false)
-	_, err := s.MockRPC(ctx, req)
-	require.True(t, errors.ErrMasterNotInitialized.Equal(err))
+	mockFeatureChecker, ok := s.hook.featureChecker.(*mock.MockFeatureChecker)
+	require.True(t, ok)
 
-	resp, err := s.MockRPCWithErrField(ctx, req)
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(false)
+	_, err := s.MockRPC(ctx, req)
+	require.True(t, errors.Is(err, errors.ErrMasterNotReady))
+
+	mockFeatureChecker.EXPECT().Available(gomock.Any()).Return(true)
+	_, err = s.MockRPC(ctx, req)
 	require.NoError(t, err)
-	require.Equal(t, pb.ErrorCode_MasterNotReady, resp.Err.Code)
 }
 
 func TestRPCLimiter(t *testing.T) {

@@ -14,6 +14,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path"
@@ -28,8 +29,11 @@ type Security struct {
 	SSLKey        string   `toml:"ssl-key" json:"ssl-key" yaml:"ssl-key"`
 	CertAllowedCN strArray `toml:"cert-allowed-cn" json:"cert-allowed-cn" yaml:"cert-allowed-cn"`
 	SSLCABytes    []byte   `toml:"ssl-ca-bytes" json:"-" yaml:"ssl-ca-bytes"`
-	SSLKEYBytes   []byte   `toml:"ssl-key-bytes" json:"-" yaml:"ssl-key-bytes"`
+	SSLKeyBytes   []byte   `toml:"ssl-key-bytes" json:"-" yaml:"ssl-key-bytes"`
 	SSLCertBytes  []byte   `toml:"ssl-cert-bytes" json:"-" yaml:"ssl-cert-bytes"`
+	SSLCABase64   string   `toml:"ssl-ca-base64" json:"-" yaml:"ssl-ca-base64"`
+	SSLKeyBase64  string   `toml:"ssl-key-base64" json:"-" yaml:"ssl-key-base64"`
+	SSLCertBase64 string   `toml:"ssl-cert-base64" json:"-" yaml:"ssl-cert-base64"`
 }
 
 // used for parse string slice in flag.
@@ -44,35 +48,37 @@ func (i *strArray) Set(value string) error {
 	return nil
 }
 
-// LoadTLSContent load all tls config from file.
+// LoadTLSContent load all tls config from file or base64 fields.
 func (s *Security) LoadTLSContent() error {
-	if len(s.SSLCABytes) > 0 {
-		// already loaded
-		return nil
+	var firstErr error
+	convertAndAssign := func(source string, convert func(string) ([]byte, error), target *[]byte) {
+		if firstErr != nil {
+			return
+		}
+		// already loaded. And DM does not support certificate rotation.
+		if len(*target) > 0 {
+			return
+		}
+
+		if source == "" {
+			return
+		}
+
+		dat, err := convert(source)
+		if err != nil {
+			firstErr = err
+			return
+		}
+		*target = dat
 	}
 
-	if s.SSLCA != "" {
-		dat, err := os.ReadFile(s.SSLCA)
-		if err != nil {
-			return err
-		}
-		s.SSLCABytes = dat
-	}
-	if s.SSLCert != "" {
-		dat, err := os.ReadFile(s.SSLCert)
-		if err != nil {
-			return err
-		}
-		s.SSLCertBytes = dat
-	}
-	if s.SSLKey != "" {
-		dat, err := os.ReadFile(s.SSLKey)
-		if err != nil {
-			return err
-		}
-		s.SSLKEYBytes = dat
-	}
-	return nil
+	convertAndAssign(s.SSLCABase64, base64.StdEncoding.DecodeString, &s.SSLCABytes)
+	convertAndAssign(s.SSLKeyBase64, base64.StdEncoding.DecodeString, &s.SSLKeyBytes)
+	convertAndAssign(s.SSLCertBase64, base64.StdEncoding.DecodeString, &s.SSLCertBytes)
+	convertAndAssign(s.SSLCA, os.ReadFile, &s.SSLCABytes)
+	convertAndAssign(s.SSLKey, os.ReadFile, &s.SSLKeyBytes)
+	convertAndAssign(s.SSLCert, os.ReadFile, &s.SSLCertBytes)
+	return firstErr
 }
 
 // DumpTLSContent dump tls certs data to file.
@@ -104,7 +110,7 @@ func (s *Security) DumpTLSContent(baseDirPath string) error {
 	}
 	if isSSLKeyNotExist {
 		s.SSLKey = path.Join(baseDirPath, "key.pem")
-		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
+		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKeyBytes, 0o600); err != nil {
 			return err
 		}
 	}
@@ -114,7 +120,7 @@ func (s *Security) DumpTLSContent(baseDirPath string) error {
 // ClearSSLBytesData clear all tls config bytes data.
 func (s *Security) ClearSSLBytesData() {
 	s.SSLCABytes = s.SSLCABytes[:0]
-	s.SSLKEYBytes = s.SSLKEYBytes[:0]
+	s.SSLKeyBytes = s.SSLKeyBytes[:0]
 	s.SSLCertBytes = s.SSLCertBytes[:0]
 }
 
@@ -126,7 +132,7 @@ func (s *Security) Clone() *Security {
 	clone := *s
 	clone.CertAllowedCN = append(strArray(nil), s.CertAllowedCN...)
 	clone.SSLCABytes = append([]byte(nil), s.SSLCABytes...)
-	clone.SSLKEYBytes = append([]byte(nil), s.SSLKEYBytes...)
+	clone.SSLKeyBytes = append([]byte(nil), s.SSLKeyBytes...)
 	clone.SSLCertBytes = append([]byte(nil), s.SSLCertBytes...)
 	return &clone
 }

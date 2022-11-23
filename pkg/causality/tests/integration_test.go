@@ -37,10 +37,10 @@ func TestConflictBasics(t *testing.T) {
 
 	conflictArray := make([]int, workingSetSize)
 	driver := newConflictTestDriver(
-		numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize),
+		numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize, numSlots),
 	).WithExecFunc(
 		func(txn *txnForTest) error {
-			for _, key := range txn.ConflictKeys() {
+			for _, key := range txn.ConflictKeys(numSlots) {
 				// Access a position in the array without synchronization,
 				// so that if causality check is buggy, the Go race detection would fail.
 				conflictArray[key]++
@@ -72,7 +72,7 @@ func BenchmarkLowConflicts(b *testing.B) {
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
-		newUniformGenerator(workingSetSize, batchSize))
+		newUniformGenerator(workingSetSize, batchSize, numSlots))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}
@@ -98,7 +98,7 @@ func BenchmarkMediumConflicts(b *testing.B) {
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
-		newUniformGenerator(workingSetSize, batchSize))
+		newUniformGenerator(workingSetSize, batchSize, numSlots))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}
@@ -124,7 +124,7 @@ func BenchmarkHighConflicts(b *testing.B) {
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
-		newUniformGenerator(workingSetSize, batchSize))
+		newUniformGenerator(workingSetSize, batchSize, numSlots))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}

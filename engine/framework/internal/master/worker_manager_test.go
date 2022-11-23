@@ -19,12 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -32,7 +27,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type workerManageTestSuite struct {
@@ -297,19 +295,19 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	require.Equal(t, workerOnlineEvent, event.Tp)
 
 	err := suite.SimulateWorkerUpdateStatus("worker-1", &frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusFinished,
+		State: frameModel.WorkerStateFinished,
 	}, 1)
 	require.NoError(t, err)
 
 	event = suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerStatusUpdatedEvent, event.Tp)
-	require.Equal(t, frameModel.WorkerStatusFinished, event.Handle.Status().Code)
+	require.Equal(t, frameModel.WorkerStateFinished, event.Handle.Status().State)
 
 	suite.AdvanceClockBy(30 * time.Second)
 	event = suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOfflineEvent, event.Tp)
 	require.NotNil(t, event.Handle.GetTombstone())
-	require.True(t, derror.ErrWorkerFinish.Equal(event.Err))
+	require.True(t, errors.Is(event.Err, errors.ErrWorkerFinish))
 
 	suite.Close()
 }
@@ -322,22 +320,22 @@ func TestRecoverAfterFailover(t *testing.T) {
 
 	suite := NewWorkerManageTestSuite(false)
 	err := suite.PutMeta("worker-1", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: 11,
 	})
 	require.NoError(t, err)
 	err = suite.PutMeta("worker-2", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: 12,
 	})
 	require.NoError(t, err)
 	err = suite.PutMeta("worker-3", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: 13,
 	})
 	require.NoError(t, err)
 	err = suite.PutMeta("worker-4", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: 14,
 	})
 	require.NoError(t, err)
@@ -385,7 +383,7 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	suite := NewWorkerManageTestSuite(false)
 	wEpoch := int64(100)
 	err := suite.PutMeta("worker-1", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: wEpoch,
 	})
 	require.NoError(t, err)
@@ -448,7 +446,7 @@ func TestCleanTombstone(t *testing.T) {
 	err := event.Handle.GetTombstone().CleanTombstone(ctx)
 	require.NoError(t, err)
 
-	workerMetaClient := metadata.NewWorkerMetadataClient("master-1", suite.meta)
+	workerMetaClient := metadata.NewWorkerStatusClient("master-1", suite.meta)
 	_, err = workerMetaClient.Load(ctx, "worker-1")
 	// Asserts that the meta for the worker is indeed deleted.
 	require.Error(t, err)
@@ -513,7 +511,7 @@ func TestWorkerGracefulExitAfterFailover(t *testing.T) {
 	suite := NewWorkerManageTestSuite(false)
 	wEpoch := int64(2)
 	err := suite.PutMeta("worker-1", &frameModel.WorkerStatus{
-		Code:  frameModel.WorkerStatusNormal,
+		State: frameModel.WorkerStateNormal,
 		Epoch: wEpoch,
 	})
 	require.NoError(t, err)

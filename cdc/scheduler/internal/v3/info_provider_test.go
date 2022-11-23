@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -33,12 +33,12 @@ func TestInfoProvider(t *testing.T) {
 		MaxTaskConcurrency: 1,
 	})
 	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
-		"a": {Tables: []schedulepb.TableStatus{{
+		"a": {Tables: []tablepb.TableStatus{{
 			TableID:    1,
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}, {
 			TableID:    2,
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}}},
 		"b": {},
 	}
@@ -54,11 +54,6 @@ func TestInfoProvider(t *testing.T) {
 		}},
 		"b": {Tables: map[model.TableID]*model.TableReplicaInfo{}},
 	}, tasks)
-	pos, err := ip.GetTaskPositions()
-	require.Nil(t, err)
-	require.Len(t, pos, 2)
-	require.Len(t, ip.GetTotalTableCounts(), 2)
-	require.Empty(t, ip.GetPendingTableCounts())
 }
 
 func TestInfoProviderIsInitialized(t *testing.T) {

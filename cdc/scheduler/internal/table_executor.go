@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -34,14 +34,14 @@ type TableExecutor interface {
 	) (done bool, err error)
 
 	// IsAddTableFinished make sure the requested table is in the proper status
-	IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) (done bool)
+	IsAddTableFinished(tableID model.TableID, isPrepare bool) (done bool)
 
 	// RemoveTable remove the table, return true if the table is already removed
-	RemoveTable(ctx context.Context, tableID model.TableID) (done bool)
+	RemoveTable(tableID model.TableID) (done bool)
 	// IsRemoveTableFinished convince the table is fully stopped.
 	// return false if table is not stopped
 	// return true and corresponding checkpoint otherwise.
-	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool)
+	IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool)
 
 	// GetAllCurrentTables should return all tables that are being run,
 	// being added and being removed.
@@ -57,6 +57,6 @@ type TableExecutor interface {
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
-	// GetTableMeta return the checkpoint and resolved ts for the given table
-	GetTableMeta(tableID model.TableID) pipeline.TableMeta
+	// GetTableStatus return the checkpoint and resolved ts for the given table
+	GetTableStatus(tableID model.TableID) tablepb.TableStatus
 }

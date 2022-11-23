@@ -30,7 +30,8 @@ type ReceivedData struct {
 }
 
 type mockSink struct {
-	Received []ReceivedData
+	Received   []ReceivedData
+	CloseTimes int
 }
 
 // NewNormalMockSink returns a mock sink for test.
@@ -60,11 +61,12 @@ func (s *mockSink) FlushRowChangedEvents(
 	return resolved, nil
 }
 
-func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	panic("unreachable")
 }
 
 func (s *mockSink) Close(ctx context.Context) error {
+	s.CloseTimes++
 	return nil
 }
 

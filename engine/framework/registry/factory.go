@@ -16,13 +16,13 @@ package registry
 import (
 	"encoding/json"
 	"reflect"
-
-	"github.com/pingcap/errors"
+	"strings"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // WorkerFactory is an interface that should be implemented by the author of
@@ -38,6 +38,9 @@ type WorkerFactory interface {
 		config WorkerConfig, // the config used to initialize the worker.
 	) (framework.WorkerImpl, error)
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
+	// IsRetryableError passes in an error to business logic, and returns whether
+	// job should be re-created or terminated permanently when meeting this error.
+	IsRetryableError(err error) bool
 }
 
 // WorkerConstructor alias to the function that can construct a WorkerImpl
@@ -81,7 +84,18 @@ func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (Worke
 	var config C
 	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.ErrDeserializeConfig.Wrap(err).GenWithStackByArgs()
 	}
 	return config, nil
+}
+
+// IsRetryableError implements WorkerFactory.IsRetryableError
+func (f *SimpleWorkerFactory[T, C]) IsRetryableError(err error) bool {
+	if errors.Is(err, errors.ErrDeserializeConfig) {
+		return false
+	}
+	if strings.Contains(err.Error(), string(errors.ErrDeserializeConfig.RFCCode())) {
+		return false
+	}
+	return true
 }

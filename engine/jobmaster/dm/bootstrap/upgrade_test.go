@@ -15,12 +15,12 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )

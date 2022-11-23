@@ -9,9 +9,10 @@ services:
     command:
       - "/tiflow"
       - "master"
-      - "--config=/config.toml"
+      - "--name=server-master"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-master-0.log"
     ports:
       - "10240:10240"
@@ -20,6 +21,8 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-executor-0:
     image: dataflow:test
     container_name: server-executor-0
@@ -29,16 +32,18 @@ services:
     command:
       - "/tiflow"
       - "executor"
-      - "--config=/config.toml"
-      - "--join=server-master:10240"
+      - "--name=server-executor-0"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor-0:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-executor-0.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-1:
     image: dataflow:test
     container_name: server-executor-1
@@ -48,16 +53,18 @@ services:
     command:
       - "/tiflow"
       - "executor"
-      - "--config=/config.toml"
-      - "--join=server-master:10240"
+      - "--name=server-executor-1"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor-1:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-executor-1.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   server-executor-2:
     image: dataflow:test
     container_name: server-executor-2
@@ -67,16 +74,18 @@ services:
     command:
       - "/tiflow"
       - "executor"
-      - "--config=/config.toml"
-      - "--join=server-master:10240"
+      - "--name=server-executor-2"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor-2:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-executor-2.log"
     depends_on:
       - "server-master"
-    restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -86,6 +95,7 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
+
   mysql-standalone:
     image: mysql:8.0
     container_name: mysql-standalone

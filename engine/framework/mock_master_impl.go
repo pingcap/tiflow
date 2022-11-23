@@ -20,14 +20,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"github.com/stretchr/testify/mock"
-	"go.uber.org/atomic"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -35,6 +30,10 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/atomic"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // MockMasterImpl implements a mock MasterImpl
@@ -67,7 +66,7 @@ func NewMockMasterImpl(t *testing.T, masterID, id frameModel.MasterID) *MockMast
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
-		tp:                FakeJobMaster,
+		tp:                frameModel.FakeJobMaster,
 		dispatchedWorkers: make(chan WorkerHandle, 1),
 		dispatchedResult:  make(chan error, 1),
 		updatedStatuses:   make(chan *frameModel.WorkerStatus, 1024),
@@ -228,12 +227,19 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 }
 
 // CloseImpl implements MasterImpl.CloseImpl
-func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
+func (m *MockMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.Called(ctx)
+}
+
+// StopImpl implements MasterImpl.StopImpl
+func (m *MockMasterImpl) StopImpl(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Called(ctx)
 }
 
 // MasterClient returns internal server master client

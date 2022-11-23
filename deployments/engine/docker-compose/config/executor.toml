@@ -1,6 +1,5 @@
 keepalive-ttl = "20s"
 keepalive-interval = "500ms"
-session-ttl = 20
 
-join = "0.0.0.0:10240"
-addr = "0.0.0.0:10241"
+[log] 
+level = "debug"

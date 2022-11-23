@@ -16,12 +16,11 @@ package cmd
 import (
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/pingcap/tiflow/engine/pkg/cmd/cli"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/executor"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/master"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/version"
+	"github.com/spf13/cobra"
 )
 
 // NewCmd creates the root command.

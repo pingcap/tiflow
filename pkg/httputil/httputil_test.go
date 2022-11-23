@@ -18,25 +18,23 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/stretchr/testify/require"
+	"time"
 
 	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/stretchr/testify/require"
 )
 
 var httputilServerMsg = "this is httputil test server"
 
 func TestHttputilNewClient(t *testing.T) {
 	t.Parallel()
-
-	port := 8303
-	_, cancel := context.WithCancel(context.Background())
 
 	dir, err := os.Getwd()
 	require.Nil(t, err)
@@ -48,9 +46,8 @@ func TestHttputilNewClient(t *testing.T) {
 		[]string{},
 	)
 	require.Nil(t, err)
-	server := runServer(serverTLS, port, t)
+	server, addr := runServer(http.HandlerFunc(handler), serverTLS)
 	defer func() {
-		cancel()
 		server.Close()
 	}()
 	credential := &security.Credential{
@@ -61,7 +58,7 @@ func TestHttputilNewClient(t *testing.T) {
 	}
 	cli, err := NewClient(credential)
 	require.Nil(t, err)
-	url := fmt.Sprintf("https://127.0.0.1:%d/", port)
+	url := fmt.Sprintf("https://%s/", addr)
 	resp, err := cli.Get(context.Background(), url)
 	require.Nil(t, err)
 	defer resp.Body.Close()
@@ -70,25 +67,79 @@ func TestHttputilNewClient(t *testing.T) {
 	require.Equal(t, httputilServerMsg, string(body))
 }
 
+func TestStatusCodeCreated(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	server, addr := runServer(http.HandlerFunc(createHandler), nil)
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+	cli, err := NewClient(nil)
+	require.Nil(t, err)
+	url := fmt.Sprintf("http://%s/create", addr)
+	respBody, err := cli.DoRequest(ctx, url, http.MethodPost, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []byte(`"{"id": "value"}"`), respBody)
+}
+
+func TestTimeout(t *testing.T) {
+	t.Parallel()
+
+	const timeout = 500 * time.Millisecond
+
+	server, addr := runServer(sleepHandler(time.Second), nil)
+	defer func() {
+		server.Close()
+	}()
+	cli, err := NewClient(nil)
+	require.NoError(t, err)
+
+	cli.SetTimeout(timeout)
+	start := time.Now()
+	resp, err := cli.Get(context.Background(), fmt.Sprintf("http://%s/", addr))
+	if resp != nil && resp.Body != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	var uErr *url.Error
+	require.ErrorAs(t, err, &uErr)
+	require.True(t, uErr.Timeout())
+	require.GreaterOrEqual(t, time.Since(start), timeout)
+}
+
 func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	//nolint:errcheck
 	w.Write([]byte(httputilServerMsg))
 }
 
-func runServer(tlsCfg *tls.Config, port int, t *testing.T) *http.Server {
-	http.HandleFunc("/", handler)
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: nil}
+func createHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	//nolint:errcheck
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(`"{"id": "value"}"`))
+}
 
-	conn, err := net.Listen("tcp", server.Addr)
-	if err != nil {
-		require.Nil(t, err)
+func sleepHandler(d time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		select {
+		case <-time.After(d):
+		case <-req.Context().Done():
+		}
 	}
+}
 
-	tlsListener := tls.NewListener(conn, tlsCfg)
-	go func() {
-		//nolint:errcheck
-		server.Serve(tlsListener)
-	}()
-	return server
+func runServer(handler http.Handler, tlsCfg *tls.Config) (*httptest.Server, string) {
+	server := httptest.NewUnstartedServer(handler)
+	addr := server.Listener.Addr().String()
+
+	if tlsCfg != nil {
+		server.TLS = tlsCfg
+		server.StartTLS()
+	} else {
+		server.Start()
+	}
+	return server, addr
 }

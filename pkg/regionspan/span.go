@@ -46,12 +46,6 @@ func (s Span) String() string {
 	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
 }
 
-// Hack will set End as UpperBoundKey if End is Nil.
-func (s Span) Hack() Span {
-	s.Start, s.End = hackSpan(s.Start, s.End)
-	return s
-}
-
 func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
 	start = originStart
 	end = originEnd
@@ -78,14 +72,6 @@ func (s ComparableSpan) String() string {
 func (s ComparableSpan) Hack() ComparableSpan {
 	s.Start, s.End = hackSpan(s.Start, s.End)
 	return s
-}
-
-// Clone clones a ComparableSpan
-func (s ComparableSpan) Clone() ComparableSpan {
-	return ComparableSpan{
-		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
-		End:   append(make([]byte, 0, len(s.End)), s.End...),
-	}
 }
 
 // GetTableSpan returns the span to watch for the specified table

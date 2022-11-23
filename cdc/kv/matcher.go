@@ -80,6 +80,7 @@ func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {
 	m.cachedCommit = append(m.cachedCommit, row)
 }
 
+//nolint:unparam
 func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
 	if !initialized {
 		log.Panic("must be initialized before match cahced rows")
@@ -96,7 +97,7 @@ func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
 			// the same key and start-ts must have been received.
 			log.Info("ignore commit event without prewrite",
 				zap.Binary("key", cacheEntry.GetKey()),
-				zap.Uint64("ts", cacheEntry.GetStartTs()))
+				zap.Uint64("startTs", cacheEntry.GetStartTs()))
 			continue
 		}
 		cachedCommit[top] = cacheEntry
@@ -113,6 +114,7 @@ func (m *matcher) cacheRollbackRow(row *cdcpb.Event_Row) {
 	m.cachedRollback = append(m.cachedRollback, row)
 }
 
+//nolint:unparam
 func (m *matcher) matchCachedRollbackRow(initialized bool) {
 	if !initialized {
 		log.Panic("must be initialized before match cahced rollback rows")

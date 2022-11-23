@@ -60,5 +60,5 @@ type StatusChangeRequest struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromMasterID MasterID            `json:"from-master-id"`
 	Epoch        Epoch               `json:"epoch"`
-	ExpectState  WorkerStatusCode    `json:"expect-state"`
+	ExpectState  WorkerState         `json:"expect-state"`
 }

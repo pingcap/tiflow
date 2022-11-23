@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -22,9 +23,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/require"
-
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJobAPIServer(t *testing.T) {
@@ -40,6 +42,13 @@ func TestJobAPIServer(t *testing.T) {
 			c.String(http.StatusOK, "job2 status")
 		})
 	})
+
+	ensureNotRunning := func(w *httptest.ResponseRecorder) {
+		require.Equal(t, errors.HTTPStatusCode(errors.ErrJobNotRunning), w.Code)
+		var httpErr openapi.HTTPError
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &httpErr))
+		require.Equal(t, string(errors.ErrJobNotRunning.RFCCode()), httpErr.Code)
+	}
 
 	// test job1
 	{
@@ -57,12 +66,12 @@ func TestJobAPIServer(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, "job2 status", w.Body.String())
 	}
-	// test not found
+	// test not running job
 	{
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/api/v1/jobs/job3/status", nil)
 		jobAPISrv.ServeHTTP(w, r)
-		require.Equal(t, http.StatusNotFound, w.Code)
+		ensureNotRunning(w)
 	}
 
 	wg := sync.WaitGroup{}
@@ -79,7 +88,11 @@ func TestJobAPIServer(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/api/v1/jobs/job1/status", nil)
 		jobAPISrv.ServeHTTP(w, r)
-		return w.Code == http.StatusNotFound
+		if w.Code/100 != 2 {
+			ensureNotRunning(w)
+			return true
+		}
+		return false
 	}, time.Second, time.Millisecond*100)
 
 	stoppedJobs <- "job2"
@@ -87,7 +100,11 @@ func TestJobAPIServer(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/api/v1/jobs/job2/status", nil)
 		jobAPISrv.ServeHTTP(w, r)
-		return w.Code == http.StatusNotFound
+		if w.Code/100 != 2 {
+			ensureNotRunning(w)
+			return true
+		}
+		return false
 	}, time.Second, time.Millisecond*100)
 
 	close(stoppedJobs)

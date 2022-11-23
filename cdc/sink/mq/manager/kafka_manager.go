@@ -15,8 +15,8 @@ package manager
 
 import (
 	"context"
-	gerrors "errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -148,10 +148,10 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 		)
 		return nil, err
 	}
+
 	log.Info(
 		"Kafka admin client describe topics success",
-		zap.Duration("duration", time.Since(start)),
-	)
+		zap.Duration("duration", time.Since(start)))
 
 	return topicMetaList, nil
 }
@@ -196,8 +196,9 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 			zap.Duration("duration", time.Since(start)))
 
 		return nil
-	}, retry.WithBackoffBaseDelay(500), // sleep 500ms for one run
-		retry.WithMaxTries(6), // 3s in total
+	}, retry.WithBackoffBaseDelay(500),
+		retry.WithBackoffMaxDelay(1000),
+		retry.WithMaxTries(6),
 	)
 
 	return err
@@ -278,7 +279,8 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
-	if err != nil && gerrors.Is(err, sarama.ErrTopicAlreadyExists) {
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),

@@ -14,16 +14,14 @@
 package metrics
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var defaultFactory = &promutil.PromFactory{}
 
 var (
-	validatorErrorCount = metricsproxy.NewGaugeVec(defaultFactory,
+	validatorErrorCount = defaultFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -31,14 +29,14 @@ var (
 			Help:      "total number of validator errors",
 		}, []string{"task", "source_id"})
 
-	validatorLogPosLatency = metricsproxy.NewGaugeVec(defaultFactory,
+	validatorLogPosLatency = defaultFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
 			Name:      "validator_logpos_latency",
 			Help:      "the log pos latency between validator and syncer",
 		}, []string{"task", "source_id"})
-	validatorLogFileLatency = metricsproxy.NewGaugeVec(defaultFactory,
+	validatorLogFileLatency = defaultFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -46,7 +44,7 @@ var (
 			Help:      "the log file latency between validator and syncer",
 		}, []string{"task", "source_id"})
 
-	validatorBinlogPos = metricsproxy.NewGaugeVec(defaultFactory,
+	validatorBinlogPos = defaultFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -54,7 +52,7 @@ var (
 			Help:      "binlog position of the validator",
 		}, []string{"task", "source_id"})
 
-	validatorBinlogFile = metricsproxy.NewGaugeVec(defaultFactory,
+	validatorBinlogFile = defaultFactory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -72,11 +70,11 @@ func RegisterValidatorMetrics(registry *prometheus.Registry) {
 }
 
 func RemoveValidatorLabelValuesWithTask(task string) {
-	validatorErrorCount.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	validatorLogPosLatency.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	validatorLogFileLatency.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	validatorBinlogPos.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	validatorBinlogFile.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	validatorErrorCount.DeletePartialMatch(prometheus.Labels{"task": task})
+	validatorLogPosLatency.DeletePartialMatch(prometheus.Labels{"task": task})
+	validatorLogFileLatency.DeletePartialMatch(prometheus.Labels{"task": task})
+	validatorBinlogPos.DeletePartialMatch(prometheus.Labels{"task": task})
+	validatorBinlogFile.DeletePartialMatch(prometheus.Labels{"task": task})
 }
 
 type ValidatorMetrics struct {

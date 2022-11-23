@@ -20,11 +20,6 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -38,6 +33,10 @@ import (
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -75,15 +74,8 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 }
 
 func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string) unit.Unit {
-	hasAutoGenColumn := false
-	for _, rule := range cfg.RouteRules {
-		if rule.SchemaExtractor != nil || rule.TableExtractor != nil || rule.SourceExtractor != nil {
-			hasAutoGenColumn = true
-			break
-		}
-	}
 	// tidb-lightning doesn't support column mapping currently
-	if cfg.ImportMode == config.LoadModeLoader || cfg.OnDuplicate == config.OnDuplicateError || hasAutoGenColumn || len(cfg.ColumnMappingRules) > 0 {
+	if cfg.ImportMode == config.LoadModeLoader || cfg.OnDuplicate == config.OnDuplicateError || len(cfg.ColumnMappingRules) > 0 {
 		return loader.NewLoader(cfg, etcdClient, workerName)
 	}
 	return loader.NewLightning(cfg, etcdClient, workerName)
@@ -890,7 +882,7 @@ func (st *SubTask) getValidatorStage() pb.Stage {
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {
 	if stage == pb.Stage_Stopped || stage == pb.Stage_Finished {
-		taskState.DeleteAllAboutLabels(prometheus.Labels{"task": task, "source_id": sourceID})
+		taskState.DeletePartialMatch(prometheus.Labels{"task": task, "source_id": sourceID})
 	} else {
 		taskState.WithLabelValues(task, sourceID, workerName).Set(float64(stage))
 	}

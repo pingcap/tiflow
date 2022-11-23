@@ -19,10 +19,6 @@ import (
 	"time"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -31,6 +27,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
+	"go.uber.org/zap"
 )
 
 var (
@@ -46,8 +44,7 @@ type WorkerAgent interface {
 	CreateWorker(
 		workerType framework.WorkerType,
 		config framework.WorkerConfig,
-		cost model.RescUnit,
-		resources ...resourcemeta.ResourceID,
+		opts ...framework.CreateWorkerOpt,
 	) (frameModel.WorkerID, error)
 }
 
@@ -62,10 +59,13 @@ type WorkerManager struct {
 
 	jobID           string
 	jobStore        *metadata.JobStore
+	unitStore       *metadata.UnitStateStore
 	workerAgent     WorkerAgent
 	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
 	logger          *zap.Logger
+
+	isS3StorageEnabled bool
 
 	// workerStatusMap record the runtime worker status
 	// taskID -> WorkerStatus
@@ -73,15 +73,27 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(jobID string, initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent, pLogger *zap.Logger) *WorkerManager {
+func NewWorkerManager(
+	jobID string,
+	initWorkerStatus []runtime.WorkerStatus,
+	jobStore *metadata.JobStore,
+	unitStore *metadata.UnitStateStore,
+	workerAgent WorkerAgent,
+	messageAgent dmpkg.MessageAgent,
+	checkpointAgent CheckpointAgent,
+	pLogger *zap.Logger,
+	isS3StorageEnabled bool,
+) *WorkerManager {
 	workerManager := &WorkerManager{
-		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
-		jobID:           jobID,
-		jobStore:        jobStore,
-		workerAgent:     workerAgent,
-		messageAgent:    messageAgent,
-		checkpointAgent: checkpointAgent,
-		logger:          pLogger.With(zap.String("component", "worker_manager")),
+		DefaultTicker:      ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:              jobID,
+		jobStore:           jobStore,
+		unitStore:          unitStore,
+		workerAgent:        workerAgent,
+		messageAgent:       messageAgent,
+		checkpointAgent:    checkpointAgent,
+		logger:             pLogger.With(zap.String("component", "worker_manager")),
+		isS3StorageEnabled: isS3StorageEnabled,
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
 
@@ -239,26 +251,33 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		if ok && runningWorker.RunAsExpected() && nextUnit == runningWorker.Unit {
-			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)))
+			wm.logger.Debug("worker status as expected", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit))
 			continue
 		} else if !ok {
-			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Int64("unit", int64(nextUnit)))
+			wm.logger.Info("task has no worker", zap.String("task_id", taskID), zap.Stringer("unit", nextUnit))
 		} else if !runningWorker.RunAsExpected() {
-			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Int("worker_stage", int(runningWorker.Stage)), zap.Int64("unit", int64(runningWorker.Unit)), zap.Int64("next_unit", int64(nextUnit)))
+			wm.logger.Info("unexpected worker status", zap.String("task_id", taskID), zap.Stringer("worker_stage", runningWorker.Stage), zap.Stringer("unit", runningWorker.Unit), zap.Stringer("next_unit", nextUnit))
 		} else {
-			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
+			wm.logger.Info("switch to next unit", zap.String("task_id", taskID), zap.Stringer("next_unit", nextUnit))
 		}
 
-		var resources []resourcemeta.ResourceID
+		var resources []resModel.ResourceID
+		taskCfg := persistentTask.Cfg
 		// first worker don't need local resource.
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
-			resources = append(resources, NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID))
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
+			resID := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
+			resources = append(resources, resID)
+		}
+
+		// FIXME: remove this after fix https://github.com/pingcap/tiflow/issues/7304
+		if nextUnit != frameModel.WorkerDMSync || isFresh {
+			taskCfg.NeedExtStorage = true
 		}
 
 		// createWorker should be an asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg, resources...); err != nil {
+		if err := wm.createWorker(ctx, taskID, nextUnit, taskCfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -268,16 +287,16 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 
 var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeAll: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
-		framework.WorkerDMSync,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
+		frameModel.WorkerDMSync,
 	},
 	dmconfig.ModeFull: {
-		framework.WorkerDMDump,
-		framework.WorkerDMLoad,
+		frameModel.WorkerDMDump,
+		frameModel.WorkerDMLoad,
 	},
 	dmconfig.ModeIncrement: {
-		framework.WorkerDMSync,
+		frameModel.WorkerDMSync,
 	},
 }
 
@@ -332,12 +351,13 @@ func (wm *WorkerManager) createWorker(
 	taskID string,
 	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) error {
-	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
+	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Stringer("unit", unit))
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg,
+		framework.CreateWorkerWithResourceRequirements(resources...))
 	if err != nil {
-		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
+		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Stringer("unit", unit), zap.Error(err))
 	}
 	if len(workerID) != 0 {
 		//	There are two mechanisms for create workers status.
@@ -349,6 +369,28 @@ func (wm *WorkerManager) createWorker(
 		//	We choose the second mechanism now.
 		//	If a worker is created but never receives a dispatch/online/offline event(2 ticker?), we should remove it.
 		wm.UpdateWorkerStatus(runtime.InitWorkerStatus(taskID, unit, workerID))
+
+		// create success, record unit state
+		if err := wm.unitStore.ReadModifyWrite(ctx, func(state *metadata.UnitState) error {
+			wm.logger.Debug("start to update current unit state", zap.String("task", taskID), zap.Stringer("unit", unit))
+			status, ok := state.CurrentUnitStatus[taskID]
+			if !ok {
+				state.CurrentUnitStatus[taskID] = &metadata.UnitStatus{
+					Unit:        unit,
+					Task:        taskID,
+					CreatedTime: time.Now(),
+				}
+			} else {
+				if status.Unit != unit {
+					status.CreatedTime = time.Now()
+					status.Unit = unit
+				}
+			}
+			return nil
+		}); err != nil {
+			wm.logger.Error("update current unit state failed", zap.String("task", taskID), zap.Stringer("unit", unit), zap.Error(err))
+			return err
+		}
 	}
 	return err
 }

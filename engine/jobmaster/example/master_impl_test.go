@@ -63,7 +63,6 @@ func TestExampleMaster(t *testing.T) {
 		master.DefaultBaseMaster,
 		exampleWorkerType,
 		exampleWorkerCfg,
-		exampleWorkerCost,
 		masterID,
 		workerID,
 		executorNodeID,
@@ -102,7 +101,7 @@ func TestExampleMaster(t *testing.T) {
 	require.Equal(t, master.worker.handle, handle)
 
 	framework.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusInit,
+		State: frameModel.WorkerStateInit,
 	})
 
 	require.Eventually(t, func() bool {
@@ -113,7 +112,7 @@ func TestExampleMaster(t *testing.T) {
 		code := master.worker.statusCode
 		master.worker.mu.Unlock()
 
-		return code == frameModel.WorkerStatusInit
+		return code == frameModel.WorkerStateInit
 	}, time.Second, time.Millisecond*10)
 
 	err = master.Close(ctx)

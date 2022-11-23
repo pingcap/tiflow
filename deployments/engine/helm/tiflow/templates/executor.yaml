@@ -70,6 +70,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: MY_SERVICE_NAME
               value: {{ include "tiflow.name" . }}-executor
+          resources:
+{{ toYaml .Values.executor.resources | indent 12 }}
           ports:
             - containerPort: 10241
               name: executor

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/stretchr/testify/require"
 )
@@ -30,11 +31,6 @@ func TestSelectorFilter(t *testing.T) {
 		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
 				ID: "executor-1",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "1",
 					"function": "1",
@@ -42,11 +38,6 @@ func TestSelectorFilter(t *testing.T) {
 			},
 			"executor-2": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "1",
@@ -54,11 +45,6 @@ func TestSelectorFilter(t *testing.T) {
 			},
 			"executor-3": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "2",
@@ -69,8 +55,7 @@ func TestSelectorFilter(t *testing.T) {
 	sf := newSelectorFilter(provider)
 
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "type",
 				Target: "2",
@@ -87,8 +72,7 @@ func TestSelectorFilter(t *testing.T) {
 	require.Equal(t, []model.ExecutorID{"executor-2"}, ret)
 
 	_, err = sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "type",
 				Target: "3",
@@ -102,7 +86,7 @@ func TestSelectorFilter(t *testing.T) {
 		},
 	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.Error(t, err)
-	require.True(t, ErrSelectorUnsatisfied.Is(err))
+	require.True(t, errors.Is(err, errors.ErrSelectorUnsatisfied))
 }
 
 func TestCandidateExecutorGone(t *testing.T) {
@@ -112,11 +96,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
 				ID: "executor-1",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "1",
 					"function": "1",
@@ -124,11 +103,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 			},
 			"executor-2": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "1",
@@ -136,11 +110,6 @@ func TestCandidateExecutorGone(t *testing.T) {
 			},
 			"executor-3": {
 				ID: "executor-2",
-				ResourceStatus: schedModel.ExecutorResourceStatus{
-					Capacity: 100,
-					Reserved: 50,
-					Used:     50,
-				},
 				Labels: label.Set{
 					"type":     "2",
 					"function": "2",
@@ -150,8 +119,7 @@ func TestCandidateExecutorGone(t *testing.T) {
 	}
 	sf := newSelectorFilter(provider)
 	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
-		Cost: 10,
-		Selectors: []label.Selector{
+		Selectors: []*label.Selector{
 			{
 				Key:    "function",
 				Target: "1",

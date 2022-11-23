@@ -51,13 +51,14 @@ func TestExampleWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	broker := worker.BaseWorker.(*framework.BaseWorkerForTesting).Broker
+	defer broker.Close()
 	broker.AssertPersisted(t, "/local/example")
 	broker.AssertFileExists(t, workerID, "/local/example", "1.txt")
 	broker.AssertFileExists(t, workerID, "/local/example", "2.txt")
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
-		return worker.Status().Code == frameModel.WorkerStatusFinished
+		return worker.Status().State == frameModel.WorkerStateFinished
 	}, time.Second, time.Millisecond*100)
 
 	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)

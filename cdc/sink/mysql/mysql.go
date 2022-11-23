@@ -31,15 +31,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -47,6 +41,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -285,7 +282,7 @@ outer:
 	}
 }
 
-func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.TableName) error {
+func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []*model.TableInfo) error {
 	// do nothing
 	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
 	return nil
@@ -296,6 +293,10 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
+	// we should not retry changefeed if DDL failed by return an unretryable error.
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 
@@ -317,7 +318,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithMaxTries(defaultDDLMaxRetry),
-		retry.WithIsRetryableErr(cerror.IsRetryableError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -339,7 +340,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 
 		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Failed to rollback", zap.Error(err))
@@ -366,7 +367,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) == 0 {
+	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
 	}
 	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
@@ -608,7 +609,7 @@ func logDMLTxnErr(
 	err error, start time.Time, changefeed model.ChangeFeedID,
 	query string, count int, startTs []model.Ts,
 ) error {
-	if isRetryableDMLError(err) {
+	if errorutil.IsRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
 			zap.String("query", query), zap.Int("count", count),
@@ -623,18 +624,6 @@ func logDMLTxnErr(
 			zap.String("changefeed", changefeed.ID))
 	}
 	return err
-}
-
-func isRetryableDMLError(err error) bool {
-	if !cerror.IsRetryableError(err) {
-		return false
-	}
-	// Check if the error is connection errors that can retry safely.
-	if dmretry.IsConnectionError(err) {
-		return true
-	}
-	// Check if the error is an retriable TiDB error or MySQL error.
-	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
@@ -700,7 +689,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithMaxTries(defaultDMLMaxRetry),
-		retry.WithIsRetryableErr(isRetryableDMLError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDMLError))
 }
 
 type preparedDMLs struct {
@@ -711,7 +700,7 @@ type preparedDMLs struct {
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *preparedDMLs {
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 	startTs := make([]model.Ts, 0, 1)
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -824,7 +813,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
 	s.statistics.ObserveRows(rows...)
-	dmls := s.prepareDMLs(rows, bucket)
+	dmls := s.prepareDMLs(rows)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		if errors.Cause(err) != context.Canceled {

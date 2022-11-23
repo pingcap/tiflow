@@ -110,36 +110,3 @@ func TestGetTableSpan(t *testing.T) {
 	prefix[len(prefix)-1]++
 	require.LessOrEqual(t, 0, bytes.Compare(span.End, prefix))
 }
-
-func TestSpanHack(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		input  Span
-		expect Span
-	}{
-		{Span{nil, nil}, Span{[]byte{}, UpperBoundKey}},
-		{Span{nil, []byte{1}}, Span{[]byte{}, []byte{1}}},
-		{Span{[]byte{1}, nil}, Span{[]byte{1}, UpperBoundKey}},
-		{Span{[]byte{1}, []byte{2}}, Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{}, []byte{}}, Span{[]byte{}, []byte{}}},
-	}
-
-	for _, tc := range testCases {
-		require.Equal(t, tc.expect, tc.input.Hack())
-	}
-}
-
-func TestSpanClone(t *testing.T) {
-	t.Parallel()
-
-	sp := ComparableSpan{
-		Start: []byte{1},
-		End:   []byte{2},
-	}
-	sp2 := sp.Clone()
-	require.Equal(t, "[01, 02)", sp2.String())
-	sp2.End[0] = 9
-	require.Equal(t, "[01, 02)", sp.String())
-	require.Equal(t, "[01, 09)", sp2.String())
-}

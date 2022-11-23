@@ -1,0 +1,67 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+package pingcap.tiflow.cdc.processor.tablepb;
+option go_package = "github.com/pingcap/tiflow/cdc/processor/tablepb";
+
+import "gogoproto/gogo.proto";
+
+option(gogoproto.goproto_enum_prefix_all) = false;
+
+// TableState is the state of table replication in processor.
+//
+//  ┌────────┐   ┌───────────┐   ┌──────────┐
+//  │ Absent ├─> │ Preparing ├─> │ Prepared │
+//  └────────┘   └───────────┘   └─────┬────┘
+//                                     v
+//  ┌─────────┐   ┌──────────┐   ┌─────────────┐
+//  │ Stopped │ <─┤ Stopping │ <─┤ Replicating │
+//  └─────────┘   └──────────┘   └─────────────┘
+enum TableState {
+    Unknown = 0 [(gogoproto.enumvalue_customname) = "TableStateUnknown"];
+    Absent = 1 [(gogoproto.enumvalue_customname) = "TableStateAbsent"];
+    Preparing = 2 [(gogoproto.enumvalue_customname) = "TableStatePreparing"];
+    Prepared = 3 [(gogoproto.enumvalue_customname) = "TableStatePrepared"];
+    Replicating = 4 [(gogoproto.enumvalue_customname) = "TableStateReplicating"];
+    Stopping = 5 [(gogoproto.enumvalue_customname) = "TableStateStopping"];
+    Stopped = 6 [(gogoproto.enumvalue_customname) = "TableStateStopped"];
+}
+
+message Checkpoint {
+    uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+}
+
+// Stats holds a statistic for a table.
+message Stats {
+    // Number of captured regions.
+    uint64 region_count = 1;
+    // The current timestamp from the table's point of view.
+    uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    // Checkponits at each stage.
+    map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
+    // The barrier timestamp of the table.
+    uint64 barrier_ts = 4 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+}
+
+// TableStatus is the running status of a table.
+message TableStatus {
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    TableState state = 2;
+    Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
+    Stats stats = 4 [(gogoproto.nullable) = false];
+}

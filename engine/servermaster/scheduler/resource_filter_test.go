@@ -18,8 +18,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,7 +77,7 @@ func TestResourceFilterConflict(t *testing.T) {
 		},
 	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.Error(t, err)
-	require.Regexp(t, "ResourceConflictError", err)
+	require.True(t, errors.Is(err, errors.ErrResourceConflict))
 }
 
 func TestResourceFilterResourceNotFound(t *testing.T) {
@@ -90,7 +91,7 @@ func TestResourceFilterResourceNotFound(t *testing.T) {
 		},
 	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.Error(t, err)
-	require.Regexp(t, "ResourceNotFound", err)
+	require.True(t, errors.Is(err, errors.ErrResourceDoesNotExist))
 }
 
 func TestResourceNoConstraint(t *testing.T) {
@@ -118,5 +119,5 @@ func TestResourceExecutorGone(t *testing.T) {
 		},
 	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.Error(t, err)
-	require.Regexp(t, "FilterNoResultError", err)
+	require.True(t, errors.Is(err, errors.ErrFilterNoResult))
 }

@@ -21,26 +21,28 @@ import (
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.RowChangedEvent] = (*sink)(nil)
+var _ eventsink.EventSink[*model.RowChangedEvent] = (*Sink)(nil)
 
-type sink struct{}
+// Sink is a black hole sink.
+type Sink struct{}
 
 // New create a black hole DML sink.
-func New() *sink {
-	return &sink{}
+func New() *Sink {
+	return &Sink{}
 }
 
 // WriteEvents log the events.
-func (s *sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
 	for _, row := range rows {
 		// NOTE: don't change the log, some tests depend on it.
 		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
+		row.Callback()
 	}
 
 	return nil
 }
 
 // Close do nothing.
-func (s *sink) Close() error {
+func (s *Sink) Close() error {
 	return nil
 }

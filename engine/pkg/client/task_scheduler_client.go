@@ -16,7 +16,6 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
@@ -28,11 +27,6 @@ type TaskSchedulerClient interface {
 		ctx context.Context,
 		request *enginepb.ScheduleTaskRequest,
 	) (*enginepb.ScheduleTaskResponse, error)
-
-	ReportExecutorWorkload(
-		ctx context.Context,
-		request *enginepb.ExecWorkloadRequest,
-	) error
 }
 
 type taskSchedulerClient struct {
@@ -52,22 +46,4 @@ func (c *taskSchedulerClient) ScheduleTask(
 		c.cli.ScheduleTask,
 		request)
 	return call.Do(ctx)
-}
-
-func (c *taskSchedulerClient) ReportExecutorWorkload(
-	ctx context.Context,
-	request *enginepb.ExecWorkloadRequest,
-) error {
-	call := internal.NewCall(
-		c.cli.ReportExecutorWorkload,
-		request)
-	resp, err := call.Do(ctx)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-		return errors.Errorf("ReportExecutorWorkload: %s",
-			resp.String())
-	}
-	return nil
 }

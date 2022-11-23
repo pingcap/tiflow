@@ -14,9 +14,9 @@
 package internal
 
 import (
-	"log"
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/mockkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv"

@@ -20,14 +20,13 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"go.uber.org/zap"
 )
 
 // GetGTIDsForPosFromStreamer tries to get GTID sets for the specified binlog position (for the corresponding txn) from a Streamer.
@@ -99,6 +98,7 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 			if err != nil {
 				return nil, err
 			}
+			latestPos = e.Header.LogPos
 		case *replication.MariadbGTIDListEvent:
 			// a MariadbGTIDListEvent logged in every binlog to record the current replication state if GTID enabled
 			// ref: https://mariadb.com/kb/en/library/gtid_list_event/
@@ -106,6 +106,7 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 			if err != nil {
 				return nil, terror.Annotatef(err, "get GTID set from MariadbGTIDListEvent %+v", e.Header)
 			}
+			latestPos = e.Header.LogPos
 		}
 
 		if latestPos == endPos.Pos {

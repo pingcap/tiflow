@@ -176,31 +176,6 @@ func (o *TableOperation) Clone() *TableOperation {
 	return &clone
 }
 
-// TaskWorkload records the workloads of a task
-// the value of the struct is the workload
-type TaskWorkload map[TableID]WorkloadInfo
-
-// WorkloadInfo records the workload info of a table
-type WorkloadInfo struct {
-	Workload uint64 `json:"workload"`
-}
-
-// Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
-func (w *TaskWorkload) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, w)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
-}
-
-// Marshal returns the json marshal format of a TaskWorkload
-func (w *TaskWorkload) Marshal() (string, error) {
-	if w == nil {
-		return "{}", nil
-	}
-	data, err := json.Marshal(w)
-	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
-}
-
 // TableReplicaInfo records the table replica info
 type TableReplicaInfo struct {
 	StartTs Ts `json:"start-ts"`
@@ -308,4 +283,46 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 type ProcInfoSnap struct {
 	CfID      ChangeFeedID `json:"changefeed-id"`
 	CaptureID string       `json:"capture-id"`
+}
+
+// TableSet maintains a set of TableID.
+type TableSet struct {
+	memo map[TableID]struct{}
+}
+
+// NewTableSet creates a TableSet.
+func NewTableSet() *TableSet {
+	return &TableSet{
+		memo: make(map[TableID]struct{}),
+	}
+}
+
+// Add adds a tableID to TableSet.
+func (s *TableSet) Add(tableID TableID) {
+	s.memo[tableID] = struct{}{}
+}
+
+// Remove removes a tableID from a TableSet.
+func (s *TableSet) Remove(tableID TableID) {
+	delete(s.memo, tableID)
+}
+
+// Keys returns a collection of TableID.
+func (s *TableSet) Keys() []TableID {
+	result := make([]TableID, 0, len(s.memo))
+	for k := range s.memo {
+		result = append(result, k)
+	}
+	return result
+}
+
+// Contain checks whether a TableID is in TableSet.
+func (s *TableSet) Contain(tableID TableID) bool {
+	_, ok := s.memo[tableID]
+	return ok
+}
+
+// Size returns the size of TableSet.
+func (s *TableSet) Size() int {
+	return len(s.memo)
 }

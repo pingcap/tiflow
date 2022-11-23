@@ -17,16 +17,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Re-export types for public use
@@ -35,8 +32,6 @@ type (
 	Runnable = internal.Runnable
 	// RunnableID alias internal.RunnableID
 	RunnableID = internal.RunnableID
-	// Workloader alias internal.Workloader
-	Workloader = internal.Workloader
 )
 
 // TaskRunner receives RunnableContainer in a FIFO way, and runs them in
@@ -80,7 +75,7 @@ func (r *TaskRunner) AddTask(task Runnable) error {
 	default:
 	}
 
-	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return errors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // addWrappedTask enqueues a task already wrapped by internal.WrapRunnable.
@@ -92,7 +87,7 @@ func (r *TaskRunner) addWrappedTask(task *internal.RunnableContainer) error {
 	default:
 	}
 
-	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return errors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // Run runs forever until context is canceled or task queue is closed.
@@ -106,7 +101,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case task := <-r.inQueue:
 			if task == nil {
-				return cerrors.ErrRuntimeIsClosed.GenWithStackByArgs()
+				return errors.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
 			if err := r.onNewTask(task); err != nil {
 				log.Warn("Failed to launch task",
@@ -115,25 +110,6 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// Workload returns total workload of task runner
-func (r *TaskRunner) Workload() (ret model.RescUnit) {
-	r.tasks.Range(func(key, value interface{}) bool {
-		container := value.(*taskEntry).RunnableContainer
-		if container.Status() != internal.TaskRunning {
-			// Skip tasks that are not currently running
-			return true
-		}
-		workloader, ok := container.Runnable.(Workloader)
-		if !ok {
-			return true
-		}
-		workload := workloader.Workload()
-		ret += workload
-		return true
-	})
-	return
 }
 
 // WorkerCount returns the number of currently running workers.
@@ -180,13 +156,13 @@ func (r *TaskRunner) onNewTask(task *internal.RunnableContainer) (ret error) {
 	defer r.cancelMu.RUnlock()
 
 	if r.canceled {
-		return cerrors.ErrRuntimeClosed.GenWithStackByArgs()
+		return errors.ErrRuntimeClosed.GenWithStackByArgs()
 	}
 
 	_, exists := r.tasks.LoadOrStore(task.ID(), t)
 	if exists {
 		log.Warn("Duplicate Task ID", zap.String("id", task.ID()))
-		return cerrors.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
+		return errors.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
 	r.launchTask(rctx, t)
@@ -204,6 +180,10 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 
 		var err error
 		defer func() {
+			if r2 := recover(); r2 != nil {
+				err2 := errors.Trace(errors.Errorf("panic: %v", r2))
+				log.Error("Task panicked", zap.String("id", entry.ID()), zap.Error(err2))
+			}
 			log.Info("Task Closed",
 				zap.String("id", entry.ID()),
 				zap.Error(err),

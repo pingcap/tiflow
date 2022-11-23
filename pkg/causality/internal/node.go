@@ -14,8 +14,8 @@
 package internal
 
 import (
-	"fmt"
 	"sync"
+	stdatomic "sync/atomic"
 
 	"github.com/google/btree"
 	"go.uber.org/atomic"
@@ -26,13 +26,13 @@ type (
 )
 
 const (
-	unassigned    = workerID(-1)
+	unassigned    = workerID(-2)
+	assignedToAny = workerID(-1)
 	invalidNodeID = int64(-1)
 )
 
 var (
 	nextNodeID = atomic.NewInt64(0)
-	nodePool   = &sync.Pool{}
 
 	// btreeFreeList is a shared free list used by all
 	// btrees in order to lessen the burden of GC.
@@ -45,12 +45,27 @@ var (
 // Node is a node in the dependency graph used
 // in conflict detection.
 type Node struct {
-	id int64 // immutable
+	// Immutable fields.
+	id int64
 
+	// Set the callback that the node is resolved.
+	OnResolved func(id workerID)
+	// Set the id generator to get a random ID.
+	RandWorkerID func() workerID
+	// Set the callback that the node is notified.
+	OnNotified func(callback func())
+
+	// Following fields are used for notifying a node's dependers lock-free.
+	totalDependees    int32
+	resolvedDependees int32
+	removedDependees  int32
+	resolvedList      []int64
+
+	// Following fields are protected by `mu`.
 	mu sync.Mutex
-	// conflictCounts stores counts of nodes that the current node depend on,
-	// grouped by the worker ID they are assigned to.
-	conflictCounts map[workerID]int
+
+	assignedTo workerID
+	removed    bool
 
 	// dependers is an ordered set for all nodes that
 	// conflict with the current node.
@@ -64,27 +79,109 @@ type Node struct {
 	// (2) Google's btree package is selected because it seems to be
 	//     the most popular production-grade ordered set implementation in Go.
 	dependers *btree.BTreeG[*Node]
-
-	assignedTo workerID
-	onResolved func(id workerID)
-
-	resolved atomic.Bool
 }
 
 // NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
-		ret.id = nextNodeID.Add(1)
+		ret.id = genNextNodeID()
+		ret.OnResolved = nil
+		ret.RandWorkerID = nil
+		ret.totalDependees = 0
+		ret.resolvedDependees = 0
+		ret.removedDependees = 0
+		ret.resolvedList = nil
 		ret.assignedTo = unassigned
+		ret.removed = false
 	}()
 
-	if obj := nodePool.Get(); obj != nil {
-		return obj.(*Node)
-	}
-	return new(Node)
+	ret = new(Node)
+	return
 }
 
-// Free must be called if a node is no longer used.
+// NodeID implements interface internal.SlotNode.
+func (n *Node) NodeID() int64 {
+	return n.id
+}
+
+// DependOn implements interface internal.SlotNode.
+func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
+	resolvedDependees, removedDependees := int32(0), int32(0)
+
+	depend := func(target *Node) {
+		if target == nil {
+			// For a given Node, every dependency corresponds to a target.
+			// If target is nil it means the dependency doesn't conflict
+			// with any other nodes. However it's still necessary to track
+			// it because Node.tryResolve needs to know it.
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], assignedToAny)
+			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
+			return
+		}
+
+		if target.id == n.id {
+			panic("you cannot depend on yourself")
+		}
+		// Lock target and insert `n` into target.dependers.
+		target.mu.Lock()
+		defer target.mu.Unlock()
+
+		if target.assignedTo != unassigned {
+			// The target has already been assigned to a worker.
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
+		}
+		if target.removed {
+			// The target has already been removed.
+			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
+		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
+			// Should never depend on a target redundantly.
+			panic("should never exist")
+		}
+	}
+
+	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
+	// pending in slots after it's created.
+	n.id = genNextNodeID()
+
+	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
+	n.totalDependees = int32(len(unresolvedDeps) + resolvedDeps)
+	n.resolvedList = make([]int64, 0, n.totalDependees)
+	for i := 0; i < int(n.totalDependees); i++ {
+		n.resolvedList = append(n.resolvedList, unassigned)
+	}
+
+	for _, target := range unresolvedDeps {
+		depend(target)
+	}
+	for i := 0; i < resolvedDeps; i++ {
+		depend(nil)
+	}
+
+	n.maybeResolve(resolvedDependees, removedDependees)
+}
+
+// Remove implements interface internal.SlotNode.
+func (n *Node) Remove() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.removed = true
+	if n.dependers != nil {
+		// `mu` must be holded during accessing dependers.
+		n.dependers.Ascend(func(node *Node) bool {
+			removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
+			node.maybeResolve(0, removedDependees)
+			return true
+		})
+		n.dependers.Clear(true)
+		n.dependers = nil
+	}
+}
+
+// Free implements interface internal.SlotNode.
+// It must be called if a node is no longer used.
 // We are using sync.Pool to lessen the burden of GC.
 func (n *Node) Free() {
 	if n.id == invalidNodeID {
@@ -92,176 +189,98 @@ func (n *Node) Free() {
 	}
 
 	n.id = invalidNodeID
-	n.conflictCounts = nil
-	n.assignedTo = unassigned
-	n.onResolved = nil
-	n.resolved.Store(false)
+	n.OnResolved = nil
+	n.RandWorkerID = nil
 
-	nodePool.Put(n)
+	// TODO: reuse node if necessary. Currently it's impossible if async-notify is used.
+	// The reason is a node can step functions `assignTo`, `Remove`, `Free`, then `assignTo`.
+	// again. In the last `assignTo`, it can never know whether the node has been reused
+	// or not.
 }
 
-// DependOn marks n as dependent upon target.
-func (n *Node) DependOn(target *Node) {
-	// Lock target first because we are always
-	// locking an earlier transaction first, so
-	// that there will be not deadlocking.
-	target.mu.Lock()
-	defer target.mu.Unlock()
-
-	if target.id == n.id {
-		panic("you cannot depend on yourself")
-	}
-
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	// Make sure that the conflictCounts have
-	// been created.
-	// Creating these maps is done lazily because we want to
-	// optimize for the case where there are little conflicts.
-	n.lazyCreateMap()
-
-	if target.getOrCreateDependers().Has(n) {
-		// Return here to ensure idempotency.
-		return
-	}
-
-	target.dependers.ReplaceOrInsert(n)
-	n.conflictCounts[target.assignedTo]++
-}
-
-// AssignTo assigns a node to a worker.
-func (n *Node) AssignTo(workerID int64) {
+// assignTo assigns a node to a worker. Returns `true` on success.
+func (n *Node) assignTo(workerID int64) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
 	if n.assignedTo != unassigned {
-		panic(fmt.Sprintf(
-			"assigning an already assigned node: id %d, worker %d",
-			n.id, n.assignedTo))
+		// Already resolved by some other guys.
+		return false
 	}
 
 	n.assignedTo = workerID
-
-	if n.dependers != nil {
-		n.dependers.Ascend(func(node *Node) bool {
-			node.mu.Lock()
-			defer node.mu.Unlock()
-
-			node.conflictCounts[unassigned]--
-			if node.conflictCounts[unassigned] == 0 {
-				delete(node.conflictCounts, unassigned)
-			}
-			node.conflictCounts[workerID]++
-			node.notifyMaybeResolved()
-
-			return true
-		})
-	}
-}
-
-// Remove should be called after the transaction corresponding
-// to the node is finished.
-func (n *Node) Remove() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	if len(n.conflictCounts) != 0 {
-		panic("conflictNumber > 0")
+	if n.OnResolved != nil {
+		n.OnResolved(workerID)
+		n.OnResolved = nil
 	}
 
 	if n.dependers != nil {
+		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			node.mu.Lock()
-			defer node.mu.Unlock()
-
-			node.conflictCounts[n.assignedTo]--
-			if node.conflictCounts[n.assignedTo] == 0 {
-				delete(node.conflictCounts, n.assignedTo)
-			}
-			node.notifyMaybeResolved()
+			resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
+			stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
+			node.maybeResolve(resolvedDependees, 0)
 			return true
 		})
-		n.dependers.Clear(true)
 	}
+
+	return true
 }
 
-// Equals tells whether two pointers to nodes are equal.
-func (n *Node) Equals(other *Node) bool {
-	return n.id == other.id
-}
-
-// OnNoConflict guarantees that fn is called
-// when the node has either no unfinished dependencies
-// or all unfinished dependencies that the node has are
-// assigned to the same worker.
-func (n *Node) OnNoConflict(fn func(id workerID)) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	if n.onResolved != nil || n.resolved.Load() {
-		panic("OnNoConflict is already called")
-	}
-
-	workerNum, ok := n.tryResolve()
-	if ok {
-		n.resolved.Store(true)
-		fn(workerNum)
-		return
-	}
-
-	n.onResolved = fn
-}
-
-// notifyMaybeResolved must be called with n.mu taken.
-// It should be called if n.conflictCounts is updated.
-func (n *Node) notifyMaybeResolved() {
-	workerNum, ok := n.tryResolve()
-	if !ok {
-		return
-	}
-
-	if n.onResolved != nil {
-		if !n.resolved.Swap(true) {
-			n.onResolved(workerNum)
+func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
+	if workerNum, ok := n.tryResolve(resolvedDependees, removedDependees); ok {
+		if workerNum < 0 {
+			panic("Node.tryResolve must return a valid worker ID")
+		}
+		if n.OnNotified != nil {
+			n.OnNotified(func() { n.assignTo(workerNum) })
+		} else {
+			n.assignTo(workerNum)
 		}
 	}
 }
 
-// tryResolve must be called with n.mu locked.
+// tryResolve try to find a worker to assign the node to.
 // Returns (_, false) if there is a conflict,
-// returns (-1, true) if there is no conflict,
+// returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
-func (n *Node) tryResolve() (int64, bool) {
-	conflictNumber := len(n.conflictCounts)
-	if conflictNumber == 0 {
-		// No conflict at all
-		return -1, true
+func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, bool) {
+	assignedTo, resolved := n.doResolve(resolvedDependees, removedDependees)
+	if resolved && assignedTo == assignedToAny {
+		assignedTo = n.RandWorkerID()
 	}
-	if conflictNumber == 1 {
-		_, ok := n.conflictCounts[unassigned]
-		if ok {
-			// All conflicts are unassigned. So
-			// no resolution is available.
-			return 0, false
-		}
-
-		// Use for loop to retrieve the only key.
-		for workerNum := range n.conflictCounts {
-			// Only conflicting with one worker, i.e., workerNum.
-			return workerNum, true
-		}
-	}
-	// Conflicting with at least one worker and unassigned nodes,
-	// or conflicting with at least two workers. In both cases,
-	// no resolution is available.
-	return 0, false
+	return assignedTo, resolved
 }
 
-func (n *Node) lazyCreateMap() {
-	if n.conflictCounts == nil {
-		n.conflictCounts = make(map[workerID]int, 4)
+func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool) {
+	if n.totalDependees == 0 {
+		// No conflicts, can select any workers.
+		return assignedToAny, true
 	}
+
+	if resolvedDependees == n.totalDependees {
+		firstDep := stdatomic.LoadInt64(&n.resolvedList[0])
+		hasDiffDep := false
+		for i := 1; i < int(n.totalDependees); i++ {
+			curr := stdatomic.LoadInt64(&n.resolvedList[i])
+			if firstDep != curr {
+				hasDiffDep = true
+				break
+			}
+		}
+		if !hasDiffDep {
+			// If all dependees are assigned to one same worker, we can assign
+			// this node to the same worker directly.
+			return firstDep, true
+		}
+	}
+
+	// All dependees are removed, so assign the node to any worker is fine.
+	if removedDependees == n.totalDependees {
+		return assignedToAny, true
+	}
+
+	return unassigned, false
 }
 
 func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
@@ -292,4 +311,8 @@ func (n *Node) assignedWorkerID() workerID {
 	defer n.mu.Unlock()
 
 	return n.assignedTo
+}
+
+func genNextNodeID() int64 {
+	return nextNodeID.Add(1)
 }

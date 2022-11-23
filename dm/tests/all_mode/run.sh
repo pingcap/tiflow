@@ -375,11 +375,44 @@ function test_regexpr_router() {
 	echo "[$(date)] <<<<<< finish test_regexpr_router $1 >>>>>>"
 }
 
+function test_json_expression() {
+	echo "[$(date)] <<<<<< start test_json_expression >>>>>>"
+	run_sql_file $cur/data/db3.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	dmctl_start_task "$cur/conf/dm-task-expression-filter.yaml" "--remove-meta"
+
+	run_sql_file $cur/data/db3.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	cleanup_process
+	cleanup_data all_mode
+	echo "[$(date)] <<<<<< finish test_json_expression >>>>>>"
+}
+
 function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
 	run_sql_source2 "SET @@global.time_zone = '+02:00';"
 	test_expression_filter
+	test_json_expression
 	test_fail_job_between_event
 	test_session_config
 	test_query_timeout
@@ -404,6 +437,10 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
+	# create table with unsupported charset
+	run_sql_source1 "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=greek;"
+	run_sql_source1 "insert into all_mode.no_diff2 values(1, 'αβγ');"
+
 	# start DM worker and master
 	# set log level of DM-master to info, because debug level will let etcd print KV, thus expose the password in task config
 	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -427,6 +464,18 @@ function run() {
 	# start DM task only
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
+		"Unknown character set: 'greek'"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $ILLEGAL_CHAR_NAME" \
+		"Unknown character set: 'greek'" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $WORK_DIR/dm-task.yaml"
+
+	run_sql_tidb "create table all_mode.no_diff2(id int primary key, name varchar(20)) charset=utf8mb4;"
+
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	# check task has started
 	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker1\"}" 10 1 3
@@ -434,6 +483,8 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# check data of no_diff2
+	run_sql_tidb_with_retry "select count(1) from all_mode.no_diff2 where name = 'αβγ'" "count(1): 1"
 
 	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
 	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
@@ -542,7 +593,11 @@ function run() {
 	check_contains "all_mode"
 
 	echo "check dump files have been cleaned"
-	ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker1 auto removed dump files"
+	# source1 contains unsupported charset, so dump files is uncleaned. files are
+	# all_mode.no_diff2-schema.sql  all_mode.t1-schema.sql
+	# all_mode.no_diff-schema.sql   metadata
+	# all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
+	[ $(ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l) -eq 6 ]
 	ls $WORK_DIR/worker2/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker2 auto removed dump files"
 
 	echo "check no password in log"
@@ -587,6 +642,73 @@ function run() {
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
+
+	test_source_and_target_with_empty_gtid
+}
+
+function prepare_test_empty_gtid() {
+	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
+	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "CREATE TABLE all_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+}
+
+function test_source_and_target_with_empty_gtid() {
+	echo "[$(date)] <<<<<< start test_source_and_target_with_empty_gtid >>>>>>"
+	cleanup_process
+	cleanup_data all_mode
+	prepare_test_empty_gtid
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/dm-master.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-task-no-gtid.yaml $WORK_DIR/
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "check master alive"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member" \
+		"\"alive\": true" 1
+
+	# check current master gtid is empty
+	# len indicates the number of non-empty fields
+	len=$(echo "show master status;" | MYSQL_PWD=$MYSQL_PASSWORD1 mysql -uroot -h127.0.0.1 -P$MYSQL_PORT1 | awk 'FNR == 2 {print NF}')
+	if [ "$len" = 2 ]; then
+		echo "gtid is empty"
+	else
+		exit 1
+	fi
+
+	echo "start task and check stage"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task-no-gtid.yaml --remove-meta=true" \
+		"\"result\": true" 2
+
+	run_sql 'INSERT INTO all_mode.t1 VALUES (1,1001);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
+
+	echo "<<<<<< test_source_and_target_with_empty_gtid success! >>>>>>"
 }
 
 cleanup_data_upstream all_mode

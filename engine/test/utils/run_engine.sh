@@ -38,8 +38,8 @@ case $1 in
 "stop")
 	flag=()
 	generate_flag "$@"
-	$COMPOSECMD "${flag[@]}" kill
-	$COMPOSECMD "${flag[@]}" down
+	$COMPOSECMD "${flag[@]}" kill || true
+	$COMPOSECMD "${flag[@]}" down || true
 
 	echo -e "\n\n[$(date)] <<<<<< stop engine cluster success! >>>>>>"
 	docker container ls

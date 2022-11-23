@@ -19,6 +19,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+// Stats of a sorter.
+type Stats struct {
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
+	CheckpointTsEgress  model.Ts
+	ResolvedTsEgress    model.Ts
+}
+
 // EventSorter accepts unsorted PolymorphicEvents, sort them in background and returns
 // sorted PolymorphicEvents in Output channel
 type EventSorter interface {
@@ -45,4 +53,6 @@ type EventSorter interface {
 
 	// EmitStartTs let sorter know the start timestamp for consuming data
 	EmitStartTs(ctx context.Context, ts uint64)
+
+	Stats() Stats
 }

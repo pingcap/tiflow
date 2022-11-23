@@ -15,42 +15,32 @@ package servermaster
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/servermaster/executormeta"
-	execModel "github.com/pingcap/tiflow/engine/servermaster/executormeta/model"
-	"github.com/pingcap/tiflow/engine/servermaster/resource"
+	"github.com/pingcap/tiflow/engine/pkg/orm"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 // ExecutorManager defines an interface to manager all executors
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
-	AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*execModel.Executor, error)
+	AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*ormModel.Executor, error)
 	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
-	ListExecutors() []*execModel.Executor
+	ListExecutors() []*ormModel.Executor
 	GetAddr(executorID model.ExecutorID) (string, bool)
-	Start(ctx context.Context) error
-	Stop()
+	Run(ctx context.Context) error
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -66,9 +56,8 @@ type ExecutorManager interface {
 
 // ExecutorManagerImpl holds all the executors' info, including liveness, status, resource usage.
 type ExecutorManagerImpl struct {
-	testContext *test.Context
-	wg          sync.WaitGroup
-	metaClient  executormeta.Client
+	wg         sync.WaitGroup
+	metaClient orm.Client
 
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
@@ -76,21 +65,18 @@ type ExecutorManagerImpl struct {
 	initHeartbeatTTL  time.Duration
 	keepAliveInterval time.Duration
 
-	rescMgr resource.RescMgr
-	logRL   *rate.Limiter
+	logRL *rate.Limiter
 
 	notifier *notifier.Notifier[model.ExecutorStatusChange]
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
-func NewExecutorManagerImpl(metaClient executormeta.Client, initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
+func NewExecutorManagerImpl(metaClient orm.Client, initHeartbeatTTL, keepAliveInterval time.Duration) *ExecutorManagerImpl {
 	return &ExecutorManagerImpl{
-		testContext:       ctx,
 		metaClient:        metaClient,
 		executors:         make(map[model.ExecutorID]*Executor),
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
-		rescMgr:           resource.NewCapRescMgr(),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 		notifier:          notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
@@ -103,24 +89,15 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
-		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
+		return errors.ErrUnknownExecutor.GenWithStackByArgs(id)
 	}
-	addr := exec.Address
 	delete(e.executors, id)
-	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
-
-	if test.GetGlobalTestFlag() {
-		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
-			Tp:   test.Delete,
-			Time: time.Now(),
-		})
-	}
 
 	e.notifier.Notify(model.ExecutorStatusChange{
 		ID:   id,
 		Tp:   model.EventExecutorOffline,
-		Addr: addr,
+		Addr: exec.Address,
 	})
 
 	// Delete the executor from the database. This operation may take a long time,
@@ -156,17 +133,11 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	// executor not exists
 	if !ok {
 		e.mu.Unlock()
-		err := errors.ErrUnknownExecutorID.FastGenByArgs(req.ExecutorId)
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
+		return nil, errors.ErrUnknownExecutor.GenWithStackByArgs(execID)
 	}
 	e.mu.Unlock()
 
-	status := model.ExecutorStatus(req.Status)
-	if err := exec.heartbeat(req.Ttl, status); err != nil {
-		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
-	}
-	usage := model.RescUnit(req.GetResourceUsage())
-	if err := e.rescMgr.Update(execID, usage, usage, status); err != nil {
+	if err := exec.heartbeat(req.Ttl); err != nil {
 		return nil, err
 	}
 	resp := &pb.HeartbeatResponse{}
@@ -175,7 +146,7 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 
 // registerExec registers executor to both executor manager and resource manager.
 // Note that this method must be called with the lock held.
-func (e *ExecutorManagerImpl) registerExecLocked(executorMeta *execModel.Executor) {
+func (e *ExecutorManagerImpl) registerExecLocked(executorMeta *ormModel.Executor) {
 	log.Info("register executor", zap.Any("executor", executorMeta))
 	exec := &Executor{
 		Executor:       *executorMeta,
@@ -190,28 +161,32 @@ func (e *ExecutorManagerImpl) registerExecLocked(executorMeta *execModel.Executo
 		Tp:   model.EventExecutorOnline,
 		Addr: executorMeta.Address,
 	})
-	e.rescMgr.Register(exec.ID, exec.Address, model.RescUnit(exec.Capability))
 }
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
-func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*execModel.Executor, error) {
+func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.RegisterExecutorRequest) (*ormModel.Executor, error) {
 	pbExecutor := req.Executor
 	log.Info("allocate new executor", zap.Stringer("executor", pbExecutor))
 
 	e.mu.Lock()
 	var executorID model.ExecutorID
 	for {
-		executorID = generateExecutorID(pbExecutor.GetName())
+		executorID = model.ExecutorID(generateNodeID(pbExecutor.GetName()))
 		if _, ok := e.executors[executorID]; !ok {
 			break
 		}
 	}
-	executorMeta := &execModel.Executor{
-		ID:         executorID,
-		Name:       pbExecutor.GetName(),
-		Address:    pbExecutor.GetAddress(),
-		Capability: int(pbExecutor.GetCapability()),
+
+	labelSet, err := label.NewSetFromMap(req.GetExecutor().GetLabels())
+	if err != nil {
+		return nil, err
+	}
+	executorMeta := &ormModel.Executor{
+		ID:      executorID,
+		Name:    pbExecutor.GetName(),
+		Address: pbExecutor.GetAddress(),
+		Labels:  ormModel.LabelSet(labelSet),
 	}
 	e.registerExecLocked(executorMeta)
 	e.mu.Unlock()
@@ -220,16 +195,10 @@ func (e *ExecutorManagerImpl) AllocateNewExec(ctx context.Context, req *pb.Regis
 	// If any error occurs, client shouldn't use the executor.
 	// The executor in the map will be removed after the ttl expires.
 	if err := e.metaClient.CreateExecutor(ctx, executorMeta); err != nil {
-		return nil, perrors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	return executorMeta, nil
-}
-
-func generateExecutorID(name string) model.ExecutorID {
-	val := rand.Uint32()
-	id := fmt.Sprintf("%s-%08x", name, val)
-	return model.ExecutorID(id)
 }
 
 // HasExecutor implements ExecutorManager.HasExecutor
@@ -241,10 +210,10 @@ func (e *ExecutorManagerImpl) HasExecutor(executorID string) bool {
 }
 
 // ListExecutors implements ExecutorManager.ListExecutors
-func (e *ExecutorManagerImpl) ListExecutors() []*execModel.Executor {
+func (e *ExecutorManagerImpl) ListExecutors() []*ormModel.Executor {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	ret := make([]*execModel.Executor, 0, len(e.executors))
+	ret := make([]*ormModel.Executor, 0, len(e.executors))
 	for _, exec := range e.executors {
 		execMeta := exec.Executor
 		ret = append(ret, &execMeta)
@@ -254,7 +223,7 @@ func (e *ExecutorManagerImpl) ListExecutors() []*execModel.Executor {
 
 // Executor records the status of an executor instance.
 type Executor struct {
-	execModel.Executor
+	ormModel.Executor
 	status model.ExecutorStatus
 
 	mu sync.RWMutex
@@ -281,15 +250,15 @@ func (e *Executor) checkAlive() bool {
 	return true
 }
 
-func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
+func (e *Executor) heartbeat(ttl uint64) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.status == model.Tombstone {
-		return errors.ErrTombstoneExecutor.FastGenByArgs(e.ID)
+		return errors.ErrTombstoneExecutor.GenWithStackByArgs(e.ID)
 	}
 	e.lastUpdateTime = time.Now()
 	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond
-	e.status = status
+	e.status = model.Running
 	return nil
 }
 
@@ -299,41 +268,29 @@ func (e *Executor) statusEqual(status model.ExecutorStatus) bool {
 	return e.status == status
 }
 
-// Start implements ExecutorManager.Start. It starts a background goroutine to
-// check whether all executors are alive periodically.
-func (e *ExecutorManagerImpl) Start(ctx context.Context) error {
+// Run implements ExecutorManager.Run
+func (e *ExecutorManagerImpl) Run(ctx context.Context) error {
 	if err := e.resetExecutors(ctx); err != nil {
-		return perrors.Errorf("failed to reset executors: %v", err)
+		return errors.Errorf("failed to reset executors: %v", err)
 	}
 
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
-		ticker := time.NewTicker(e.keepAliveInterval)
-		defer func() {
-			ticker.Stop()
-			log.Info("check executor alive finished")
-		}()
-		for {
-			select {
-			case <-ticker.C:
-				err := e.checkAliveImpl()
-				if err != nil {
-					log.Info("check alive meet error", zap.Error(err))
-				}
-			case <-ctx.Done():
-				return
+	ticker := time.NewTicker(e.keepAliveInterval)
+	defer func() {
+		ticker.Stop()
+		e.notifier.Close()
+		log.Info("executor manager exited")
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			err := e.checkAliveImpl()
+			if err != nil {
+				log.Info("check alive meet error", zap.Error(err))
 			}
 		}
-	}()
-
-	return nil
-}
-
-// Stop implements ExecutorManager.Stop
-func (e *ExecutorManagerImpl) Stop() {
-	e.wg.Wait()
-	e.notifier.Close()
+	}
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {
@@ -385,7 +342,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 
 	executors, err := e.metaClient.QueryExecutors(ctx)
 	if err != nil {
-		return perrors.Trace(err)
+		return errors.Trace(err)
 	}
 	for _, executor := range executors {
 		e.registerExecLocked(executor)
@@ -395,7 +352,7 @@ func (e *ExecutorManagerImpl) resetExecutors(ctx context.Context) error {
 	// Clean up executors that are not in the meta.
 	for id := range orphanExecutorIDs {
 		if err := e.removeExecutorLocked(id); err != nil {
-			return perrors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
 
@@ -430,14 +387,9 @@ func (e *ExecutorManagerImpl) GetExecutorInfos() map[model.ExecutorID]schedModel
 
 	ret := make(map[model.ExecutorID]schedModel.ExecutorInfo, len(e.executors))
 	for id, exec := range e.executors {
-		resStatus, ok := e.rescMgr.CapacityForExecutor(id)
-		if !ok {
-			continue
-		}
 		schedInfo := schedModel.ExecutorInfo{
-			ID:             id,
-			ResourceStatus: *resStatus,
-			Labels:         label.Set(exec.Labels),
+			ID:     id,
+			Labels: label.Set(exec.Labels),
 		}
 		ret[id] = schedInfo
 	}

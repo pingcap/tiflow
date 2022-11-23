@@ -19,15 +19,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -58,14 +58,20 @@ func TestMasterInit(t *testing.T) {
 
 	resp, err := master.GetFrameMetaClient().GetJobByID(ctx, masterName)
 	require.NoError(t, err)
-	require.Equal(t, frameModel.MasterStatusInit, resp.StatusCode)
+	require.Equal(t, frameModel.MasterStateInit, resp.State)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
 	// Restart the master
 	master.Reset()
+	defer func() {
+		master.deps.Construct(func(broker broker.Broker) (int, error) {
+			broker.Close()
+			return 0, nil
+		})
+	}()
 	master.timeoutConfig.WorkerTimeoutDuration = 10 * time.Millisecond
 	master.timeoutConfig.WorkerTimeoutGracefulDuration = 10 * time.Millisecond
 
@@ -101,7 +107,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		for {
 			err := master.Poll(ctx)
 			if err != nil {
-				if errors.ErrMasterClosed.Equal(err) {
+				if errors.Is(err, errors.ErrMasterClosed) {
 					return
 				}
 			}
@@ -113,7 +119,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		return master.TickCount() > 10
 	}, time.Millisecond*2000, time.Millisecond*10)
 
-	master.On("CloseImpl", mock.Anything).Return(nil)
+	master.On("CloseImpl", mock.Anything).Return()
 	err = master.Close(ctx)
 	require.NoError(t, err)
 
@@ -146,11 +152,10 @@ func TestMasterCreateWorker(t *testing.T) {
 		master.DefaultBaseMaster,
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
-		100,
 		masterName,
 		workerID1,
 		executorNodeID1,
-		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		[]resModel.ResourceID{"resource-1", "resource-2"},
 		// call GenEpoch three times, including create master meta, master init
 		// refresh meta, create worker.
 		epoch+3,
@@ -159,9 +164,8 @@ func TestMasterCreateWorker(t *testing.T) {
 	workerID, err := master.CreateWorker(
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
-		100,
-		"resource-1",
-		"resource-2")
+		CreateWorkerWithResourceRequirements("resource-1", "resource-2"),
+	)
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
 
@@ -186,18 +190,18 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.GetFrameMetaClient())
+	workerMetaClient := metadata.NewWorkerStatusClient(masterName, master.GetFrameMetaClient())
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
 	err = workerMetaClient.Store(ctx, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	})
 	require.NoError(t, err)
 
 	master.On("OnWorkerStatusUpdated", mock.Anything, &frameModel.WorkerStatus{
-		Code:     frameModel.WorkerStatusNormal,
+		State:    frameModel.WorkerStateNormal,
 		ExtBytes: ext,
 	}).Return(nil)
 
@@ -209,7 +213,7 @@ func TestMasterCreateWorker(t *testing.T) {
 			Worker:      workerID1,
 			MasterEpoch: master.currentEpoch.Load(),
 			Status: &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			},
 		})
@@ -222,7 +226,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		select {
 		case updatedStatus := <-master.updatedStatuses:
 			require.Equal(t, &frameModel.WorkerStatus{
-				Code:     frameModel.WorkerStatusNormal,
+				State:    frameModel.WorkerStateNormal,
 				ExtBytes: ext,
 			}, updatedStatus)
 		default:
@@ -230,7 +234,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		}
 
 		status := master.GetWorkers()[workerID1].Status()
-		return status.Code == frameModel.WorkerStatusNormal
+		return status.State == frameModel.WorkerStateNormal
 	}, 1*time.Second, 10*time.Millisecond)
 }
 
@@ -254,7 +258,6 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 		master.DefaultBaseMaster,
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
-		100,
 		masterName,
 		workerID1,
 		executorNodeID1)
@@ -269,7 +272,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 			close(done)
 		})
 
-	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
+	_, err = master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1})
 	require.NoError(t, err)
 
 	for {
@@ -305,16 +308,16 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &frameModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			frameModel.FakeJobMaster, &frameModel.MasterMeta{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{
-			FakeTask, fakeWorkerCfg,
+			frameModel.FakeTask, fakeWorkerCfg,
 			fakeCfgBytes, fakeWorkerID,
 		},
 	}
 	for _, tc := range testCases {
-		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		rawConfig, workerID, err := master.PrepareWorkerConfig(tc.workerType, tc.config)
 		require.NoError(t, err)
 		require.Equal(t, tc.rawConfig, rawConfig)
 		require.Equal(t, tc.workerID, workerID)

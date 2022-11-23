@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"context"
 	"crypto/tls"
 	"database/sql"
 	"fmt"
@@ -28,14 +27,14 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"go.uber.org/zap"
 )
 
 // the time layout for TiDB SHOW DDL statements.
@@ -144,13 +143,13 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		if loadErr := cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
-			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKEYBytes, cfg.From.Security.CertAllowedCN)
+		tlsConfig, err = util.NewTLSConfig(
+			util.WithCAContent(cfg.From.Security.SSLCABytes),
+			util.WithCertAndKeyContent(cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKeyBytes),
+			util.WithVerifyCommonName(cfg.From.Security.CertAllowedCN),
+		)
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
-		}
-		if tlsConfig != nil {
-			tlsConfig.InsecureSkipVerify = true
 		}
 	}
 
@@ -184,7 +183,7 @@ func safeToRedirect(e *replication.BinlogEvent) bool {
 // getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
 // hence here db should be TiDB database
 // createTime should be based on the timezone of downstream, and its unit is second.
-func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
+func getDDLStatusFromTiDB(tctx *tcontext.Context, db *dbconn.DBConn, ddl string, createTime int64) (string, error) {
 	rowNum := linesOfRows
 	rowOffset := 0
 	queryMap := make(map[int]string)
@@ -192,7 +191,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	for {
 		// every attempt try 10 history jobs
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
-		jobsRows, err := db.QueryContext(ctx, showJobs)
+		jobsRows, err := db.QuerySQL(tctx, nil, showJobs)
 		if err != nil {
 			return "", err
 		}
@@ -226,7 +225,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 						// jobID does not exist, expand queryMap for deeper search
 						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
 						var rowsLimitNext *sql.Rows
-						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
+						rowsLimitNext, err = db.QuerySQL(tctx, nil, showJobsLimitNext)
 						if err != nil {
 							return "", err
 						}

@@ -16,18 +16,15 @@ package event
 import (
 	"bytes"
 	"fmt"
+	"testing"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
-
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testDDLSuite{})
-
-type testDDLSuite struct{}
-
-func (t *testDDLSuite) TestGenDDLEvent(c *C) {
+func TestGenDDLEvent(t *testing.T) {
+	t.Parallel()
 	var (
 		serverID  uint32 = 101
 		latestPos uint32 = 123
@@ -41,15 +38,15 @@ func (t *testDDLSuite) TestGenDDLEvent(c *C) {
 	flavor := gmysql.MariaDBFlavor
 	gSetStr := fmt.Sprintf("1-%d-3", serverID)
 	latestGTID, err := gtid.ParserGTID(flavor, gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// ALTER TABLE
 	query := fmt.Sprintf("ALTER TABLE `%s`.`%s` CHANGE COLUMN `c2` `c2` decimal(10,3)", schema, table)
 	result, err := GenDDLEvents(flavor, serverID, latestPos, latestGTID, schema, query, true, false, 0)
-	c.Assert(err, IsNil)
-	c.Assert(result.Events, HasLen, 2)
-	c.Assert(bytes.Contains(result.Data, []byte("ALTER TABLE")), IsTrue)
-	c.Assert(bytes.Contains(result.Data, []byte(table)), IsTrue)
-	c.Assert(result.LatestPos, Equals, latestPos+uint32(len(result.Data)))
-	c.Assert(result.LatestGTID.String(), Equals, fmt.Sprintf("1-%d-4", serverID))
+	require.Nil(t, err)
+	require.Len(t, result.Events, 2)
+	require.True(t, bytes.Contains(result.Data, []byte("ALTER TABLE")))
+	require.True(t, bytes.Contains(result.Data, []byte(table)))
+	require.Equal(t, latestPos+uint32(len(result.Data)), result.LatestPos)
+	require.Equal(t, fmt.Sprintf("1-%d-4", serverID), result.LatestGTID.String())
 }

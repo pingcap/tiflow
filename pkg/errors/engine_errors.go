@@ -32,26 +32,19 @@ import (
 
 // all dataflow engine errors
 var (
-	// This happens when a unknown executor send requests to master.
-	ErrUnknownExecutorID = errors.Normalize(
-		"cannot find executor ID: %s",
-		errors.RFCCodeText("DFLOW:ErrUnknownExecutorID"),
+	// general errors
+	ErrUnknown = errors.Normalize(
+		"unknown error",
+		errors.RFCCodeText("DFLOW:ErrUnknown"),
 	)
-	ErrTombstoneExecutor = errors.Normalize(
-		"executor %s has been dead",
-		errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"),
+	ErrInvalidArgument = errors.Normalize(
+		"invalid argument: %s",
+		errors.RFCCodeText("DFLOW:ErrInvalidArgument"),
 	)
-	ErrSubJobFailed = errors.Normalize(
-		"executor %s job %d",
-		errors.RFCCodeText("DFLOW:ErrSubJobFailed"),
-	)
+
 	ErrClusterResourceNotEnough = errors.Normalize(
 		"cluster resource is not enough, please scale out the cluster",
 		errors.RFCCodeText("DFLOW:ErrClusterResourceNotEnough"),
-	)
-	ErrBuildJobFailed = errors.Normalize(
-		"build job failed",
-		errors.RFCCodeText("DFLOW:ErrBuildJobFailed"),
 	)
 
 	ErrGrpcBuildConn = errors.Normalize(
@@ -61,18 +54,6 @@ var (
 	ErrDecodeEtcdKeyFail = errors.Normalize(
 		"failed to decode etcd key: %s",
 		errors.RFCCodeText("DFLOW:ErrDecodeEtcdKeyFail"),
-	)
-	ErrDecodeEtcdValueFail = errors.Normalize(
-		"failed to decode etcd value: %s",
-		errors.RFCCodeText("DFLOW:ErrDecodeEtcdValueFail"),
-	)
-	ErrInvalidMetaStoreKey = errors.Normalize(
-		"invalid metastore key %s",
-		errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKey"),
-	)
-	ErrInvalidMetaStoreKeyTp = errors.Normalize(
-		"invalid metastore key type %s",
-		errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKeyTp"),
 	)
 	ErrEtcdAPIError = errors.Normalize(
 		"etcd api returns error",
@@ -84,13 +65,9 @@ var (
 	)
 
 	// master related errors
-	ErrMasterConfigParseFlagSet = errors.Normalize(
-		"parse config flag set failed",
-		errors.RFCCodeText("DFLOW:ErrMasterConfigParseFlagSet"),
-	)
-	ErrMasterConfigInvalidFlag = errors.Normalize(
-		"'%s' is an invalid flag",
-		errors.RFCCodeText("DFLOW:ErrMasterConfigInvalidFlag"),
+	ErrMasterNotReady = errors.Normalize(
+		"master is not ready",
+		errors.RFCCodeText("DFLOW:ErrMasterNotReady"),
 	)
 	ErrMasterDecodeConfigFile = errors.Normalize(
 		"decode config file failed",
@@ -100,57 +77,13 @@ var (
 		"master config contains unknown configuration options: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterConfigUnknownItem"),
 	)
-	ErrMasterGenEmbedEtcdConfigFail = errors.Normalize(
-		"master gen embed etcd config failed: %s",
-		errors.RFCCodeText("DFLOW:ErrMasterGenEmbedEtcdConfigFail"),
-	)
-	ErrMasterJoinEmbedEtcdFail = errors.Normalize(
-		"failed to join embed etcd: %s",
-		errors.RFCCodeText("DFLOW:ErrMasterJoinEmbedEtcdFail"),
-	)
-	ErrMasterStartEmbedEtcdFail = errors.Normalize(
-		"failed to start embed etcd",
-		errors.RFCCodeText("DFLOW:ErrMasterStartEmbedEtcdFail"),
-	)
-	ErrMasterParseURLFail = errors.Normalize(
-		"failed to parse URL %s",
-		errors.RFCCodeText("DFLOW:ErrMasterParseURLFail"),
-	)
-	ErrMasterScheduleMissTask = errors.Normalize(
-		"task %d is not found after scheduling",
-		errors.RFCCodeText("DFLOW:ErrMasterScheduleMissTask"),
-	)
-	ErrMasterNewServer = errors.Normalize(
-		"master create new server failed",
-		errors.RFCCodeText("DFLOW:ErrMasterNewServer"),
-	)
-	ErrMasterCampaignLeader = errors.Normalize(
-		"master campaign to be leader failed",
-		errors.RFCCodeText("DFLOW:ErrMasterCampaignLeader"),
-	)
-	ErrMasterSessionDone = errors.Normalize(
-		"master session is done",
-		errors.RFCCodeText("DFLOW:ErrMasterSessionDone"),
-	)
 	ErrMasterRPCNotForward = errors.Normalize(
 		"server grpc is not forwarded to leader",
 		errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"),
 	)
-	ErrLeaderCtxCanceled = errors.Normalize(
-		"leader context is canceled",
-		errors.RFCCodeText("DFLOW:ErrLeaderCtxCanceled"),
-	)
-	ErrMessageClientNotFoundForWorker = errors.Normalize(
-		"peer message client is not found for worker: worker ID %s",
-		errors.RFCCodeText("DFLOW:ErrMessageClientNotFoundForWorker"),
-	)
 	ErrMasterNotFound = errors.Normalize(
 		"master is not found: master ID %s",
 		errors.RFCCodeText("DFLOW:ErrMasterNotFound"),
-	)
-	ErrDuplicateWorkerID = errors.Normalize(
-		"duplicate worker ID encountered: %s, report a bug",
-		errors.RFCCodeText("DFLOW:ErrDuplicateWorkerID"),
 	)
 	ErrMasterClosed = errors.Normalize(
 		"master has been closed explicitly: master ID %s",
@@ -160,13 +93,17 @@ var (
 		"master has reached concurrency quota",
 		errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"),
 	)
+	ErrMasterCreateWorkerBackoff = errors.Normalize(
+		"create worker is being backoff, retry later",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerBackoff"),
+	)
+	ErrMasterCreateWorkerTerminate = errors.Normalize(
+		"create worker is terminated, won't backoff any more",
+		errors.RFCCodeText("DFLOW:ErrMasterCreateWorkerTerminate"),
+	)
 	ErrMasterInvalidMeta = errors.Normalize(
 		"invalid master meta data: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterInvalidMeta"),
-	)
-	ErrInvalidServerMasterID = errors.Normalize(
-		"invalid server master id: %s",
-		errors.RFCCodeText("DFLOW:ErrInvalidServerMasterID"),
 	)
 	ErrInvalidMasterMessage = errors.Normalize(
 		"invalid master message: %s",
@@ -175,10 +112,6 @@ var (
 	ErrSendingMessageToTombstone = errors.Normalize(
 		"trying to send message to a tombstone worker handle: %s",
 		errors.RFCCodeText("DFLOW:ErrSendingMessageToTombstone"),
-	)
-	ErrMasterNotInitialized = errors.Normalize(
-		"master is not initialized",
-		errors.RFCCodeText("DFLOW:ErrMasterNotInitialized"),
 	)
 	ErrMasterInterfaceNotFound = errors.Normalize(
 		"basemaster interface not found",
@@ -201,33 +134,26 @@ var (
 		"worker is offline: workerID: %s, error message: %s",
 		errors.RFCCodeText("DFLOW:ErrWorkerOffline"),
 	)
-	ErrWorkerTimedOut = errors.Normalize(
-		"worker heartbeat timed out: workerID %s",
-		errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"),
-	)
 	ErrWorkerSuicide = errors.Normalize(
 		"worker has committed suicide due to master(%s) having timed out",
 		errors.RFCCodeText("DFLOW:ErrWorkerSuicide"),
-	)
-	ErrWorkerNoMeta = errors.Normalize(
-		"worker metadata does not exist",
-		errors.RFCCodeText("DFLOW:ErrWorkerNoMeta"),
 	)
 	ErrWorkerUpdateStatusTryAgain = errors.Normalize(
 		"worker should try again in updating the status",
 		errors.RFCCodeText("DFLOW:ErrWorkerUpdateStatusTryAgain"),
 	)
-	ErrInvalidJobType = errors.Normalize(
-		"invalid job type: %s",
-		errors.RFCCodeText("DFLOW:ErrInvalidJobType"),
-	)
+	// TODO: unify the following three errors into one ErrWorkerTerminated
 	ErrWorkerFinish = errors.Normalize(
 		"worker finished and exited",
 		errors.RFCCodeText("DFLOW:ErrWorkerFinish"),
 	)
-	ErrWorkerStop = errors.Normalize(
-		"worker is stopped",
-		errors.RFCCodeText("DFLOW:ErrWorkerStop"),
+	ErrWorkerCancel = errors.Normalize(
+		"worker is canceled",
+		errors.RFCCodeText("DFLOW:ErrWorkerCancel"),
+	)
+	ErrWorkerFailed = errors.Normalize(
+		"worker is failed permanently",
+		errors.RFCCodeText("DFLOW:ErrWorkerFailed"),
 	)
 	ErrTooManyStatusUpdates = errors.Normalize(
 		"there are too many pending worker status updates: %d",
@@ -237,45 +163,61 @@ var (
 		"the worker is in half-exited state",
 		errors.RFCCodeText("DFLOW:ErrWorkerHalfExit"),
 	)
-	ErrInvalidWorkerType = errors.Normalize(
-		"invalid worker type: %s",
-		errors.RFCCodeText("DFLOW:ErrInvalidWorkerType"),
+	// ErrCreateWorkerNonTerminate indicates the job can be re-created.
+	ErrCreateWorkerNonTerminate = errors.Normalize(
+		"create worker is not terminated",
+		errors.RFCCodeText("DFLOW:ErrCreateWorkerNonTerminate"),
+	)
+	// ErrCreateWorkerTerminate indicates the job should be terminated permanently
+	// from the perspective of business logic.
+	ErrCreateWorkerTerminate = errors.Normalize(
+		"create worker is terminated",
+		errors.RFCCodeText("DFLOW:ErrCreateWorkerTerminate"),
+	)
+
+	// job manager related errors
+	ErrJobManagerGetJobDetailFail = errors.Normalize(
+		"failed to get job detail from job master",
+		errors.RFCCodeText("DFLOW:ErrJobManagerGetJobDetailFail"),
+	)
+
+	ErrJobManagerReadRespBodyFail = errors.Normalize(
+		"failed to read response body",
+		errors.RFCCodeText("DFLOW:ErrJobManagerReadRespBodyFail"),
+	)
+
+	ErrJobManagerRespStatusCode404 = errors.Normalize(
+		"get job detail response status code is 404",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCode404"),
+	)
+
+	ErrJobManagerRespStatusCodeNot2XX = errors.Normalize(
+		"get job detail response status code is not 2XX",
+		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCodeNot2XX"),
 	)
 
 	// master etcd related errors
-	ErrMasterEtcdCreateSessionFail = errors.Normalize(
-		"failed to create Etcd session",
-		errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"),
-	)
-	ErrMasterEtcdElectionCampaignFail = errors.Normalize(
-		"failed to campaign for leader",
-		errors.RFCCodeText("DFLOW:ErrMasterEtcdElectionCampaignFail"),
-	)
-	ErrMasterNoLeader = errors.Normalize(
-		"server master has no leader",
-		errors.RFCCodeText("DFLOW:ErrMasterNoLeader"),
-	)
-	ErrLeaderResigned = errors.Normalize(
-		"leader has resigned",
-		errors.RFCCodeText("DFLOW:ErrLeaderResigned"),
-	)
-	ErrDiscoveryDuplicateWatch = errors.Normalize(
-		"service discovery can't be watched multiple times",
-		errors.RFCCodeText("DFLOW:ErrDiscoveryDuplicateWatch"),
-	)
 	ErrMasterEtcdEpochFail = errors.Normalize(
 		"server master generate epoch fail",
 		errors.RFCCodeText("DFLOW:ErrMasterEtcdEpochFail"),
 	)
 
 	// executor related errors
-	ErrExecutorConfigParseFlagSet = errors.Normalize(
-		"parse config flag set failed",
-		errors.RFCCodeText("DFLOW:ErrExecutorConfigParseFlagSet"),
+	ErrUnknownExecutor = errors.Normalize(
+		"unknown executor: %s",
+		errors.RFCCodeText("DFLOW:ErrUnknownExecutor"),
 	)
-	ErrExecutorConfigInvalidFlag = errors.Normalize(
-		"'%s' is an invalid flag",
-		errors.RFCCodeText("DFLOW:ErrExecutorConfigInvalidFlag"),
+	ErrTombstoneExecutor = errors.Normalize(
+		"tombstone executor: %s",
+		errors.RFCCodeText("DFLOW:ErrTombstoneExecutor"),
+	)
+	ErrExecutorNotFound = errors.Normalize(
+		"executor %s not found",
+		errors.RFCCodeText("DFLOW:ErrExecutorNotFound"),
+	)
+	ErrExecutorAlreadyExists = errors.Normalize(
+		"executor %s already exists",
+		errors.RFCCodeText("DFLOW:ErrExecutorAlreadyExists"),
 	)
 	ErrExecutorDecodeConfigFile = errors.Normalize(
 		"decode config file failed",
@@ -289,33 +231,13 @@ var (
 		"heartbeat error type: %s",
 		errors.RFCCodeText("DFLOW:ErrHeartbeat"),
 	)
-	ErrTaskNotFound = errors.Normalize(
-		"task %d is not found",
-		errors.RFCCodeText("DFLOW:ErrTaskNotFound"),
-	)
-	ErrExecutorUnknownOperator = errors.Normalize(
-		"operator type %d is unknown",
-		errors.RFCCodeText("DFLOW:ErrOperatorUnknown"),
-	)
-	ErrExecutorSessionDone = errors.Normalize(
-		"executor %s session done",
-		errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"),
-	)
 	ErrRuntimeIncomingQueueFull = errors.Normalize(
 		"runtime has too many pending CreateWorker requests",
 		errors.RFCCodeText("DFLOW:ErrRuntimeIncomingQueueFull"),
 	)
-	ErrRuntimeReachedCapacity = errors.Normalize(
-		"runtime has reached its capacity %d",
-		errors.RFCCodeText("DFLOW:ErrRuntimeReachedCapacity"),
-	)
 	ErrRuntimeIsClosed = errors.Normalize(
 		"runtime has been closed",
 		errors.RFCCodeText("DFLOW:ErrRuntimeIsClosed"),
-	)
-	ErrRuntimeInitQueuingTimeOut = errors.Normalize(
-		"a task has waited too long to be initialized",
-		errors.RFCCodeText("DFLOW:ErrRuntimeInitQueuingTimeOut"),
 	)
 	ErrRuntimeDuplicateTaskID = errors.Normalize(
 		"trying to add a task with the same ID as an existing one",
@@ -325,10 +247,6 @@ var (
 		"runtime has been closed",
 		errors.RFCCodeText("DFLOW:ErrRuntimeClosed"),
 	)
-	ErrExecutorEtcdConnFail = errors.Normalize(
-		"executor conn inner etcd fail",
-		errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"),
-	)
 	ErrExecutorNotFoundForMessage = errors.Normalize(
 		"cannot find the executor for p2p messaging",
 		errors.RFCCodeText("DFLOW:ErrExecutorNotFoundForMessage"),
@@ -336,22 +254,6 @@ var (
 	ErrMasterTooManyPendingEvents = errors.Normalize(
 		"master has too many pending events",
 		errors.RFCCodeText("DFLOW:ErrMasterTooManyPendingEvents"),
-	)
-
-	// Two-Phase Task Dispatching errors
-	ErrExecutorPreDispatchFailed = errors.Normalize(
-		"PreDispatchTask failed",
-		errors.RFCCodeText("DFLOW:ErrExecutorPreDispatchFailed"),
-	)
-	ErrExecutorConfirmDispatchFailed = errors.Normalize(
-		"ConfirmDispatch failed",
-		errors.RFCCodeText("DFLOW:ErrExecutorConfirmDispatchFailed"),
-	)
-
-	// planner related errors
-	ErrPlannerDAGDepthExceeded = errors.Normalize(
-		"dag depth exceeded: %d",
-		errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"),
 	)
 
 	// meta related errors
@@ -375,10 +277,6 @@ var (
 		"meta empty key",
 		errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"),
 	)
-	ErrMetaRevisionUnmatch = errors.Normalize(
-		"meta revision unmatch",
-		errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"),
-	)
 	ErrMetaNestedTxn = errors.Normalize(
 		"meta unsupported nested txn",
 		errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"),
@@ -391,10 +289,6 @@ var (
 		"metastore id duplicated",
 		errors.RFCCodeText("DFLOW:ErrMetaStoreIDDuplicate"),
 	)
-	ErrMetaStoreUnfounded = errors.Normalize(
-		"metastore unfounded:%s",
-		errors.RFCCodeText("DFLOW:ErrMetaStoreUnfounded"),
-	)
 	ErrMetaEntryNotFound = errors.Normalize(
 		"meta entry not found",
 		errors.RFCCodeText("DFLOW:ErrMetaEntryNotFound"),
@@ -403,29 +297,19 @@ var (
 		"meta params invalid:%s",
 		errors.RFCCodeText("DFLOW:ErrMetaParamsInvalid"),
 	)
-	ErrMetaEntryAlreadyExists = errors.Normalize(
-		"meta entry already exists",
-		errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"),
-	)
 	ErrMetaClientTypeNotSupport = errors.Normalize(
 		"meta client type not support:%s",
 		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
 	)
 
-	// DataSet errors
-	ErrDatasetEntryNotFound = errors.Normalize(
-		"dataset entry not found. Key: %s",
-		errors.RFCCodeText("DFLOW:ErrDatasetEntryNotFound"),
-	)
-
 	// Resource related errors
-	ErrUnexpectedResourcePath = errors.Normalize(
-		"unexpected resource path: %s",
-		errors.RFCCodeText("DFLOW:ErrUnexpectedResourcePath"),
-	)
 	ErrDuplicateResourceID = errors.Normalize(
 		"duplicate resource ID: %s",
 		errors.RFCCodeText("DFLOW:ErrDuplicateResourceID"),
+	)
+	ErrResourceAlreadyExists = errors.Normalize(
+		"resource %s already exists",
+		errors.RFCCodeText("DFLOW:ErrResourceAlreadyExists"),
 	)
 	ErrIllegalResourcePath = errors.Normalize(
 		"resource path is illegal: %s",
@@ -435,9 +319,9 @@ var (
 		"resource does not exists: %s",
 		errors.RFCCodeText("DFLOW:ErrResourceDoesNotExist"),
 	)
-	ErrResourceManagerNotReady = errors.Normalize(
-		"resource manager is not ready",
-		errors.RFCCodeText("DLFOW:ErrResourceManagerNotReady"),
+	ErrResourceConflict = errors.Normalize(
+		"resource % on executor %s conflicts with resource %s on executor %s",
+		errors.RFCCodeText("DFLOW:ErrResourceConflict"),
 	)
 	ErrReadLocalFileDirectoryFailed = errors.Normalize(
 		"reading local file resource directory failed",
@@ -467,10 +351,75 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+	ErrNoQualifiedExecutor = errors.Normalize(
+		"no executor is available for scheduling",
+		errors.RFCCodeText("DFLOW:ErrNoQualifiedExecutor"),
+	)
+	ErrFilterNoResult = errors.Normalize(
+		"filter % returns no result",
+		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),
+	)
+	ErrSelectorUnsatisfied = errors.Normalize(
+		"selector %v is not satisfied",
+		errors.RFCCodeText("DFLOW:ErrSelectorUnsatisfied"),
+	)
+	ErrResourceFilesNotFound = errors.Normalize(
+		"resource files not found",
+		errors.RFCCodeText("DFLOW:ErrResourceFilesNotFound"),
+	)
+	ErrResourceMetastoreError = errors.Normalize(
+		"resource metastore error",
+		errors.RFCCodeText("DFLOW:ErrResourceMetastoreError"),
+	)
+
+	// Job related error
+	ErrJobNotFound = errors.Normalize(
+		"job %s is not found",
+		errors.RFCCodeText("DFLOW:ErrJobNotFound"),
+	)
+	ErrJobAlreadyExists = errors.Normalize(
+		"job %s already exists",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyExists"),
+	)
+	ErrJobAlreadyCanceled = errors.Normalize(
+		"job %s is already canceled",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyCanceled"),
+	)
+	ErrJobNotTerminated = errors.Normalize(
+		"job %s is not terminated",
+		errors.RFCCodeText("DFLOW:ErrJobNotTerminated"),
+	)
+	ErrJobNotRunning = errors.Normalize(
+		"job %s is not running",
+		errors.RFCCodeText("DFLOW:ErrJobNotRunning"),
+	)
+
+	// metastore related errors
+	ErrMetaStoreNotExists = errors.Normalize(
+		"metastore %s does not exist",
+		errors.RFCCodeText("DFLOW:ErrMetaStoreNotExists"),
+	)
 
 	// cli related errors
 	ErrInvalidCliParameter = errors.Normalize(
 		"invalid cli parameters",
 		errors.RFCCodeText("DFLOW:ErrInvalidCliParameter"),
+	)
+
+	ErrIncompatibleSchedulerRequest = errors.Normalize(
+		"incompatible scheduler request: %s",
+		errors.RFCCodeText("DFLOW:ErrIncompatibleSchedulerRequest"),
+	)
+	ErrDispatchTaskRequestIDNotFound = errors.Normalize(
+		"dispatch task request id %s not found",
+		errors.RFCCodeText("DFLOW:ErrDispatchTaskRequestIDNotFound"),
+	)
+	ErrElectionRecordConflict = errors.Normalize(
+		"election record conflict",
+		errors.RFCCodeText("DFLOW:ErrElectionRecordConflict"),
+	)
+	ErrDeserializeConfig = errors.Normalize(
+		"deserialize config failed",
+		errors.RFCCodeText("DFLOW:ErrDeserializeConfig"),
 	)
 )

@@ -72,8 +72,7 @@ func TestNewClient(t *testing.T) {
 	defer regionCache.Close()
 	cli := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, model.DefaultChangeFeedID(""), 0, "")
 	require.NotNil(t, cli)
 }
 
@@ -313,18 +312,15 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
 	eventCh := make(chan model.RegionFeedEvent, 50)
@@ -333,7 +329,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, lockResolver, isPullInit, eventCh)
+			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -418,25 +414,22 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, lockResolver, isPullInit, eventCh)
+			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -521,25 +514,22 @@ func TestHandleError(t *testing.T) {
 	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -683,18 +673,15 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -702,7 +689,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
 
@@ -753,19 +740,15 @@ func TestClusterIDMismatch(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
-
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
@@ -774,7 +757,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
 
@@ -826,25 +809,22 @@ func testHandleFeedEvent(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1100,11 +1080,12 @@ func testHandleFeedEvent(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 100,
 			},
-			RegionID: 3,
 		},
 		{
 			Val: &model.RawKVEntry{
@@ -1172,26 +1153,33 @@ func testHandleFeedEvent(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 135,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 135,
 			},
-			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 145,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 145,
 			},
-			RegionID: 3,
 		},
 	}
 	multipleExpected := model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
-			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		Resolved: &model.ResolvedSpans{
+			Spans:      make([]model.RegionComparableSpan, multiSize),
 			ResolvedTs: 160,
 		},
-		RegionID: 3,
+	}
+	for i := range multipleExpected.Resolved.Spans {
+		multipleExpected.Resolved.Spans[i] = model.RegionComparableSpan{
+			Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			Region: 3,
+		}
 	}
 
 	ch1 <- eventsBeforeInit
@@ -1210,15 +1198,12 @@ func testHandleFeedEvent(t *testing.T) {
 	}
 
 	ch1 <- multipleResolved
-	for i := 0; i < multiSize; i++ {
-		select {
-		case event := <-eventCh:
-			require.Equal(t, multipleExpected, event)
-		case <-time.After(time.Second):
-			require.Fail(t, fmt.Sprintf("expected event %v not received", multipleExpected))
-		}
+	select {
+	case event := <-eventCh:
+		require.Equal(t, multipleExpected, event)
+	case <-time.After(time.Second):
+		require.Fail(t, fmt.Sprintf("expected event %v not received", multipleExpected))
 	}
-
 	cancel()
 }
 
@@ -1285,24 +1270,22 @@ func TestStreamSendWithError(t *testing.T) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	lockerResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"), util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockerResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, lockerResolver, isPullInit, eventCh)
+			100, lockerResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1353,13 +1336,12 @@ func TestStreamSendWithError(t *testing.T) {
 		select {
 		case event := <-eventCh:
 			require.NotNil(t, event.Resolved)
-			initRegions[event.RegionID] = struct{}{}
+			require.Equal(t, 1, len(event.Resolved.Spans))
+			require.NotNil(t, 0, event.RegionID)
 		case <-time.After(time.Second):
 			require.Fail(t, fmt.Sprintf("expected events are not receive, received: %v", initRegions))
 		}
 	}
-	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
-	require.Equal(t, expectedInitRegions, initRegions)
 
 	// a hack way to check the goroutine count of region worker is 1
 	buf := make([]byte, 1<<20)
@@ -1400,25 +1382,22 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1461,18 +1440,20 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 120,
 			},
-			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 120,
 			},
-			RegionID: regionID,
 		},
 	}
 
@@ -1534,18 +1515,15 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1553,7 +1531,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1745,18 +1723,16 @@ func TestIncompatibleTiKV(t *testing.T) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
@@ -1764,7 +1740,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1790,8 +1766,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 	ch1 <- initialized
 	select {
 	case event := <-eventCh:
-		require.NotNil(t, event.Resolved)
-		require.Equal(t, regionID, event.RegionID)
+		require.Equal(t, 1, len(event.Resolved.Spans))
 	case <-time.After(time.Second):
 		require.Fail(t, "expected events are not receive")
 	}
@@ -1826,18 +1801,15 @@ func TestNoPendingRegionError(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	wg.Add(1)
@@ -1845,7 +1817,7 @@ func TestNoPendingRegionError(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1908,25 +1880,22 @@ func TestDropStaleRequest(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1954,25 +1923,28 @@ func TestDropStaleRequest(t *testing.T) {
 	}}
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 100,
 			},
-			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 120,
 			},
-			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 130,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 130,
 			},
-			RegionID: regionID,
 		},
 	}
 
@@ -2022,25 +1994,22 @@ func TestResolveLock(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2060,18 +2029,20 @@ func TestResolveLock(t *testing.T) {
 	}}
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 100,
 			},
-			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: tso,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: tso,
 			},
-			RegionID: regionID,
 		},
 	}
 	ch1 <- resolved
@@ -2128,18 +2099,15 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientErrUnreachable")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
@@ -2147,7 +2115,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
 
@@ -2284,25 +2252,22 @@ func testEventAfterFeedStop(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientSingleFeedProcessDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2400,16 +2365,20 @@ func testEventAfterFeedStop(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 100,
 			},
 			RegionID: regionID,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 100,
 			},
 			RegionID: regionID,
 		},
@@ -2425,9 +2394,11 @@ func testEventAfterFeedStop(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: regionID,
+				}}, ResolvedTs: 120,
 			},
 			RegionID: regionID,
 		},
@@ -2468,25 +2439,22 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2603,11 +2571,12 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 100,
 			},
-			RegionID: 3,
 		},
 		{
 			Val: &model.RawKVEntry{
@@ -2632,11 +2601,12 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 			RegionID: 3,
 		},
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 145,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 145,
 			},
-			RegionID: 3,
 		},
 	}
 
@@ -2687,25 +2657,22 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2786,25 +2753,22 @@ func TestFailRegionReentrant(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2871,25 +2835,23 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 	}()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2941,25 +2903,23 @@ func testClientErrNoPendingRegion(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamCloseDelay")
 	}()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3022,25 +2982,22 @@ func testKVClientForceReconnect(t *testing.T) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3101,11 +3058,12 @@ func testKVClientForceReconnect(t *testing.T) {
 	ch2 <- resolved
 
 	expected := model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpan{
-			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			ResolvedTs: 135,
+		Resolved: &model.ResolvedSpans{
+			Spans: []model.RegionComparableSpan{{
+				Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				Region: regionID3,
+			}}, ResolvedTs: 135,
 		},
-		RegionID: regionID3,
 	}
 
 eventLoop:
@@ -3174,25 +3132,23 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientMockRangeLock")
 	}()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3294,25 +3250,22 @@ func TestEvTimeUpdate(t *testing.T) {
 	}()
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3345,11 +3298,12 @@ func TestEvTimeUpdate(t *testing.T) {
 
 	expected := []model.RegionFeedEvent{
 		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
+			Resolved: &model.ResolvedSpans{
+				Spans: []model.RegionComparableSpan{{
+					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Region: 3,
+				}}, ResolvedTs: 100,
 			},
-			RegionID: 3,
 		},
 		{
 			Val: &model.RawKVEntry{
@@ -3422,25 +3376,22 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
-	isPullInit := &mockPullerInit{}
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3517,18 +3468,15 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	isPullInit := &mockPullerInit{}
-	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultChangeFeedID("changefeed-test"),
-		util.RoleTester)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID(""),
-		config.GetDefaultServerConfig().KVClient)
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
@@ -3537,7 +3485,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 		defer wg.Done()
 		err = cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, lockResolver, isPullInit, eventCh)
+			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3616,9 +3564,9 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 		},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 		nil, /*lockResolver*/
-		nil, /*isPullerInit*/
 		100, /*startTs*/
-		nil /*eventCh*/)
+		nil, /*eventCh*/
+		model.DefaultChangeFeedID("changefeed-test"), 0, "")
 }
 
 func TestCheckRateLimit(t *testing.T) {

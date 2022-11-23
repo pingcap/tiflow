@@ -173,10 +173,8 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 			ID:         cfID.ID,
 		}
 
-		if cfInfo != nil {
-			resp.FeedState = cfInfo.State
-			resp.RunningError = cfInfo.Error
-		}
+		resp.FeedState = cfInfo.State
+		resp.RunningError = cfInfo.Error
 
 		if cfStatus != nil {
 			resp.CheckpointTSO = cfStatus.CheckpointTs
@@ -681,22 +679,10 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	}
 	status, captureExist := statuses[captureID]
 
-	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	position, positionsExist := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if captureExist && positionsExist {
-		processorDetail = model.ProcessorDetail{
-			CheckPointTs: position.CheckPointTs,
-			ResolvedTs:   position.ResolvedTs,
-			Count:        position.Count,
-			Error:        position.Error,
-		}
+	if captureExist {
 		tables := make([]int64, 0)
 		for tableID := range status.Tables {
 			tables = append(tables, tableID)
@@ -760,7 +746,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&model.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&model.Capture{
+				ID:            c.ID,
+				IsOwner:       isOwner,
+				AdvertiseAddr: c.AdvertiseAddr,
+				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
+			})
 	}
 
 	c.IndentedJSON(http.StatusOK, captures)
@@ -872,8 +863,12 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
-	ctx := c.Request.Context()
+	if !h.capture.IsOwner() {
+		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+		return
+	}
 
+	ctx := c.Request.Context()
 	health, err := h.statusProvider().IsHealthy(ctx)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

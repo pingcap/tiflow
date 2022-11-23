@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -52,9 +52,6 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-
-	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.EncoderBuilder
 }
 
 func newSink(ctx context.Context,
@@ -62,6 +59,7 @@ func newSink(ctx context.Context,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
+	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -70,18 +68,16 @@ func newSink(ctx context.Context,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoder := encoderBuilder.Build()
 
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
-	w := newWorker(changefeedID, encoder, producer, statistics)
-
+	worker := newWorker(changefeedID, encoderConfig.Protocol,
+		encoderBuilder, encoderConcurrency, producer, statistics)
 	s := &dmlSink{
-		id:             changefeedID,
-		protocol:       encoderConfig.Protocol,
-		worker:         w,
-		eventRouter:    eventRouter,
-		topicManager:   topicManager,
-		encoderBuilder: encoderBuilder,
+		id:           changefeedID,
+		protocol:     encoderConfig.Protocol,
+		worker:       worker,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
@@ -92,9 +88,10 @@ func newSink(ctx context.Context,
 				return
 			case errCh <- err:
 			default:
-				log.Error("Error channel is full in DML sink", zap.Error(err),
+				log.Error("Error channel is full in DML sink",
 					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
+					zap.String("changefeed", changefeedID.ID),
+					zap.Error(err))
 			}
 		}
 	}()
@@ -106,6 +103,12 @@ func newSink(ctx context.Context,
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
+		if row.GetTableSinkState() != state.TableSinkSinking {
+			// The table where the event comes from is in stopping, so it's safe
+			// to drop the event directly.
+			row.Callback()
+			continue
+		}
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
 		partitionNum, err := s.topicManager.GetPartitionNum(topic)
 		if err != nil {

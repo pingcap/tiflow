@@ -115,8 +115,8 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.TargetTs = 10
 	cfg.Engine = model.SortInMemory
 	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
-	cfg.SyncPointEnabled = true
-	cfg.SyncPointInterval = 10 * time.Second
+	cfg.ReplicaConfig.EnableSyncPoint = true
+	cfg.ReplicaConfig.SyncPointInterval = 30 * time.Second
 	cfg.PDAddrs = []string{"a", "b"}
 	cfg.CertPath = "p1"
 	cfg.CAPath = "p2"
@@ -126,14 +126,14 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.Nil(t, err)
 	// startTs can not be updated
-	require.Equal(t, "table", string(newCfInfo.Config.Sink.TxnAtomicity))
+	require.Equal(t, "none", string(newCfInfo.Config.Sink.TxnAtomicity))
 	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
 	require.Equal(t, model.SortInMemory, newCfInfo.Engine)
-	require.Equal(t, true, newCfInfo.SyncPointEnabled)
-	require.Equal(t, 10*time.Second, newCfInfo.SyncPointInterval)
-	require.Equal(t, config.GetDefaultReplicaConfig(), newCfInfo.Config)
+	require.Equal(t, true, newCfInfo.Config.EnableSyncPoint)
+	require.Equal(t, 30*time.Second, newCfInfo.Config.SyncPointInterval)
+	require.Equal(t, cfg.ReplicaConfig.ToInternalReplicaConfig(), newCfInfo.Config)
 	require.Equal(t, "a,b", newUpInfo.PDEndpoints)
 	require.Equal(t, "p1", newUpInfo.CertPath)
 	require.Equal(t, "p2", newUpInfo.CAPath)

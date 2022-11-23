@@ -1,0 +1,45 @@
+# master config
+name = "master-test"                 # Corresponding command line:  --name
+addr = "127.0.0.1:10240"             # Corresponding command line:  --addr
+advertise-addr = "127.0.0.1:10240"   # Corresponding command line:  --advertise-addr
+
+[log] 
+level = "info"            # Corresponding command line:  --log-level
+file = "/log/master.log"  # Corresponding command line:  --log-file
+
+[security]
+ca-path = "/path/to/ca.pem"
+cert-path = "/path/to/cert.pem"
+key-path = "/path/to/key.pem"
+cert-allowed-cn = ["tiflow"]
+
+
+[framework-meta]
+endpoints = ["127.0.0.1:3336"]  # Corresponding command line:  --framework-meta-endpoints
+user = "root"
+password = ""
+# NOTE: Schema Convention:
+#   1.It needs to stay UNCHANGED for one dataflow engine cluster
+#   2.It needs be different between any two dataflow engine clusters
+#   3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
+schema = "test_framework"
+
+[framework-meta.security]
+ca-path = "/path/to/ca.pem"
+cert-path = "/path/to/cert.pem"
+key-path = "/path/to/key.pem"
+cert-allowed-cn = ["framework"]
+
+
+[business-meta]
+endpoints = ["127.0.0.1:3336"]  # Corresponding command line:  --business-meta-endpoints
+store-type = "mysql"
+user = "root"
+password = ""
+schema = "test_business"
+
+[business-meta.security]
+ca-path = "/path/to/ca.pem"
+cert-path = "/path/to/cert.pem"
+key-path = "/path/to/key.pem"
+cert-allowed-cn = ["business"]

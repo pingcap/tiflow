@@ -14,12 +14,13 @@
 package canal
 
 import (
-	"encoding/json"
+	"bytes"
 
+	"github.com/goccy/go-json"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -28,36 +29,59 @@ type batchDecoder struct {
 	data                []byte
 	msg                 canalJSONMessageInterface
 	enableTiDBExtension bool
+	terminator          string
 }
 
 // NewBatchDecoder return a decoder for canal-json
-func NewBatchDecoder(data []byte, enableTiDBExtension bool) codec.EventBatchDecoder {
+func NewBatchDecoder(data []byte,
+	enableTiDBExtension bool,
+	terminator string,
+) codec.EventBatchDecoder {
 	return &batchDecoder{
 		data:                data,
 		msg:                 nil,
 		enableTiDBExtension: enableTiDBExtension,
+		terminator:          terminator,
 	}
 }
 
 // HasNext implements the EventBatchDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
-	if len(b.data) == 0 {
-		return model.MessageTypeUnknown, false, nil
-	}
-	var msg canalJSONMessageInterface = &canalJSONMessage{}
+	var (
+		msg         canalJSONMessageInterface = &JSONMessage{}
+		encodedData []byte
+	)
+
 	if b.enableTiDBExtension {
 		msg = &canalJSONMessageWithTiDBExtension{
-			canalJSONMessage: &canalJSONMessage{},
-			Extensions:       &tidbExtension{},
+			JSONMessage: &JSONMessage{},
+			Extensions:  &tidbExtension{},
 		}
 	}
-	if err := json.Unmarshal(b.data, msg); err != nil {
+	if len(b.terminator) > 0 {
+		idx := bytes.IndexAny(b.data, b.terminator)
+		if idx >= 0 {
+			encodedData = b.data[:idx]
+			b.data = b.data[idx+len(b.terminator):]
+		} else {
+			encodedData = b.data
+			b.data = nil
+		}
+	} else {
+		encodedData = b.data
+		b.data = nil
+	}
+
+	if len(encodedData) == 0 {
+		return model.MessageTypeUnknown, false, nil
+	}
+
+	if err := json.Unmarshal(encodedData, msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err), zap.ByteString("data", b.data))
+			zap.Error(err), zap.ByteString("data", encodedData))
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
-	b.data = nil
 
 	return b.msg.messageType(), true, nil
 }
@@ -66,7 +90,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
-		return nil, cerrors.ErrCanalDecodeFailed.
+		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
 	result, err := canalJSONMessage2RowChange(b.msg)
@@ -81,7 +105,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.
+		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found ddl event message")
 	}
 
@@ -94,7 +118,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.
+		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found resolved event message")
 	}
 
@@ -102,7 +126,7 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if !ok {
 		log.Error("canal-json resolved event message should have tidb extension, but not found",
 			zap.Any("msg", b.msg))
-		return 0, cerrors.ErrCanalDecodeFailed.
+		return 0, cerror.ErrCanalDecodeFailed.
 			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
 	b.msg = nil

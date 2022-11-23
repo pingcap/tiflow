@@ -19,14 +19,14 @@ import (
 	"github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
 // BrokerServiceClient wraps a pb.BrokerServiceClient
 type BrokerServiceClient interface {
 	RemoveResource(
 		ctx context.Context,
-		creatorID frameModel.WorkerID,
+		WorkerID frameModel.WorkerID,
 		resourceID resModel.ResourceID,
 	) error
 }
@@ -43,14 +43,14 @@ func NewBrokerServiceClient(cli enginepb.BrokerServiceClient) BrokerServiceClien
 // RemoveResource removes a local file resource from an executor.
 func (c *brokerServiceClient) RemoveResource(
 	ctx context.Context,
-	creatorID frameModel.WorkerID,
+	WorkerID frameModel.WorkerID,
 	resourceID resModel.ResourceID,
 ) error {
 	call := internal.NewCall(
 		c.cli.RemoveResource,
 		&enginepb.RemoveLocalResourceRequest{
 			ResourceId: resourceID,
-			CreatorId:  creatorID,
+			WorkerId:   WorkerID,
 		})
 	_, err := call.Do(ctx)
 	return err

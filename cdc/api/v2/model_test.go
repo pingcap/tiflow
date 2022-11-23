@@ -80,6 +80,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 			IgnoreDeleteValueExpr:    "age > 20",
 		}},
 	}
+	cfg.Mounter = &config.MounterConfig{WorkerNum: 11}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""

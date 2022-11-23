@@ -17,25 +17,34 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/tests/v3/integration"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	mode "github.com/pingcap/tiflow/dm/syncer/safe-mode"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/tests/v3/integration"
+	"go.uber.org/zap"
 )
 
 type mockCheckpointForSafeMode struct {
 	CheckPoint
 
 	safeModeExitPoint *binlog.Location
+	globalPoint       binlog.Location
+	tablePoint        map[string]map[string]binlog.Location
 }
 
 func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
 	return c.safeModeExitPoint
+}
+
+func (c *mockCheckpointForSafeMode) GlobalPoint() binlog.Location {
+	return c.globalPoint
+}
+
+func (c *mockCheckpointForSafeMode) TablePoint() map[string]map[string]binlog.Location {
+	return c.tablePoint
 }
 
 func TestEnableSafeModeInitializationPhase(t *testing.T) {
@@ -44,13 +53,17 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	defer mockCluster.Terminate(t)
 	etcdTestCli := mockCluster.RandClient()
 
+	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
 	l := log.With(zap.String("unit test", "TestEnableSafeModeInitializationPhase"))
 	s := &Syncer{
 		tctx:     tcontext.Background().WithLogger(l),
 		safeMode: mode.NewSafeMode(), cli: etcdTestCli,
 		cfg: &config.SubTaskConfig{
 			Name: "test", SourceID: "test",
-			SyncerConfig: config.SyncerConfig{CheckpointFlushInterval: 1},
+			SyncerConfig: config.SyncerConfig{
+				CheckpointFlushInterval: 1,
+			},
+			Flavor: mysql.MySQLFlavor,
 		},
 	}
 
@@ -80,21 +93,48 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	// test enable by config
 	s.cliArgs = nil
 	s.cfg.SafeMode = true
+	s.cfg.SafeModeDuration = "0s" // test safeMode's priority higher than SafeModeDuration's
 	mockCheckpoint := &mockCheckpointForSafeMode{}
+	mockCheckpoint.globalPoint = binlog.Location{}
+	mockCheckpoint.tablePoint = make(map[string]map[string]binlog.Location)
 	s.checkpoint = mockCheckpoint
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
 
 	// test enable by SafeModeExitPoint (disable is tested in it test)
 	s.cfg.SafeMode = false
+	s.cfg.SafeModeDuration = ""
 	mockCheckpoint.safeModeExitPoint = &binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 123}}
+	mockCheckpoint.globalPoint = binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 120}}
+	s.initInitExecutedLoc()
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
 
 	// test enable by initPhaseSeconds
+	s.checkpoint = &mockCheckpointForSafeMode{}
 	s.enableSafeModeInitializationPhase(s.tctx)
 	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
 	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase exit
+	require.False(t, s.safeMode.Enable())
+
+	// test SafeModeDuration="3s"
+	s = &Syncer{
+		tctx:     tcontext.Background().WithLogger(l),
+		safeMode: mode.NewSafeMode(), cli: etcdTestCli,
+		cfg: &config.SubTaskConfig{
+			Name: "test", SourceID: "test",
+			SyncerConfig: config.SyncerConfig{
+				CheckpointFlushInterval: 1,
+				SafeModeDuration:        "3s",
+			},
+			Flavor: mysql.MySQLFlavor,
+		},
+		checkpoint: &mockCheckpointForSafeMode{},
+	}
+	s.enableSafeModeInitializationPhase(s.tctx)
+	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase running
+	require.True(t, s.safeMode.Enable())
+	time.Sleep(time.Second * 4) // wait for enableSafeModeInitializationPhase exit
 	require.False(t, s.safeMode.Enable())
 }

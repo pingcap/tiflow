@@ -15,145 +15,257 @@ package canal
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/goccy/go-json"
+	"github.com/mailru/easyjson/jwriter"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	canal "github.com/pingcap/tiflow/proto/canal"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
-	builder     *canalEntryBuilder
-	messageBuf  []canalJSONMessageInterface
-	callbackBuf []func()
+	builder *canalEntryBuilder
+
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
+	// the symbol separating two lines
+	terminator []byte
+	messages   []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder() codec.EventBatchEncoder {
-	return &JSONBatchEncoder{
+func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
+	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
-		messageBuf:          make([]canalJSONMessageInterface, 0),
-		callbackBuf:         make([]func(), 0),
-		enableTiDBExtension: false,
+		enableTiDBExtension: config.EnableTiDBExtension,
+		messages:            make([]*common.Message, 0, 1),
+		terminator:          []byte(config.Terminator),
 	}
+	return encoder
 }
 
-func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) (canalJSONMessageInterface, error) {
-	eventType := convertRowEventType(e)
-	header := c.builder.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
-	rowData, err := c.builder.buildRowData(e)
-	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
-	}
+func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
+	isDelete := e.IsDelete()
+	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	pkCols := e.PrimaryKeyColumns()
-	pkNames := make([]string, len(pkCols))
-	for i := range pkNames {
-		pkNames[i] = pkCols[i].Name
-	}
-
-	var nonTrivialRow []*canal.Column
-	if e.IsDelete() {
-		nonTrivialRow = rowData.BeforeColumns
-	} else {
-		nonTrivialRow = rowData.AfterColumns
-	}
-
-	sqlType := make(map[string]int32, len(nonTrivialRow))
-	mysqlType := make(map[string]string, len(nonTrivialRow))
-	for i := range nonTrivialRow {
-		sqlType[nonTrivialRow[i].Name] = nonTrivialRow[i].SqlType
-		mysqlType[nonTrivialRow[i].Name] = nonTrivialRow[i].MysqlType
-	}
-
-	var (
-		data    map[string]interface{}
-		oldData map[string]interface{}
-	)
-
-	if len(rowData.BeforeColumns) > 0 {
-		oldData = make(map[string]interface{}, len(rowData.BeforeColumns))
-		for i := range rowData.BeforeColumns {
-			if !rowData.BeforeColumns[i].GetIsNull() {
-				oldData[rowData.BeforeColumns[i].Name] = rowData.BeforeColumns[i].Value
-			} else {
-				oldData[rowData.BeforeColumns[i].Name] = nil
+	filling := func(columns []*model.Column, out *jwriter.Writer) error {
+		if len(columns) == 0 {
+			out.RawString("null")
+			return nil
+		}
+		out.RawByte('[')
+		out.RawByte('{')
+		isFirst := true
+		for _, col := range columns {
+			if col != nil {
+				if isFirst {
+					isFirst = false
+				} else {
+					out.RawByte(',')
+				}
+				mysqlType := getMySQLType(col)
+				javaType, err := getJavaSQLType(col, mysqlType)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				value, err := c.builder.formatValue(col.Value, javaType)
+				if err != nil {
+					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				out.String(col.Name)
+				out.RawByte(':')
+				if col.Value == nil {
+					out.RawString("null")
+				} else {
+					out.String(value)
+				}
 			}
+		}
+		out.RawByte('}')
+		out.RawByte(']')
+		return nil
+	}
+
+	out := &jwriter.Writer{}
+	out.RawByte('{')
+	{
+		const prefix string = ",\"id\":"
+		out.RawString(prefix[1:])
+		out.Int64(0) // ignored by both Canal Adapter and Flink
+	}
+	{
+		const prefix string = ",\"database\":"
+		out.RawString(prefix)
+		out.String(e.Table.Schema)
+	}
+	{
+		const prefix string = ",\"table\":"
+		out.RawString(prefix)
+		out.String(e.Table.Table)
+	}
+	{
+		const prefix string = ",\"pkNames\":"
+		out.RawString(prefix)
+		pkNames := e.PrimaryKeyColumnNames()
+		if pkNames == nil {
+			out.RawString("null")
+		} else {
+			out.RawByte('[')
+			for v25, v26 := range pkNames {
+				if v25 > 0 {
+					out.RawByte(',')
+				}
+				out.String(v26)
+			}
+			out.RawByte(']')
+		}
+	}
+	{
+		const prefix string = ",\"isDdl\":"
+		out.RawString(prefix)
+		out.Bool(false)
+	}
+	{
+		const prefix string = ",\"type\":"
+		out.RawString(prefix)
+		out.String(eventTypeString(e))
+	}
+	{
+		const prefix string = ",\"es\":"
+		out.RawString(prefix)
+		out.Int64(convertToCanalTs(e.CommitTs))
+	}
+	{
+		const prefix string = ",\"ts\":"
+		out.RawString(prefix)
+		out.Int64(time.Now().UnixMilli()) // ignored by both Canal Adapter and Flink
+	}
+	{
+		const prefix string = ",\"sql\":"
+		out.RawString(prefix)
+		out.String("")
+	}
+	{
+		columns := e.PreColumns
+		if !isDelete {
+			columns = e.Columns
+		}
+		const prefix string = ",\"sqlType\":"
+		out.RawString(prefix)
+		emptyColumn := true
+		for _, col := range columns {
+			if col != nil {
+				if emptyColumn {
+					out.RawByte('{')
+					emptyColumn = false
+				} else {
+					out.RawByte(',')
+				}
+				mysqlType := getMySQLType(col)
+				javaType, err := getJavaSQLType(col, mysqlType)
+				if err != nil {
+					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+				}
+				out.String(col.Name)
+				out.RawByte(':')
+				out.Int32(int32(javaType))
+				mysqlTypeMap[col.Name] = mysqlType
+			}
+		}
+		if emptyColumn {
+			out.RawString(`null`)
+		} else {
+			out.RawByte('}')
+		}
+	}
+	{
+		const prefix string = ",\"mysqlType\":"
+		out.RawString(prefix)
+		if mysqlTypeMap == nil {
+			out.RawString(`null`)
+		} else {
+			out.RawByte('{')
+			isFirst := true
+			for typeKey, typeValue := range mysqlTypeMap {
+				if isFirst {
+					isFirst = false
+				} else {
+					out.RawByte(',')
+				}
+				out.String(typeKey)
+				out.RawByte(':')
+				out.String(typeValue)
+			}
+			out.RawByte('}')
 		}
 	}
 
-	if len(rowData.AfterColumns) > 0 {
-		data = make(map[string]interface{}, len(rowData.AfterColumns))
-		for i := range rowData.AfterColumns {
-			if !rowData.AfterColumns[i].GetIsNull() {
-				data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
-			} else {
-				data[rowData.AfterColumns[i].Name] = nil
-			}
-		}
-	}
-
-	msg := &canalJSONMessage{
-		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
-		PKNames:       pkNames,
-		IsDDL:         false,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixNano() / 1e6, // ignored by both Canal Adapter and Flink
-		Query:         "",
-		SQLType:       sqlType,
-		MySQLType:     mysqlType,
-		Data:          make([]map[string]interface{}, 0),
-		Old:           nil,
-		tikvTs:        e.CommitTs,
-	}
-
 	if e.IsDelete() {
-		msg.Data = append(msg.Data, oldData)
+		out.RawString(",\"old\":null")
+		out.RawString(",\"data\":")
+		if err := filling(e.PreColumns, out); err != nil {
+			return nil, err
+		}
 	} else if e.IsInsert() {
-		msg.Data = append(msg.Data, data)
+		out.RawString(",\"old\":null")
+		out.RawString(",\"data\":")
+		if err := filling(e.Columns, out); err != nil {
+			return nil, err
+		}
 	} else if e.IsUpdate() {
-		msg.Old = []map[string]interface{}{oldData}
-		msg.Data = append(msg.Data, data)
+		out.RawString(",\"old\":")
+		if err := filling(e.PreColumns, out); err != nil {
+			return nil, err
+		}
+		out.RawString(",\"data\":")
+		if err := filling(e.Columns, out); err != nil {
+			return nil, err
+		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if !c.enableTiDBExtension {
-		return msg, nil
+	if c.enableTiDBExtension {
+		const prefix string = ",\"_tidb\":"
+		out.RawString(prefix)
+		out.RawByte('{')
+		out.RawString("\"commitTs\":")
+		out.Uint64(e.CommitTs)
+		out.RawByte('}')
 	}
+	out.RawByte('}')
 
-	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: msg,
-		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
-	}, nil
+	return out.BuildBytes()
+}
+
+func eventTypeString(e *model.RowChangedEvent) string {
+	if e.IsDelete() {
+		return "DELETE"
+	}
+	if len(e.PreColumns) == 0 {
+		return "INSERT"
+	}
+	return "UPDATE"
 }
 
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
-	msg := &canalJSONMessage{
+	msg := &JSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
-		Schema:        header.SchemaName,
-		Table:         header.TableName,
+		Schema:        e.TableInfo.TableName.Schema,
+		Table:         e.TableInfo.TableName.Table,
 		IsDDL:         true,
-		EventType:     header.GetEventType().String(),
-		ExecutionTime: header.ExecuteTime,
-		BuildTime:     time.Now().UnixNano() / 1e6, // timestamp
+		EventType:     convertDdlEventType(e).String(),
+		ExecutionTime: convertToCanalTs(e.CommitTs),
+		BuildTime:     time.Now().UnixMilli(), // timestamp
 		Query:         e.Query,
-		tikvTs:        e.CommitTs,
 	}
 
 	if !c.enableTiDBExtension {
@@ -161,14 +273,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 	}
 
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: msg,
-		Extensions:       &tidbExtension{CommitTs: e.CommitTs},
+		JSONMessage: msg,
+		Extensions:  &tidbExtension{CommitTs: e.CommitTs},
 	}
 }
 
 func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONMessageWithTiDBExtension {
 	return &canalJSONMessageWithTiDBExtension{
-		canalJSONMessage: &canalJSONMessage{
+		JSONMessage: &JSONMessage{
 			ID:            0,
 			IsDDL:         false,
 			EventType:     tidbWaterMarkType,
@@ -179,7 +291,7 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 	}
 }
 
-// EncodeCheckpointEvent implements the EventJSONBatchEncoder interface
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
@@ -188,7 +300,7 @@ func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, er
 	msg := c.newJSONMessage4CheckpointEvent(ts)
 	value, err := json.Marshal(msg)
 	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
@@ -200,15 +312,38 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	message, err := c.newJSONMessageForDML(e)
+	value, err := c.newJSONMessageForDML(e)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.messageBuf = append(c.messageBuf, message)
-	if callback != nil {
-		c.callbackBuf = append(c.callbackBuf, callback)
+	if len(c.terminator) > 0 {
+		value = append(value, c.terminator...)
 	}
+	m := &common.Message{
+		Key:      nil,
+		Value:    value,
+		Ts:       e.CommitTs,
+		Schema:   &e.Table.Schema,
+		Table:    &e.Table.Table,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolCanalJSON,
+		Callback: callback,
+	}
+	m.IncRowsCount()
+
+	c.messages = append(c.messages, m)
 	return nil
+}
+
+// Build implements the EventBatchEncoder interface
+func (c *JSONBatchEncoder) Build() []*common.Message {
+	if len(c.messages) == 0 {
+		return nil
+	}
+
+	result := c.messages
+	c.messages = nil
+	return result
 }
 
 // EncodeDDLEvent encodes DDL events
@@ -216,35 +351,9 @@ func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, e
 	message := c.newJSONMessageForDDL(e)
 	value, err := json.Marshal(message)
 	if err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
-}
-
-// Build implements the EventJSONBatchEncoder interface
-func (c *JSONBatchEncoder) Build() []*common.Message {
-	if len(c.messageBuf) == 0 {
-		return nil
-	}
-	ret := make([]*common.Message, len(c.messageBuf))
-	for i, msg := range c.messageBuf {
-		value, err := json.Marshal(msg)
-		if err != nil {
-			log.Panic("JSONBatchEncoder", zap.Error(err))
-			return nil
-		}
-		m := common.NewMsg(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
-		m.IncRowsCount()
-		ret[i] = m
-	}
-	c.messageBuf = make([]canalJSONMessageInterface, 0)
-	if len(c.callbackBuf) != 0 && len(c.callbackBuf) == len(ret) {
-		for i, c := range c.callbackBuf {
-			ret[i].Callback = c
-		}
-		c.callbackBuf = make([]func(), 0)
-	}
-	return ret
 }
 
 type jsonBatchEncoderBuilder struct {
@@ -258,8 +367,5 @@ func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 
 // Build a `JSONBatchEncoder`
 func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	encoder := newJSONBatchEncoder()
-	encoder.(*JSONBatchEncoder).enableTiDBExtension = b.config.EnableTiDBExtension
-
-	return encoder
+	return newJSONBatchEncoder(b.config)
 }

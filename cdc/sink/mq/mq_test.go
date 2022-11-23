@@ -21,7 +21,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/open"
@@ -87,8 +86,9 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -125,9 +125,11 @@ func TestKafkaSink(t *testing.T) {
 	require.Equal(t, uint64(120), checkpoint.Ts)
 
 	// mock kafka broker processes 1 checkpoint ts event
-	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
-		Schema: "test",
-		Table:  "t1",
+	err = sink.EmitCheckpointTs(ctx, uint64(120), []*model.TableInfo{{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
 	}})
 	require.Nil(t, err)
 	defer func() {
@@ -141,8 +143,10 @@ func TestKafkaSink(t *testing.T) {
 	ddl := &model.DDLEvent{
 		StartTs:  130,
 		CommitTs: 140,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
 		},
 		Query: "create table a",
 		Type:  1,
@@ -163,37 +167,6 @@ func TestKafkaSink(t *testing.T) {
 	if err != nil {
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}
-}
-
-func TestPulsarSinkEncoderConfig(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar/MockPulsar",
-		"return(true)")
-	require.Nil(t, err)
-
-	uri := "pulsar://127.0.0.1:1234/kafka-test?" +
-		"max-message-bytes=4194304&max-batch-size=1&protocol=open-protocol"
-
-	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
-	replicaConfig := config.GetDefaultReplicaConfig()
-	errCh := make(chan error, 1)
-
-	sink, err := NewPulsarSink(ctx, sinkURI, replicaConfig, errCh)
-	require.Nil(t, err)
-
-	encoder := sink.encoderBuilder.Build()
-	require.IsType(t, &open.BatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*open.BatchEncoder).MaxBatchSize)
-	require.Equal(t, 4194304, encoder.(*open.BatchEncoder).MaxMessageBytes)
-
-	// FIXME: mock pulsar client doesn't support close,
-	// so we can't call sink.Close() to close it.
-	// We will leak goroutine if we don't close it.
-	cancel()
-	sink.flushWorker.close()
-	sink.resolvedBuffer.Close()
 }
 
 func TestFlushRowChangedEvents(t *testing.T) {
@@ -217,7 +190,9 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	}()
 
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
 	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row changed event

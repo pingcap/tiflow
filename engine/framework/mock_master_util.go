@@ -22,8 +22,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -33,13 +31,14 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // MockBaseMaster returns a mock DefaultBaseMaster
@@ -66,14 +65,14 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	ctx.ProjectInfo = tenant.TestProjectInfo
 	epoch, err := cli.GenEpoch(ctx)
 	require.NoError(t, err)
-	masterMeta := &frameModel.MasterMetaKVData{
-		ProjectID:  tenant.TestProjectInfo.UniqueID(),
-		Addr:       ctx.Environ.Addr,
-		NodeID:     ctx.Environ.NodeID,
-		ID:         id,
-		Tp:         FakeJobMaster,
-		Epoch:      epoch,
-		StatusCode: frameModel.MasterStatusUninit,
+	masterMeta := &frameModel.MasterMeta{
+		ProjectID: tenant.TestProjectInfo.UniqueID(),
+		Addr:      ctx.Environ.Addr,
+		NodeID:    ctx.Environ.NodeID,
+		ID:        id,
+		Type:      frameModel.FakeJobMaster,
+		Epoch:     epoch,
+		State:     frameModel.MasterStateUninit,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
 	require.NoError(t, err)
@@ -83,7 +82,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 		ctx,
 		masterImpl,
 		id,
-		FakeTask,
+		frameModel.FakeTask,
 	)
 
 	return ret.(*DefaultBaseMaster)
@@ -102,18 +101,16 @@ func MockBaseMasterCreateWorker(
 	master *DefaultBaseMaster,
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
-	cost model.RescUnit,
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	executorID model.ExecutorID,
-	resources []resourcemeta.ResourceID,
+	resources []resModel.ResourceID,
 	workerEpoch frameModel.Epoch,
 ) {
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
-		TaskId:               workerID,
-		Cost:                 int64(cost),
-		ResourceRequirements: resourcemeta.ToResourceRequirement(masterID, resources...),
+		TaskId:    workerID,
+		Resources: resModel.ToResourceRequirement(masterID, resources...),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
 		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
@@ -134,12 +131,11 @@ func MockBaseMasterCreateWorker(
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
 			WorkerEpoch:  workerEpoch,
-		}), gomock.Any(), gomock.Any()).Do(
+		}), gomock.Any()).Do(
 		func(
 			ctx context.Context,
 			args *client.DispatchTaskArgs,
 			start client.StartWorkerCallback,
-			abort client.AbortWorkerCallback,
 		) {
 			start()
 		}).Times(1).Return(nil)
@@ -153,7 +149,6 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	master *DefaultBaseMaster,
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
-	cost model.RescUnit,
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	executorID model.ExecutorID,
@@ -161,7 +156,6 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId: workerID,
-		Cost:   int64(cost),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
 		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
@@ -208,7 +202,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *frameModel.WorkerStatus,
 ) {
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.frameMetaClient)
+	workerMetaClient := metadata.NewWorkerStatusClient(masterID, master.frameMetaClient)
 	err := workerMetaClient.Store(ctx, status)
 	require.NoError(t, err)
 

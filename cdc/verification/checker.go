@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockery --name=checkSumChecker --inpackage
+//go:generate mockery --name=checkSumChecker --inpackage --quiet
 type checkSumChecker interface {
 	getCheckSum(ctx context.Context, db string, f filter.Filter) (map[string]string, error)
 	getAllDBs(ctx context.Context) ([]string, error)
@@ -35,7 +35,7 @@ type checker struct {
 	db *sql.DB
 }
 
-// nolint:deadcode, will be used in next pr
+// nolint:unused
 func newChecker(db *sql.DB) *checker {
 	return &checker{
 		db: db,

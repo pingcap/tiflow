@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -43,7 +43,7 @@ type managerTester struct {
 // NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	t *testing.T,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
@@ -61,11 +61,11 @@ func NewManager4Test(
 }
 
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
-	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			state:        tablepipeline.TableStateReplicating,
+			state:        tablepb.TableStateReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
@@ -297,14 +297,14 @@ func TestQueryTableCount(t *testing.T) {
 	ctx := context.TODO()
 	// Add some tables to processor.
 	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{
-		tables: map[model.TableID]tablepipeline.TablePipeline{1: nil, 2: nil},
+		tables: map[model.TableID]tablepb.TablePipeline{1: nil, 2: nil},
 	}
 
 	done := make(chan error, 1)
 	tableCh := make(chan int, 1)
 	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
 	require.Nil(t, err)
-	err = m.handleCommand()
+	err = m.handleCommand(nil)
 	require.Nil(t, err)
 	select {
 	case count := <-tableCh:

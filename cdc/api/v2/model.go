@@ -77,15 +77,13 @@ type PDConfig struct {
 
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
-	Namespace         string         `json:"namespace"`
-	ID                string         `json:"changefeed_id"`
-	StartTs           uint64         `json:"start_ts"`
-	TargetTs          uint64         `json:"target_ts"`
-	SinkURI           string         `json:"sink_uri"`
-	Engine            string         `json:"engine"`
-	ReplicaConfig     *ReplicaConfig `json:"replica_config"`
-	SyncPointEnabled  bool           `json:"sync_point_enabled"`
-	SyncPointInterval time.Duration  `json:"sync_point_interval"`
+	Namespace     string         `json:"namespace"`
+	ID            string         `json:"changefeed_id"`
+	StartTs       uint64         `json:"start_ts"`
+	TargetTs      uint64         `json:"target_ts"`
+	SinkURI       string         `json:"sink_uri"`
+	Engine        string         `json:"engine"`
+	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
 
@@ -96,7 +94,11 @@ type ReplicaConfig struct {
 	ForceReplicate        bool              `json:"force_replicate"`
 	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool              `json:"enable_sync_point"`
+	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
+	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
+	Mounter               *MounterConfig    `json:"mounter"`
 	Sink                  *SinkConfig       `json:"sink"`
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
@@ -108,6 +110,9 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
+	res.EnableSyncPoint = c.EnableSyncPoint
+	res.SyncPointInterval = c.SyncPointInterval
+	res.SyncPointRetention = c.SyncPointRetention
 
 	if c.Filter != nil {
 		var mySQLReplicationRules *filter.MySQLReplicationRules
@@ -173,12 +178,32 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
+		var csvConfig *config.CSVConfig
+		if c.Sink.CSVConfig != nil {
+			csvConfig = &config.CSVConfig{
+				Delimiter:       c.Sink.CSVConfig.Delimiter,
+				Quote:           c.Sink.CSVConfig.Quote,
+				NullString:      c.Sink.CSVConfig.NullString,
+				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+			}
+		}
+
 		res.Sink = &config.SinkConfig{
-			DispatchRules:   dispatchRules,
-			Protocol:        c.Sink.Protocol,
-			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
-			ColumnSelectors: columnSelectors,
-			SchemaRegistry:  c.Sink.SchemaRegistry,
+			DispatchRules:            dispatchRules,
+			Protocol:                 c.Sink.Protocol,
+			CSVConfig:                csvConfig,
+			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
+			ColumnSelectors:          columnSelectors,
+			SchemaRegistry:           c.Sink.SchemaRegistry,
+			EncoderConcurrency:       c.Sink.EncoderConcurrency,
+			Terminator:               c.Sink.Terminator,
+			DateSeparator:            c.Sink.DateSeparator,
+			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
+		}
+	}
+	if c.Mounter != nil {
+		res.Mounter = &config.MounterConfig{
+			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
 	return res
@@ -193,6 +218,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		ForceReplicate:        cloned.ForceReplicate,
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
+		EnableSyncPoint:       cloned.EnableSyncPoint,
+		SyncPointInterval:     cloned.SyncPointInterval,
+		SyncPointRetention:    cloned.SyncPointRetention,
 	}
 
 	if cloned.Filter != nil {
@@ -252,12 +280,27 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
+		var csvConfig *CSVConfig
+		if cloned.Sink.CSVConfig != nil {
+			csvConfig = &CSVConfig{
+				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
+				Quote:           cloned.Sink.CSVConfig.Quote,
+				NullString:      cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+			}
+		}
+
 		res.Sink = &SinkConfig{
-			Protocol:        cloned.Sink.Protocol,
-			SchemaRegistry:  cloned.Sink.SchemaRegistry,
-			DispatchRules:   dispatchRules,
-			ColumnSelectors: columnSelectors,
-			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
+			Protocol:                 cloned.Sink.Protocol,
+			SchemaRegistry:           cloned.Sink.SchemaRegistry,
+			DispatchRules:            dispatchRules,
+			CSVConfig:                csvConfig,
+			ColumnSelectors:          columnSelectors,
+			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
+			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
+			Terminator:               cloned.Sink.Terminator,
+			DateSeparator:            cloned.Sink.DateSeparator,
+			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -268,15 +311,23 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Storage:           cloned.Consistent.Storage,
 		}
 	}
+	if cloned.Mounter != nil {
+		res.Mounter = &MounterConfig{
+			WorkerNum: cloned.Mounter.WorkerNum,
+		}
+	}
 	return res
 }
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
-		CaseSensitive:    true,
-		EnableOldValue:   true,
-		CheckGCSafePoint: true,
+		CaseSensitive:      true,
+		EnableOldValue:     true,
+		CheckGCSafePoint:   true,
+		EnableSyncPoint:    false,
+		SyncPointInterval:  10 * time.Second,
+		SyncPointRetention: 24 * time.Hour,
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
@@ -297,6 +348,11 @@ type FilterConfig struct {
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters"`
+}
+
+// MounterConfig represents mounter config for a changefeed
+type MounterConfig struct {
+	WorkerNum int `json:"worker_num"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
@@ -380,11 +436,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol        string            `json:"protocol"`
-	SchemaRegistry  string            `json:"schema_registry"`
-	DispatchRules   []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity    string            `json:"transaction_atomicity"`
+	Protocol                 string            `json:"protocol"`
+	SchemaRegistry           string            `json:"schema_registry"`
+	CSVConfig                *CSVConfig        `json:"csv"`
+	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity             string            `json:"transaction_atomicity"`
+	EncoderConcurrency       int               `json:"encoder_concurrency"`
+	Terminator               string            `json:"terminator"`
+	DateSeparator            string            `json:"date_separator"`
+	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
+}
+
+// CSVConfig denotes the csv config
+// This is the same as config.CSVConfig
+type CSVConfig struct {
+	Delimiter       string `json:"delimiter"`
+	Quote           string `json:"quote"`
+	NullString      string `json:"null"`
+	IncludeCommitTs bool   `json:"include_commit_ts"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -436,14 +506,12 @@ type ChangeFeedInfo struct {
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
-	AdminJobType      model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine            string             `json:"engine,omitempty"`
-	Config            *ReplicaConfig     `json:"config,omitempty"`
-	State             model.FeedState    `json:"state,omitempty"`
-	Error             *RunningError      `json:"error,omitempty"`
-	SyncPointEnabled  bool               `json:"sync_point_enabled,omitempty"`
-	SyncPointInterval time.Duration      `json:"sync_point_interval,omitempty"`
-	CreatorVersion    string             `json:"creator_version,omitempty"`
+	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
+	Engine         string             `json:"engine,omitempty"`
+	Config         *ReplicaConfig     `json:"config,omitempty"`
+	State          model.FeedState    `json:"state,omitempty"`
+	Error          *RunningError      `json:"error,omitempty"`
+	CreatorVersion string             `json:"creator_version,omitempty"`
 }
 
 // RunningError represents some running error from cdc components, such as processor.

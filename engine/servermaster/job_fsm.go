@@ -20,21 +20,21 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // JobHolder holds job meta and worker handle for a job.
 type JobHolder struct {
 	workerHandle framework.WorkerHandle
-	masterMeta   *frameModel.MasterMetaKVData
+	masterMeta   *frameModel.MasterMeta
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
 }
 
 // MasterMeta returns master meta of the job.
-func (jh *JobHolder) MasterMeta() *frameModel.MasterMetaKVData {
+func (jh *JobHolder) MasterMeta() *frameModel.MasterMeta {
 	return jh.masterMeta
 }
 
@@ -91,20 +91,20 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[frameModel.MasterID]*frameModel.MasterMetaKVData
+	pendingJobs map[frameModel.MasterID]*frameModel.MasterMeta
 	waitAckJobs map[frameModel.MasterID]*JobHolder
 	onlineJobs  map[frameModel.MasterID]*JobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
 type JobStats interface {
-	JobCount(status pb.Job_Status) int
+	JobCount(status pb.Job_State) int
 }
 
 // NewJobFsm creates a new job fsm
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMetaKVData),
+		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMeta),
 		waitAckJobs: make(map[frameModel.MasterID]*JobHolder),
 		onlineJobs:  make(map[frameModel.MasterID]*JobHolder),
 	}
@@ -140,7 +140,7 @@ func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *JobHolder {
 }
 
 // JobDispatched is called when a job is firstly created or server master is failovered
-func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailover bool) {
+func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMeta, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &JobHolder{
@@ -150,13 +150,21 @@ func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailov
 }
 
 // IterPendingJobs iterates all pending jobs and dispatch(via create worker) them again.
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
 	for oldJobID, job := range fsm.pendingJobs {
 		id, err := dispatchJobFn(job)
 		if err != nil {
+			// This job is being backoff, skip it and process other jobs.
+			if errors.Is(err, errors.ErrMasterCreateWorkerBackoff) {
+				continue
+			}
+			if errors.Is(err, errors.ErrMasterCreateWorkerTerminate) {
+				delete(fsm.pendingJobs, oldJobID)
+				continue
+			}
 			return err
 		}
 		delete(fsm.pendingJobs, oldJobID)
@@ -171,7 +179,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 }
 
 // IterWaitAckJobs iterates wait ack jobs, failover them if they are added from failover
-func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMeta) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -197,7 +205,7 @@ func (fsm *JobFsm) JobOnline(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &JobHolder{
 		workerHandle: worker,
@@ -235,7 +243,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 
 	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
-		return cerrors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
+		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.pendingJobs[worker.ID()] = job.masterMeta
 	delete(fsm.waitAckJobs, worker.ID())
@@ -243,7 +251,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 }
 
 // JobCount queries job count based on job status
-func (fsm *JobFsm) JobCount(status pb.Job_Status) int {
+func (fsm *JobFsm) JobCount(status pb.Job_State) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	switch status {

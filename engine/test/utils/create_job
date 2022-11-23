@@ -1,0 +1,55 @@
+#!/bin/bash
+# parameter 1: job type
+# parameter 2: job config
+# parameter 3: tenant id
+# parameter 4: project id
+# parameter 5: selectors
+
+set -eu
+
+job_type=${1}
+job_config=${2}
+tenant_id=""
+project_id=""
+selectors="[]"
+
+if [ $# -ge 3 ]; then
+	tenant_id=${3}
+fi
+if [ $# -ge 4 ]; then
+	project_id=${4}
+fi
+if [ $# -ge 5 ]; then
+	selectors=${5}
+fi
+
+echo -e "\ncreate job using: $job_config \n" >/dev/stderr
+config=$(base64 -i ${job_config} | tr -d \\n)
+create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+	'{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+echo -e "\ncreate_job_json: $create_job_json \n" >/dev/stderr
+
+job_id=""
+retry_time=15
+i=0
+set +e
+while [ $i -lt $retry_time ]; do
+	output=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=${tenant_id}&project_id=${project_id})" | tee /dev/stderr)
+	code=$(echo $output | jq -r .code)
+	if [ "$code" == "null" ]; then
+		job_id=$(echo $output | jq -r .id)
+		break
+	else
+		((i++))
+		echo -e "create job failed $i-th time, retry later, error: $output" >/dev/stderr
+		sleep 2
+	fi
+done
+set -e
+
+if [ $i -ge $retry_time ]; then
+	echo "create job failed at last"
+	exit 1
+else
+	echo $job_id
+fi

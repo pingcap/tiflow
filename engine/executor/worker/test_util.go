@@ -18,12 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/atomic"
-
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 )
 
 type dummyWorker struct {
@@ -70,12 +68,12 @@ func (d *dummyWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) ID() RunnableID {
-	return d.id
+func (d *dummyWorker) Stop(ctx context.Context) error {
+	return nil
 }
 
-func (d *dummyWorker) Workload() model.RescUnit {
-	return model.RescUnit(1)
+func (d *dummyWorker) ID() RunnableID {
+	return d.id
 }
 
 func (d *dummyWorker) Close(ctx context.Context) error {

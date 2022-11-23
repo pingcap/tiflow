@@ -32,6 +32,7 @@ type conflictTestDriver struct {
 	pendingCount atomic.Int64
 }
 
+//nolint:unparam
 func newConflictTestDriver(
 	numWorkers int, numSlots int, workload workloadGenerator,
 ) *conflictTestDriver {
@@ -39,7 +40,7 @@ func newConflictTestDriver(
 	for i := 0; i < numWorkers; i++ {
 		workers = append(workers, newWorkerForTest())
 	}
-	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, int64(numSlots))
+	detector := causality.NewConflictDetector[*workerForTest, *txnForTest](workers, uint64(numSlots))
 	return &conflictTestDriver{
 		workers:          workers,
 		conflictDetector: detector,
@@ -76,9 +77,7 @@ func (d *conflictTestDriver) Run(ctx context.Context, n int) error {
 		}
 
 		d.pendingCount.Add(1)
-		if err := d.conflictDetector.Add(txn); err != nil {
-			return err
-		}
+		d.conflictDetector.Add(txn)
 		counter++
 
 		if counter > n {

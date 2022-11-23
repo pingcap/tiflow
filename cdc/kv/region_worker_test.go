@@ -62,9 +62,7 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[idx]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.RLock()
 				require.Equal(t, uint64(idx+1), s.requestID)
-				s.lock.RUnlock()
 			}
 		}()
 	}
@@ -79,10 +77,10 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 				regionID := regionIDs[rand.Intn(regionCount)]
 				s, ok := rsm.getState(regionID)
 				require.True(t, ok)
-				s.lock.Lock()
-				s.lastResolvedTs += 10
-				s.lock.Unlock()
+				lastResolvedTs := s.getLastResolvedTs()
+				s.updateResolvedTs(s.getLastResolvedTs() + 10)
 				rsm.setState(regionID, s)
+				require.GreaterOrEqual(t, s.getLastResolvedTs(), lastResolvedTs)
 			}
 		}()
 	}
@@ -95,9 +93,6 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 		require.Greater(t, s.lastResolvedTs, uint64(1000))
 		totalResolvedTs += s.lastResolvedTs
 	}
-	// 100 regions, initial resolved ts 1000;
-	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
-	require.Equal(t, uint64(100*1000+2000*10*concurrency), totalResolvedTs)
 }
 
 func TestRegionStateManagerBucket(t *testing.T) {
@@ -152,7 +147,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	eventCh := make(chan model.RegionFeedEvent, 2)
 	s := createFakeEventFeedSession(ctx)
 	s.eventCh = eventCh
-	span := regionspan.Span{}.Hack()
+	span := regionspan.Span{Start: []byte{}, End: regionspan.UpperBoundKey}
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ToComparableSpan(span),
@@ -257,4 +252,52 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 			OldValue: []byte("oldvalue"),
 		},
 	}, event, "%v", event)
+}
+
+func TestRegionWorkerHandleResolvedTs(t *testing.T) {
+	ctx := context.Background()
+	w := &regionWorker{}
+	outputCh := make(chan model.RegionFeedEvent, 1)
+	w.outputCh = outputCh
+	w.rtsUpdateCh = make(chan *rtsUpdateEvent, 1)
+	w.session = &eventFeedSession{client: &CDCClient{
+		changefeed: model.DefaultChangeFeedID("1"),
+	}}
+	w.metrics = &regionWorkerMetrics{metricSendEventResolvedCounter: sendEventCounter.
+		WithLabelValues("native-resolved", "n", "id")}
+	s1 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(1, 1, 1),
+	}, 1)
+	s1.initialized.Store(true)
+	s1.lastResolvedTs = 9
+
+	s2 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(2, 2, 2),
+	}, 2)
+	s2.initialized.Store(true)
+	s2.lastResolvedTs = 11
+
+	s3 := newRegionFeedState(singleRegionInfo{
+		verID: tikv.NewRegionVerID(3, 3, 3),
+	}, 3)
+	s3.initialized.Store(false)
+	s3.lastResolvedTs = 8
+	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
+		resolvedTs: 10,
+		regions:    []*regionFeedState{s1, s2, s3},
+	})
+	require.Nil(t, err)
+	require.Equal(t, uint64(10), s1.lastResolvedTs)
+	require.Equal(t, uint64(11), s2.lastResolvedTs)
+	require.Equal(t, uint64(8), s3.lastResolvedTs)
+
+	re := <-w.rtsUpdateCh
+	require.Equal(t, uint64(10), re.resolvedTs)
+	require.Equal(t, 2, len(re.regions))
+
+	event := <-outputCh
+	require.Equal(t, uint64(0), event.RegionID)
+	require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
+	require.Equal(t, 1, len(event.Resolved.Spans))
+	require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
 }

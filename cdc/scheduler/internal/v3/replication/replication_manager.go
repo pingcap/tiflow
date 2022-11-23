@@ -19,8 +19,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -91,7 +92,6 @@ type Manager struct { //nolint:revive
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
-	acceptScheduleTask     int
 	slowestTableID         model.TableID
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
@@ -113,8 +113,8 @@ func NewReplicationManager(
 
 // HandleCaptureChanges handles capture changes.
 func (r *Manager) HandleCaptureChanges(
-	init map[model.CaptureID][]schedulepb.TableStatus,
-	removed map[model.CaptureID][]schedulepb.TableStatus,
+	init map[model.CaptureID][]tablepb.TableStatus,
+	removed map[model.CaptureID][]tablepb.TableStatus,
 	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if init != nil {
@@ -124,12 +124,12 @@ func (r *Manager) HandleCaptureChanges(
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Any("init", init), zap.Any("tables", r.tables))
 		}
-		tableStatus := map[model.TableID]map[model.CaptureID]*schedulepb.TableStatus{}
+		tableStatus := map[model.TableID]map[model.CaptureID]*tablepb.TableStatus{}
 		for captureID, tables := range init {
 			for i := range tables {
 				table := tables[i]
 				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[model.CaptureID]*schedulepb.TableStatus{}
+					tableStatus[table.TableID] = map[model.CaptureID]*tablepb.TableStatus{}
 				}
 				tableStatus[table.TableID][captureID] = &table
 			}
@@ -224,7 +224,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 func (r *Manager) handleMessageDispatchTableResponse(
 	from model.CaptureID, msg *schedulepb.DispatchTableResponse,
 ) ([]*schedulepb.Message, error) {
-	var status *schedulepb.TableStatus
+	var status *tablepb.TableStatus
 	switch resp := msg.Response.(type) {
 	case *schedulepb.DispatchTableResponse_AddTable:
 		status = resp.AddTable.Status
@@ -518,6 +518,42 @@ func (r *Manager) CollectMetrics() {
 		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
 		slowestTableResolvedTsGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
+
+		// Slow table latency metrics.
+		phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
+		for stage, checkpoint := range table.Stats.StageCheckpoints {
+			// Checkpoint ts
+			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
+			slowestTableStageCheckpointTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
+			checkpointLag := float64(phyCurrentTs-phyCkpTs) / 1e3
+			slowestTableStageCheckpointTsLagGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
+			slowestTableStageCheckpointTsLagHistogramVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
+			// Resolved ts
+			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
+			slowestTableStageResolvedTsGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
+			resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
+			slowestTableStageResolvedTsLagGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
+			slowestTableStageResolvedTsLagHistogramVec.
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
+		}
+		// Barrier ts
+		stage := "barrier"
+		phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
+		slowestTableStageResolvedTsGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
+		barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
+		slowestTableStageResolvedTsLagGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
+		slowestTableStageResolvedTsLagHistogramVec.
+			WithLabelValues(cf.Namespace, cf.ID, stage).Observe(barrierTsLag)
+		// Region count
+		slowestTableRegionGaugeVec.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 	}
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,
@@ -593,6 +629,13 @@ func (r *Manager) CleanMetrics() {
 		tableStateGauge.
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
+	slowestTableStageCheckpointTsGaugeVec.Reset()
+	slowestTableStageResolvedTsGaugeVec.Reset()
+	slowestTableStageCheckpointTsLagGaugeVec.Reset()
+	slowestTableStageResolvedTsLagGaugeVec.Reset()
+	slowestTableStageCheckpointTsLagHistogramVec.Reset()
+	slowestTableStageResolvedTsLagHistogramVec.Reset()
+	slowestTableRegionGaugeVec.Reset()
 }
 
 // SetReplicationSetForTests is only used in tests.

@@ -7,23 +7,35 @@
 image:
   repository: dataflow
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: test
+  # Overwrite this image tags according to the actual deployment requirements
+  tag: chaos
 
 master:
   replicas: 3
   dataStorage: 2Gi
   logStorage: 1Gi
   config: |
-    [framework-metastore-conf]
-    auth.user = "root"
-    auth.passwd = ""
+    [framework-meta]
+    user = "root"
+    password = ""
     schema = "test_framework"
 
-    [business-metastore-conf]
-    auth.user = "root"
-    auth.passwd = ""
+    [business-meta]
+    user = "root"
+    password = ""
     schema = "test_business"
+
+    [job-backoff]
+    reset-interval = "2s"
+    initial-interval = "1s"
+    max-interval = "15s"
+    max-try-time = 100
+
+    [storage.s3]
+    bucket = "engine-it"
+    endpoint = "http://chaos-minio:9000/"
+    access-key = "engine"
+    secret-access-key = "engineSecret"
 
 executor:
   replicas: 4
@@ -31,38 +43,12 @@ executor:
   config: |
     keepalive-ttl = "20s"
     keepalive-interval = "500ms"
-    session-ttl = 20
 
 metastore:
   frameworkStorage: 5Gi
   businessStorage: 5Gi
 
 cases:
-  enabled: true
-  repository: dataflow
-  tag: test
-
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-autoscaling:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
+  repository: dataflow
+  tag: chaos

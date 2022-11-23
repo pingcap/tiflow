@@ -43,6 +43,7 @@ auto-fix-gtid = false
 enable-gtid = false
 disable-detect = false
 safe-mode = false
+safe-mode-duration = "60s"
 enable-ansi-quotes = false
 log-level = ""
 log-file = ""

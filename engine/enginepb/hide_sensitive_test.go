@@ -20,12 +20,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 )
 
-func TestSensitive(t *testing.T) {
-	expectOutput := `config:\\\"ssl-ca-bytes: \\\"******\\\"\\\\nssl-key-bytes: \\\"******\\\"\\\\nssl-cert-bytes: \\\"******\\\"`
-	config := `ssl-ca-bytes:  -----BEGIN CERTIFICATE-----
+var (
+	expectOutput = `:\\\"password: \\\\\\\"******\\\\\\\"\\\\nssl-ca-bytes: \\\"******\\\"\\\\nssl-key-bytes: \\\"******\\\"\\\\nssl-cert-bytes: \\\"******\\\"`
+	config       = `password: "random-password"
+ssl-ca-bytes:  -----BEGIN CERTIFICATE-----
 random1
 random1-random2
 random1-random2-random3
@@ -40,7 +42,9 @@ random1-random2-random3
 random1-random2
 random1
 -----END CERTIFICATE REQUEST-----"`
+)
 
+func TestJobConfig(t *testing.T) {
 	job := &Job{
 		Id:     "test_job",
 		Config: []byte(config),
@@ -61,4 +65,22 @@ random1
 
 	log.Info("test Job", zap.Any("job", job))
 	require.Contains(t, buffer.String(), expectOutput)
+}
+
+func TestConfig(t *testing.T) {
+	configs := []zapcore.ObjectMarshaler{
+		&PreDispatchTaskRequest{TaskConfig: []byte(config)},
+		&QueryMetaStoreResponse{Config: []byte(config)},
+		&QueryStorageConfigResponse{Config: []byte(config)},
+	}
+
+	var buffer zaptest.Buffer
+	err := logutil.InitLogger(&logutil.Config{Level: "info"}, logutil.WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	for _, c := range configs {
+		log.Info("test config", zap.Any("c", c))
+		require.Contains(t, buffer.String(), expectOutput)
+		buffer.Reset()
+	}
 }

@@ -20,11 +20,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pingcap/errors"
-	bstorage "github.com/pingcap/tidb/br/pkg/storage"
-
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/pingcap/errors"
+	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
 // AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path and will not change rawURL.

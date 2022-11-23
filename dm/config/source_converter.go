@@ -65,7 +65,7 @@ func OpenAPISourceToSourceCfg(source openapi.Source) *SourceConfig {
 	if source.Security != nil {
 		from.Security = &Security{
 			SSLCABytes:   []byte(source.Security.SslCaContent),
-			SSLKEYBytes:  []byte(source.Security.SslKeyContent),
+			SSLKeyBytes:  []byte(source.Security.SslKeyContent),
 			SSLCertBytes: []byte(source.Security.SslCertContent),
 		}
 		if source.Security.CertAllowedCn != nil {

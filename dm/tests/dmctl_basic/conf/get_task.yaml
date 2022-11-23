@@ -146,7 +146,7 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
-    import-mode: sql
+    import-mode: logical
     on-duplicate: replace
 syncers:
   sync-01:
@@ -162,6 +162,7 @@ syncers:
     enable-gtid: false
     disable-detect: false
     safe-mode: false
+    safe-mode-duration: 60s
     enable-ansi-quotes: false
 validators:
   validator-01:

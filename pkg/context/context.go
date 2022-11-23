@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -35,7 +36,13 @@ type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
-	SorterSystem     *ssystem.System
+
+	// SortEngineManager is introduced for pull-based sinks.
+	//
+	// TODO(qupeng): remove SorterSystem after all sorters are transformed
+	// to adapt pull-based sinks.
+	SorterSystem      *ssystem.System
+	SortEngineFactory *factory.SortEngineFactory
 
 	// OwnerRevision is the Etcd revision when the owner got elected.
 	OwnerRevision int64
@@ -208,7 +215,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 }
 
 // NewBackendContext4Test returns a new pipeline context for test, and us
-// context.Background() as ethe parent context
+// context.Background() as the parent context
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
 }

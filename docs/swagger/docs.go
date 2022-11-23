@@ -743,6 +743,27 @@ var doc = `{
         }
     },
     "definitions": {
+        "config.CSVConfig": {
+            "type": "object",
+            "properties": {
+                "delimiter": {
+                    "description": "delimiter between fields",
+                    "type": "string"
+                },
+                "include-commit-ts": {
+                    "description": "whether to include commit ts",
+                    "type": "boolean"
+                },
+                "null": {
+                    "description": "representation of null values",
+                    "type": "string"
+                },
+                "quote": {
+                    "description": "quoting character",
+                    "type": "string"
+                }
+            }
+        },
         "config.ColumnSelector": {
             "type": "object",
             "properties": {
@@ -791,16 +812,31 @@ var doc = `{
                         "$ref": "#/definitions/config.ColumnSelector"
                     }
                 },
+                "csv": {
+                    "$ref": "#/definitions/config.CSVConfig"
+                },
+                "date-separator": {
+                    "type": "string"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
                     }
                 },
+                "enable-partition-separator": {
+                    "type": "boolean"
+                },
+                "encoder-concurrency": {
+                    "type": "integer"
+                },
                 "protocol": {
                     "type": "string"
                 },
                 "schema-registry": {
+                    "type": "string"
+                },
+                "terminator": {
                     "type": "string"
                 },
                 "transaction-atomicity": {
@@ -812,6 +848,9 @@ var doc = `{
             "type": "object",
             "properties": {
                 "address": {
+                    "type": "string"
+                },
+                "cluster_id": {
                     "type": "string"
                 },
                 "id": {
@@ -1009,24 +1048,8 @@ var doc = `{
         "model.ProcessorDetail": {
             "type": "object",
             "properties": {
-                "checkpoint_ts": {
-                    "description": "The maximum event CommitTs that has been synchronized.",
-                    "type": "integer"
-                },
-                "count": {
-                    "description": "The count of events that have been replicated.",
-                    "type": "integer"
-                },
-                "error": {
-                    "description": "Error code when error happens",
-                    "$ref": "#/definitions/model.RunningError"
-                },
-                "resolved_ts": {
-                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized.",
-                    "type": "integer"
-                },
                 "table_ids": {
-                    "description": "all table ids that this processor are replicating",
+                    "description": "All table ids that this processor are replicating.",
                     "type": "array",
                     "items": {
                         "type": "integer"

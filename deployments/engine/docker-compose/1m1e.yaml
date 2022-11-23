@@ -9,10 +9,10 @@ services:
     command:
       - "/tiflow"
       - "master"
-      - "--config=/config.toml"
-      - "--log-level=debug"
+      - "--name=server-master"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-master-0.log"
     ports:
       - "10240:10240"
@@ -21,6 +21,8 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
+    restart: unless-stopped
+
   server-executor:
     image: dataflow:test
     container_name: server-executor-0
@@ -30,11 +32,11 @@ services:
     command:
       - "/tiflow"
       - "executor"
-      - "--config=/config.toml"
-      - "--log-level=debug"
-      - "--join=server-master:10240"
+      - "--name=server-executor"
       - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor:10241"
+      - "--join=server-master:10240"
+      - "--config=/config.toml"
       - "--log-file=/log/server-executor-0.log"
     ports:
       - "10241:10241"
@@ -45,6 +47,8 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - TZ=UTC
+    restart: unless-stopped
+
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -54,6 +58,7 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
+
   mysql-standalone:
     image: mysql:8.0
     container_name: mysql-standalone

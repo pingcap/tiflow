@@ -18,11 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -31,21 +27,22 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 )
 
 // Worker defines an interface that provides all methods that will be used in
@@ -54,8 +51,8 @@ type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	ID() runtime.RunnableID
-	Workload() model.RescUnit
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -63,20 +60,37 @@ type Worker interface {
 // the implementation struct must embed the framework.BaseWorker interface, this
 // interface will be initialized by the framework.
 type WorkerImpl interface {
-	// InitImpl provides customized logic for the business logic to initialize.
+	// InitImpl is called as the consequence of CreateWorker from jobmaster or failover,
+	// business logic is expected to do initialization here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function is called as the first callback function of an WorkerImpl
+	//   instance, and it's not concurrent with other callbacks.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
+	// Tick is called on a fixed interval after WorkerImpl is initialized, business
+	// logic can do some periodic tasks here.
+	// Return:
+	// - error to let the framework call CloseImpl.
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
 	Tick(ctx context.Context) error
 
-	// Workload returns the current workload of the worker.
-	Workload() model.RescUnit
+	// OnMasterMessage is called when worker receives master message, business developer
+	// does not need to implement it.
+	// TODO: move it out of WorkerImpl and should not be concurrent with CloseImpl.
+	OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error
 
-	// OnMasterMessage is called when worker receives master message
-	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
-
-	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
-	CloseImpl(ctx context.Context) error
+	// CloseImpl is called as the consequence of returning error from InitImpl or
+	// Tick, the Tick will be stopped after entering this function. Business logic
+	// is expected to release resources here, but business developer should be aware
+	// that when the runtime is crashed, CloseImpl has no time to be called.
+	// CloseImpl will only be called for once.
+	// TODO: no other callbacks will be called after CloseImpl
+	// Concurrent safety:
+	// - this function may be concurrently called with OnMasterMessage.
+	CloseImpl(ctx context.Context)
 }
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
@@ -102,7 +116,12 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	OpenStorage(
+		ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+	) (broker.Handle, error)
+
+	// IsS3StorageEnabled returns whether the s3 storage is enabled
+	IsS3StorageEnabled() bool
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -123,7 +142,7 @@ type DefaultBaseWorker struct {
 	masterClient *worker.MasterClient
 	masterID     frameModel.MasterID
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	statusSender     *statusutil.Writer
 	workerStatus     *frameModel.WorkerStatus
 	messageRouter    *MessageRouter
@@ -219,13 +238,9 @@ func NewBaseWorker(
 	}
 }
 
-// Workload implements BaseWorker.Workload
-func (w *DefaultBaseWorker) Workload() model.RescUnit {
-	return w.Impl.Workload()
-}
-
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	// Note this context must not be held in any resident goroutine.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -276,8 +291,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 			retErr = frameErrors.FailFast(retErr)
 		}
 	}()
-	// TODO refine this part
-	poolCtx, cancelPool := context.WithCancel(context.TODO())
+	// poolCtx will be held in background goroutines, and it won't be canceled
+	// until DefaultBaseWorker.Close is called.
+	poolCtx, cancelPool := context.WithCancel(context.Background())
 	w.cancelMu.Lock()
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
@@ -307,13 +323,13 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.workerStatus.Epoch,
 	)
 
-	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
+	w.workerMetaClient = metadata.NewWorkerStatusClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.frameMetaClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
-			return w.Impl.OnMasterMessage(topic, msg)
+			return w.Impl.OnMasterMessage(poolCtx, topic, msg)
 		},
 	)
 
@@ -336,7 +352,7 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	w.workerStatus.Code = frameModel.WorkerStatusInit
+	w.workerStatus.State = frameModel.WorkerStateInit
 	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
 		return errors.Trace(err)
 	}
@@ -374,10 +390,8 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doClose() {
 	if w.resourceBroker != nil {
-		// Closing the resource broker here will
-		// release all temporary file resources created by the worker.
-		// Since we only support local files for now, deletion is fast,
-		// so this method will block until it finishes.
+		// Closing the resource broker here will release all temporary file
+		// resources created by the worker.
 		w.resourceBroker.OnWorkerClosed(context.Background(), w.id, w.masterID)
 	}
 
@@ -419,12 +433,12 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
 	defer cancel()
 
-	err := w.Impl.CloseImpl(closeCtx)
-	if err != nil {
-		w.Logger().Warn("Failed to close worker",
-			zap.String("worker-id", w.id),
-			logutil.ShortError(err))
-	}
+	w.Impl.CloseImpl(closeCtx)
+}
+
+// Stop implements Worker.Stop, works the same as Worker.Close
+func (w *DefaultBaseWorker) Stop(ctx context.Context) error {
+	return w.Close(ctx)
 }
 
 // ID implements BaseWorker.ID
@@ -448,7 +462,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
-// The status is persisted if Code or ErrorMsg has changed. Refer to (*WorkerStatus).HasSignificantChange.
+// The status is persisted if State or ErrorMsg has changed. Refer to (*WorkerState).HasSignificantChange.
 //
 // If UpdateStatus returns without an error, then the status must have been persisted,
 // but there is no guarantee that the master has received a notification.
@@ -458,7 +472,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	w.workerStatus.Code = status.Code
+	w.workerStatus.State = status.State
 	w.workerStatus.ErrorMsg = status.ErrorMsg
 	w.workerStatus.ExtBytes = status.ExtBytes
 	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
@@ -487,10 +501,17 @@ func (w *DefaultBaseWorker) SendMessage(
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
-func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+func (w *DefaultBaseWorker) OpenStorage(
+	ctx context.Context, resourcePath resModel.ResourceID, opts ...broker.OpenStorageOption,
+) (broker.Handle, error) {
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
-	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
+	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath, opts...)
+}
+
+// IsS3StorageEnabled implements BaseWorker.IsS3StorageEnabled
+func (w *DefaultBaseWorker) IsS3StorageEnabled() bool {
+	return w.resourceBroker.IsS3StorageEnabled()
 }
 
 // Exit implements BaseWorker.Exit
@@ -499,22 +520,22 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 	defer func() {
 		// keep the original error or ErrWorkerFinish in error center
 		if err == nil {
-			err = derror.ErrWorkerFinish.FastGenByArgs()
+			err = errors.ErrWorkerFinish.FastGenByArgs()
 		}
 		w.onError(err)
 	}()
 
 	switch exitReason {
 	case ExitReasonFinished:
-		w.workerStatus.Code = frameModel.WorkerStatusFinished
+		w.workerStatus.State = frameModel.WorkerStateFinished
 	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
-		w.workerStatus.Code = frameModel.WorkerStatusStopped
+		w.workerStatus.State = frameModel.WorkerStateStopped
 	case ExitReasonFailed:
 		// TODO: replace error with failed
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	default:
-		w.workerStatus.Code = frameModel.WorkerStatusError
+		w.workerStatus.State = frameModel.WorkerStateError
 	}
 
 	if err != nil {
@@ -578,7 +599,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			errOut := derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
+			errOut := errors.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
 			return errOut
 		}
 	}
@@ -623,7 +644,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg, ok := value.(*frameModel.StatusChangeRequest)
 			if !ok {
-				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
+				return errors.ErrInvalidMasterMessage.GenWithStackByArgs(value)
 			}
 			w.messageRouter.AppendMessage(topic, msg)
 			return nil

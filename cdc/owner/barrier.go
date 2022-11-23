@@ -48,7 +48,7 @@ func newBarriers() *barriers {
 
 func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
 	// the barriers structure was given the ability to handle a fallback barrierTs by design.
-	// but the barrierTs should never fallback in owner replication model
+	// but the barrierTs should never fall back in owner replication model
 	if !b.dirty && (tp == b.min || barrierTs <= b.inner[b.min]) {
 		b.dirty = true
 	}

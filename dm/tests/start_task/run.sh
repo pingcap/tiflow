@@ -55,8 +55,10 @@ function init_tracker_test() {
 	done
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 20
 
+	# now syncer will save all table structure from dump files at Init, so all tables
+	# should be loaded into schema tracker.
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t50' 1
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51' 1
 
 	cleanup_process
 	cleanup_data start_task
@@ -76,7 +78,7 @@ function start_task_by_time() {
 	check_contains "time: 06:00:00"
 	trap restore_timezone EXIT
 
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"10ms\")"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml

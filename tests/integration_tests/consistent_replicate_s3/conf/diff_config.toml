@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["consistent_replicate_s3.usertable*"]
+    target-check-tables = ["consistent_replicate_s3.usertable*","consistent_replicate_s3.t*"]
 
 [data-sources]
 [data-sources.mysql1]

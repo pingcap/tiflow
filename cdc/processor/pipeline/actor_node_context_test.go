@@ -91,7 +91,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 		sys.Stop()
 	}()
 
-	require.Nil(t, sys.Start(ctx))
+	sys.Start(ctx)
 	actorID := sys.ActorID()
 	mb := actor.NewMailbox[pmessage.Message](actorID, defaultOutputChannelSize)
 	ch := make(chan message.Message[pmessage.Message], defaultOutputChannelSize)

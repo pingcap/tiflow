@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -134,7 +135,7 @@ func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 
 // IsFresh implements Agent.IsFresh
 func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error) {
-	if workerType == framework.WorkerDMDump {
+	if workerType == frameModel.WorkerDMDump {
 		return true, nil
 	}
 
@@ -144,7 +145,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 	}
 	defer db.Close()
 
-	if workerType == framework.WorkerDMLoad {
+	if workerType == frameModel.WorkerDMLoad {
 		return isLoadFresh(ctx, c.jobID, task.Cfg, db)
 	}
 	return isSyncFresh(ctx, c.jobID, task.Cfg, db)
@@ -210,7 +211,7 @@ func onlineDDLName(jobID string, cfg *config.JobCfg) string {
 
 func isLoadFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
 	// nolint:gosec
-	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName(jobID, (*config.JobCfg)(taskCfg)))
+	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName(jobID, taskCfg.ToJobCfg()))
 	var status string
 	err := db.DB.QueryRowContext(ctx, query, jobID, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
@@ -225,7 +226,7 @@ func isLoadFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db 
 
 func isSyncFresh(ctx context.Context, jobID string, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
 	// nolint:gosec
-	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName(jobID, (*config.JobCfg)(taskCfg)))
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName(jobID, taskCfg.ToJobCfg()))
 	var status string
 	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {

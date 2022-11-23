@@ -87,7 +87,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
-	// NOTE: it's better to pre-allocate the vector. However in the current implementation
+	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
 	// we can't know how many valid tables in the snapshot.
 	s.allPhysicalTablesCache = make([]model.TableID, 0)
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
@@ -105,15 +105,15 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
-// AllTableNames returns the table names of all tables that are being replicated.
-func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
-	names := make([]model.TableName, 0, len(s.allPhysicalTablesCache))
+// AllTableNames returns table info of all tables that are being replicated.
+func (s *schemaWrap4Owner) AllTables() []*model.TableInfo {
+	tables := make([]*model.TableInfo, 0, len(s.allPhysicalTablesCache))
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if !s.shouldIgnoreTable(tblInfo) {
-			names = append(names, tblInfo.TableName)
+			tables = append(tables, tblInfo)
 		}
 	})
-	return names
+	return tables
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
@@ -186,7 +186,9 @@ func (s *schemaWrap4Owner) parseRenameTables(
 		}
 
 		event.FromRenameTablesJob(job, oldSchemaName,
-			newSchemaName, preTableInfo, tableInfo)
+			newSchemaName, preTableInfo,
+			model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
+				job.BinlogInfo.FinishedTS, tableInfo))
 		ddlEvents = append(ddlEvents, event)
 	}
 
@@ -201,6 +203,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 ) ([]*model.DDLEvent, error) {
 	var err error
 	var preTableInfo *model.TableInfo
+	var tableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -220,7 +223,16 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		event.FromJob(job, preTableInfo)
+		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
+			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+		} else {
+			// for an invalid DDL job or a DDL job that does not contain TableInfo,
+			// just retrieve the schema name.
+			tableInfo = &model.TableInfo{
+				TableName: model.TableName{Schema: job.SchemaName},
+			}
+		}
+		event.FromJob(job, preTableInfo, tableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
 	// filter out ddl here

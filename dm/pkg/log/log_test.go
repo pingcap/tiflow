@@ -19,41 +19,33 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pingcap/errors"
+	pclog "github.com/pingcap/log"
+	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tidb/util/logutil"
+	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
-
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 )
 
-func TestLog(t *testing.T) {
-	TestingT(t)
-}
-
-type testLogSuite struct{}
-
-var _ = Suite(&testLogSuite{})
-
-func (s *testLogSuite) TestTestLogger(c *C) {
+func TestTestLogger(t *testing.T) {
 	logger, buffer := makeTestLogger()
 	logger.Warn("the message", zap.Int("number", 123456), zap.Ints("array", []int{7, 8, 9}))
-	c.Assert(
-		buffer.Stripped(), Equals,
-		`{"$lvl":"WARN","$msg":"the message","number":123456,"array":[7,8,9]}`,
-	)
+	require.Equal(t, `{"$lvl":"WARN","$msg":"the message","number":123456,"array":[7,8,9]}`, buffer.Stripped())
 	buffer.Reset()
 	logger.ErrorFilterContextCanceled("the message", zap.Int("number", 123456),
 		zap.Ints("array", []int{7, 8, 9}), zap.Error(context.Canceled))
-	c.Assert(buffer.Stripped(), Equals, "")
+	require.Empty(t, buffer.Stripped())
 	buffer.Reset()
 	logger.ErrorFilterContextCanceled("the message", zap.Int("number", 123456),
 		zap.Ints("array", []int{7, 8, 9}), ShortError(errors.Annotate(context.Canceled, "extra info")))
-	c.Assert(buffer.Stripped(), Equals, "")
+	require.Empty(t, buffer.Stripped())
 }
 
 // makeTestLogger creates a Logger instance which produces JSON logs.
@@ -72,22 +64,22 @@ func makeTestLogger() (Logger, *zaptest.Buffer) {
 	return Logger{Logger: logger}, buffer
 }
 
-func (s *testLogSuite) TestLogLevel(c *C) {
+func TestLogLevel(t *testing.T) {
 	logLevel := "warning"
 	cfg := &Config{
 		Level: logLevel,
 	}
 	cfg.Adjust()
 
-	c.Assert(InitLogger(cfg), IsNil)
-	c.Assert(Props().Level.String(), Equals, zap.WarnLevel.String())
-	c.Assert(L().Check(zap.InfoLevel, "This is an info log"), IsNil)
-	c.Assert(L().Check(zap.ErrorLevel, "This is an error log"), NotNil)
+	require.NoError(t, InitLogger(cfg))
+	require.Equal(t, zap.WarnLevel.String(), Props().Level.String())
+	require.Nil(t, L().Check(zap.InfoLevel, "This is an info log"))
+	require.NotNil(t, L().Check(zap.ErrorLevel, "This is an error log"))
 
 	SetLevel(zap.InfoLevel)
-	c.Assert(Props().Level.String(), Equals, zap.InfoLevel.String())
-	c.Assert(L().Check(zap.WarnLevel, "This is a warn log"), NotNil)
-	c.Assert(L().Check(zap.DebugLevel, "This is a debug log"), IsNil)
+	require.Equal(t, zap.InfoLevel.String(), Props().Level.String())
+	require.NotNil(t, L().Check(zap.WarnLevel, "This is a warn log"))
+	require.Nil(t, L().Check(zap.DebugLevel, "This is a debug log"))
 }
 
 func captureStdout(f func()) ([]string, error) {
@@ -113,45 +105,45 @@ func captureStdout(f func()) ([]string, error) {
 	return strings.Split(<-output, "\n"), <-errs
 }
 
-func (s *testLogSuite) TestInitSlowQueryLoggerInDebugLevel(c *C) {
+func TestInitSlowQueryLoggerInDebugLevel(t *testing.T) {
 	// test slow query logger can write debug log
 	logLevel := "debug"
 	cfg := &Config{Level: logLevel, Format: "json"}
 	cfg.Adjust()
 	output, err := captureStdout(func() {
-		c.Assert(InitLogger(cfg), IsNil)
+		require.NoError(t, InitLogger(cfg))
 		logutil.SlowQueryLogger.Debug("this is test info")
 		appLogger.Debug("this is from applogger")
 	})
-	c.Assert(err, IsNil)
-	c.Assert(output[0], Matches, ".*this is test info.*component.*slow query logger.*")
-	c.Assert(output[1], Matches, ".*this is from applogger.*")
+	require.NoError(t, err)
+	require.Regexp(t, "this is test info.*component.*slow query logger", output[0])
+	require.Contains(t, output[1], "this is from applogger")
 	// test log is json formart
 	type jsonLog struct {
 		Component string `json:"component"`
 	}
 	oneLog := jsonLog{}
-	c.Assert(json.Unmarshal([]byte(output[0]), &oneLog), IsNil)
-	c.Assert(oneLog.Component, Equals, "slow query logger")
+	require.NoError(t, json.Unmarshal([]byte(output[0]), &oneLog))
+	require.Equal(t, "slow query logger", oneLog.Component)
 }
 
-func (s *testLogSuite) TestInitSlowQueryLoggerNotInDebugLevel(c *C) {
+func TestInitSlowQueryLoggerNotInDebugLevel(t *testing.T) {
 	// test slow query logger can not write log in other log level
 	logLevel := "info"
 	cfg := &Config{Level: logLevel, Format: "json"}
 	cfg.Adjust()
 	output, err := captureStdout(func() {
-		c.Assert(InitLogger(cfg), IsNil)
+		require.NoError(t, InitLogger(cfg))
 		logutil.SlowQueryLogger.Info("this is test info")
 		appLogger.Info("this is from applogger")
 	})
-	c.Assert(err, IsNil)
-	c.Assert(output, HasLen, 2)
-	c.Assert(output[0], Matches, ".*this is from applogger.*")
-	c.Assert(output[1], Equals, "") // no output
+	require.NoError(t, err)
+	require.Len(t, output, 2)
+	require.Contains(t, output[0], "this is from applogger")
+	require.Empty(t, output[1]) // no output
 }
 
-func (s *testLogSuite) TestWithCtx(c *C) {
+func TestWithCtx(t *testing.T) {
 	// test slow query logger can write debug log
 	logLevel := "debug"
 	cfg := &Config{Level: logLevel, Format: "json"}
@@ -162,11 +154,46 @@ func (s *testLogSuite) TestWithCtx(c *C) {
 	ctx = AppendZapFieldToCtx(ctx, zap.String("key2", "value2"))
 
 	output, err := captureStdout(func() {
-		c.Assert(InitLogger(cfg), IsNil)
+		require.NoError(t, InitLogger(cfg))
 		WithCtx(ctx).Info("test1")
 	})
-	c.Assert(err, IsNil)
-	c.Assert(output[0], Matches, ".*test1.*key1.*value1.*key2.*value2.*")
+	require.NoError(t, err)
+	require.Regexp(t, `"key1":"value1".*"key2":"value2"`, output[0])
+}
+
+func TestLogToFile(t *testing.T) {
+	d := t.TempDir()
+
+	logFile := filepath.Join(d, "test.log")
+
+	logLevel := "debug"
+	cfg := &Config{
+		Level:  logLevel,
+		Format: "json",
+		File:   logFile,
+	}
+	cfg.Adjust()
+	require.NoError(t, InitLogger(cfg))
+
+	var lastOff int64
+	newLog := func() string {
+		require.NoError(t, L().Sync())
+		data, err := os.ReadFile(logFile)
+		require.NoError(t, err)
+		require.Greater(t, len(data), int(lastOff))
+		result := string(data[lastOff:])
+		lastOff = int64(len(data))
+		return strings.TrimSpace(result)
+	}
+
+	L().Info("test dm log to file")
+	require.Contains(t, newLog(), `"message":"test dm log to file"`)
+	lightningLog.L().Info("test lightning log to file")
+	require.Contains(t, newLog(), `"message":"test lightning log to file"`)
+	pclog.Info("test pingcap/log to file")
+	require.Contains(t, newLog(), `"message":"test pingcap/log to file"`)
+	version.LogVersionInfo("DM")
+	require.Contains(t, newLog(), `"message":"Welcome to DM"`)
 }
 
 func BenchmarkBaseline(b *testing.B) {

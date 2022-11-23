@@ -14,17 +14,16 @@
 package framework
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
-	"github.com/pingcap/tiflow/engine/framework/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"go.uber.org/zap"
 )
 
 type (
 	// WorkerType alias to model.WorkerType
-	WorkerType = model.WorkerType
+	WorkerType = frameModel.WorkerType
 
 	// WorkerConfig stores worker config in any type
 	WorkerConfig = interface{}
@@ -38,29 +37,6 @@ type (
 
 	// MasterFailoverReasonCode is used as reason code
 	MasterFailoverReasonCode int32
-)
-
-// Defines all task type
-// TODO: Refine me.Currently, when adding a new worker type or job type, we need to modify many code places,
-// NOTICE: DO NOT CHANGE the previous worker type
-// Modify the comment in model IF you add some new worker type
-const (
-	JobManager = WorkerType(iota + 1)
-	// job master
-	CvsJobMaster
-	FakeJobMaster
-	DMJobMaster
-	CdcJobMaster
-	// task
-	CvsTask
-	FakeTask
-	DmTask
-	CdcTask
-	// worker
-	WorkerDMDump
-	WorkerDMLoad
-	WorkerDMSync
-	// extend the worker type here
 )
 
 // Defines all reason codes
@@ -79,20 +55,20 @@ type MasterFailoverReason struct {
 // TODO: let user register a unique identifier for the metric prefix
 func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 	switch tp {
-	case JobManager:
+	case frameModel.JobManager:
 		// jobmanager is the framework level job
 		return engineModel.JobTypeJobManager
-	case CvsJobMaster, CvsTask:
+	case frameModel.CvsJobMaster, frameModel.CvsTask:
 		return engineModel.JobTypeCVSDemo
-	case FakeJobMaster, FakeTask:
+	case frameModel.FakeJobMaster, frameModel.FakeTask:
 		return engineModel.JobTypeFakeJob
-	case DMJobMaster, DmTask, WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+	case frameModel.DMJobMaster, frameModel.DmTask, frameModel.WorkerDMDump, frameModel.WorkerDMLoad, frameModel.WorkerDMSync:
 		return engineModel.JobTypeDM
-	case CdcJobMaster, CdcTask:
+	case frameModel.CdcJobMaster, frameModel.CdcTask:
 		return engineModel.JobTypeCDC
 	}
 
-	log.Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
+	log.Panic("unexpected fail when convert worker type to job type", zap.Stringer("worker_type", tp))
 	return engineModel.JobTypeInvalid
 }
 
@@ -107,15 +83,15 @@ const (
 	ExitReasonFailed
 )
 
-// WorkerStatusCodeToExitReason translates WorkerStatusCode to ExitReason
-// TODO: business logic should not sense 'WorkerStatus'
-func WorkerStatusCodeToExitReason(code model.WorkerStatusCode) ExitReason {
+// WorkerStateToExitReason translates WorkerState to ExitReason
+// TODO: business logic should not sense 'WorkerState'
+func WorkerStateToExitReason(code frameModel.WorkerState) ExitReason {
 	switch code {
-	case model.WorkerStatusFinished:
+	case frameModel.WorkerStateFinished:
 		return ExitReasonFinished
-	case model.WorkerStatusStopped:
+	case frameModel.WorkerStateStopped:
 		return ExitReasonCanceled
-	case model.WorkerStatusError:
+	case frameModel.WorkerStateError:
 		return ExitReasonFailed
 	}
 

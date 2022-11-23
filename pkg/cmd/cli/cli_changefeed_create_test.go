@@ -14,10 +14,7 @@
 package cli
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,29 +93,6 @@ func TestTomlFileToApiModel(t *testing.T) {
 	require.Equal(t, cfg, cfg2)
 }
 
-func TestPulsarSchemaWarning(t *testing.T) {
-	t.Parallel()
-
-	cases := []string{
-		"pulsar://localhost:6650/schema/test",
-		"pulsar+ssl://localhost:6650/schema/test",
-	}
-	for _, cs := range cases {
-		cmd := new(cobra.Command)
-		b := bytes.NewBufferString("")
-		cmd.SetOut(b)
-		o := newChangefeedCommonOptions()
-		o.addFlags(cmd)
-		require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=" + cs}))
-		opt := newCreateChangefeedOptions(o)
-		err := opt.validate(cmd)
-		require.Nil(t, err)
-		out, err := ioutil.ReadAll(b)
-		require.Nil(t, err)
-		require.Contains(t, string(out), "Pulsar Sink is not recommended for production use")
-	}
-}
-
 func TestInvalidSortEngine(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +132,7 @@ func TestChangefeedCreateCli(t *testing.T) {
 	cmd := newCmdCreateChangefeed(f)
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "cf.toml")
-	err := os.WriteFile(configPath, []byte("enable-old-value=false\r\n"), 0o644)
+	err := os.WriteFile(configPath, []byte("enable-old-value=false\r\nenable-sync-point=true\r\nsync-point-interval='20m'"), 0o644)
 	require.Nil(t, err)
 	os.Args = []string{
 		"create",
@@ -168,8 +142,6 @@ func TestChangefeedCreateCli(t *testing.T) {
 		"--sink-uri=blackhole://sss?protocol=canal",
 		"--schema-registry=a",
 		"--sort-engine=memory",
-		"--sync-point=true",
-		"--sync-interval=1s",
 		"--changefeed-id=abc",
 		"--upstream-pd=pd",
 		"--upstream-ca=ca",
@@ -199,6 +171,6 @@ func TestChangefeedCreateCli(t *testing.T) {
 	cmd = newCmdCreateChangefeed(f)
 	o := newCreateChangefeedOptions(newChangefeedCommonOptions())
 	o.commonChangefeedOptions.sortDir = "/tmp/test"
-	require.NoError(t, o.complete(context.Background(), f, cmd))
+	require.NoError(t, o.complete(f, cmd))
 	require.Contains(t, o.validate(cmd).Error(), "creating changefeed with `--sort-dir`")
 }

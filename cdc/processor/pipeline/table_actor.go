@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
@@ -34,15 +35,22 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
+	uberatomic "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 var (
-	_       TablePipeline                 = (*tableActor)(nil)
+	_       tablepb.TablePipeline         = (*tableActor)(nil)
 	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
 	stopped                               = uint32(1)
 )
+
+// Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
+// replicating 1024 tables in the worst case.
+const defaultOutputChannelSize = 64
 
 const sinkFlushInterval = 500 * time.Millisecond
 
@@ -56,25 +64,26 @@ type tableActor struct {
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
-	mounter entry.Mounter
+	mg entry.MounterGroup
 	// backend tableSink
 	tableSinkV1 sinkv1.Sink
 	tableSinkV2 sinkv2.TableSink
 	redoManager redo.LogManager
 
-	state TableState
+	state tablepb.TableState
 
 	pullerNode *pullerNode
-	sortNode   *sorterNode
 	sinkNode   *sinkNode
 	// contains all nodes except pullerNode
 	nodes []*ActorNode
+
+	sortNode *sorterNode
 
 	// states of table actor
 	started     bool
 	stopped     uint32
 	stopLock    sync.Mutex
-	sinkStopped bool
+	sinkStopped uberatomic.Bool
 
 	// TODO: try to reduce these config fields below in the future
 	tableID        int64
@@ -90,8 +99,8 @@ type tableActor struct {
 
 	// use to report error to processor
 	reportErr func(error)
-	// stopCtx use to stop table actor
-	stopCtx context.Context
+	// tablePipelineCtx use to drive the nodes in table pipeline.
+	tablePipelineCtx context.Context
 	// cancel use to cancel all goroutines spawned from table actor
 	cancel context.CancelFunc
 
@@ -99,9 +108,10 @@ type tableActor struct {
 }
 
 // NewTableActor creates a table actor and starts it.
-func NewTableActor(cdcCtx cdcContext.Context,
+func NewTableActor(
+	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
-	mounter entry.Mounter,
+	mg entry.MounterGroup,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -109,7 +119,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	sinkV2 sinkv2.TableSink,
 	redoManager redo.LogManager,
 	targetTs model.Ts,
-) (TablePipeline, error) {
+) (tablepb.TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	changefeedVars := cdcCtx.ChangefeedVars()
 	globalVars := cdcCtx.GlobalVars()
@@ -128,12 +138,12 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		wg:        wg,
 		cancel:    cancel,
 
-		state:         TableStatePreparing,
+		state:         tablepb.TableStatePreparing,
 		tableID:       tableID,
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
-		mounter:       mounter,
+		mg:            mg,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSinkV1:   sinkV1,
@@ -142,18 +152,20 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
+		sortNode: nil,
+
 		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
 		globalVars:     globalVars,
 		router:         globalVars.TableActorSystem.Router(),
 		actorID:        actorID,
 
-		stopCtx: cctx,
+		tablePipelineCtx: cctx,
 	}
 
 	startTime := time.Now()
 	if err := table.start(cctx); err != nil {
-		table.stop(err)
+		table.stop()
 		return nil, errors.Trace(err)
 	}
 	err := globalVars.TableActorSystem.System().Spawn(mb, table)
@@ -190,12 +202,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		case message.TypeValue:
 			switch msgs[i].Value.Tp {
 			case pmessage.MessageTypeBarrier:
-				err = t.handleBarrierMsg(ctx, msgs[i].Value.BarrierTs)
+				err = t.handleBarrierMsg(t.tablePipelineCtx, msgs[i].Value.BarrierTs)
 			case pmessage.MessageTypeTick:
-				err = t.handleTickMsg(ctx)
+				err = t.handleTickMsg(t.tablePipelineCtx)
 			}
 		case message.TypeStop:
-			t.handleStopMsg(ctx)
+			t.handleStopMsg(t.tablePipelineCtx)
 		}
 		if err != nil {
 			log.Error("failed to process message, stop table actor ",
@@ -208,7 +220,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		}
 
 		// process message for each node, pull message from parent node and then send it to next node
-		if !t.sinkStopped {
+		if !t.sinkStopped.Load() {
 			if err := t.handleDataMsg(ctx); err != nil {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
@@ -256,7 +268,11 @@ func (t *tableActor) handleTickMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleStopMsg(ctx context.Context) {
-	t.sinkStopped = true
+	// Already stopped, no need to handle stop message again.
+	if t.sinkStopped.Load() {
+		return
+	}
+	t.sinkStopped.Store(true)
 	// async stops sinkNode and tableSink
 	go func() {
 		_, err := t.sinkNode.HandleMessage(ctx,
@@ -283,10 +299,11 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled(),
+		t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
 		t.upstream.PDClient,
 	)
 	t.sortNode = sorterNode
+
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
@@ -338,7 +355,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
-func (t *tableActor) stop(err error) {
+func (t *tableActor) stop() {
 	log.Debug("table actor begin to stop....",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
@@ -353,14 +370,18 @@ func (t *tableActor) stop(err error) {
 		return
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
+
 	if t.sortNode != nil {
 		// releaseResource will send a message to sorter router
-		t.sortNode.releaseResource(t.changefeedID)
+		t.sortNode.releaseResource()
 	}
+
 	t.cancel()
-	if t.sinkNode != nil {
-		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
-			if errors.Cause(err) != context.Canceled {
+	if t.sinkNode != nil && !t.sinkStopped.Load() {
+		if err := t.sinkNode.stop(t.tablePipelineCtx); err != nil {
+			switch errors.Cause(err) {
+			case context.Canceled, cerror.ErrTableProcessorStoppedSafely:
+			default:
 				log.Warn("close sink failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
@@ -373,13 +394,12 @@ func (t *tableActor) stop(err error) {
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Error(err))
+		zap.Int64("tableID", t.tableID))
 }
 
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
-	t.stop(err)
+	t.stop()
 	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
 		t.reportErr(err)
 	}
@@ -404,29 +424,30 @@ func (t *tableActor) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
+// if the actor system is slow, too many warn log will be printed, so we need to add rate limit
+var updateBarrierTsLogRateLimiter = rate.NewLimiter(rate.Every(time.Millisecond*500), 1)
+
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	msg := pmessage.BarrierMessage(ts)
 	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
-		log.Warn("send fails",
-			zap.Reflect("msg", msg),
-			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
-			zap.Error(err))
+		if updateBarrierTsLogRateLimiter.Allow() {
+			log.Warn("send fails",
+				zap.Any("msg", msg),
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID),
+				zap.Error(err))
+		}
 	}
 }
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
-func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
+func (t *tableActor) AsyncStop() bool {
 	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
 	// and then stop the whole table pipeline by call Cancel
 	msg := message.StopMessage[pmessage.Message]()
 	err := t.router.Send(t.actorID, msg)
-	log.Info("send async stop signal to table",
-		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Uint64("targetTs", targetTs))
 	if err != nil {
 		if cerror.ErrMailboxFull.Equal(err) {
 			return false
@@ -439,14 +460,47 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	return true
 }
 
-// Workload returns the workload of this table pipeline
-func (t *tableActor) Workload() model.WorkloadInfo {
-	// We temporarily set the value to constant 1
-	return workload
+// Stats returns the statistics of this table pipeline
+func (t *tableActor) Stats() tablepb.Stats {
+	pullerStats := t.pullerNode.plr.Stats()
+	sinkStats := t.sinkNode.Stats()
+	now, _ := t.upstream.PDClock.CurrentTime()
+
+	stats := tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
+			},
+			"sink": {
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
+			},
+		},
+	}
+
+	sorterStats := t.sortNode.sorter.Stats()
+	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+		CheckpointTs: sorterStats.CheckpointTsIngress,
+		ResolvedTs:   sorterStats.ResolvedTsIngress,
+	}
+	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+		CheckpointTs: sorterStats.CheckpointTsEgress,
+		ResolvedTs:   sorterStats.ResolvedTsEgress,
+	}
+
+	return stats
 }
 
 // State returns the state of this table pipeline
-func (t *tableActor) State() TableState {
+func (t *tableActor) State() tablepb.TableState {
 	return t.state.Load()
 }
 
@@ -464,7 +518,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	// cancel wait group, release resource and mark the state as stopped
-	t.stop(nil)
+	t.stop()
 	// actor is closed, tick actor to remove this actor router
 	msg := pmessage.TickMessage()
 	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
@@ -498,7 +552,7 @@ func (t *tableActor) RemainEvents() int64 {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
+	return t.pullerNode.startWithSorterNode(ctx, t.upstream, t.wg, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {

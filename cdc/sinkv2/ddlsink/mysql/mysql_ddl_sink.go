@@ -91,14 +91,13 @@ func NewMySQLDDLSink(
 }
 
 func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	m.statistics.AddDDLCount()
 	err := m.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
-		err := m.execDDL(ctx, ddl)
+		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
 			if errorutil.IsIgnorableMySQLDDLError(err) {
 				// NOTE: don't change the log, some tests depend on it.
@@ -146,7 +145,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 
 		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
@@ -183,7 +182,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func needSwitchDB(ddl *model.DDLEvent) bool {
-	if len(ddl.TableInfo.Schema) == 0 {
+	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
 	}
 	if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
@@ -192,7 +191,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
 	return nil
 }
@@ -201,6 +200,9 @@ func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []model.
 func (m *mysqlDDLSink) Close() error {
 	if err := m.db.Close(); err != nil {
 		return errors.Trace(err)
+	}
+	if m.statistics != nil {
+		m.statistics.Close()
 	}
 
 	return nil

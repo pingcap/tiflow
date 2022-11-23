@@ -21,10 +21,9 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
 	timock "github.com/pingcap/tidb/util/mock"
-	"github.com/stretchr/testify/require"
-
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 )
 
 func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
@@ -110,4 +109,22 @@ func TestGenSQL(t *testing.T) {
 		require.Equal(t, c.expectedSQLs, queries)
 		require.Equal(t, c.expectedArgs, args)
 	}
+}
+
+func TestJudgeKeyNotFound(t *testing.T) {
+	dmlWorker := &DMLWorker{
+		compact:      true,
+		multipleRows: true,
+	}
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	dmlWorker.compact = false
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	dmlWorker.multipleRows = false
+	require.False(t, dmlWorker.judgeKeyNotFound(0, nil))
+	jobs := []*job{{safeMode: false}, {safeMode: true}}
+	require.False(t, dmlWorker.judgeKeyNotFound(0, jobs))
+	jobs[1].safeMode = false
+	require.True(t, dmlWorker.judgeKeyNotFound(0, jobs))
+	require.False(t, dmlWorker.judgeKeyNotFound(2, jobs))
+	require.False(t, dmlWorker.judgeKeyNotFound(4, jobs))
 }

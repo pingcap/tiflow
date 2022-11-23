@@ -18,7 +18,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 )
 
@@ -36,7 +36,7 @@ type ExecutorInfoProvider interface {
 }
 
 // JobStatus describes the a Job's status.
-type JobStatus = frameModel.MasterStatusCode
+type JobStatus = frameModel.MasterState
 
 // JobStatusesSnapshot describes the statuses of all jobs
 // at some time point.
@@ -83,4 +83,5 @@ type GCCoordinator interface {
 type GCRunner interface {
 	Run(ctx context.Context) error
 	GCNotify()
+	GCExecutors(context.Context, ...model.ExecutorID) error
 }

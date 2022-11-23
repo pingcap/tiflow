@@ -20,8 +20,10 @@ import (
 	"strings"
 	"time"
 
-	perrors "github.com/pingcap/errors"
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -38,17 +40,19 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -69,8 +73,7 @@ const (
 
 // Server is an executor server.
 type Server struct {
-	cfg     *Config
-	testCtx *test.Context
+	cfg *Config
 
 	tcpServer     tcpserver.TCPServer
 	grpcSrv       *grpc.Server
@@ -93,13 +96,12 @@ type Server struct {
 }
 
 // NewServer creates a new executor server instance
-func NewServer(cfg *Config, ctx *test.Context) *Server {
+func NewServer(cfg *Config) *Server {
 	log.Info("creating executor", zap.Stringer("config", cfg))
 
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:        cfg,
-		testCtx:    ctx,
 		jobAPISrv:  newJobAPIServer(),
 		metastores: server.NewMetastoreManager(),
 	}
@@ -187,10 +189,10 @@ func (s *Server) makeTask(
 	logutil.NewContextWithLogger(dctx, logger)
 
 	// NOTICE: only take effect when job type is job master
-	masterMeta := &frameModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMeta{
 		ProjectID: dctx.ProjectInfo.UniqueID(),
 		ID:        workerID,
-		Tp:        workerType,
+		Type:      workerType,
 		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
@@ -199,7 +201,8 @@ func (s *Server) makeTask(
 	}
 	dctx.Environ.MasterMetaBytes = metaBytes
 
-	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
+	globalRegistry := registry.GlobalWorkerRegistry()
+	newWorker, err := globalRegistry.CreateWorker(
 		dctx,
 		workerType,
 		workerID,
@@ -211,6 +214,12 @@ func (s *Server) makeTask(
 		log.Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
+	if _, ok := newWorker.(framework.BaseJobMaster); ok {
+		err := precheckMasterMeta(dctx, globalRegistry, workerID, workerType)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if jm, ok := newWorker.(framework.BaseJobMasterExt); ok {
 		jobID := newWorker.ID()
 		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
@@ -219,27 +228,90 @@ func (s *Server) makeTask(
 	return taskutil.WrapWorker(newWorker), nil
 }
 
+// precheckMasterMeta checks job master metadata before running it, stop task
+// creating if job master has met a business unretryable error.
+// Return error means meets failure in this function or job creation should be
+// terminated.
+func precheckMasterMeta(
+	dctx *dcontext.Context,
+	register registry.Registry,
+	id frameModel.MasterID,
+	tp frameModel.WorkerType,
+) error {
+	var param struct {
+		dig.In
+		FrameMetaClient pkgOrm.Client
+	}
+	if err := dctx.Deps().Fill(&param); err != nil {
+		log.Panic("failed to fill dependencies", zap.Error(err))
+	}
+	meta, err := param.FrameMetaClient.GetJobByID(dctx, id)
+	if err != nil {
+		return err
+	}
+	if meta.ErrorMsg == "" {
+		return nil
+	}
+	errInMeta := errors.New(meta.ErrorMsg)
+	retryable, err := checkBusinessErrorIsRetryable(register, errInMeta, tp)
+	if err != nil {
+		return err
+	} else if !retryable {
+		return errInMeta
+	}
+	return nil
+}
+
+// convertMakeTaskErrorToRPCError converts an error returned from `makeTask` to
+// a gRPC friendly error.
+func convertMakeTaskErrorToRPCError(
+	register registry.Registry, err error, tp frameModel.WorkerType,
+) error {
+	if errors.Is(err, errors.ErrCreateWorkerTerminate) {
+		return err
+	}
+
+	retryable, inErr := checkBusinessErrorIsRetryable(register, err, tp)
+	if inErr != nil {
+		return inErr
+	}
+	if retryable {
+		return errors.ErrCreateWorkerNonTerminate.Wrap(err).GenWithStackByArgs()
+	}
+	return errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
+}
+
+// checkBusinessErrorIsRetryable converts raw error to business error if possible, and
+// checks whether this error is retryable from the perspective of business logic.
+func checkBusinessErrorIsRetryable(
+	register registry.Registry, err error, tp frameModel.WorkerType,
+) (retryable bool, retErr error) {
+	switch tp {
+	case frameModel.DMJobMaster:
+		err = errors.ToDMError(err)
+	default:
+	}
+	return register.IsRetryableError(err, tp)
+}
+
 // PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	if !s.isReadyToServe() {
 		return nil, status.Error(codes.Unavailable, "executor server is not ready")
 	}
 
+	workerType := frameModel.WorkerType(req.GetTaskTypeId())
 	task, err := s.makeTask(
 		ctx,
 		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		frameModel.WorkerType(req.GetTaskTypeId()),
+		workerType,
 		req.GetTaskConfig(),
 		req.GetWorkerEpoch(),
 	)
 	if err != nil {
-		// We use the code Aborted here per the suggestion in gRPC's documentation
-		// "Use Aborted if the client should retry at a higher-level".
-		// Failure to make task is usually a problem that the business logic
-		// should be notified of.
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, convertMakeTaskErrorToRPCError(registry.GlobalWorkerRegistry(), err, workerType)
 	}
 
 	if !s.taskCommitter.PreDispatchTask(req.GetRequestId(), task) {
@@ -259,10 +331,10 @@ func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatc
 
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, err
 	}
 	if !ok {
-		return nil, status.Error(codes.NotFound, "RequestID not found")
+		return nil, errors.ErrDispatchTaskRequestIDNotFound.GenWithStackByArgs(req.GetRequestId())
 	}
 	return &pb.ConfirmDispatchTaskResponse{}, nil
 }
@@ -291,27 +363,6 @@ func (s *Server) Stop() {
 	// TODO: unregister self from master.
 }
 
-func (s *Server) startForTest(ctx context.Context) (err error) {
-	s.mockSrv, err = mock.NewExecutorServer(s.cfg.Addr, s)
-	if err != nil {
-		return err
-	}
-
-	err = s.initClients(ctx)
-	if err != nil {
-		return err
-	}
-	err = s.selfRegister(ctx)
-	if err != nil {
-		return err
-	}
-	go func() {
-		err := s.keepHeartbeat(ctx)
-		log.L().Info("heartbeat quits", zap.Error(err))
-	}()
-	return nil
-}
-
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
 	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.selfID), nil, s.grpcSrv)
 	if err != nil {
@@ -331,8 +382,19 @@ func (s *Server) isReadyToServe() bool {
 // Run drives server logic in independent background goroutines, and use error
 // group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
-	if test.GetGlobalTestFlag() {
-		return s.startForTest(ctx)
+	if s.cfg.EnableGCTuning {
+		limit, err := memory.MemTotal()
+		if err != nil {
+			log.Warn("get memory failed", zap.Error(err))
+			limit = 0
+		}
+		threshold := limit * 7 / 10
+		log.Info("set memory threshold to GC tuner",
+			zap.Uint64("memory limit", limit),
+			zap.Uint64("threshold", threshold))
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.SetMinGCPercent(20)
+		gctuner.Tuning(threshold)
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
@@ -352,7 +414,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.jobAPISrv.listenStoppedJobs(ctx, taskStopReceiver.C)
 	})
 
-	err := s.initClients(ctx)
+	err := s.initClients()
 	if err != nil {
 		return err
 	}
@@ -361,18 +423,21 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+	s.resourceBroker, err = broker.NewBroker(ctx, s.selfID, s.masterClient)
+	if err != nil {
 		return err
 	}
-
-	s.resourceBroker = broker.NewBroker(
-		&s.cfg.Storage,
-		s.selfID,
-		s.masterClient)
+	defer s.resourceBroker.Close()
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.selfID), s.cfg.AdvertiseAddr)
 
-	s.grpcSrv = grpc.NewServer()
+	s.grpcSrv = grpc.NewServer(
+		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
+		grpc.ChainUnaryInterceptor(
+			grpcprometheus.UnaryServerInterceptor,
+			rpcutil.UnaryServerInterceptor,
+		),
+	)
 	err = s.startMsgService(ctx, wg)
 	if err != nil {
 		return err
@@ -408,7 +473,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -444,7 +509,7 @@ func (s *Server) Run(ctx context.Context) error {
 			var event discovery.Event
 			select {
 			case <-ctx.Done():
-				return perrors.Trace(err)
+				return errors.Trace(err)
 			case event = <-receiver.C:
 			}
 
@@ -514,10 +579,11 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
-		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+		mux.Handle(openapi.JobAPIPrefix, s.jobAPISrv)
 
 		httpSrv := &http.Server{
-			Handler: mux,
+			Handler:           mux,
+			ReadHeaderTimeout: time.Minute,
 		}
 		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
 		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
@@ -528,7 +594,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	return nil
 }
 
-func (s *Server) initClients(ctx context.Context) (err error) {
+func (s *Server) initClients() (err error) {
 	// initServerMasterList is a MasterServerList with all servers marked as followers.
 	initServerMasterList := getInitServerMasterList(s.cfg.Join)
 	// TODO support TLS
@@ -549,9 +615,9 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 func (s *Server) selfRegister(ctx context.Context) error {
 	registerReq := &pb.RegisterExecutorRequest{
 		Executor: &pb.Executor{
-			Name:       s.cfg.Name,
-			Address:    s.cfg.AdvertiseAddr,
-			Capability: defaultCapability,
+			Name:    s.cfg.Name,
+			Address: s.cfg.AdvertiseAddr,
+			Labels:  s.cfg.Labels,
 		},
 	}
 	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
@@ -569,14 +635,6 @@ func (s *Server) selfRegister(ctx context.Context) error {
 func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
 	s.lastHearbeatTime = time.Now()
-	defer func() {
-		if test.GetGlobalTestFlag() {
-			s.testCtx.NotifyExecutorChange(&test.ExecutorChangeEvent{
-				Tp:   test.Delete,
-				Time: time.Now(),
-			})
-		}
-	}()
 	rl := rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/)
 	for {
 		select {
@@ -584,41 +642,36 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.selfID),
-				Status:     int32(model.Running),
 				Timestamp:  uint64(t.Unix()),
 				// We set longer ttl for master, which is "ttl + rpc timeout", to avoid that
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.masterClient.Heartbeat(ctx, req)
+			_, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				log.L().Error("heartbeat rpc meet error", zap.Error(err))
-				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
-				}
-				continue
-			}
-			if resp.Err != nil {
-				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
-				switch resp.Err.Code {
-				case pb.ErrorCode_UnknownExecutor:
-					log.L().Info("heartbeat failed, will retry", zap.Error(err))
-					continue
-				case pb.ErrorCode_TombstoneExecutor:
-					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
-				case pb.ErrorCode_MasterNotReady:
+				if errors.Is(err, errors.ErrMasterNotReady) {
 					s.lastHearbeatTime = t
 					if rl.Allow() {
 						log.L().Info("heartbeat success with MasterNotReady")
 					}
 					continue
-				default:
 				}
+
+				log.Warn("heartbeat rpc meet error", zap.Error(err))
+				if errors.Is(err, errors.ErrTombstoneExecutor) {
+					return errors.ErrHeartbeat.GenWithStack("logic error: %v", err)
+				}
+
+				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
+					return errors.WrapError(errors.ErrHeartbeat, err, "timeout")
+				}
+				continue
 			}
+
 			// We aim to keep lastHbTime of executor consistent with lastHbTime of Master.
 			// If we set the heartbeat time of executor to the start time of rpc, it will
 			// be a little bit earlier than the heartbeat time of master, which is safe.
@@ -627,9 +680,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			if rl.Allow() {
-				log.L().Info("heartbeat success",
-					zap.String("leader", resp.Leader),
-					zap.Strings("members", resp.Addrs))
+				log.L().Info("heartbeat success")
 			}
 		}
 	}
@@ -697,7 +748,7 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		case <-time.After(defaultDiscoveryAutoSyncInterval):
 			masters, err := s.masterClient.ListMasters(ctx)
 			if err != nil {

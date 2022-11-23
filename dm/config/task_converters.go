@@ -21,12 +21,11 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 // TaskConfigToSubTaskConfigs generates sub task configs by TaskConfig.
@@ -296,7 +295,7 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *DBConfig {
 		}
 		toDBCfg.Security = &Security{
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLKEYBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
+			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
 			CertAllowedCN: certAllowedCN,
 		}

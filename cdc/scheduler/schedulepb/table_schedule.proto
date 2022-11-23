@@ -1,0 +1,103 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+package pingcap.tiflow.cdc.scheduler.schedulepb;
+option go_package = "github.com/pingcap/tiflow/cdc/scheduler/schedulepb";
+
+import "gogoproto/gogo.proto";
+import "processor/tablepb/table.proto";
+
+option(gogoproto.goproto_enum_prefix_all) = false;
+
+message AddTableRequest {
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    bool is_secondary = 2;
+    processor.tablepb.Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
+}
+
+message RemoveTableRequest {
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+}
+
+message DispatchTableRequest {
+    oneof request {
+        AddTableRequest add_table = 1;
+        RemoveTableRequest remove_table = 2;
+    }
+}
+
+message AddTableResponse {
+    processor.tablepb.TableStatus status = 1;
+    processor.tablepb.Checkpoint checkpoint = 2 [(gogoproto.nullable) = false];
+}
+
+message RemoveTableResponse {
+    processor.tablepb.TableStatus status = 1;
+    processor.tablepb.Checkpoint checkpoint = 2 [(gogoproto.nullable) = false];
+}
+
+message DispatchTableResponse {
+    oneof response {
+        AddTableResponse add_table = 1;
+        RemoveTableResponse remove_table = 2;
+    }
+}
+
+message Heartbeat {
+    repeated int64 table_ids = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableIDs"
+    ];
+    bool is_stopping = 2;
+}
+
+message HeartbeatResponse {
+    repeated processor.tablepb.TableStatus tables = 1 [(gogoproto.nullable) = false];
+    int32 liveness = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Liveness"];
+}
+
+enum MessageType {
+    MsgUnknown = 0 [(gogoproto.enumvalue_customname) = "MsgUnknown"];
+    MsgDispatchTableRequest = 1 [(gogoproto.enumvalue_customname) = "MsgDispatchTableRequest"];
+    MsgDispatchTableResponse = 2 [(gogoproto.enumvalue_customname) = "MsgDispatchTableResponse"];
+    MsgHeartbeat = 3 [(gogoproto.enumvalue_customname) = "MsgHeartbeat"];
+    MsgHeartbeatResponse = 4 [(gogoproto.enumvalue_customname) = "MsgHeartbeatResponse"];
+}
+
+message OwnerRevision { int64 revision = 1; }
+
+message ProcessorEpoch { string epoch = 1; }
+
+message Message {
+    message Header {
+        // The semantic version of the node that sent this message.
+        string version = 1;
+        OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
+        ProcessorEpoch processor_epoch = 3 [(gogoproto.nullable) = false];
+    }
+    Header header = 1;
+    MessageType msg_type = 2;
+    string from = 3 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.CaptureID"];
+    string to = 4 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.CaptureID"];
+    DispatchTableRequest dispatch_table_request = 5;
+    DispatchTableResponse dispatch_table_response = 6;
+    Heartbeat heartbeat = 7;
+    HeartbeatResponse heartbeat_response = 8;
+}

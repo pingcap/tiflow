@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -30,12 +28,13 @@ import (
 	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/stretchr/testify/require"
 )
 
 // BaseWorkerForTesting mocks base worker
 type BaseWorkerForTesting struct {
 	*DefaultBaseWorker
-	Broker *broker.LocalBroker
+	Broker *broker.MockBroker
 }
 
 // MockBaseWorker creates a mock base worker for test
@@ -75,7 +74,7 @@ func MockBaseWorker(
 		workerImpl,
 		workerID,
 		masterID,
-		FakeTask,
+		frameModel.FakeTask,
 		epoch,
 	)
 	return &BaseWorkerForTesting{

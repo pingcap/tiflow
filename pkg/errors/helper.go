@@ -15,10 +15,12 @@ package errors
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/pingcap/errors"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // WrapError generates a new error based on given `*errors.Error`, wraps the err
@@ -73,9 +75,10 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrExpressionParseFailed,
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
+	ErrChangefeedUnretryable,
 }
 
-// IsChangefeedUnRetryableError returns true if a error is a changefeed not retry error.
+// IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
 func IsChangefeedUnRetryableError(err error) bool {
 	for _, e := range changefeedUnRetryableErrors {
 		if e.Equal(err) {
@@ -124,39 +127,6 @@ func IsRetryableError(err error) bool {
 	return true
 }
 
-// ToPBError translates go error to pb error.
-func ToPBError(err error) *pb.Error {
-	if err == nil {
-		return nil
-	}
-	rfcCode, ok := RFCCode(err)
-	if !ok {
-		return &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}
-	}
-	pbErr := &pb.Error{}
-	switch rfcCode {
-	case ErrUnknownExecutorID.RFCCode():
-		pbErr.Code = pb.ErrorCode_UnknownExecutor
-	case ErrTombstoneExecutor.RFCCode():
-		pbErr.Code = pb.ErrorCode_TombstoneExecutor
-	case ErrSubJobFailed.RFCCode():
-		pbErr.Code = pb.ErrorCode_SubJobSubmitFailed
-	case ErrClusterResourceNotEnough.RFCCode():
-		pbErr.Code = pb.ErrorCode_NotEnoughResource
-	case ErrBuildJobFailed.RFCCode():
-		pbErr.Code = pb.ErrorCode_SubJobBuildFailed
-	case ErrGrpcBuildConn.RFCCode():
-		pbErr.Code = pb.ErrorCode_BuildGrpcConnFailed
-	default:
-		pbErr.Code = pb.ErrorCode_UnknownError
-	}
-	pbErr.Message = err.Error()
-	return pbErr
-}
-
 var cliUnprintableError = []*errors.Error{ErrCliAborted}
 
 // IsCliUnprintableError returns true if the error should not be printed in cli.
@@ -170,4 +140,104 @@ func IsCliUnprintableError(err error) bool {
 		}
 	}
 	return false
+}
+
+// WrapChangefeedUnretryableErr wraps an error into ErrChangefeedUnRetryable.
+func WrapChangefeedUnretryableErr(err error, args ...interface{}) error {
+	return WrapError(ErrChangefeedUnretryable, err, args...)
+}
+
+// IsContextCanceledError checks if an error is caused by context.Canceled.
+func IsContextCanceledError(err error) bool {
+	return errors.Cause(err) == context.Canceled
+}
+
+// IsContextDeadlineExceededError checks if an error is caused by context.DeadlineExceeded.
+func IsContextDeadlineExceededError(err error) bool {
+	return errors.Cause(err) == context.DeadlineExceeded
+}
+
+// httpStatusCodeMapping is a mapping from RFC error code to HTTP status code.
+// It does not contain all RFC error codes, only the ones what we think
+// are not just internal errors.
+var httpStatusCodeMapping = map[errors.RFCErrorCode]int{
+	ErrUnknown.RFCCode():               http.StatusInternalServerError,
+	ErrInvalidArgument.RFCCode():       http.StatusBadRequest,
+	ErrMasterNotReady.RFCCode():        http.StatusServiceUnavailable,
+	ErrJobNotFound.RFCCode():           http.StatusNotFound,
+	ErrJobAlreadyExists.RFCCode():      http.StatusConflict,
+	ErrJobAlreadyCanceled.RFCCode():    http.StatusBadRequest,
+	ErrJobNotTerminated.RFCCode():      http.StatusBadRequest,
+	ErrJobNotRunning.RFCCode():         http.StatusBadRequest,
+	ErrMetaStoreNotExists.RFCCode():    http.StatusNotFound,
+	ErrResourceAlreadyExists.RFCCode(): http.StatusConflict,
+	ErrIllegalResourcePath.RFCCode():   http.StatusBadRequest,
+	ErrResourceDoesNotExist.RFCCode():  http.StatusNotFound,
+	ErrResourceConflict.RFCCode():      http.StatusConflict,
+}
+
+// HTTPStatusCode returns the HTTP status code for the given error.
+func HTTPStatusCode(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	rfcCode, ok := RFCCode(err)
+	if !ok {
+		if IsContextCanceledError(err) {
+			return 499 // Client Closed Request
+		}
+		if IsContextDeadlineExceededError(err) {
+			return http.StatusGatewayTimeout
+		}
+		return http.StatusInternalServerError
+	}
+	if code, ok := httpStatusCodeMapping[rfcCode]; ok {
+		return code
+	}
+	return http.StatusInternalServerError
+}
+
+// gRPCStatusCodeMapping is a mapping from RFC error code to gRPC status code.
+// It does not contain all RFC error codes, only the ones what we think
+// are not just internal errors.
+var gRPCStatusCodeMapping = map[errors.RFCErrorCode]codes.Code{
+	ErrUnknown.RFCCode():               codes.Unknown,
+	ErrInvalidArgument.RFCCode():       codes.InvalidArgument,
+	ErrMasterNotReady.RFCCode():        codes.Unavailable,
+	ErrUnknownExecutor.RFCCode():       codes.InvalidArgument,
+	ErrTombstoneExecutor.RFCCode():     codes.FailedPrecondition,
+	ErrJobNotFound.RFCCode():           codes.NotFound,
+	ErrJobAlreadyExists.RFCCode():      codes.AlreadyExists,
+	ErrJobAlreadyCanceled.RFCCode():    codes.FailedPrecondition,
+	ErrJobNotTerminated.RFCCode():      codes.FailedPrecondition,
+	ErrJobNotRunning.RFCCode():         codes.FailedPrecondition,
+	ErrMetaStoreNotExists.RFCCode():    codes.NotFound,
+	ErrResourceAlreadyExists.RFCCode(): codes.AlreadyExists,
+	ErrIllegalResourcePath.RFCCode():   codes.InvalidArgument,
+	ErrResourceDoesNotExist.RFCCode():  codes.NotFound,
+	ErrResourceConflict.RFCCode():      codes.FailedPrecondition,
+}
+
+// GRPCStatusCode returns the gRPC status code for the given error.
+func GRPCStatusCode(err error) codes.Code {
+	if err == nil {
+		return codes.OK
+	}
+	if s, ok := status.FromError(err); ok {
+		return s.Code()
+	}
+	rfcCode, ok := RFCCode(err)
+	if !ok {
+		if IsContextCanceledError(err) {
+			return codes.Canceled
+		}
+		if IsContextDeadlineExceededError(err) {
+			return codes.DeadlineExceeded
+		}
+		return codes.Unknown
+	}
+	if code, ok := gRPCStatusCodeMapping[rfcCode]; ok {
+		return code
+	}
+	return codes.Internal
 }

@@ -49,17 +49,17 @@ func (mr *MockExecutorClientMockRecorder) Close() *gomock.Call {
 }
 
 // DispatchTask mocks base method.
-func (m *MockExecutorClient) DispatchTask(arg0 context.Context, arg1 *DispatchTaskArgs, arg2 func(), arg3 func(error)) error {
+func (m *MockExecutorClient) DispatchTask(arg0 context.Context, arg1 *DispatchTaskArgs, arg2 func()) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchTask", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "DispatchTask", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DispatchTask indicates an expected call of DispatchTask.
-func (mr *MockExecutorClientMockRecorder) DispatchTask(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockExecutorClientMockRecorder) DispatchTask(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchTask", reflect.TypeOf((*MockExecutorClient)(nil).DispatchTask), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchTask", reflect.TypeOf((*MockExecutorClient)(nil).DispatchTask), arg0, arg1, arg2)
 }
 
 // RemoveResource mocks base method.
@@ -200,6 +200,21 @@ func (mr *MockServerMasterClientMockRecorder) QueryResource(arg0, arg1 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryResource", reflect.TypeOf((*MockServerMasterClient)(nil).QueryResource), arg0, arg1)
 }
 
+// QueryStorageConfig mocks base method.
+func (m *MockServerMasterClient) QueryStorageConfig(arg0 context.Context, arg1 *enginepb.QueryStorageConfigRequest) (*enginepb.QueryStorageConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryStorageConfig", arg0, arg1)
+	ret0, _ := ret[0].(*enginepb.QueryStorageConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryStorageConfig indicates an expected call of QueryStorageConfig.
+func (mr *MockServerMasterClientMockRecorder) QueryStorageConfig(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryStorageConfig", reflect.TypeOf((*MockServerMasterClient)(nil).QueryStorageConfig), arg0, arg1)
+}
+
 // RegisterExecutor mocks base method.
 func (m *MockServerMasterClient) RegisterExecutor(arg0 context.Context, arg1 *enginepb.RegisterExecutorRequest) (model.DeployNodeID, error) {
 	m.ctrl.T.Helper()
@@ -215,20 +230,6 @@ func (mr *MockServerMasterClientMockRecorder) RegisterExecutor(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterExecutor", reflect.TypeOf((*MockServerMasterClient)(nil).RegisterExecutor), arg0, arg1)
 }
 
-// RegisterMetaStore mocks base method.
-func (m *MockServerMasterClient) RegisterMetaStore(arg0 context.Context, arg1 *enginepb.RegisterMetaStoreRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterMetaStore", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterMetaStore indicates an expected call of RegisterMetaStore.
-func (mr *MockServerMasterClientMockRecorder) RegisterMetaStore(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMetaStore", reflect.TypeOf((*MockServerMasterClient)(nil).RegisterMetaStore), arg0, arg1)
-}
-
 // RemoveResource mocks base method.
 func (m *MockServerMasterClient) RemoveResource(arg0 context.Context, arg1 *enginepb.RemoveResourceRequest) error {
 	m.ctrl.T.Helper()
@@ -241,20 +242,6 @@ func (m *MockServerMasterClient) RemoveResource(arg0 context.Context, arg1 *engi
 func (mr *MockServerMasterClientMockRecorder) RemoveResource(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveResource", reflect.TypeOf((*MockServerMasterClient)(nil).RemoveResource), arg0, arg1)
-}
-
-// ReportExecutorWorkload mocks base method.
-func (m *MockServerMasterClient) ReportExecutorWorkload(arg0 context.Context, arg1 *enginepb.ExecWorkloadRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReportExecutorWorkload", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ReportExecutorWorkload indicates an expected call of ReportExecutorWorkload.
-func (mr *MockServerMasterClientMockRecorder) ReportExecutorWorkload(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportExecutorWorkload", reflect.TypeOf((*MockServerMasterClient)(nil).ReportExecutorWorkload), arg0, arg1)
 }
 
 // ScheduleTask mocks base method.

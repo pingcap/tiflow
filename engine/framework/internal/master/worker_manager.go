@@ -18,10 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -31,7 +28,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type (
@@ -47,7 +45,7 @@ type WorkerManager struct {
 	workerEntries map[frameModel.WorkerID]*workerEntry
 	state         workerManagerState
 
-	workerMetaClient *metadata.WorkerMetadataClient
+	workerMetaClient *metadata.WorkerStatusClient
 	messageSender    p2p.MessageSender
 
 	masterID frameModel.MasterID
@@ -103,7 +101,7 @@ func NewWorkerManager(
 		workerEntries: make(map[frameModel.WorkerID]*workerEntry),
 		state:         state,
 
-		workerMetaClient: metadata.NewWorkerMetadataClient(masterID, meta),
+		workerMetaClient: metadata.NewWorkerStatusClient(masterID, meta),
 		messageSender:    messageSender,
 
 		masterID: masterID,
@@ -171,7 +169,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	for workerID, status := range allPersistedWorkers {
 		entry := newWaitingWorkerEntry(workerID, status)
 		// TODO: refine mapping from worker status to worker entry state
-		if status.Code == frameModel.WorkerStatusFinished {
+		if status.State == frameModel.WorkerStateFinished {
 			continue
 		}
 		m.workerEntries[workerID] = entry
@@ -362,7 +360,7 @@ func (m *WorkerManager) BeforeStartingWorker(
 		m.nextExpireTime(),
 		workerEntryCreated,
 		&frameModel.WorkerStatus{
-			Code:  frameModel.WorkerStatusCreated,
+			State: frameModel.WorkerStateCreated,
 			Epoch: epoch,
 		},
 	)
@@ -504,13 +502,15 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 
 		var offlineError error
 		if status := entry.Status(); status != nil {
-			switch status.Code {
-			case frameModel.WorkerStatusFinished:
-				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case frameModel.WorkerStatusStopped:
-				offlineError = derror.ErrWorkerStop.FastGenByArgs()
+			switch status.State {
+			case frameModel.WorkerStateFinished:
+				offlineError = errors.ErrWorkerFinish.FastGenByArgs()
+			case frameModel.WorkerStateStopped:
+				offlineError = errors.ErrWorkerCancel.FastGenByArgs()
+			case frameModel.WorkerStateError:
+				offlineError = errors.ErrWorkerFailed.FastGenByArgs()
 			default:
-				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
+				offlineError = errors.ErrWorkerOffline.FastGenByArgs(workerID)
 			}
 		}
 
@@ -603,7 +603,7 @@ func (m *WorkerManager) enqueueEvent(event *masterEvent) error {
 
 	select {
 	case <-timer.C:
-		return derror.ErrMasterTooManyPendingEvents.GenWithStackByArgs()
+		return errors.ErrMasterTooManyPendingEvents.GenWithStackByArgs()
 	case m.eventQueue <- event:
 	}
 

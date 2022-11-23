@@ -49,6 +49,9 @@ const (
 	constLabelJobKey = "job_id"
 	// constLabelWorkerKey is used to recognize workers of the same job
 	constLabelWorkerKey = "worker_id"
+
+	// test const lable
+	constLableTestKey = "test_id"
 )
 
 // HTTPHandlerForMetric return http.Handler for prometheus metric
@@ -85,14 +88,24 @@ func NewFactory4Master(info tenant.ProjectInfo, jobType engineModel.JobType, job
 		return NewFactory4Framework()
 	}
 
-	return NewFactory4MasterImpl(globalMetricRegistry, info, jobType, jobID)
+	// TODO: If the job type prefix is not required in metrics, change implementation
+	// of NewFactory4MasterImpl.
+	return NewFactory4MasterImpl(globalMetricRegistry, info, "", jobID)
 }
 
 // NewFactory4Worker return a Factory for worker
 func NewFactory4Worker(info tenant.ProjectInfo, jobType engineModel.JobType, jobID engineModel.JobID,
 	workerID frameModel.WorkerID,
 ) Factory {
-	return NewFactory4WorkerImpl(globalMetricRegistry, info, jobType, jobID, workerID)
+	// TODO: If the job type prefix is not required in metrics, change implementation
+	// of NewFactory4WorkerImpl.
+	return NewFactory4WorkerImpl(globalMetricRegistry, info, "", jobID, workerID)
+}
+
+// NewFactory4Test return a Factory for test
+// NOTICE: we use testing.T.TempDir() to distinguish different test
+func NewFactory4Test(testKey string) Factory {
+	return NewFactory4TestImpl(globalMetricRegistry, testKey)
 }
 
 // NewFactory4Framework return a Factory for dataflow framework

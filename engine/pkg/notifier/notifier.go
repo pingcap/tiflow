@@ -18,10 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/engine/pkg/containers"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 )
 
 type receiverID = int64
@@ -138,6 +137,8 @@ func (n *Notifier[T]) Flush(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case <-n.closeCh:
+			return nil
 		case <-n.synchronizeCh:
 			// Checks the queue size after each iteration
 			// of run().

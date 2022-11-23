@@ -15,57 +15,90 @@ package tablesink
 
 import (
 	"context"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/emirpasic/gods/maps/linkedhashmap"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
 const (
 	// waitingInterval is the interval to wait for the all callbacks be called.
-	// It used for close the table sink.
+	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
+	// A progressTracker contains several internal fixed-length buffers.
+	defaultBufferSize uint64 = 1024 * 1024
 )
 
+// A pendingResolvedTs is received by progressTracker but hasn't been flushed yet.
+type pendingResolvedTs struct {
+	offset     uint64
+	resolvedTs model.ResolvedTs
+}
+
 // progressTracker is used to track the progress of the table sink.
+//
 // For example,
 // We have txn1, txn2, resolvedTs2, txn3-1, txn3-2, resolvedTs3, resolvedTs4, resolvedTs5.
 // txn3-1 and txn3-2 are in the same big txn.
 // First txn1 and txn2 are written, then the progress can be updated to resolvedTs2.
 // Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
 // Next, since no data is being written, we can update to resolvedTs5 in order.
+//
+// The core of the algorithm is `pendingEvents`, which is a bit map for all events.
+// Every event is associated with a `eventID` which is a continuous number. `eventID`
+// can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
 	// tableID is the table ID of the table sink.
 	tableID model.TableID
-	// This lock for both pendingEventAndResolvedTs and lastMinResolvedTs.
-	lock sync.Mutex
-	// pendingEventAndResolvedTs is used to store the pending event keys and resolved tss.
-	// The key is the key of the event or the resolved ts.
-	// The value is nil or the resolved ts. **nil for event**.
-	// Since the data in TableSink is sequential,
-	// we only need to maintain an insertion order.
-	pendingEventAndResolvedTs *linkedhashmap.Map
-	// lastMinResolvedTs is used to store the last min resolved ts.
-	// It is used to indicate the progress of the table sink.
-	lastMinResolvedTs model.ResolvedTs
+
+	// Internal Buffer size. Modified in tests only.
+	bufferSize uint64
+
+	// Following fields are protected by `mu`.
+	mu sync.Mutex
+
+	// frozen is used to indicate whether the progress tracker is frozen.
+	// It means we do not advance anymore.
+	frozen bool
+
 	// closed is used to indicate the progress tracker is closed.
-	closed atomic.Bool
+	closed bool
+
+	// Used to generate the next eventID.
+	nextEventID uint64
+
+	// Every received event is a bit in `pendingEvents`.
+	pendingEvents [][]uint64
+
+	// When old events are flushed the buffer should be released.
+	nextToReleasePos uint64
+
+	// The position that the next event which should be check in `advance`.
+	nextToResolvePos uint64
+
+	resolvedTsCache []pendingResolvedTs
+
+	lastMinResolvedTs model.ResolvedTs
 }
 
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker(tableID model.TableID) *progressTracker {
+func newProgressTracker(tableID model.TableID, bufferSize uint64) *progressTracker {
+	if bufferSize%8 != 0 {
+		panic("bufferSize must be align to 8 bytes")
+	}
+
 	return &progressTracker{
-		tableID:                   tableID,
-		pendingEventAndResolvedTs: linkedhashmap.New(),
+		tableID:    tableID,
+		bufferSize: bufferSize / 8,
 		// It means the start of the table.
 		// It's Ok to use 0 here.
 		// Because sink node only update the checkpoint when it's growing.
@@ -73,86 +106,152 @@ func newProgressTracker(tableID model.TableID) *progressTracker {
 	}
 }
 
-// addEvent is used to add the pending event key.
-// Notice: must hold the lock.
-func (r *progressTracker) addEvent(key uint64) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	r.pendingEventAndResolvedTs.Put(key, nil)
+// addEvent is used to add the pending event key. `postEventFlush` should be called
+// when the event has been flushed.
+func (r *progressTracker) addEvent() (postEventFlush func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	eventID := r.nextEventID
+	bit := eventID % 64
+	r.nextEventID += 1
+
+	bufferCount := len(r.pendingEvents)
+	if bufferCount == 0 || (uint64(len(r.pendingEvents[bufferCount-1])) == r.bufferSize && bit == 0) {
+		// If there is no buffer or the last one is full, we need to allocate a new one.
+		buffer := make([]uint64, 0, r.bufferSize)
+		r.pendingEvents = append(r.pendingEvents, buffer)
+		bufferCount += 1
+	}
+
+	if bit == 0 {
+		// If bit is 0 it means we need to append a new uint64 word for the event.
+		r.pendingEvents[bufferCount-1] = append(r.pendingEvents[bufferCount-1], 0)
+	}
+	lastBuffer := r.pendingEvents[bufferCount-1]
+
+	// Set the corresponding bit to 1.
+	// For example, if the eventID is 3, the bit is 3 % 64 = 3.
+	// 0000000000000000000000000000000000000000000000000000000000000000 ->
+	// 0000000000000000000000000000000000000000000000000000000000001000
+	// When we advance the progress, we can try to find the first 0 bit to indicate the progress.
+	postEventFlush = func() { atomic.AddUint64(&lastBuffer[len(lastBuffer)-1], 1<<bit) }
+	return
 }
 
 // addResolvedTs is used to add the pending resolved ts.
-// Notice: must hold the lock.
-func (r *progressTracker) addResolvedTs(key uint64, resolvedTs model.ResolvedTs) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	// If no pending event and resolved ts,
-	// we can directly advance the progress.
-	if r.pendingEventAndResolvedTs.Empty() {
+func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.nextEventID == 0 {
 		r.lastMinResolvedTs = resolvedTs
 		return
 	}
-	r.pendingEventAndResolvedTs.Put(key, resolvedTs)
+
+	r.resolvedTsCache = append(r.resolvedTsCache, pendingResolvedTs{
+		offset:     r.nextEventID - 1,
+		resolvedTs: resolvedTs,
+	})
 }
 
-// remove is used to remove the pending resolved ts.
-// If we are deleting the last value before resolved ts,
-// that means we can advance the progress,
-// and we will update lastMinResolvedTs.
-// Notice: must hold the lock.
-func (r *progressTracker) remove(key uint64) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	r.pendingEventAndResolvedTs.Remove(key)
-	// We chose to use an iterator here instead of a for loop
-	// because in most cases we will encounter some event before the last resolved ts.
-	iterator := r.pendingEventAndResolvedTs.Iterator()
-	var deleteKeys []any
-	for iterator.Next() {
-		// If the element is resolved ts,
-		// it means we can advance the progress.
-		if iterator.Value() != nil {
-			// If the tracker is closed, we no longer need to track the progress.
-			if !r.closed.Load() {
-				r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
+// advance tries to move forward the tracker and returns the latest resolved timestamp.
+func (r *progressTracker) advance() model.ResolvedTs {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// `pendingEvents` is like a 3-dimo bit array. To access a given bit in the array,
+	// use `pendingEvents[idx1][idx2][idx3]`.
+	// The first index is used to access the buffer.
+	// The second index is used to access the uint64 in the buffer.
+	// The third index is used to access the bit in the uint64.
+	offset := r.nextToResolvePos - r.nextToReleasePos
+	idx1 := offset / (r.bufferSize * 64)
+	idx2 := offset % (r.bufferSize * 64) / 64
+	idx3 := offset % (r.bufferSize * 64) % 64
+
+	for {
+		if r.nextToResolvePos >= r.nextEventID {
+			// All events are resolved.
+			break
+		}
+
+		currBitMap := atomic.LoadUint64(&r.pendingEvents[idx1][idx2])
+		if currBitMap == math.MaxUint64 {
+			// Move to the next uint64 word (maybe in the next buffer).
+			idx2 += 1
+			if idx2 >= r.bufferSize {
+				idx2 = 0
+				idx1 += 1
 			}
-			deleteKeys = append(deleteKeys, iterator.Key())
+			r.nextToResolvePos += 64 - idx3
+			idx3 = 0
 		} else {
-			// When we met the first event,
-			// we couldn't advance anymore.
+			// Try to find the first 0 bit in the word.
+			for i := idx3; i < 64; i++ {
+				if currBitMap&uint64(1<<i) == 0 {
+					r.nextToResolvePos += i - idx3
+					break
+				}
+			}
 			break
 		}
 	}
 
-	// Do not forget to remove the resolved ts.
-	for _, key := range deleteKeys {
-		r.pendingEventAndResolvedTs.Remove(key)
+	// Try to advance resolved timestamp based on `nextToResolvePos`.
+	if r.nextToResolvePos > 0 {
+		for len(r.resolvedTsCache) > 0 {
+			cached := r.resolvedTsCache[0]
+			if cached.offset <= r.nextToResolvePos-1 {
+				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
+				if !r.frozen && !r.closed {
+					r.lastMinResolvedTs = cached.resolvedTs
+				}
+				r.resolvedTsCache = r.resolvedTsCache[1:]
+				if len(r.resolvedTsCache) == 0 {
+					r.resolvedTsCache = nil
+				}
+			} else {
+				break
+			}
+		}
 	}
-}
 
-// minTs returns the last min resolved ts.
-// This means that all data prior to this point has already been processed.
-// It can be considered as CheckpointTs of the table.
-// Notice: must hold the lock.
-func (r *progressTracker) minTs() model.ResolvedTs {
-	r.lock.Lock()
-	defer r.lock.Unlock()
+	// If a buffer is finished, release it.
+	for r.nextToResolvePos-r.nextToReleasePos >= r.bufferSize*64 {
+		r.nextToReleasePos += r.bufferSize * 64
+		r.pendingEvents = r.pendingEvents[1:]
+		if len(r.pendingEvents) == 0 {
+			r.pendingEvents = nil
+		}
+	}
 
 	return r.lastMinResolvedTs
 }
 
-// trackingCount returns the number of pending events and resolved tss.
+// trackingCount returns the number of pending events and resolved timestamps.
 // Notice: must hold the lock.
 func (r *progressTracker) trackingCount() int {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	return r.pendingEventAndResolvedTs.Size()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return int(r.nextEventID - r.nextToResolvePos)
+}
+
+// freezeProcess marks we do not advance checkpoint ts anymore.
+func (r *progressTracker) freezeProcess() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.frozen = true
 }
 
 // close is used to close the progress tracker.
 func (r *progressTracker) close(ctx context.Context) error {
-	r.closed.Store(true)
-
+	r.mu.Lock()
+	if !r.frozen {
+		panic("the progress tracker should be frozen before closing")
+	}
+	r.closed = true
+	r.mu.Unlock()
 	blockTicker := time.NewTicker(warnDuration)
 	defer blockTicker.Stop()
 	// Used to block for loop for a while to prevent CPU spin.
@@ -166,9 +265,10 @@ func (r *progressTracker) close(ctx context.Context) error {
 			log.Warn("Close process doesn't return in time, may be stuck",
 				zap.Int64("tableID", r.tableID),
 				zap.Int("trackingCount", r.trackingCount()),
-				zap.Any("lastMinResolvedTs", r.minTs()),
+				zap.Any("lastMinResolvedTs", r.advance()),
 			)
 		case <-waitingTicker.C:
+			r.advance()
 			if r.trackingCount() == 0 {
 				return nil
 			}

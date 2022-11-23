@@ -14,71 +14,41 @@
 package metrics
 
 import (
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
-const rowSizeLowBound = 128 * 1024
+const largeRowSizeLowBound = 128 * 1024
 
-// ---------- Metrics for txn sink and backends. ---------- //
+// ---------- Metrics used in Statistics. ---------- //
 var (
-	// ConflictDetectDuration records the duration of detecting conflict.
-	ConflictDetectDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "txn_conflict_detect_duration",
-			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
-			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
-		})
-
-	// TxnBatchSize is the batch size for transactions.
-	TxnBatchSize = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "txn_batch_size",
-			Help:      "Size of the DML transaction batch.",
-		})
-
 	// ExecBatchHistogram records batch size of a txn.
 	ExecBatchHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "txn_batch_size",
-			Help:      "Bucketed histogram of batch size of a txn.",
+			Subsystem: "sinkv2",
+			Name:      "batch_row_count",
+			Help:      "Row count number for a given batch.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
-	// ExecTxnHistogram records the execution time of a txn.
-	ExecTxnHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "txn_exec_duration",
-			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
-		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
-)
-
-var (
-	// LargeRowSizeHistogram records the row size of events.
+	// LargeRowSizeHistogram records size of large rows.
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "large_row_changed_event_size",
+			Subsystem: "sinkv2",
+			Name:      "large_row_size",
 			Help:      "The size of all received row changed events (in bytes).",
-			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
+			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 10), // 128K~128M
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
@@ -88,53 +58,19 @@ var (
 	ExecutionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sink",
+			Subsystem: "sinkv2",
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
-		}, []string{"namespace", "changefeed"})
-
-	// TotalRowsCountGauge is the total number of rows that are processed by sink.
-	TotalRowsCountGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "total_rows_count",
-			Help:      "The total count of rows that are processed by sink.",
-		}, []string{"namespace", "changefeed"})
-
-	// TotalFlushedRowsCountGauge is the total count of rows that are flushed to sink.
-	TotalFlushedRowsCountGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "total_flushed_rows_count",
-			Help:      "The total count of rows that are flushed by sink.",
-		}, []string{"namespace", "changefeed"})
-
-	// TableSinkTotalRowsCountCounter is the total count of rows that are processed by sink.
-	TableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "table_sink_total_rows_count",
-			Help:      "The total count of rows that are processed by table sink.",
-		}, []string{"namespace", "changefeed"})
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 )
 
-// InitMetrics registers all metrics in this file
+// InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(ConflictDetectDuration)
-	registry.MustRegister(TxnBatchSize)
 	registry.MustRegister(ExecBatchHistogram)
-	registry.MustRegister(ExecTxnHistogram)
-
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
-	registry.MustRegister(TotalRowsCountGauge)
-	registry.MustRegister(TotalFlushedRowsCountGauge)
-	registry.MustRegister(TableSinkTotalRowsCountCounter)
 
-	// Register Kafka producer and broker metrics.
-	kafka.InitMetrics(registry)
+	txn.InitMetrics(registry)
+	mq.InitMetrics(registry)
 }

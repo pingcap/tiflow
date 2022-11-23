@@ -17,14 +17,12 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // WorkerConfig alias to framework.WorkerConfig
@@ -43,6 +41,9 @@ type Registry interface {
 		config []byte,
 		epoch frameModel.Epoch,
 	) (framework.Worker, error)
+	// IsRetryableError returns whether error is treated as retryable from the
+	// perspective of business logic.
+	IsRetryableError(err error, tp framework.WorkerType) (bool, error)
 }
 
 type registryImpl struct {
@@ -60,9 +61,9 @@ func NewRegistry() Registry {
 // MustRegisterWorkerType implements Registry.MustRegisterWorkerType
 func (r *registryImpl) MustRegisterWorkerType(tp frameModel.WorkerType, factory WorkerFactory) {
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
-		log.Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
+		log.Panic("duplicate worker type", zap.Stringer("worker-type", tp))
 	}
-	log.Info("register worker", zap.Int64("worker-type", int64(tp)))
+	log.Info("register worker", zap.Stringer("worker-type", tp))
 }
 
 // RegisterWorkerType implements Registry.RegisterWorkerType
@@ -88,12 +89,12 @@ func (r *registryImpl) CreateWorker(
 ) (framework.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
-		return nil, derror.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+		return nil, errors.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
 	}
 
 	config, err := factory.DeserializeConfig(configBytes)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.ErrCreateWorkerTerminate.Wrap(err).GenWithStackByArgs()
 	}
 
 	impl, err := factory.NewWorkerImpl(ctx, workerID, masterID, config)
@@ -130,6 +131,15 @@ func (r *registryImpl) CreateWorker(
 		zap.String("reason", "impl has no member BaseWorker or BaseJobMaster"),
 		zap.Any("workerType", tp))
 	return nil, nil
+}
+
+// IsRetryableError checks whether an error is retryable in business logic
+func (r *registryImpl) IsRetryableError(err error, tp frameModel.WorkerType) (bool, error) {
+	factory, ok := r.getWorkerFactory(tp)
+	if !ok {
+		return false, errors.ErrWorkerTypeNotFound.GenWithStackByArgs(tp)
+	}
+	return factory.IsRetryableError(err), nil
 }
 
 func (r *registryImpl) getWorkerFactory(tp frameModel.WorkerType) (factory WorkerFactory, ok bool) {

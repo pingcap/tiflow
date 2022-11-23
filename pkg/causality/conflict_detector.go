@@ -30,48 +30,36 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
-	slots *internal.Slots[*internal.Node]
-
-	// finishedTxnQueue is the queue for all transactions that
-	// are already finished, but still waiting to be processed
-	// by the conflict detector, because they need to be processed
-	// so that transactions conflicting with them can be unblocked.
-	finishedTxnQueue *containers.SliceQueue[txnFinishedEvent[Txn]]
-
-	// resolvedTxnQueue is the queue for all transactions that
-	// have been "resolved" (i.e., conflict free) but are not yet
-	// sent to the workers.
-	resolvedTxnQueue *containers.SliceQueue[txnResolvedEvent[Txn]]
+	slots    *internal.Slots[*internal.Node]
+	numSlots uint64
 
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
-	wg      sync.WaitGroup
-	closeCh chan struct{}
+	// Used to run a background goroutine to GC or notify nodes.
+	notifiedNodes *containers.SliceQueue[func()]
+	garbageNodes  *containers.SliceQueue[txnFinishedEvent]
+	wg            sync.WaitGroup
+	closeCh       chan struct{}
 }
 
-type txnFinishedEvent[Txn txnEvent] struct {
-	txn  Txn
-	node *internal.Node
-}
-
-type txnResolvedEvent[Txn txnEvent] struct {
-	txn      Txn
-	node     *internal.Node
-	workerID int64
+type txnFinishedEvent struct {
+	node         *internal.Node
+	conflictKeys []uint64
 }
 
 // NewConflictDetector creates a new ConflictDetector.
 func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	workers []Worker,
-	numSlots int64,
+	numSlots uint64,
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
-		workers:          workers,
-		slots:            internal.NewSlots[*internal.Node](numSlots),
-		finishedTxnQueue: containers.NewSliceQueue[txnFinishedEvent[Txn]](),
-		resolvedTxnQueue: containers.NewSliceQueue[txnResolvedEvent[Txn]](),
-		closeCh:          make(chan struct{}),
+		workers:       workers,
+		slots:         internal.NewSlots[*internal.Node](numSlots),
+		numSlots:      numSlots,
+		notifiedNodes: containers.NewSliceQueue[func()](),
+		garbageNodes:  containers.NewSliceQueue[txnFinishedEvent](),
+		closeCh:       make(chan struct{}),
 	}
 
 	ret.wg.Add(1)
@@ -84,30 +72,21 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 }
 
 // Add pushes a transaction to the ConflictDetector.
-func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
+//
+// NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
+func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
+	conflictKeys := txn.ConflictKeys(d.numSlots)
 	node := internal.NewNode()
-	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node) {
-		// Construct a dependency map under the slots' lock.
-		node.DependOn(other)
-	})
-	node.OnNoConflict(func(workerID int64) {
-		// Push a resolved transaction to a queue,
-		// so that they can be processed asynchronously.
-		//
-		// DESIGN NOTE:
-		// If we were to call the next step synchronously, the
-		// locking problem would become intractable. Because
-		// resolving one transaction can cause another to be
-		// resolved too, thus incurring potential risk of
-		// deadlocking.
-		d.resolvedTxnQueue.Push(txnResolvedEvent[Txn]{
-			txn:      txn,
-			node:     node,
-			workerID: workerID,
-		})
-	})
-
-	return nil
+	node.OnResolved = func(workerID int64) {
+		unlock := func() {
+			node.Remove()
+			d.garbageNodes.Push(txnFinishedEvent{node, conflictKeys})
+		}
+		d.sendToWorker(txn, unlock, workerID)
+	}
+	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
+	node.OnNotified = func(callback func()) { d.notifiedNodes.Push(callback) }
+	d.slots.Add(node, conflictKeys)
 }
 
 // Close closes the ConflictDetector.
@@ -121,50 +100,31 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 		select {
 		case <-d.closeCh:
 			return
-		case <-d.resolvedTxnQueue.C:
+		case <-d.notifiedNodes.C:
 			for {
-				event, ok := d.resolvedTxnQueue.Pop()
+				notifiyCallback, ok := d.notifiedNodes.Pop()
 				if !ok {
 					break
 				}
-
-				unlock := func() {
-					d.finishedTxnQueue.Push(txnFinishedEvent[Txn]{
-						txn:  event.txn,
-						node: event.node,
-					})
-				}
-				d.sendToWorker(
-					event.txn,
-					event.node,
-					unlock,
-					event.workerID,
-				)
+				notifiyCallback()
 			}
-		case <-d.finishedTxnQueue.C:
+		case <-d.garbageNodes.C:
 			for {
-				event, ok := d.finishedTxnQueue.Pop()
+				event, ok := d.garbageNodes.Pop()
 				if !ok {
 					break
 				}
-
-				d.slots.Remove(event.node, event.txn.ConflictKeys())
-				event.node.Remove()
-				event.node.Free()
+				d.slots.Free(event.node, event.conflictKeys)
 			}
 		}
 	}
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(
-	txn Txn, node *internal.Node, unlock func(), workerID int64,
-) {
-	if workerID == -1 {
-		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
+func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, unlock func(), workerID int64) {
+	if workerID < 0 {
+		panic("must assign with a valid workerID")
 	}
-
-	node.AssignTo(workerID)
 	worker := d.workers[workerID]
 	worker.Add(txn, unlock)
 }

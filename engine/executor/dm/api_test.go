@@ -15,19 +15,21 @@ package dm
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/gogo/protobuf/jsonpb"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,6 +41,8 @@ func TestQueryStatusAPI(t *testing.T) {
 			FinishedBytes:     100,
 			FinishedRows:      10,
 			EstimateTotalRows: 1000,
+			Bps:               1000,
+			Progress:          "20.00 %",
 		}
 		loadStatus = &pb.LoadStatus{
 			FinishedBytes:  4,
@@ -46,11 +50,12 @@ func TestQueryStatusAPI(t *testing.T) {
 			Progress:       "4%",
 			MetaBinlog:     "mysql-bin.000002, 8",
 			MetaBinlogGTID: "1-2-3",
+			Bps:            1000,
 		}
 		syncStatus = &pb.SyncStatus{
-			TotalEvents:         10,
-			TotalTps:            10,
-			RecentTps:           10,
+			TotalRows:           10,
+			TotalRps:            10,
+			RecentRps:           10,
 			MasterBinlog:        "mysql-bin.000002, 4",
 			MasterBinlogGtid:    "1-2-20",
 			SyncerBinlog:        "mysql-bin.000001, 432",
@@ -80,25 +85,42 @@ func TestQueryStatusAPI(t *testing.T) {
 			RawCause:   "raw cause",
 			Workaround: "workaround",
 		}
-		dumpStatusBytes, _ = json.Marshal(dumpStatus)
-		loadStatusBytes, _ = json.Marshal(loadStatus)
-		syncStatusBytes, _ = json.Marshal(syncStatus)
+		mar                = jsonpb.Marshaler{EmitDefaults: true}
+		dumpStatusBytes, _ = mar.MarshalToString(dumpStatus)
+		loadStatusBytes, _ = mar.MarshalToString(loadStatus)
+		syncStatusBytes, _ = mar.MarshalToString(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
-			Unit:   framework.WorkerDMDump,
+			Unit:   frameModel.WorkerDMDump,
 			Stage:  metadata.StageRunning,
-			Status: dumpStatusBytes,
+			Status: []byte(dumpStatusBytes),
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   framework.WorkerDMLoad,
+			Unit:   frameModel.WorkerDMLoad,
 			Stage:  metadata.StageFinished,
 			Result: &dmpkg.ProcessResult{IsCanceled: false},
-			Status: loadStatusBytes,
+			Status: []byte(loadStatusBytes),
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   framework.WorkerDMSync,
+			Unit:   frameModel.WorkerDMSync,
 			Stage:  metadata.StagePaused,
 			Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
-			Status: syncStatusBytes,
+			Status: []byte(syncStatusBytes),
+		}
+		taskCfg = &config.TaskCfg{
+			JobCfg: config.JobCfg{
+				TargetDB: &dmconfig.DBConfig{},
+				Upstreams: []*config.UpstreamCfg{
+					{
+						MySQLInstance: dmconfig.MySQLInstance{
+							Mydumper: &dmconfig.MydumperConfig{},
+							Loader:   &dmconfig.LoaderConfig{},
+							Syncer:   &dmconfig.SyncerConfig{},
+							SourceID: "task-id",
+						},
+						DBCfg: &dmconfig.DBConfig{},
+					},
+				},
+			},
 		}
 	)
 
@@ -109,7 +131,8 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 
@@ -124,17 +147,18 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	unitHolder.On("Status").Return(loadStatus).Once()
 	unitHolder.On("Stage").Return(metadata.StageFinished, &pb.ProcessResult{IsCanceled: false}).Once()
-	dmWorker.workerType = framework.WorkerDMLoad
+	dmWorker.workerType = frameModel.WorkerDMLoad
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, loadStatusResp, resp)
 
 	unitHolder.On("Status").Return(syncStatus).Once()
 	unitHolder.On("Stage").Return(metadata.StagePaused, &pb.ProcessResult{Errors: []*pb.ProcessError{pbProcessError}}).Once()
-	dmWorker.workerType = framework.WorkerDMSync
+	dmWorker.workerType = frameModel.WorkerDMSync
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp)
+	require.Contains(t, string(syncStatusResp.Status), "secondsBehindMaster")
 }
 
 func TestStopWorker(t *testing.T) {
@@ -145,17 +169,34 @@ func TestStopWorker(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	taskCfg := &config.TaskCfg{
+		JobCfg: config.JobCfg{
+			TargetDB: &dmconfig.DBConfig{},
+			Upstreams: []*config.UpstreamCfg{
+				{
+					MySQLInstance: dmconfig.MySQLInstance{
+						Mydumper: &dmconfig.MydumperConfig{},
+						Loader:   &dmconfig.LoaderConfig{},
+						Syncer:   &dmconfig.SyncerConfig{},
+						SourceID: "task-id",
+					},
+					DBCfg: &dmconfig.DBConfig{},
+				},
+			},
+		},
+	}
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
 
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
-	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
+	err = dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
 	require.NoError(t, err)
 
 	// mock close by framework
-	require.NoError(t, dmWorker.CloseImpl(context.Background()))
+	dmWorker.CloseImpl(context.Background())
 }
 
 func TestOperateTask(t *testing.T) {
@@ -166,7 +207,24 @@ func TestOperateTask(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
+	taskCfg := &config.TaskCfg{
+		JobCfg: config.JobCfg{
+			TargetDB: &dmconfig.DBConfig{},
+			Upstreams: []*config.UpstreamCfg{
+				{
+					MySQLInstance: dmconfig.MySQLInstance{
+						Mydumper: &dmconfig.MydumperConfig{},
+						Loader:   &dmconfig.LoaderConfig{},
+						Syncer:   &dmconfig.SyncerConfig{},
+						SourceID: "task-id",
+					},
+					DBCfg: &dmconfig.DBConfig{},
+				},
+			},
+		},
+	}
+	dmWorker, err := newDMWorker(dctx, "master-id", frameModel.WorkerDMDump, taskCfg)
+	require.NoError(t, err)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}

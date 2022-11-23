@@ -15,11 +15,13 @@ package dm
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Defines topics here
@@ -51,6 +53,54 @@ const (
 	// internal
 	Deleting
 )
+
+var typesStringify = [...]string{
+	0:        "",
+	Create:   "Create",
+	Pause:    "Pause",
+	Resume:   "Resume",
+	Update:   "Update",
+	Delete:   "Delete",
+	Deleting: "Deleting",
+}
+
+var toOperateType map[string]OperateType
+
+func init() {
+	toOperateType = make(map[string]OperateType, len(typesStringify))
+	for i, s := range typesStringify {
+		toOperateType[s] = OperateType(i)
+	}
+}
+
+// String implements fmt.Stringer interface
+func (op OperateType) String() string {
+	if int(op) >= len(typesStringify) || op < 0 {
+		return fmt.Sprintf("Unknown OperateType %d", op)
+	}
+	return typesStringify[op]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (op OperateType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(op.String())
+}
+
+// UnmarshalJSON unmashals a quoted json string to the enum value
+func (op *OperateType) UnmarshalJSON(b []byte) error {
+	var (
+		j  string
+		ok bool
+	)
+	if err := json.Unmarshal(b, &j); err != nil {
+		return err
+	}
+	*op, ok = toOperateType[j]
+	if !ok {
+		return errors.Errorf("Unknown OperateType %s", j)
+	}
+	return nil
+}
 
 // OperateTaskMessage is operate task message
 type OperateTaskMessage struct {
@@ -86,6 +136,7 @@ type ProcessResult struct {
 	Detail     []byte          `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 }
 
+// NewProcessResultFromPB converts ProcessResult from pb.ProcessResult.
 func NewProcessResultFromPB(result *pb.ProcessResult) *ProcessResult {
 	if result == nil {
 		return nil

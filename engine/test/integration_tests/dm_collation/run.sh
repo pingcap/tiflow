@@ -5,7 +5,7 @@ set -eu
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
+CONFIG="$DOCKER_COMPOSE_DIR/3m3e_with_s3.yaml $DOCKER_COMPOSE_DIR/dm_databases.yaml"
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
 echo "using adjusted configs to deploy cluster: $CONFIG"
 TABLE_NUM=500
@@ -25,24 +25,21 @@ function run() {
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 
 	# create job
+	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_collation")
 
-	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
-	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
-	echo "job_id: $job_id"
-
-	# TODO: blocked by https://github.com/pingcap/tiflow/issues/6856
-	#	# utf8mb4_0900_as_cs is not supported, should display error message
-	#
-	#	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -r '.task_status.\"mysql-02\".status.result.errors[0].message' | grep -q \"Error 1273: Unknown collation: 'utf8mb4_0900_as_cs'\""
-	#	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
-	#	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
-	#	# change allow-list
-	#	# clean downstraem data
+	# a table with utf8mb4_0900_as_cs collation will fail the test. After we manually
+	# create the table, task can be continued.
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'utf8mb4_0900_as_cs'"
+	run_sql --port 4000 "create table test_panic.t1 (id int PRIMARY KEY, name varchar(20) COLLATE utf8mb4_bin);"
+	# after a manually resume, the task can be continued.
+	# duplicate request is OK
+	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
+	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 
 	# wait for dump and load finished
 
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == 12 and .task_status.\"mysql-02\".status.unit == 12'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMSyncTask\" and .task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"
+	curl http://127.0.0.1:10245/api/v1/jobs/$job_id/status | tee /dev/stderr | jq -e '.finished_unit_status."mysql-02"[1].Status.finishedBytes == 174'
 
 	# check data
 
@@ -64,8 +61,12 @@ function run() {
 	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_increment2.t2 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
 	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_server.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
 	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_server2.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+
+	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
+	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
+
 }
 
 trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
-# run $*
+run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

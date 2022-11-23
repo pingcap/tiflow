@@ -21,9 +21,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/mock"
@@ -170,7 +170,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
 	// Force set liveness to alive.
@@ -197,7 +197,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	// let the prepared table become replicating, by set `IsSecondary` to false.
@@ -218,7 +218,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
@@ -233,7 +233,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
@@ -247,7 +247,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
+	require.Equal(t, tablepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
@@ -264,7 +264,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
+	require.Equal(t, tablepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
@@ -278,7 +278,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStateStopped, removeTableResponse.RemoveTable.Status.State)
+	require.Equal(t, tablepb.TableStateStopped, removeTableResponse.RemoveTable.Status.State)
 	require.Equal(t, model.Ts(3), removeTableResponse.RemoveTable.Checkpoint.CheckpointTs)
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 }
@@ -294,17 +294,17 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		a.tableM.addTable(model.TableID(i))
 	}
 
-	a.tableM.tables[model.TableID(0)].state = schedulepb.TableStatePreparing
-	a.tableM.tables[model.TableID(1)].state = schedulepb.TableStatePrepared
-	a.tableM.tables[model.TableID(2)].state = schedulepb.TableStateReplicating
-	a.tableM.tables[model.TableID(3)].state = schedulepb.TableStateStopping
-	a.tableM.tables[model.TableID(4)].state = schedulepb.TableStateStopped
+	a.tableM.tables[model.TableID(0)].state = tablepb.TableStatePreparing
+	a.tableM.tables[model.TableID(1)].state = tablepb.TableStatePrepared
+	a.tableM.tables[model.TableID(2)].state = tablepb.TableStateReplicating
+	a.tableM.tables[model.TableID(3)].state = tablepb.TableStateStopping
+	a.tableM.tables[model.TableID(4)].state = tablepb.TableStateStopped
 
-	mockTableExecutor.tables[model.TableID(0)] = pipeline.TableStatePreparing
-	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePrepared
-	mockTableExecutor.tables[model.TableID(2)] = pipeline.TableStateReplicating
-	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateStopping
-	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
+	mockTableExecutor.tables[model.TableID(0)] = tablepb.TableStatePreparing
+	mockTableExecutor.tables[model.TableID(1)] = tablepb.TableStatePrepared
+	mockTableExecutor.tables[model.TableID(2)] = tablepb.TableStateReplicating
+	mockTableExecutor.tables[model.TableID(3)] = tablepb.TableStateStopping
+	mockTableExecutor.tables[model.TableID(4)] = tablepb.TableStateStopped
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -328,13 +328,13 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		return result[i].TableID < result[j].TableID
 	})
 
-	require.Equal(t, schedulepb.TableStatePreparing, result[0].State)
-	require.Equal(t, schedulepb.TableStatePrepared, result[1].State)
-	require.Equal(t, schedulepb.TableStateReplicating, result[2].State)
-	require.Equal(t, schedulepb.TableStateStopping, result[3].State)
-	require.Equal(t, schedulepb.TableStateStopped, result[4].State)
+	require.Equal(t, tablepb.TableStatePreparing, result[0].State)
+	require.Equal(t, tablepb.TableStatePrepared, result[1].State)
+	require.Equal(t, tablepb.TableStateReplicating, result[2].State)
+	require.Equal(t, tablepb.TableStateStopping, result[3].State)
+	require.Equal(t, tablepb.TableStateStopped, result[4].State)
 	for i := 5; i < 10; i++ {
-		require.Equal(t, schedulepb.TableStateAbsent, result[i].State)
+		require.Equal(t, tablepb.TableStateAbsent, result[i].State)
 	}
 
 	a.tableM.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
@@ -343,7 +343,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].TableID < result[j].TableID
 	})
-	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
+	require.Equal(t, tablepb.TableStateStopping, result[1].State)
 
 	a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
@@ -420,13 +420,13 @@ func TestAgentPermuteMessages(t *testing.T) {
 		},
 	})
 
-	states := []schedulepb.TableState{
-		schedulepb.TableStateAbsent,
-		schedulepb.TableStatePreparing,
-		schedulepb.TableStatePrepared,
-		schedulepb.TableStateReplicating,
-		schedulepb.TableStateStopping,
-		schedulepb.TableStateStopped,
+	states := []tablepb.TableState{
+		tablepb.TableStateAbsent,
+		tablepb.TableStatePreparing,
+		tablepb.TableStatePrepared,
+		tablepb.TableStateReplicating,
+		tablepb.TableStateStopping,
+		tablepb.TableStateStopped,
 	}
 	ctx := context.Background()
 	tableID := model.TableID(1)
@@ -434,17 +434,17 @@ func TestAgentPermuteMessages(t *testing.T) {
 		iterPermutation([]int{0, 1, 2, 3}, func(sequence []int) {
 			t.Logf("test %v, %v", state, sequence)
 			switch state {
-			case schedulepb.TableStatePreparing:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatePreparing
-			case schedulepb.TableStatePrepared:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatePrepared
-			case schedulepb.TableStateReplicating:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateReplicating
-			case schedulepb.TableStateStopping:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateStopping
-			case schedulepb.TableStateStopped:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateStopped
-			case schedulepb.TableStateAbsent:
+			case tablepb.TableStatePreparing:
+				mockTableExecutor.tables[tableID] = tablepb.TableStatePreparing
+			case tablepb.TableStatePrepared:
+				mockTableExecutor.tables[tableID] = tablepb.TableStatePrepared
+			case tablepb.TableStateReplicating:
+				mockTableExecutor.tables[tableID] = tablepb.TableStateReplicating
+			case tablepb.TableStateStopping:
+				mockTableExecutor.tables[tableID] = tablepb.TableStateStopping
+			case tablepb.TableStateStopped:
+				mockTableExecutor.tables[tableID] = tablepb.TableStateStopped
+			case tablepb.TableStateAbsent:
 			default:
 			}
 
@@ -496,9 +496,9 @@ func TestAgentPermuteMessages(t *testing.T) {
 									Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 								trans.SendBuffer = trans.SendBuffer[:0]
 								require.True(t, yes)
-								expected := schedulepb.TableStateStopping
+								expected := tablepb.TableStateStopping
 								if ok && ok1 {
-									expected = schedulepb.TableStateStopped
+									expected = tablepb.TableStateStopped
 								}
 								require.Equal(t, expected, response.RemoveTable.Status.State)
 								mockTableExecutor.ExpectedCalls = mockTableExecutor.
@@ -551,7 +551,7 @@ func TestAgentHandleMessage(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{},
+					Checkpoint:  tablepb.Checkpoint{},
 				},
 			},
 		},
@@ -653,7 +653,7 @@ func TestAgentTick(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{},
+					Checkpoint:  tablepb.Checkpoint{},
 				},
 			},
 		},
@@ -700,7 +700,7 @@ func TestAgentTick(t *testing.T) {
 	resp, ok := responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
+	require.Equal(t, tablepb.TableStatePrepared, resp.AddTable.Status.State)
 
 	require.NoError(t, a.Close())
 }
@@ -826,22 +826,21 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	require.Len(t, trans.SendBuffer, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.SendBuffer[0].MsgType)
 	addTableResp := trans.SendBuffer[0].DispatchTableResponse.GetAddTable()
-	require.Equal(t, schedulepb.TableStateReplicating, addTableResp.Status.State)
+	require.Equal(t, tablepb.TableStateReplicating, addTableResp.Status.State)
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.
 type MockTableExecutor struct {
 	mock.Mock
 
-	t *testing.T
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables map[model.TableID]pipeline.TableState
+	tables map[model.TableID]tablepb.TableState
 }
 
 // newMockTableExecutor creates a new mock table executor.
 func newMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: map[model.TableID]pipeline.TableState{},
+		tables: map[model.TableID]tablepb.TableState{},
 	}
 }
 
@@ -857,30 +856,28 @@ func (e *MockTableExecutor) AddTable(
 	state, ok := e.tables[tableID]
 	if ok {
 		switch state {
-		case pipeline.TableStatePreparing:
+		case tablepb.TableStatePreparing:
 			return true, nil
-		case pipeline.TableStatePrepared:
+		case tablepb.TableStatePrepared:
 			if !isPrepare {
-				e.tables[tableID] = pipeline.TableStateReplicating
+				e.tables[tableID] = tablepb.TableStateReplicating
 			}
 			return true, nil
-		case pipeline.TableStateReplicating:
+		case tablepb.TableStateReplicating:
 			return true, nil
-		case pipeline.TableStateStopped:
+		case tablepb.TableStateStopped:
 			delete(e.tables, tableID)
 		}
 	}
 	args := e.Called(ctx, tableID, startTs, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatePreparing
+		e.tables[tableID] = tablepb.TableStatePreparing
 	}
 	return args.Bool(0), args.Error(1)
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
-	tableID model.TableID, isPrepare bool,
-) bool {
+func (e *MockTableExecutor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
 	_, ok := e.tables[tableID]
 	if !ok {
 		log.Panic("table which was added is not found",
@@ -888,50 +885,48 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	args := e.Called(ctx, tableID, isPrepare)
+	args := e.Called(tableID, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatePrepared
+		e.tables[tableID] = tablepb.TableStatePrepared
 		if !isPrepare {
-			e.tables[tableID] = pipeline.TableStateReplicating
+			e.tables[tableID] = tablepb.TableStateReplicating
 		}
 		return true
 	}
 
-	e.tables[tableID] = pipeline.TableStatePreparing
+	e.tables[tableID] = tablepb.TableStatePreparing
 	if !isPrepare {
-		e.tables[tableID] = pipeline.TableStatePrepared
+		e.tables[tableID] = tablepb.TableStatePrepared
 	}
 
 	return false
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
+func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	state, ok := e.tables[tableID]
 	if !ok {
 		log.Warn("table to be remove is not found", zap.Int64("tableID", tableID))
 		return true
 	}
 	switch state {
-	case pipeline.TableStateStopping, pipeline.TableStateStopped:
+	case tablepb.TableStateStopping, tablepb.TableStateStopped:
 		return true
-	case pipeline.TableStatePreparing, pipeline.TableStatePrepared, pipeline.TableStateReplicating:
+	case tablepb.TableStatePreparing, tablepb.TableStatePrepared, tablepb.TableStateReplicating:
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
 	log.Info("RemoveTable", zap.Int64("tableID", tableID), zap.Any("state", state))
 
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStateStopped
+		e.tables[tableID] = tablepb.TableStateStopped
 	}
 	return args.Bool(0)
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
-	tableID model.TableID,
-) (model.Ts, bool) {
+func (e *MockTableExecutor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
 	state, ok := e.tables[tableID]
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
@@ -939,7 +934,7 @@ func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
 			zap.Int64("tableID", tableID))
 		return 0, true
 	}
-	args := e.Called(ctx, tableID)
+	args := e.Called(tableID)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
 			zap.Int64("tableID", tableID), zap.Any("state", state))
@@ -947,7 +942,7 @@ func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
 	} else {
 		// revert the state back to old state, assume it's `replicating`,
 		// but `preparing` / `prepared` can also be removed.
-		e.tables[tableID] = pipeline.TableStateReplicating
+		e.tables[tableID] = tablepb.TableStateReplicating
 	}
 
 	return model.Ts(args.Int(0)), args.Bool(1)
@@ -968,16 +963,14 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
-// GetTableMeta implements TableExecutor interface
-func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
+// GetTableStatus implements TableExecutor interface
+func (e *MockTableExecutor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	state, ok := e.tables[tableID]
 	if !ok {
-		state = pipeline.TableStateAbsent
+		state = tablepb.TableStateAbsent
 	}
-	return pipeline.TableMeta{
-		TableID:      tableID,
-		CheckpointTs: 0,
-		ResolvedTs:   0,
-		State:        state,
+	return tablepb.TableStatus{
+		TableID: tableID,
+		State:   state,
 	}
 }

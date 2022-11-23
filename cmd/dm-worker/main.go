@@ -22,16 +22,13 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	globalLog "github.com/pingcap/log"
-	"go.uber.org/zap"
-
-	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/worker"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -58,15 +55,6 @@ func main() {
 
 	utils.LogHTTPProxies(true)
 
-	// currently only schema tracker use global logger(std logger), simply replace it with `error` level
-	// may be we should support config logger in mock tidb later
-	conf := &globalLog.Config{Level: "error", File: globalLog.FileLogConfig{}}
-	lg, r, _ := globalLog.InitLogger(conf)
-	lg = lg.With(zap.String("component", "ddl tracker"))
-	globalLog.ReplaceGlobals(lg, r)
-	lightningLogger := lg.With(zap.String("component", "lightning"))
-	lightningLog.SetAppLogger(lightningLogger)
-
 	version.LogVersionInfo("dm-worker")
 	log.L().Info("", zap.Stringer("dm-worker config", cfg))
 
@@ -90,9 +78,14 @@ func main() {
 		s.Close()
 	}()
 	err = s.Start()
-	if err != nil {
+	switch errors.Cause(err) {
+	case nil:
+	case terror.ErrWorkerServerClosed:
+		log.L().Info("server closed")
+	default:
 		log.L().Error("fail to start dm-worker", zap.Error(err))
 	}
+
 	s.Close() // wait until closed
 	log.L().Info("dm-worker exit")
 

@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e
+
+# parameter 1: work directory
+# parameter 2, ...: certificate file prefixes
+
+workdir=$1
+shift
+
+mkdir -p $workdir
+cd $workdir
+
+cat - >"ipsan.cnf" <<EOF
+[dn]
+CN = localhost
+[req]
+distinguished_name = dn
+[EXT]
+subjectAltName = @alt_names
+keyUsage = digitalSignature,keyEncipherment
+extendedKeyUsage = clientAuth,serverAuth
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+EOF
+
+# generate CA
+
+openssl genrsa -out ca.key 4096
+openssl req -new -x509 -days 1000 -key ca.key -out ca.pem -subj "/CN=localhost" 2>/dev/null
+
+# generate server certificate
+
+for role in "$@"; do
+	openssl genrsa -out "$role.key" 2048
+	openssl req -new -key "$role.key" -out "$role.csr" -subj "/CN=${role}"
+	openssl x509 -req -days 365 -extensions EXT -extfile "ipsan.cnf" -in "$role.csr" -CA "ca.pem" -CAkey "ca.key" -CAcreateserial -out "$role.pem" 2>/dev/null
+done
+
+# generate client certificate
+
+openssl genrsa -out client.key 2048
+openssl req -new -key client.key -out client.csr -subj "/CN=client"
+openssl x509 -req -days 365 -CA ca.pem -CAkey ca.key -CAcreateserial -in client.csr -out client.pem 2>/dev/null

@@ -20,7 +20,6 @@ import (
 	"encoding/hex"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 

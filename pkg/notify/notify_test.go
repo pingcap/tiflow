@@ -15,11 +15,13 @@ package notify
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestNotifyHub(t *testing.T) {
@@ -109,4 +111,53 @@ func TestNewReceiverWithClosedNotifier(t *testing.T) {
 	notifier.Close()
 	_, err := notifier.NewReceiver(50 * time.Millisecond)
 	require.True(t, errors.ErrOperateOnClosedNotifier.Equal(err))
+}
+
+func TestNotifierMultiple(t *testing.T) {
+	t.Parallel()
+	notifier := new(Notifier)
+
+	receiver, err := notifier.NewReceiver(-1)
+	require.NoError(t, err)
+	counter := atomic.NewInt32(0)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			_, ok := <-receiver.C
+			if !ok {
+				return
+			}
+			counter.Add(1)
+		}
+	}()
+
+	receiver1, err := notifier.NewReceiver(time.Minute)
+	require.NoError(t, err)
+	counter1 := atomic.NewInt32(0)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			_, ok := <-receiver1.C
+			if !ok {
+				return
+			}
+			counter1.Add(1)
+		}
+	}()
+
+	N := 5
+	for i := 0; i < N; i++ {
+		notifier.Notify()
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	notifier.Close()
+	wg.Wait()
+	require.LessOrEqual(t, counter.Load(), int32(N))
+	require.LessOrEqual(t, counter1.Load(), int32(N))
 }

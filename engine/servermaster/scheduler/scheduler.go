@@ -15,18 +15,18 @@ package scheduler
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Scheduler is a full set of scheduling management, containing capacity provider,
 // real scheduler and resource placement manager.
 type Scheduler struct {
-	infoProvider         executorInfoProvider
-	costScheduler        *costScheduler
-	placementConstrainer PlacementConstrainer
-	filters              []filter
+	infoProvider executorInfoProvider
+	filters      []filter
 }
 
 // NewScheduler creates a new Scheduler instance
@@ -35,9 +35,7 @@ func NewScheduler(
 	placementConstrainer PlacementConstrainer,
 ) *Scheduler {
 	return &Scheduler{
-		infoProvider:         infoProvider,
-		costScheduler:        NewRandomizedCostScheduler(infoProvider),
-		placementConstrainer: placementConstrainer,
+		infoProvider: infoProvider,
 		filters: []filter{
 			newResourceFilter(placementConstrainer),
 			newSelectorFilter(infoProvider),
@@ -54,13 +52,10 @@ func (s *Scheduler) ScheduleTask(
 	if err != nil {
 		return nil, err
 	}
-	executorID, ok := s.costScheduler.ScheduleByCost(request.Cost, candidates)
-	if !ok {
-		return nil, ErrCapacityNotEnough.GenWithStack(
-			&CapacityNotEnoughError{
-				FinalCandidates: candidates,
-			})
+	if len(candidates) == 0 {
+		return nil, errors.ErrNoQualifiedExecutor.GenWithStackByArgs()
 	}
+	executorID := candidates[rand.Intn(len(candidates))]
 	return &schedModel.SchedulerResponse{ExecutorID: executorID}, nil
 }
 

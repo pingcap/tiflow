@@ -15,7 +15,6 @@ package model
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -23,12 +22,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gsql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
-func mockGetDBConn(t *testing.T, dsnStr string) (*gorm.DB, sqlmock.Sqlmock, error) {
+func mockGetDBConn(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
@@ -44,7 +44,7 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*gorm.DB, sqlmock.Sqlmock, erro
 	})
 	require.NoError(t, err)
 
-	return gdb, mock, nil
+	return gdb, mock
 }
 
 func closeGormDB(t *testing.T, gdb *gorm.DB) {
@@ -54,8 +54,7 @@ func closeGormDB(t *testing.T, gdb *gorm.DB) {
 }
 
 func TestNewEpochClient(t *testing.T) {
-	gdb, mock, err := mockGetDBConn(t, "test")
-	require.NoError(t, err)
+	gdb, mock := mockGetDBConn(t)
 	defer closeGormDB(t, gdb)
 	defer mock.ExpectClose()
 
@@ -65,8 +64,7 @@ func TestNewEpochClient(t *testing.T) {
 }
 
 func TestGenEpoch(t *testing.T) {
-	gdb, mock, err := mockGetDBConn(t, "test")
-	require.NoError(t, err)
+	gdb, mock := mockGetDBConn(t)
 	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()

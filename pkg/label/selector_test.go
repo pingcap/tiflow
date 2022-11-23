@@ -25,12 +25,12 @@ func TestSelectorMatches(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		selector    Selector
+		selector    *Selector
 		labels      Set
 		shouldMatch bool
 	}{
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpEq,
@@ -39,7 +39,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpEq,
@@ -48,7 +48,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpEq,
@@ -57,7 +57,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpNeq,
@@ -66,7 +66,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpNeq,
@@ -75,7 +75,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1",
 				Op:     OpNeq,
@@ -84,7 +84,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: ".*abc.*",
 				Op:     OpRegex,
@@ -93,7 +93,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: ".*abc.*",
 				Op:     OpRegex,
@@ -102,7 +102,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "^(abc|def)$",
 				Op:     OpRegex,
@@ -111,7 +111,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "^(abc|def)$",
 				Op:     OpRegex,
@@ -120,7 +120,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "^(abc|def)$",
 				Op:     OpRegex,
@@ -129,7 +129,7 @@ func TestSelectorMatches(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "^(abc|def)$",
 				Op:     OpRegex,
@@ -141,6 +141,7 @@ func TestSelectorMatches(t *testing.T) {
 
 	for idx, tc := range cases {
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.shouldMatch, tc.selector.Matches(tc.labels))
 		})
 	}
@@ -186,11 +187,11 @@ func TestSelectorValidate(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		selector Selector
+		selector *Selector
 		checkErr func(err error)
 	}{
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "#@$!@#", // Illegal Key
 				Target: "1234",
 				Op:     OpEq,
@@ -201,7 +202,7 @@ func TestSelectorValidate(t *testing.T) {
 			},
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: "1234",
 				Op:     Op("invalid"), // invalid op code
@@ -211,7 +212,7 @@ func TestSelectorValidate(t *testing.T) {
 			},
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: ")))", // invalid regex
 				Op:     OpRegex,
@@ -221,7 +222,7 @@ func TestSelectorValidate(t *testing.T) {
 			},
 		},
 		{
-			selector: Selector{
+			selector: &Selector{
 				Key:    "tenant",
 				Target: ".*abc.*",
 				Op:     OpRegex,
@@ -234,6 +235,7 @@ func TestSelectorValidate(t *testing.T) {
 
 	for idx, tc := range cases {
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
+			t.Parallel()
 			tc.checkErr(tc.selector.Validate())
 		})
 	}

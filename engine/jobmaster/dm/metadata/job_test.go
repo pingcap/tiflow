@@ -15,16 +15,16 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -52,7 +52,7 @@ func TestJobStore(t *testing.T) {
 	t.Parallel()
 
 	jobStore := NewJobStore(mock.NewMetaMock(), log.L())
-	key := jobStore.Key()
+	key := jobStore.key()
 	keys, err := adapter.DMJobKeyAdapter.Decode(key)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
@@ -62,7 +62,7 @@ func TestJobStore(t *testing.T) {
 	require.Error(t, jobStore.UpdateConfig(context.Background(), nil))
 	require.Error(t, jobStore.MarkDeleting(context.Background()))
 
-	state := jobStore.CreateState()
+	state := jobStore.createState()
 	require.IsType(t, &Job{}, state)
 
 	jobCfg := &config.JobCfg{}
@@ -125,4 +125,28 @@ func TestJobStore(t *testing.T) {
 	require.EqualError(t, jobStore.UpdateConfig(context.Background(), jobCfg), "failed to update config because job is being deleted")
 
 	require.Len(t, jobStore.UpgradeFuncs(), 0)
+}
+
+func TestTaskStage(t *testing.T) {
+	t.Parallel()
+	for i, s := range typesStringify {
+		ts, ok := toTaskStage[s]
+		require.True(t, ok)
+		bs, err := json.Marshal(ts)
+		require.NoError(t, err)
+		var ts2 TaskStage
+		require.NoError(t, json.Unmarshal(bs, &ts2))
+		require.Equal(t, ts, ts2)
+		require.Equal(t, ts, TaskStage(i))
+	}
+
+	ts := TaskStage(-1)
+	require.Equal(t, "Unknown TaskStage -1", ts.String())
+	ts = TaskStage(1000)
+	require.Equal(t, "Unknown TaskStage 1000", ts.String())
+	bs, err := json.Marshal(ts)
+	require.NoError(t, err)
+	var ts2 TaskStage
+	require.EqualError(t, json.Unmarshal(bs, &ts2), "Unknown TaskStage Unknown TaskStage 1000")
+	require.Equal(t, TaskStage(0), ts2)
 }

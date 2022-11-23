@@ -53,6 +53,7 @@ var allowDDLList = []timodel.ActionType{
 	timodel.ActionRebaseAutoID,
 	timodel.ActionAlterIndexVisibility,
 	timodel.ActionMultiSchemaChange,
+	timodel.ActionExchangeTablePartition,
 }
 
 // Filter are safe for concurrent use.
@@ -157,11 +158,11 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 	switch ddl.Type {
 	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
 		timodel.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.TableName.Schema)
 	case timodel.ActionRenameTable:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.PreTableInfo.Schema, ddl.PreTableInfo.Table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.PreTableInfo.TableName.Schema, ddl.PreTableInfo.TableName.Table)
 	default:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.TableName.Schema, ddl.TableInfo.TableName.Table)
 	}
 	if shouldIgnoreTableOrSchema {
 		return true, nil

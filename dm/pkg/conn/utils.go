@@ -21,12 +21,12 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/dumpling/export"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
-
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -118,10 +118,6 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	}
 	defer rows.Close()
 
-	if !rows.Next() {
-		err = terror.ErrNoMasterStatus.Generate()
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
 	// Show an example.
 	/*
 		MySQL [test]> SHOW MASTER STATUS;
@@ -145,15 +141,65 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		| 0-1-2                    |
 		+--------------------------+
 	*/
+
+	var rowsResult [][]string
 	if flavor == gmysql.MySQLFlavor {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB, &gtidStr)
+		rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set")
+		if err != nil {
+			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		}
+
+		switch {
+		case len(rowsResult) == 0:
+			err = terror.ErrNoMasterStatus.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		case len(rowsResult[0]) != 5:
+			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
+			err = terror.ErrIncorrectReturnColumnsNum.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		default:
+			binlogName = rowsResult[0][0]
+			var posInt int64
+			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			if err != nil {
+				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+			}
+			pos = uint32(posInt)
+			binlogDoDB = rowsResult[0][2]
+			binlogIgnoreDB = rowsResult[0][3]
+			gtidStr = rowsResult[0][4]
+		}
 	} else {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB)
+		rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB")
+		if err != nil {
+			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		}
+
+		switch {
+		case len(rowsResult) == 0:
+			err = terror.ErrNoMasterStatus.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		case len(rowsResult[0]) != 4:
+			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS returns for MariaDB is not equal to 4, will not use the retrieved information")
+			err = terror.ErrIncorrectReturnColumnsNum.Generate()
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		default:
+			binlogName = rowsResult[0][0]
+			var posInt int64
+			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			if err != nil {
+				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+			}
+			pos = uint32(posInt)
+			binlogDoDB = rowsResult[0][2]
+			binlogIgnoreDB = rowsResult[0][3]
+		}
 	}
-	if err != nil {
-		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
+
 	if flavor == gmysql.MariaDBFlavor {
 		gtidStr, err = GetGlobalVariable(ctx, db, "gtid_binlog_pos")
 		if err != nil {
@@ -161,7 +207,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		}
 	}
 
-	if rows.Next() {
+	if len(rowsResult) > 1 {
 		ctx.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
 	}
 	if rows.Close() != nil {

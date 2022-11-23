@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -39,6 +40,27 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// TODO determine a reasonable default value
+	// This is part of sink performance optimization
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
+	// defaultBatchReadSize is the default batch size of read from sorter
+	defaultBatchReadSize = 256
+)
+
+// TODO find a better name or avoid using an interface
+// We use an interface here for ease in unit testing.
+type tableFlowController interface {
+	Consume(
+		msg *model.PolymorphicEvent,
+		size uint64,
+		blockCallBack func(batchID uint64) error,
+	) error
+	Release(resolved model.ResolvedTs)
+	Abort()
+	GetConsumption() uint64
+}
+
 type sorterNode struct {
 	pdClient pd.Client
 	sorter   sorter.EventSorter
@@ -49,7 +71,7 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
-	mounter entry.Mounter
+	mg entry.MounterGroup
 
 	eg     *errgroup.Group
 	cancel context.CancelFunc
@@ -61,7 +83,7 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	state      *TableState
+	state      *tablepb.TableState
 	preparedCh chan struct{}
 
 	// started indicate that the sink is really replicating, not idle.
@@ -73,19 +95,20 @@ type sorterNode struct {
 	changefeed     model.ChangeFeedID
 	// remainEvents record the amount of event remain in sorter engine
 	remainEvents int64
+	startTs      model.Ts
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
-	flowController tableFlowController, mounter entry.Mounter,
-	state *TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
+	flowController tableFlowController, mg entry.MounterGroup,
+	state *tablepb.TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
 	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
-		mounter:        mounter,
+		mg:             mg,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		state:          state,
@@ -116,7 +139,12 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 				zap.String("tableName", tableName))
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
+		debugConfig := config.GetGlobalServerConfig().Debug
+		if debugConfig.EnableDBSorter {
+			if debugConfig.EnablePullBasedSink {
+				log.Panic("DB sorter has been switched into a new implementation in pkg/sorter")
+				return nil, nil
+			}
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			ssystem := ctx.GlobalVars().SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))
@@ -144,11 +172,83 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	}
 }
 
+func (n *sorterNode) batchRead(ctx context.Context, result []*model.PolymorphicEvent) (int, bool) {
+	var (
+		idx   = 0
+		start = time.Now()
+	)
+	defer func() {
+		if idx > 0 {
+			SorterBatchReadSize.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(float64(idx))
+			SorterBatchReadDuration.
+				WithLabelValues(n.changefeed.Namespace, n.changefeed.ID).Observe(time.Since(start).Seconds())
+		}
+	}()
+	// receive at least one event indicate that there are have many more event
+	// in the sorter wait to be consumed.
+	output := n.sorter.Output()
+	select {
+	case <-ctx.Done():
+		return idx, false
+	case event, ok := <-output:
+		if !ok {
+			return idx, false
+		}
+		if event == nil || event.RawKV == nil {
+			log.Panic("unexpected empty event",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Any("event", event))
+		}
+		if event.CRTs >= n.startTs {
+			result[idx] = event
+			idx++
+		}
+	}
+
+	for {
+		// We must call `sorter.Output` before receiving resolved events.
+		// Skip calling `sorter.Output` and caching output channel may fail
+		// to receive any events.
+		output := n.sorter.Output()
+		select {
+		case <-ctx.Done():
+			return idx, false
+		case event, ok := <-output:
+			if !ok {
+				return idx, false
+			}
+			if event == nil || event.RawKV == nil {
+				log.Panic("unexpected empty event",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.Int64("tableID", n.tableID),
+					zap.String("tableName", n.tableName),
+					zap.Any("event", event))
+			}
+			if event.CRTs >= n.startTs {
+				result[idx] = event
+				idx++
+			}
+			if idx == defaultBatchReadSize {
+				return idx, true
+			}
+		default:
+			return idx, true
+		}
+	}
+}
+
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 	eventSorter sorter.EventSorter,
 ) error {
+	n.sorter = eventSorter
+
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -157,7 +257,7 @@ func (n *sorterNode) start(
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
 	n.eg.Go(func() error {
-		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
+		ctx.Throw(errors.Trace(n.sorter.Run(stdCtx)))
 		return nil
 	})
 	n.eg.Go(func() error {
@@ -183,7 +283,7 @@ func (n *sorterNode) start(
 		case <-stdCtx.Done():
 			return nil
 		case <-n.preparedCh:
-			log.Info("table is prepared",
+			log.Debug("table is prepared",
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.String("namespace", n.changefeed.Namespace),
@@ -215,115 +315,114 @@ func (n *sorterNode) start(
 				return errors.Trace(err)
 			}
 			log.Info("table is replicating",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),
 				zap.Uint64("replicateTs", replicateTs),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID))
+				zap.Duration("duration", time.Since(start)))
+			n.startTs = startTs
 		}
 
-		n.state.Store(TableStateReplicating)
-		eventSorter.EmitStartTs(stdCtx, startTs)
+		n.state.Store(tablepb.TableStateReplicating)
+		n.sorter.EmitStartTs(stdCtx, startTs)
 
+		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
 		for {
-			// We must call `sorter.Output` before receiving resolved events.
-			// Skip calling `sorter.Output` and caching output channel may fail
-			// to receive any events.
-			output := eventSorter.Output()
 			select {
 			case <-stdCtx.Done():
 				return nil
-			case msg, ok := <-output:
-				if !ok {
-					// sorter output channel closed
-					return nil
+			default:
+			}
+			index, ok := n.batchRead(stdCtx, events)
+			if !ok {
+				// sorter output channel closed
+				return nil
+			}
+			for i := 0; i < index; i++ {
+				e := events[i]
+				e.SetUpFinishedCh()
+				if err := n.mg.AddEvent(stdCtx, e); err != nil {
+					return errors.Trace(err)
 				}
+			}
 
-				if msg == nil || msg.RawKV == nil {
-					log.Panic("unexpected empty msg", zap.Any("msg", msg))
-				}
-
-				if msg.CRTs < startTs {
-					// Ignore messages are less than initial checkpoint ts.
-					log.Debug("sorterNode: ignore sorter output event",
-						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
-					continue
-				}
-
-				if msg.RawKV.OpType != model.OpTypeResolved {
-					atomic.AddInt64(&n.remainEvents, -1)
-					ignored, err := n.mounter.DecodeEvent(ctx, msg)
-					if err != nil {
-						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
-						ctx.Throw(err)
-						return errors.Trace(err)
-					}
-					if ignored {
-						continue
-					}
-					commitTs := msg.CRTs
-					// We interpolate a resolved-ts if none has been sent for some time.
-					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
-						resolvedTsInterpolateFunc(commitTs)
-					}
-
-					// For all rows, we add table replicate ts, so mysql sink can
-					// determine when to turn off safe-mode.
-					msg.Row.ReplicatingTs = replicateTs
-					// We calculate memory consumption by RowChangedEvent size.
-					// It's much larger than RawKVEntry.
-					size := uint64(msg.Row.ApproximateBytes())
-					// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
-					// means interrupting a transaction. Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
-						if commitTs > lastCRTs {
-							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
-							// Not sending a Resolved Event here will very likely deadlock the pipeline.
-							resolvedTsInterpolateFunc(commitTs)
-						} else if commitTs == lastCRTs {
-							// send batch resolve event
-							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
-							msg.Resolved = &model.ResolvedTs{
-								Ts:      commitTs,
-								Mode:    model.BatchResolvedMode,
-								BatchID: batchID,
-							}
-							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-						} else {
-							log.Panic("flow control blocked, report a bug",
-								zap.Uint64("commitTs", commitTs),
-								zap.Uint64("lastCommitTs", lastCRTs),
-								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
-						}
-						return nil
-					})
-					if err != nil {
-						if cerror.ErrFlowControllerAborted.Equal(err) {
-							log.Debug("flow control cancelled for table",
-								zap.Int64("tableID", n.tableID),
-								zap.String("tableName", n.tableName))
-						} else {
-							ctx.Throw(err)
-						}
-						return nil
-					}
-					lastCRTs = msg.CRTs
-				} else {
-					// handle OpTypeResolved
-					if msg.CRTs < lastSentResolvedTs {
+			for i := 0; i < index; i++ {
+				e := events[i]
+				if e.RawKV.OpType == model.OpTypeResolved {
+					if e.CRTs < lastSentResolvedTs {
 						continue
 					}
 					tickMsg := message.ValueMessage(pmessage.TickMessage())
 					_ = tableActorRouter.Send(tableActorID, tickMsg)
-					lastSentResolvedTs = msg.CRTs
+					lastSentResolvedTs = e.CRTs
 					lastSendResolvedTsTime = time.Now()
+					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
+					continue
 				}
-				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+
+				atomic.AddInt64(&n.remainEvents, -1)
+				if err := e.WaitFinished(ctx); err != nil {
+					if errors.Cause(err) != context.Canceled {
+						ctx.Throw(err)
+					}
+					return errors.Trace(err)
+				}
+				if e.Row == nil {
+					continue
+				}
+
+				commitTs := e.CRTs
+				// We interpolate a resolved-ts if none has been sent for some time.
+				if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
+					resolvedTsInterpolateFunc(commitTs)
+				}
+
+				// For all rows, we add table replicate ts, so mysql sink can
+				// determine when to turn off safe-mode.
+				e.Row.ReplicatingTs = replicateTs
+				// We calculate memory consumption by RowChangedEvent size.
+				// It's much larger than RawKVEntry.
+				size := uint64(e.Row.ApproximateBytes())
+				// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
+				// means interrupting a transaction. Otherwise, the pipeline would deadlock.
+				err := n.flowController.Consume(e, size, func(batchID uint64) error {
+					if commitTs > lastCRTs {
+						// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
+						// Not sending a Resolved Event here will very likely deadlock the pipeline.
+						resolvedTsInterpolateFunc(commitTs)
+					} else if commitTs == lastCRTs {
+						// send batch resolve event
+						msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+						msg.Resolved = &model.ResolvedTs{
+							Ts:      commitTs,
+							Mode:    model.BatchResolvedMode,
+							BatchID: batchID,
+						}
+						ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+					} else {
+						log.Panic("flow control blocked, report a bug",
+							zap.Uint64("commitTs", commitTs),
+							zap.Uint64("lastCommitTs", lastCRTs),
+							zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
+					}
+					return nil
+				})
+				if err != nil {
+					if cerror.ErrFlowControllerAborted.Equal(err) {
+						log.Debug("flow control cancelled for table",
+							zap.Int64("tableID", n.tableID),
+							zap.String("tableName", n.tableName))
+					} else {
+						ctx.Throw(err)
+					}
+					return nil
+				}
+				lastCRTs = e.CRTs
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 			}
 		}
 	})
-	n.sorter = eventSorter
 	return nil
 }
 
@@ -340,8 +439,6 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("oldResolvedTs", oldResolvedTs))
 		}
-		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
-
 		if resolvedTs > n.BarrierTs() && !n.redoLogEnabled {
 			// Do not send resolved ts events that is larger than
 			// barrier ts.
@@ -358,9 +455,13 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// startTs (which is used to initialize the `sorterNode.resolvedTs`) received,
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
-		if n.state.Load() == TableStatePreparing {
-			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
-			n.state.Store(TableStatePrepared)
+		if n.state.Load() == tablepb.TableStatePreparing {
+			log.Debug("sorterNode, first resolved event received",
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs))
+			n.state.Store(tablepb.TableStatePrepared)
 			close(n.preparedCh)
 		}
 	} else {
@@ -375,7 +476,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
+func (n *sorterNode) releaseResource() {
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
@@ -391,7 +492,7 @@ func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
 
-func (n *sorterNode) State() TableState { return n.state.Load() }
+func (n *sorterNode) State() tablepb.TableState { return n.state.Load() }
 
 func (n *sorterNode) remainEvent() int64 {
 	return atomic.LoadInt64(&n.remainEvents)

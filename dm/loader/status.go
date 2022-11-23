@@ -16,10 +16,9 @@ package loader
 import (
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"go.uber.org/zap"
 )
 
 // Status implements Unit.Status.
@@ -27,12 +26,15 @@ func (l *Loader) Status(_ *binlog.SourceStatus) interface{} {
 	finishedSize := l.finishedDataSize.Load()
 	totalSize := l.totalDataSize.Load()
 	progress := percent(finishedSize, totalSize, l.finish.Load())
+	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finishedSize)))
+
 	s := &pb.LoadStatus{
 		FinishedBytes:  finishedSize,
 		TotalBytes:     totalSize,
 		Progress:       progress,
 		MetaBinlog:     l.metaBinlog.Load(),
 		MetaBinlogGTID: l.metaBinlogGTID.Load(),
+		Bps:            currentSpeed,
 	}
 	go l.printStatus()
 	return s

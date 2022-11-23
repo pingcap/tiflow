@@ -45,6 +45,7 @@ import (
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchReplaceEnabled = false
+	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 		cfg:        cfg,
@@ -60,6 +61,9 @@ func newMySQLBackend(
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, sink.TxnSink)
 	cancel() // Cancel background goroutines in returned metrics.Statistics.
+	raw := sinkURI.Query()
+	raw.Set("batch-dml-enable", "false")
+	sinkURI.RawQuery = raw.Encode()
 
 	backends, err := NewMySQLBackends(ctx, sinkURI, replicaConfig, dbConnFactory, statistics)
 	if err != nil {
@@ -260,7 +264,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
@@ -772,7 +776,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		mock.ExpectClose()
 		return db, nil
@@ -1123,7 +1127,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				rowCount: 1,
 			},
 		}, {
-			name: "safe mode on one row commit ts < replicating ts",
+			name: "safe mode on and txn's commit ts < replicating ts",
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:       418658114257813516,
@@ -1143,9 +1147,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					}},
 				},
 				{
-					StartTs:       418658114257813506,
-					CommitTs:      418658114257813507,
-					ReplicatingTs: 418658114257813505,
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
@@ -1161,7 +1165,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				startTs: []model.Ts{418658114257813516, 418658114257813506},
+				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
@@ -1184,5 +1188,260 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 		ms.rows = len(tc.input)
 		dmls := ms.prepareDMLs()
 		require.Equal(t, tc.expected, dmls, tc.name)
+	}
+}
+
+func TestPrepareBatchDMLs(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		input    []*model.RowChangedEvent
+		expected *preparedDMLs
+	}{
+		// empty event
+		{
+			input: []*model.RowChangedEvent{},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{},
+				sqls:    []string{},
+				values:  [][]interface{}{},
+			},
+		},
+		{ // delete event
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813514},
+				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
+				values:   [][]interface{}{{1, 1, 2, 2}},
+				rowCount: 2,
+			},
+		},
+		{ // insert event
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 1}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813516},
+				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
+				values:   [][]interface{}{{1, 1, 2, 2}},
+				rowCount: 2,
+			},
+		},
+		// update event
+		{
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 3,
+					}},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 4,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 4,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813516},
+				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))"},
+				values:   [][]interface{}{{1, 1, 2, 3, 3, 4, 1, 1, 2, 3, 3, 4, 1, 1, 3, 3}},
+				rowCount: 2,
+			},
+		},
+		// mixed event
+		{
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813514},
+				sqls: []string{
+					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
+					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
+				},
+				values:   [][]interface{}{{1, 1, 2, 2}, {2, 2}},
+				rowCount: 3,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ms := newMySQLBackendWithoutDB(ctx)
+	ms.cfg.BatchDMLEnable = true
+	ms.cfg.SafeMode = false
+	ms.cfg.EnableOldValue = true
+	for _, tc := range testCases {
+		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
+		ms.events[0] = &eventsink.TxnCallbackableEvent{
+			Event: &model.SingleTableTxn{Rows: tc.input},
+		}
+		ms.rows = len(tc.input)
+		dmls := ms.prepareDMLs()
+		require.Equal(t, tc.expected, dmls)
 	}
 }

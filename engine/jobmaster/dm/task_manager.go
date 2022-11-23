@@ -18,16 +18,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/engine/framework"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"go.uber.org/zap"
-
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 var (
@@ -45,15 +46,24 @@ type TaskManager struct {
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
+
+	gaugeVec *prometheus.GaugeVec
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger, metricFactory promutil.Factory) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
 		logger:        pLogger.With(zap.String("component", "task_manager")),
 		messageAgent:  messageAgent,
+		gaugeVec: metricFactory.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "dm",
+				Subsystem: "task",
+				Name:      "stage",
+				Help:      "task stage of dm worker in this job",
+			}, []string{"task_id"}),
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -66,7 +76,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 // OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
 // called by user request.
 func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
-	tm.logger.Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
+	tm.logger.Info("operate task", zap.Stringer("op", op), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
 			tm.SetNextCheckTime(time.Now())
@@ -101,11 +111,12 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 	tm.logger.Debug(
 		"update task status",
 		zap.String("task_id", taskStatus.Task),
-		zap.String("stage", string(taskStatus.Stage)),
-		zap.Int("unit", int(taskStatus.Unit)),
+		zap.Stringer("stage", taskStatus.Stage),
+		zap.Stringer("unit", taskStatus.Unit),
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
+	tm.gaugeVec.WithLabelValues(taskStatus.Task).Set(float64(taskStatus.Stage))
 }
 
 // TaskStatus return the task status.
@@ -125,7 +136,7 @@ func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil || state.(*metadata.Job).Deleting {
 		tm.logger.Info("on job deleting", zap.Error(err))
-		tm.onJobDel(ctx)
+		tm.onJobDel()
 		return err
 	}
 	job := state.(*metadata.Job)
@@ -154,12 +165,12 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 			continue
 		}
 
-		op := genOp(runningTask.Stage, persistentTask.Stage)
+		op := genOp(runningTask.Stage, runningTask.StageUpdatedTime, persistentTask.Stage, persistentTask.StageUpdatedTime)
 		if op == dmpkg.None {
 			tm.logger.Debug(
 				"task status will not be changed",
 				zap.String("task_id", taskID),
-				zap.String("stage", string(runningTask.Stage)),
+				zap.Stringer("stage", runningTask.Stage),
 			)
 			continue
 		}
@@ -167,9 +178,9 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		tm.logger.Info(
 			"unexpected task status",
 			zap.String("task_id", taskID),
-			zap.Int("op", int(op)),
-			zap.String("expected_stage", string(persistentTask.Stage)),
-			zap.String("stage", string(runningTask.Stage)),
+			zap.Stringer("op", op),
+			zap.Stringer("expected_stage", persistentTask.Stage),
+			zap.Stringer("stage", runningTask.Stage),
 		)
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {
@@ -182,10 +193,11 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 }
 
 // remove all tasks, usually happened when delete jobs.
-func (tm *TaskManager) onJobDel(ctx context.Context) {
+func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
+		tm.gaugeVec.DeleteLabelValues(key.(string))
 		return true
 	})
 }
@@ -197,6 +209,7 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 		if _, ok := job.Tasks[taskID]; !ok {
 			tm.logger.Info("remove task status", zap.String("task_id", taskID))
 			tm.tasks.Delete(taskID)
+			tm.gaugeVec.DeleteLabelValues(taskID)
 		}
 		return true
 	})
@@ -211,12 +224,24 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 	return value.(runtime.TaskStatus), true
 }
 
-func genOp(runtimeStage, expectedStage metadata.TaskStage) dmpkg.OperateType {
+func genOp(
+	runningStage metadata.TaskStage,
+	runningStageUpdatedTime time.Time,
+	expectedStage metadata.TaskStage,
+	expectedStageUpdatedTime time.Time,
+) dmpkg.OperateType {
 	switch {
-	case expectedStage == metadata.StagePaused && (runtimeStage == metadata.StageRunning || runtimeStage == metadata.StageError):
+	case expectedStage == metadata.StagePaused && (runningStage == metadata.StageRunning || runningStage == metadata.StageError):
 		return dmpkg.Pause
-	case expectedStage == metadata.StageRunning && runtimeStage == metadata.StagePaused:
-		return dmpkg.Resume
+	case expectedStage == metadata.StageRunning:
+		if runningStage == metadata.StagePaused {
+			return dmpkg.Resume
+		}
+		// only resume a error task for a manual Resume action by checking expectedStageUpdatedTime
+		if runningStage == metadata.StageError && expectedStageUpdatedTime.After(runningStageUpdatedTime) {
+			return dmpkg.Resume
+		}
+		return dmpkg.None
 	// TODO: support update
 	default:
 		return dmpkg.None
@@ -248,7 +273,7 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 			return false
 		}
 		// update if we add new task mode
-		if runningTask.Unit != framework.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
+		if runningTask.Unit != frameModel.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
 			return false
 		}
 	}

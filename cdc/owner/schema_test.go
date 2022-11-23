@@ -15,11 +15,13 @@ package owner
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -76,7 +78,7 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Equal(t, schema.AllPhysicalTables(), expectedTableIDs)
 }
 
-func TestAllTableNames(t *testing.T) {
+func TestAllTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
@@ -84,14 +86,26 @@ func TestAllTableNames(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
-	require.Len(t, schema.AllTableNames(), 0)
+	require.Len(t, schema.AllTables(), 0)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	require.Nil(t, schema.HandleDDL(job))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
+	require.Len(t, schema.AllTables(), 1)
+	tableName := schema.AllTables()[0].TableName
+	require.Equal(t, tableName, model.TableName{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 76,
+	})
 	// add ineligible table
 	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
+	require.Len(t, schema.AllTables(), 1)
+	tableName = schema.AllTables()[0].TableName
+	require.Equal(t, tableName, model.TableName{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 76,
+	})
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
@@ -115,6 +129,18 @@ func TestIsIneligibleTableID(t *testing.T) {
 	require.True(t, schema.IsIneligibleTableID(tableIDT2))
 }
 
+func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
+	require.Equal(t, e1.StartTs, e2.StartTs)
+	require.Equal(t, e1.CommitTs, e2.CommitTs)
+	require.Equal(t, e1.Query, e2.Query)
+	require.Equal(t, e1.TableInfo.TableName, e2.TableInfo.TableName)
+	require.Equal(t, len(e1.TableInfo.TableInfo.Columns), len(e2.TableInfo.TableInfo.Columns))
+	for idx, col := range e1.TableInfo.TableInfo.Columns {
+		require.Equal(t, col.Name, e2.TableInfo.Columns[idx].Name)
+		require.Equal(t, col.FieldType.GetType(), e2.TableInfo.Columns[idx].FieldType.GetType())
+	}
+}
+
 func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -128,16 +154,22 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	events, err := schema.BuildDDLEvents(job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "create table test.t1(id int primary key)",
 		Type:     timodel.ActionCreateTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+				},
+			},
 		},
 		PreTableInfo: nil,
 	})
@@ -146,22 +178,35 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	events, err = schema.BuildDDLEvents(job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
 		Type:     timodel.ActionAddColumn,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}, {Name: "c1", Type: mysql.TypeString}},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+					{Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeString)},
+				},
+			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: job.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+				},
+			},
 		},
 	})
 }
@@ -224,58 +269,64 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	events, err = schema.BuildDDLEvents(job)
 	require.Nil(t, err)
 	require.Len(t, events, 2)
-	require.Equal(t, events[0], &model.DDLEvent{
+	fmt.Printf("events[0]:%+v\n", events[0])
+	fmt.Printf("events[1]:%+v\n", events[1])
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "RENAME TABLE `test1`.`t1` TO `test1`.`t10`",
 		Type:     timodel.ActionRenameTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t10",
-			TableID: t1TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t10",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t1",
-			TableID: t1TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t1",
+				TableID: t1TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
 	})
-	require.Equal(t, events[1], &model.DDLEvent{
+	compareEvents(t, events[1], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
 		Query:    "RENAME TABLE `test1`.`t2` TO `test1`.`t20`",
 		Type:     timodel.ActionRenameTable,
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t20",
-			TableID: t2TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t20",
+				TableID: t2TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test1",
-			Table:   "t2",
-			TableID: t2TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test1",
+				Table:   "t2",
+				TableID: t2TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -312,30 +363,32 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDL(t1DropJob))
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  t1DropJob.StartTS,
 		CommitTs: t1DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP TABLE `test`.`t1`",
 		Type:     timodel.ActionDropTable,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: t1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: t1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t1",
-			TableID: t1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t1",
+				TableID: t1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -345,30 +398,32 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDL(t2DropJob))
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  t2DropJob.StartTS,
 		CommitTs: t2DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP TABLE `test`.`t2`",
 		Type:     timodel.ActionDropTable,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t2",
-			TableID: t2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t2",
+				TableID: t2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "t2",
-			TableID: t2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeLong,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "t2",
+				TableID: t2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 				},
 			},
 		},
@@ -421,30 +476,32 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDL(view1DropJob))
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  view1DropJob.StartTS,
 		CommitTs: view1DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP VIEW `test`.`view1`",
 		Type:     timodel.ActionDropView,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view1",
-			TableID: view1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view1",
+				TableID: view1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view1",
-			TableID: view1DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view1",
+				TableID: view1DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
@@ -454,30 +511,32 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDL(view2DropJob))
-	require.Equal(t, events[0], &model.DDLEvent{
+	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  view2DropJob.StartTS,
 		CommitTs: view2DropJob.BinlogInfo.FinishedTS,
 		Query:    "DROP VIEW `test`.`view2`",
 		Type:     timodel.ActionDropView,
-		PreTableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view2",
-			TableID: view2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		PreTableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view2",
+				TableID: view2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},
-		TableInfo: &model.SimpleTableInfo{
-			Schema:  "test",
-			Table:   "view2",
-			TableID: view2DropJob.TableID,
-			ColumnInfo: []*model.ColumnInfo{
-				{
-					Name: "id",
-					Type: mysql.TypeUnspecified,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "view2",
+				TableID: view2DropJob.TableID,
+			},
+			TableInfo: &timodel.TableInfo{
+				Columns: []*timodel.ColumnInfo{
+					{Name: timodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeUnspecified)},
 				},
 			},
 		},

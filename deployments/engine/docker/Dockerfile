@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine as builder
+FROM golang:1.19-alpine as builder
 
 #build
 RUN apk add --no-cache \
@@ -15,7 +15,6 @@ WORKDIR /dataflow-engine
 COPY . .
 RUN make engine
 
-FROM alpine:3.16
+FROM gcr.io/pingcap-public/pingcap/alpine:alpine-3.14.6
 
 COPY --from=builder /dataflow-engine/bin/tiflow /tiflow
-COPY --from=builder /dataflow-engine/bin/tiflow-demoserver /tiflow-demoserver
