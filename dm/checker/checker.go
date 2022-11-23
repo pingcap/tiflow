@@ -343,7 +343,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		// bypass a Adjust error
+		// bypass an Adjust error
 		lCfg.Mydumper.SourceDir = "noop://"
 		err = lCfg.Adjust(ctx)
 		if err != nil {
