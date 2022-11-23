@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"net"
 	"net/url"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -249,7 +249,6 @@ func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConn
 		// If access is denied and password is encoded by base64, try to decoded password.
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && mysqlErr.Number == tmysql.ErrAccessDenied {
 			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
-				log.Info("fizz decode password", zap.String("password", password), zap.String("decode password", string(dePassword)))
 				dbConfig.Passwd = string(dePassword)
 				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
 				if err != nil {
