@@ -68,7 +68,7 @@ func TestNewBroker(t *testing.T) {
 	require.NoError(t, err)
 	c.EXPECT().QueryStorageConfig(gomock.Any(), &pb.QueryStorageConfigRequest{}).Return(
 		&pb.QueryStorageConfigResponse{
-			Config: string(cfg),
+			Config: cfg,
 		}, nil).Times(1)
 	brk, err = NewBroker(ctx, "executor-1", c)
 	require.NoError(t, err)
@@ -240,10 +240,10 @@ func TestBrokerRemoveResource(t *testing.T) {
 	err := os.MkdirAll(resPath, 0o700)
 	require.NoError(t, err)
 
-	// Wrong creatorID would yield NotFound
+	// Wrong WorkerId would yield NotFound
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
-		CreatorId:  "worker-2", // wrong creatorID
+		WorkerId:   "worker-2", // wrong WorkerId
 	})
 	require.Error(t, err)
 	code := status.Convert(err).Code()
@@ -252,7 +252,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// Wrong file type would yield InvalidArgument
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/s3/resource-1",
-		CreatorId:  "worker-2", // wrong creatorID
+		WorkerId:   "worker-2", // wrong WorkerId
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
@@ -260,7 +260,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/wrongType/resource-1",
-		CreatorId:  "worker-2", // wrong creatorID
+		WorkerId:   "worker-2", // wrong WorkerId
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
@@ -269,7 +269,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// The response is ignored because it is an empty PB message.
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})
 	require.NoError(t, err)
 	require.NoDirExists(t, resPath)
@@ -277,7 +277,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// Repeated calls should fail with NotFound
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
@@ -286,7 +286,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// Unexpected resource type
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/s3/resource-1",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
@@ -295,16 +295,16 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// Unparsable ResourceID
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "#@$!@#!$",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
 	require.Equal(t, codes.InvalidArgument, code)
 
-	// Empty CreatorID
+	// Empty WorkerId
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
-		CreatorId:  "",
+		WorkerId:   "",
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()
@@ -313,7 +313,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	// Empty ResourceID
 	_, err = brk.RemoveResource(context.Background(), &pb.RemoveLocalResourceRequest{
 		ResourceId: "",
-		CreatorId:  "worker-1",
+		WorkerId:   "worker-1",
 	})
 	require.Error(t, err)
 	code = status.Convert(err).Code()

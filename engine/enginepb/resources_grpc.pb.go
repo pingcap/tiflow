@@ -20,8 +20,8 @@ const _ = grpc.SupportPackageIsVersion7
 type ResourceManagerClient interface {
 	CreateResource(ctx context.Context, in *CreateResourceRequest, opts ...grpc.CallOption) (*CreateResourceResponse, error)
 	QueryResource(ctx context.Context, in *QueryResourceRequest, opts ...grpc.CallOption) (*QueryResourceResponse, error)
-	// RemoveResource cleans up the metadata only of the resource.
-	// The invoker should handle the actual cleaning up on its own.
+	// RemoveResource only cleans up the metadata of the resource.
+	// The invoker should handle the actual resource cleaning up on its own.
 	RemoveResource(ctx context.Context, in *RemoveResourceRequest, opts ...grpc.CallOption) (*RemoveResourceResponse, error)
 }
 
@@ -66,8 +66,8 @@ func (c *resourceManagerClient) RemoveResource(ctx context.Context, in *RemoveRe
 type ResourceManagerServer interface {
 	CreateResource(context.Context, *CreateResourceRequest) (*CreateResourceResponse, error)
 	QueryResource(context.Context, *QueryResourceRequest) (*QueryResourceResponse, error)
-	// RemoveResource cleans up the metadata only of the resource.
-	// The invoker should handle the actual cleaning up on its own.
+	// RemoveResource only cleans up the metadata of the resource.
+	// The invoker should handle the actual resource cleaning up on its own.
 	RemoveResource(context.Context, *RemoveResourceRequest) (*RemoveResourceResponse, error)
 }
 

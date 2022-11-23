@@ -1637,10 +1637,9 @@ func TestExecutorClient(t *testing.T) {
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
 		},
-		ID:         "executor-0-1234",
-		Name:       "executor-0",
-		Address:    "127.0.0.1:1234",
-		Capability: 20,
+		ID:      "executor-0-1234",
+		Name:    "executor-0",
+		Address: "127.0.0.1:1234",
 		Labels: map[label.Key]label.Value{
 			"key1": "val1",
 			"key2": "val2",
@@ -1657,8 +1656,8 @@ func TestExecutorClient(t *testing.T) {
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `executors` (`created_at`,`updated_at`,`id`,`name`,`address`,`capability`,`labels`) VALUES (?,?,?,?,?,?,?)")).
-					WithArgs(createdAt, updatedAt, executor.ID, executor.Name, executor.Address, executor.Capability, "{\"key1\":\"val1\",\"key2\":\"val2\"}").
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `executors` (`created_at`,`updated_at`,`id`,`name`,`address`,`labels`) VALUES (?,?,?,?,?,?)")).
+					WithArgs(createdAt, updatedAt, executor.ID, executor.Name, executor.Address, "{\"key1\":\"val1\",\"key2\":\"val2\"}").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -1671,8 +1670,8 @@ func TestExecutorClient(t *testing.T) {
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("UPDATE `executors` SET `address`=?,`capability`=?,`id`=?,`labels`=?,`name`=?,`updated_at`=? WHERE id = ?")).
-					WithArgs(executor.Address, executor.Capability, executor.ID, "{\"key1\":\"val1\",\"key2\":\"val2\"}", executor.Name, sqlmock.AnyArg(), executor.ID).
+				mock.ExpectExec(regexp.QuoteMeta("UPDATE `executors` SET `address`=?,`id`=?,`labels`=?,`name`=?,`updated_at`=? WHERE id = ?")).
+					WithArgs(executor.Address, executor.ID, "{\"key1\":\"val1\",\"key2\":\"val2\"}", executor.Name, sqlmock.AnyArg(), executor.ID).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
@@ -1696,9 +1695,9 @@ func TestExecutorClient(t *testing.T) {
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `executors`")).
 					WillReturnRows(sqlmock.NewRows([]string{
-						"seq_id", "created_at", "updated_at", "id", "name", "address", "capability", "labels",
+						"seq_id", "created_at", "updated_at", "id", "name", "address", "labels",
 					}).AddRow(1, createdAt, updatedAt, executor.ID, executor.Name,
-						executor.Address, executor.Capability, "{\"key1\":\"val1\",\"key2\":\"val2\"}"))
+						executor.Address, "{\"key1\":\"val1\",\"key2\":\"val2\"}"))
 			},
 		},
 	}

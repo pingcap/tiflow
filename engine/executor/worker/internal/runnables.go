@@ -17,16 +17,10 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
-
-// Workloader defines an interface to get Workload
-type Workloader interface {
-	Workload() model.RescUnit
-}
 
 // RunnableID is a unique id for the runnable
 type RunnableID = string
