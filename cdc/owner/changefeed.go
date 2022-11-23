@@ -34,6 +34,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -44,7 +45,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, upstream *upstream.Upstream,
+	ctx cdcContext.Context, pdClock pdutil.Clock,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -54,15 +55,15 @@ func newSchedulerFromCtx(
 	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, cfg.Scheduler, upstream)
+		messageServer, messageRouter, ownerRev, cfg.Scheduler, pdClock)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
 	ctx cdcContext.Context,
-	upstream *upstream.Upstream,
+	pdClock pdutil.Clock,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, upstream)
+	return newSchedulerFromCtx(ctx, pdClock)
 }
 
 type changefeed struct {
@@ -129,7 +130,7 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, upstream *upstream.Upstream) (scheduler.Scheduler, error)
+	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -161,13 +162,13 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, upstream *upstream.Upstream) (scheduler.Scheduler, error),
+	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
@@ -525,7 +526,7 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock)
 	if err != nil {
 		return errors.Trace(err)
 	}

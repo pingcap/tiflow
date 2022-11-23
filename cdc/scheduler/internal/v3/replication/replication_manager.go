@@ -502,11 +502,6 @@ func (r *Manager) AdvanceCheckpoint(
 				zap.Int64("tableID", tableID))
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
-		// find the slow tables
-		heap.Push(&r.slowTableHeap, table)
-		if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
-			heap.Pop(&r.slowTableHeap)
-		}
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
@@ -520,16 +515,27 @@ func (r *Manager) AdvanceCheckpoint(
 		r.slowestTableID = slowestTableID
 	}
 
-	r.logSlowTableInfo(newCheckpointTs, currentTime)
+	checkpointLag := currentTime.Sub(oracle.GetTimeFromTS(newCheckpointTs))
+	if checkpointLag > logSlowTablesLagThreshold &&
+		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
+		r.logSlowTableInfo(currentTables, currentTime)
+		r.lastLogSlowTablesTime = time.Now()
+	}
 
 	return newCheckpointTs, newResolvedTs
 }
 
-func (r *Manager) logSlowTableInfo(checkpointTs model.Ts, currentTime time.Time) {
-	checkpointLag := currentTime.Sub(oracle.GetTimeFromTS(checkpointTs))
-	if checkpointLag < logSlowTablesLagThreshold ||
-		time.Since(r.lastLogSlowTablesTime) < logSlowTablesInterval {
-		return
+func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime time.Time) {
+	// find the slow tables
+	for _, tableID := range currentTables {
+		table, ok := r.tables[tableID]
+		if !ok {
+			continue
+		}
+		heap.Push(&r.slowTableHeap, table)
+		if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
+			heap.Pop(&r.slowTableHeap)
+		}
 	}
 	for i := 0; i < defaultSlowTableHeapSize; i++ {
 		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)

@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -54,7 +54,7 @@ type coordinator struct {
 	replicationM *replication.Manager
 	captureM     *member.CaptureManager
 	schedulerM   *scheduler.Manager
-	upstream     *upstream.Upstream
+	pdClock      pdutil.Clock
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -69,7 +69,7 @@ func NewCoordinator(
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
-	upstream *upstream.Upstream,
+	pdClock pdutil.Clock,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
 		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
@@ -78,7 +78,7 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
-	coord.upstream = upstream
+	coord.pdClock = pdClock
 	return coord, nil
 }
 
@@ -236,6 +236,8 @@ func (c *coordinator) Close(ctx context.Context) {
 		zap.String("changefeed", c.changefeedID.ID))
 }
 
+// ===========
+
 func (c *coordinator) poll(
 	ctx context.Context,
 	checkpointTs model.Ts,
@@ -265,8 +267,8 @@ func (c *coordinator) poll(
 
 	pdTime := time.Now()
 	// only nil in unit test
-	if c.upstream != nil {
-		pdTime, err = c.upstream.PDClock.CurrentTime()
+	if c.pdClock != nil {
+		pdTime, err = c.pdClock.CurrentTime()
 		if err != nil {
 			log.Warn("schedulerv3: failed to get pd time", zap.Error(err))
 		}
