@@ -228,6 +228,7 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 				continue
 			}
 
+			w.statistics.ObserveRows(event.row)
 			if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
 				return errors.Trace(err)
 			}
@@ -271,6 +272,7 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
+			w.statistics.ObserveRows(events...)
 			if err := w.encoderGroup.AddEvents(ctx, key.topic, key.partition, events...); err != nil {
 				return errors.Trace(err)
 			}
