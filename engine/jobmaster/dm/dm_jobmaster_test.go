@@ -294,11 +294,10 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// worker1 online, worker2 dispatch error
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
-	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: nil}).Once()
 	require.NoError(t.T(), jm.OnWorkerOnline(workerHandle1))
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	require.NoError(t.T(), jm.OnWorkerOnline(workerHandle1))
+	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1}))
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
@@ -312,7 +311,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), err)
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle2)
+	jm.OnWorkerStatusUpdated(workerHandle2, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes2})
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	worker4 := "worker4"
@@ -324,7 +323,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle1.WorkerID = worker4
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker1 finished
@@ -344,7 +343,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// master failover

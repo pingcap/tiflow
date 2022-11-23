@@ -183,11 +183,12 @@ func (jm *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, result er
 
 // OnWorkerOnline implements JobMasterImpl.OnWorkerOnline
 func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
-	jm.Logger().Debug("on worker online", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
-	return jm.handleOnlineStatus(worker)
+	// because DM needs business online message with worker bound information, plain framework online is no use
+	jm.Logger().Info("on worker online", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
+	return nil
 }
 
-// handleOnlineStatus is used by OnWorkerOnline and OnWorkerStatusUpdated.
+// handleOnlineStatus is used by OnWorkerStatusUpdated.
 func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	extBytes := worker.Status().ExtBytes
 	if len(extBytes) == 0 {
