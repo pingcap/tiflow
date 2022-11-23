@@ -168,6 +168,18 @@ function checktask_full_mode_conn() {
 	run_sql_tidb "set @@GLOBAL.max_connections=6;"
 	check_task_pass $cur/conf/dm-task3.yaml
 
+	# test no enough privilege
+	cp $cur/conf/dm-task3.yaml $WORK_DIR/temp.yaml
+	sed -i "s/  user: \"root\"/  user: \"test1\"/g" $WORK_DIR/temp.yaml
+	run_sql_tidb "drop user if exists test1"
+	run_sql_tidb "create user test1;"
+	run_sql_tidb "grant select, create, insert, delete, alter, drop, index on *.* to test1;" # no super privilege
+	run_sql_tidb "flush privileges;"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/temp.yaml" \
+		"lack of Super global" 1
+	run_sql_tidb "drop user test1;"
+
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "set @@GLOBAL.max_connections=151;"
@@ -750,9 +762,9 @@ function run_check_task() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
-	checktask_full_mode_conn
 	check_task_lightning
 	check_full_mode_conn
+	checktask_full_mode_conn
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "set @@GLOBAL.max_connections=0;" # set default (unlimited), or other tests will fail
