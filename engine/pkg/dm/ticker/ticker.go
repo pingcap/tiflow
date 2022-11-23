@@ -70,8 +70,8 @@ func (s *DefaultTicker) advanceCheckTime() {
 	s.nextCheckTime = now
 }
 
-// Tick checks whether needs to check and calls TickImpl if needed.
-func (s *DefaultTicker) Tick(ctx context.Context) {
+// DoTick checks whether needs to check and calls TickImpl if needed.
+func (s *DefaultTicker) DoTick(ctx context.Context) {
 	if time.Now().Before(s.getNextCheckTime()) {
 		return
 	}

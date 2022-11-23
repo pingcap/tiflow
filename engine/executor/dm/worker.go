@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -79,9 +80,15 @@ func (f workerFactory) IsRetryableError(err error) bool {
 	return true
 }
 
+var (
+	workerNormalInterval = time.Second * 30
+	workerErrorInterval  = time.Second * 10
+)
+
 // dmWorker implements methods for framework.WorkerImpl
 type dmWorker struct {
 	framework.BaseWorker
+	*ticker.DefaultTicker
 
 	unitHolder   unitHolder
 	messageAgent dmpkg.MessageAgent
@@ -116,6 +123,7 @@ func newDMWorker(
 		return nil, err
 	}
 	w := &dmWorker{
+		DefaultTicker:  ticker.NewDefaultTicker(workerNormalInterval, workerErrorInterval),
 		cfg:            dmSubtaskCfg,
 		stage:          metadata.StageInit,
 		workerType:     workerType,
@@ -126,6 +134,7 @@ func newDMWorker(
 		cfgModRevision: cfg.ModRevision,
 		needExtStorage: cfg.NeedExtStorage,
 	}
+	w.DefaultTicker.Ticker = w
 
 	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
@@ -165,7 +174,13 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	// update unit status periodically to update metrics
 	w.unitHolder.CheckAndUpdateStatus()
 	w.discardResource4Syncer(ctx)
+	w.DoTick(ctx)
 	return w.messageAgent.Tick(ctx)
+}
+
+func (w *dmWorker) TickImpl(ctx context.Context) error {
+	status := w.workerStatus(ctx)
+	return w.UpdateStatus(ctx, status)
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
