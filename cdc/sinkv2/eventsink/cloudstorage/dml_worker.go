@@ -243,7 +243,8 @@ func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
 	elems = append(elems, tbl.Schema)
 	elems = append(elems, tbl.Table)
 	elems = append(elems, fmt.Sprintf("%d", tbl.version))
-	if tbl.TableName.IsPartition {
+
+	if d.config.EnablePartitionSeparator && tbl.TableName.IsPartition {
 		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
 	}
 	currTime := time.Now()

@@ -80,23 +80,28 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules      []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig          *CSVConfig        `toml:"csv" json:"csv"`
-	Protocol           string            `toml:"protocol" json:"protocol"`
-	ColumnSelectors    []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry     string            `toml:"schema-registry" json:"schema-registry"`
-	TxnAtomicity       AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
-	EncoderConcurrency int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
+	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
+	Protocol                 string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity             AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	EncoderConcurrency       int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
+	Terminator               string            `toml:"terminator" json:"terminator"`
+	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
+	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
-	Delimiter       string `toml:"delimiter" json:"delimiter"`
-	Quote           string `toml:"quote" json:"quote"`
-	Terminator      string `toml:"terminator" json:"terminator"`
-	NullString      string `toml:"null" json:"null"`
-	DateSeparator   string `toml:"date-separator" json:"date-separator"`
-	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
+	// delimiter between fields
+	Delimiter string `toml:"delimiter" json:"delimiter"`
+	// quoting character
+	Quote string `toml:"quote" json:"quote"`
+	// representation of null values
+	NullString string `toml:"null" json:"null"`
+	// whether to include commit ts
+	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
 }
 
 // DateSeparator specifies the date separator in storage destination path
@@ -196,6 +201,19 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
 
+	// validate terminator
+	if len(s.Terminator) == 0 {
+		s.Terminator = CRLF
+	}
+
+	// validate date separator
+	if len(s.DateSeparator) > 0 {
+		var separator DateSeparator
+		if err := separator.FromString(s.DateSeparator); err != nil {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+		}
+	}
+
 	if s.CSVConfig != nil {
 		return s.validateAndAdjustCSVConfig()
 	}
@@ -230,19 +248,6 @@ func (s *SinkConfig) validateAndAdjustCSVConfig() error {
 	if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config quote and delimiter cannot be the same"))
-	}
-
-	// validate terminator
-	if len(s.CSVConfig.Terminator) == 0 {
-		s.CSVConfig.Terminator = CRLF
-	}
-
-	// validate date separator
-	if len(s.CSVConfig.DateSeparator) > 0 {
-		var separator DateSeparator
-		if err := separator.FromString(s.CSVConfig.DateSeparator); err != nil {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
-		}
 	}
 
 	return nil

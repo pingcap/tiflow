@@ -23,7 +23,6 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	globalLog "github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -60,13 +59,6 @@ func main() {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
-
-	// currently only schema tracker use global logger(std logger), simply replace it with `error` level
-	// may be we should support config logger in mock tidb later
-	confG := &globalLog.Config{Level: "error", File: globalLog.FileLogConfig{}, Format: conf.LogFormat}
-	lg, r, _ := globalLog.InitLogger(confG)
-	lg = lg.With(zap.String("component", "ddl tracker"))
-	globalLog.ReplaceGlobals(lg, r)
 
 	// 3. print process version information
 	version.LogVersionInfo("dm-syncer")

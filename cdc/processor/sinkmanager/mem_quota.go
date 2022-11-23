@@ -133,7 +133,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
 		// This can happen when the table has no data and never been recorded.
-		log.Warn("Table consumed memory records not found.",
+		log.Debug("Table consumed memory records not found.",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
@@ -154,6 +154,33 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	if m.usedBytes < m.totalBytes {
 		m.blockAcquireCond.Signal()
 	}
+}
+
+// clean all records of the table.
+// Return the cleaned memory quota.
+func (m *memQuota) clean(tableID model.TableID) uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.tableMemory[tableID]; !ok {
+		// This can happen when the table has no data and never been recorded.
+		log.Warn("Table consumed memory records not found",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return 0
+	}
+	cleaned := uint64(0)
+	records := m.tableMemory[tableID]
+	for _, record := range records {
+		cleaned += record.size
+	}
+	m.usedBytes -= cleaned
+	delete(m.tableMemory, tableID)
+	if m.usedBytes < m.totalBytes {
+		m.blockAcquireCond.Broadcast()
+	}
+	return cleaned
 }
 
 // close the mem quota and notify the blocked acquire.

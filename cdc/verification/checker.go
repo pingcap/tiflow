@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockery --name=checkSumChecker --inpackage
+//go:generate mockery --name=checkSumChecker --inpackage --quiet
 type checkSumChecker interface {
 	getCheckSum(ctx context.Context, db string, f filter.Filter) (map[string]string, error)
 	getAllDBs(ctx context.Context) ([]string, error)

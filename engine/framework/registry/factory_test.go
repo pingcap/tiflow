@@ -17,7 +17,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -61,11 +62,24 @@ func makeCtxWithMockDeps(t *testing.T) (*dcontext.Context, context.CancelFunc) {
 	return dcontext.Background().WithDeps(dp), cancelFn
 }
 
+type fakeWorkerConfig struct {
+	TargetTick int `json:"target-tick"`
+}
+
+type fakeWorker struct {
+	framework.WorkerImpl
+	framework.BaseWorker
+}
+
+func newFakeWorker(_ *dcontext.Context, _ frameModel.WorkerID, _ frameModel.MasterID, _ *fakeWorkerConfig) framework.WorkerImpl {
+	return &fakeWorker{}
+}
+
 func TestNewSimpleWorkerFactory(t *testing.T) {
-	fac := NewSimpleWorkerFactory(fake.NewDummyWorker)
+	fac := NewSimpleWorkerFactory(newFakeWorker)
 	config, err := fac.DeserializeConfig([]byte(`{"target-tick":100}`))
 	require.NoError(t, err)
-	require.Equal(t, &fake.WorkerConfig{TargetTick: 100}, config)
+	require.Equal(t, &fakeWorkerConfig{TargetTick: 100}, config)
 
 	ctx, cancel := makeCtxWithMockDeps(t)
 	defer cancel()
@@ -77,13 +91,13 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer metaCli.(pkgOrm.Client).Close()
-	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &fake.WorkerConfig{TargetTick: 100})
+	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &fakeWorkerConfig{TargetTick: 100})
 	require.NoError(t, err)
-	require.IsType(t, &fake.Worker{}, newWorker)
+	require.IsType(t, &fakeWorker{}, newWorker)
 }
 
 func TestDeserializeConfigError(t *testing.T) {
-	fac := NewSimpleWorkerFactory(fake.NewDummyWorker)
+	fac := NewSimpleWorkerFactory(newFakeWorker)
 	_, err := fac.DeserializeConfig([]byte(`{target-tick:100}`))
 	require.Error(t, err)
 	require.False(t, fac.IsRetryableError(err))

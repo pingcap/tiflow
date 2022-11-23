@@ -276,7 +276,7 @@ func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
 		PoolSize:    defaultPoolSize,
 		Dir:         defaultDir,
-		ImportMode:  LoadModeSQL,
+		ImportMode:  LoadModeLogical,
 		OnDuplicate: OnDuplicateReplace,
 	}
 }
