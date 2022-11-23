@@ -187,6 +187,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 		sqlmock.NewRows([]string{"File", "Position"}).AddRow("mysql-bin.000001", "2345"),
 	)
 	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 	require.NotNil(t, unitHolder.sourceStatus)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -194,6 +195,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	// the second time CheckAndUpdateStatus, will not query upstreamDB
 	unitHolder.upstreamDB = nil
 	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 
 	// imitate pass refresh interval
@@ -214,6 +216,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	)
 	u.On("Status").Return(&pb.DumpStatus{})
 	unitHolder.CheckAndUpdateStatus(ctx)
+	unitHolder.bgWg.Wait()
 	u.AssertExpectations(t)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NotEqual(t, lastUpdateTime, unitHolder.sourceStatus.UpdateTime)

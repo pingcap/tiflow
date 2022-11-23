@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) sinkWorker {
+func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) *sinkWorker {
 	sortEngine := memory.New(context.Background())
 	quota := newMemQuota(changefeedID, memQuota)
 	return newSinkWorker(changefeedID, &entry.MockMountGroup{}, sortEngine, quota, nil, splitTxn, false)
@@ -144,7 +144,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 	}
 
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -259,7 +259,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -301,7 +301,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 		isCanceled:    func() bool { return false },
 	}
 	// Abort the task when no memory quota and blocked.
-	w.(*sinkWorkerImpl).memQuota.close()
+	w.memQuota.close()
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
 }
@@ -386,7 +386,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -512,7 +512,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -637,7 +637,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 		},
 	}
 	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSortEngine(suite.T(), events, w.(*sinkWorkerImpl).sortEngine, tableID)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
