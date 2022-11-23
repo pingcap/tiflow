@@ -2,9 +2,10 @@ package mysql
 
 import (
 	"encoding/base64"
-	"github.com/stretchr/testify/require"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDecodePassword(t *testing.T) {
