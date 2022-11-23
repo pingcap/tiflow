@@ -16,47 +16,133 @@ package servermaster
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/election"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// multiClient is an interface that implements all the Client interfaces
-// for the individual services running on the server masters.
-type multiClient interface {
-	enginepb.DiscoveryClient
-	enginepb.ResourceManagerClient
-	enginepb.TaskSchedulerClient
-	enginepb.JobManagerClient
-}
-
-type multiClientImpl struct {
-	enginepb.DiscoveryClient
-	enginepb.ResourceManagerClient
-	enginepb.TaskSchedulerClient
-	enginepb.JobManagerClient
-}
-
-func newMultiClient(conn *grpc.ClientConn) multiClient {
-	return &multiClientImpl{
-		DiscoveryClient:       enginepb.NewDiscoveryClient(conn),
-		ResourceManagerClient: enginepb.NewResourceManagerClient(conn),
-		TaskSchedulerClient:   enginepb.NewTaskSchedulerClient(conn),
-		JobManagerClient:      enginepb.NewJobManagerClient(conn),
-	}
-}
-
 func generateNodeID(name string) string {
 	val := rand.Uint32()
 	id := fmt.Sprintf("%s-%08x", name, val)
 	return id
+}
+
+// multiClient is an interface that implements all the Client interfaces
+// for the individual services running on the server masters.
+type multiClient interface {
+	pb.DiscoveryClient
+	pb.ResourceManagerClient
+	pb.TaskSchedulerClient
+	pb.JobManagerClient
+}
+
+type multiClientImpl struct {
+	pb.DiscoveryClient
+	pb.ResourceManagerClient
+	pb.TaskSchedulerClient
+	pb.JobManagerClient
+}
+
+func newMultiClient(conn *grpc.ClientConn) multiClient {
+	return &multiClientImpl{
+		DiscoveryClient:       pb.NewDiscoveryClient(conn),
+		ResourceManagerClient: pb.NewResourceManagerClient(conn),
+		TaskSchedulerClient:   pb.NewTaskSchedulerClient(conn),
+		JobManagerClient:      pb.NewJobManagerClient(conn),
+	}
+}
+
+var leaderOnlyMethods = map[string]struct{}{
+	"ListExecutors":    {},
+	"RegisterExecutor": {},
+	"Heartbeat":        {},
+	"CreateJob":        {},
+	"GetJob":           {},
+	"ListJobs":         {},
+	"CancelJob":        {},
+	"DeleteJob":        {},
+	"ScheduleTask":     {},
+}
+
+var _ rpcutil.ForwardChecker[multiClient] = &forwardChecker{}
+
+type forwardChecker struct {
+	elector *election.Elector
+
+	rwm       sync.RWMutex
+	conn      *grpc.ClientConn
+	leaderCli multiClient
+}
+
+func newForwardChecker(elector *election.Elector) *forwardChecker {
+	return &forwardChecker{
+		elector: elector,
+	}
+}
+
+func (f *forwardChecker) LeaderOnly(method string) bool {
+	_, ok := leaderOnlyMethods[method]
+	return ok
+}
+
+func (f *forwardChecker) IsLeader() bool {
+	return f.elector.IsLeader()
+}
+
+func (f *forwardChecker) HasLeader() bool {
+	_, ok := f.elector.GetLeader()
+	return ok
+}
+
+func (f *forwardChecker) LeaderClient() (multiClient, error) {
+	leader, ok := f.elector.GetLeader()
+	if !ok {
+		return nil, errors.ErrMasterNoLeader.GenWithStackByArgs()
+	}
+	return f.getOrCreateLeaderClient(leader.Address)
+}
+
+func (f *forwardChecker) getOrCreateLeaderClient(leaderAddr string) (multiClient, error) {
+	f.rwm.RLock()
+	if f.conn != nil && f.conn.Target() == leaderAddr {
+		f.rwm.RUnlock()
+		return f.leaderCli, nil
+	}
+	f.rwm.RUnlock()
+
+	f.rwm.Lock()
+	defer f.rwm.Unlock()
+
+	if f.conn != nil {
+		if f.conn.Target() == leaderAddr {
+			return f.leaderCli, nil
+		}
+		if err := f.conn.Close(); err != nil {
+			log.Warn("failed to close grpc connection", zap.Error(err))
+		}
+		f.conn = nil
+	}
+
+	conn, err := grpc.Dial(leaderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, errors.Cause(err)
+	}
+	f.conn = conn
+	f.leaderCli = newMultiClient(conn)
+	return f.leaderCli, nil
 }
 
 // ensure featureDegrader implements rpcutil.FeatureChecker
@@ -89,8 +175,8 @@ func (d *featureDegrader) reset() {
 }
 
 // Available implements rpcutil.FeatureChecker
-func (d *featureDegrader) Available(apiName string) bool {
-	switch apiName {
+func (d *featureDegrader) Available(method string) bool {
+	switch method {
 	case "ListExecutors", "RegisterExecutor", "Heartbeat":
 		return d.executorManager.Load()
 	case "CreateJob", "GetJob", "ListJobs", "CancelJob", "DeleteJob",
