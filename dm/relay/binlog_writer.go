@@ -108,6 +108,7 @@ func (w *BinlogWriter) run() {
 		if bs != nil {
 			buf.Write(bs)
 		}
+		// we use bs = nil to mean flush
 		if bs == nil || buf.Len() > bufferSize || len(w.input) == 0 {
 			writeToFile()
 		}
