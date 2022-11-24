@@ -343,7 +343,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		// bypass an Adjust error
+		// Adjust will raise error when this field is empty, so we set any non empty value here.
 		lCfg.Mydumper.SourceDir = "noop://"
 		err = lCfg.Adjust(ctx)
 		if err != nil {

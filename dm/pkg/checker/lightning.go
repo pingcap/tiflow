@@ -24,6 +24,7 @@ func convertLightningPrecheck(
 	dmResult *Result,
 	lightningPrechecker restore.PrecheckItem,
 	failLevel State,
+	instruction string,
 ) {
 	lightningResult, err := lightningPrechecker.Check(ctx)
 	if err != nil {
@@ -32,6 +33,7 @@ func convertLightningPrecheck(
 	}
 	if !lightningResult.Passed {
 		dmResult.State = failLevel
+		dmResult.Instruction = instruction
 		dmResult.Errors = append(dmResult.Errors, &Error{Severity: failLevel, ShortErr: lightningResult.Message})
 		return
 	}
@@ -57,10 +59,16 @@ func (c *LightningEmptyRegionChecker) Name() string {
 func (c *LightningEmptyRegionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check downstream cluster has too many empty regions",
+		Desc:  "check whether there are too many empty Regions in the TiKV under Physical import mode",
 		State: StateFailure,
 	}
-	convertLightningPrecheck(ctx, result, c.inner, StateWarning)
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateWarning,
+		`you can change "region merge" related configuration in PD to speed up eliminating empty regions`,
+	)
 	return result
 }
 
@@ -83,10 +91,16 @@ func (c *LightningRegionDistributionChecker) Name() string {
 func (c *LightningRegionDistributionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check downstream cluster region distribution",
+		Desc:  "check whether the Regions in the TiKV cluster are distributed evenly under Physical import mode",
 		State: StateFailure,
 	}
-	convertLightningPrecheck(ctx, result, c.inner, StateWarning)
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateWarning,
+		`you can change "region schedule" related configuration in PD to speed up balancing regions`,
+	)
 	return result
 }
 
@@ -109,9 +123,15 @@ func (c *LightningClusterVersionChecker) Name() string {
 func (c *LightningClusterVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check downstream cluster version",
+		Desc:  "check whether the downstream TiDB/PD/TiKV version meets the requirements of Physical import mode",
 		State: StateFailure,
 	}
-	convertLightningPrecheck(ctx, result, c.inner, StateFailure)
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateFailure,
+		`you can switch to logical import mode which has no requirements on downstream cluster version`,
+	)
 	return result
 }
