@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -32,7 +31,6 @@ import (
 const (
 	bufferSize = 1 * 1024 * 1024 // 1MB
 	chanSize   = 1024
-	waitTime   = 10 * time.Millisecond
 )
 
 // BinlogWriter is a binlog event writer which writes binlog events to a file.
@@ -43,12 +41,12 @@ type BinlogWriter struct {
 	relayDir string
 	uuid     atomic.String
 	filename atomic.String
+	err      atomic.Error
 
 	logger log.Logger
 
 	input   chan []byte
 	flushWg sync.WaitGroup
-	errCh   chan error
 	wg      sync.WaitGroup
 }
 
@@ -73,7 +71,6 @@ func NewBinlogWriter(logger log.Logger, relayDir string) *BinlogWriter {
 	return &BinlogWriter{
 		logger:   logger,
 		relayDir: relayDir,
-		errCh:    make(chan error, 1),
 	}
 }
 
@@ -91,19 +88,13 @@ func (w *BinlogWriter) run() {
 		}
 
 		if w.file == nil {
-			select {
-			case w.errCh <- terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")):
-			default:
-			}
+			w.err.CompareAndSwap(nil, terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")))
 			errOccurs = true
 			return
 		}
 		n, err := w.file.Write(buf.Bytes())
 		if err != nil {
-			select {
-			case w.errCh <- terror.ErrBinlogWriterWriteDataLen.Delegate(err, n):
-			default:
-			}
+			w.err.CompareAndSwap(nil, terror.ErrBinlogWriterWriteDataLen.Delegate(err, n))
 			errOccurs = true
 			return
 		}
@@ -165,13 +156,13 @@ func (w *BinlogWriter) Close() error {
 	}
 	w.wg.Wait()
 
-	var err error
 	if w.file != nil {
-		err2 := w.file.Sync() // try sync manually before close.
-		if err2 != nil {
-			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err2))
+		if err := w.file.Sync(); err != nil {
+			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err))
 		}
-		err = w.file.Close()
+		if err := w.file.Close(); err != nil {
+			w.err.CompareAndSwap(nil, err)
+		}
 	}
 
 	w.file = nil
@@ -179,11 +170,7 @@ func (w *BinlogWriter) Close() error {
 	w.uuid.Store("")
 	w.filename.Store("")
 	w.input = nil
-
-	if writeErr := w.Error(); writeErr != nil {
-		return writeErr
-	}
-	return err
+	return w.err.Swap(nil)
 }
 
 func (w *BinlogWriter) Write(rawData []byte) error {
@@ -192,7 +179,7 @@ func (w *BinlogWriter) Write(rawData []byte) error {
 	}
 	w.input <- rawData
 	w.offset.Add(int64(len(rawData)))
-	return w.Error()
+	return w.err.Load()
 }
 
 func (w *BinlogWriter) Flush() error {
@@ -201,16 +188,7 @@ func (w *BinlogWriter) Flush() error {
 		return err
 	}
 	w.flushWg.Wait()
-	return w.Error()
-}
-
-func (w *BinlogWriter) Error() error {
-	select {
-	case err := <-w.errCh:
-		return err
-	default:
-		return nil
-	}
+	return w.err.Load()
 }
 
 func (w *BinlogWriter) Status() *BinlogWriterStatus {
