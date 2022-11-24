@@ -14,18 +14,16 @@
 package utils
 
 import (
-	. "github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testStorageSuite{})
-
-type testStorageSuite struct{}
-
-func (t *testStorageSuite) TestGetStorageSize(c *C) {
+func TestGetStorageSize(t *testing.T) {
 	// only ensure we can get storage size.
-	d := c.MkDir()
+	d := t.TempDir()
 	size, err := GetStorageSize(d)
-	c.Assert(err, IsNil)
-	c.Assert(size.Capacity, Greater, uint64(0))
-	c.Assert(size.Available, Greater, uint64(0))
+	require.NoError(t, err)
+	require.Greater(t, size.Capacity, uint64(0))
+	require.Greater(t, size.Available, uint64(0))
 }
