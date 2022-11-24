@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -31,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
