@@ -78,15 +78,6 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		existUnitState bool
 	)
 
-	state, err := jm.metadata.UnitStateStore().Get(ctx)
-	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
-		return nil, err
-	}
-	unitState, existUnitState = state.(*metadata.UnitState)
-	if existUnitState {
-		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
-	}
-
 	for _, task := range tasks {
 		taskID := task
 		wg.Add(1)
@@ -139,6 +130,15 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}()
 	}
 	wg.Wait()
+
+	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
+		return nil, err
+	}
+	unitState, existUnitState = state.(*metadata.UnitState)
+	if existUnitState {
+		jobStatus.FinishedUnitStatus = unitState.FinishedUnitStatus
+	}
 
 	return jobStatus, nil
 }
