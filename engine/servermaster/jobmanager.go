@@ -393,6 +393,7 @@ func (jm *JobManagerImpl) ListJobs(ctx context.Context, req *pb.ListJobsRequest)
 		jm.tryQueryJobDetail(ctx, masterMetas[i].Addr, job)
 
 		resp.Jobs = append(resp.Jobs, job)
+		// Retrieve one more job to determine whether there is a next page.
 		if int32(len(resp.Jobs)) >= pageSize+1 {
 			break
 		}
