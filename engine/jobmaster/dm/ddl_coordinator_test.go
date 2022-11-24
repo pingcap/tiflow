@@ -20,12 +20,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
