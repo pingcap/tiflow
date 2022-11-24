@@ -485,20 +485,20 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
-func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
+func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
 
-	writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-	defer cancelFunc()
-
 	start := time.Now()
-	return retry.Do(ctx, func() error {
+	return retry.Do(pctx, func() error {
+		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
+		writeTimeout += networkDriftDuration
+		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+		defer cancelFunc()
+
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)

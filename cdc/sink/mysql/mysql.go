@@ -307,11 +307,6 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
-	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-	defer cancelFunc()
-
 	return retry.Do(ctx, func() error {
 		err := s.execDDL(ctx, ddl)
 		if errorutil.IsIgnorableMySQLDDLError(err) {
@@ -332,7 +327,12 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
-func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
+func (s *mysqlSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+	defer cancelFunc()
+
 	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
@@ -637,20 +637,20 @@ func logDMLTxnErr(
 	return err
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
+func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs, bucket int) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
 
-	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-	defer cancelFunc()
-
 	start := time.Now()
-	return retry.Do(ctx, func() error {
+	return retry.Do(pctx, func() error {
+		writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+		writeTimeout += networkDriftDuration
+		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+		defer cancelFunc()
+
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			failpoint.Return(
 				logDMLTxnErr(

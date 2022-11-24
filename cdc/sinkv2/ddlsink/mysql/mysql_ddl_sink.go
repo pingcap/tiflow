@@ -101,11 +101,6 @@ func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
-	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-	defer cancelFunc()
-
 	return retry.Do(ctx, func() error {
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
@@ -133,7 +128,12 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
-func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+	defer cancelFunc()
+
 	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
