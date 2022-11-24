@@ -163,7 +163,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// There is no more data.
+		// There is no more data. It means that we finish this time scan task.
 		if e == nil {
 			log.Debug("No more data",
 				zap.String("namespace", w.changefeedID.Namespace),
