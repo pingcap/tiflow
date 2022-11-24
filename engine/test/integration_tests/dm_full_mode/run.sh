@@ -55,6 +55,8 @@ function run() {
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'Error 1142: ALTER command denied'"
   docker restart server-executor-0 server-executor-1 server-executor-2
+  # check the error is not related to lightning checkpoint
+  exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'Error 1142: ALTER command denied'"
 
 	read -p 123
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
