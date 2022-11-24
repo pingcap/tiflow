@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
@@ -38,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

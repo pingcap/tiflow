@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
