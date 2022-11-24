@@ -47,12 +47,14 @@ function run() {
 	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
 
   # test downstream has no ALTER privilege
-  run_sql "create table full_mode.auto(c int primary key auto_increment);"
-  run_sql "insert into full_mode.auto values(1),(2);"
+  run_sql "create table dm_full.auto(c int primary key auto_increment);"
+  run_sql "insert into dm_full.auto values(1),(2);"
   run_sql --port 4000 "revoke alter on *.* from 'root'@'%';"
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'Error 1142: ALTER command denied'"
+  docker restart server-executor-0 server-executor-1 server-executor-2
 
 	read -p 123
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
