@@ -111,7 +111,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 	})
 
-	msg := &sarama.ProducerMessage{
+	_ = &sarama.ProducerMessage{
 		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
@@ -119,6 +119,8 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 	}
 
 	k.mu.Lock()
+	k.mu.inflight++
+	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
 	select {
@@ -129,10 +131,6 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 	default:
 	}
 
-	//k.mu.Lock()
-	//k.mu.inflight++
-	//log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
-	//k.mu.Unlock()
 	//
 	//select {
 	//case <-ctx.Done():
@@ -299,6 +297,8 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
+	ticker := time.NewTicker(time.Millisecond)
+
 	for {
 		var ack *sarama.ProducerMessage
 		select {
@@ -311,6 +311,14 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 			return err
+		case <-ticker.C:
+			k.mu.Lock()
+			k.mu.inflight--
+			if k.mu.inflight == 0 && k.mu.flushDone != nil {
+				k.mu.flushDone <- struct{}{}
+				k.mu.flushDone = nil
+			}
+			k.mu.Unlock()
 		case ack = <-k.asyncProducer.Successes():
 		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
