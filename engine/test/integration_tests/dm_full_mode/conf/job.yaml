@@ -2,8 +2,8 @@ task-mode: full
 target-database:
   host: host.docker.internal
   port: 4000
-  user: root
-  password: ''
+  user: dm_full
+  password: '123456'
 upstreams:
   - db-config:
       host: host.docker.internal
