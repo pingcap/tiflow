@@ -16,14 +16,16 @@ package jobop
 import "time"
 
 const (
-	defaultBackoffInitInterval = 10 * time.Second
+	defaultBackoffInitInterval = 5 * time.Second
 	defaultBackoffMaxInterval  = 5 * time.Minute
-	defaultBackoffMultiplier   = 2.0
+	defaultBackoffMultiplier   = 1.2
 	// If a job can keep running for more than 10 minutes, it won't be backoff
 	// If a job keeps failing, the max back interval is 5 minutes, and 10 minutes
 	// can keep at least one failed record.
 	defaultBackoffResetInterval = 2 * defaultBackoffMaxInterval
-	defaultBackoffMaxTryTime    = 8
+	// with 1.2 as multiplier, it will cost approximately 32 minutes to reach max interval 5min,
+	// and it will keep trying for every 5min until approximate 48 hours. Then, it will quit.
+	defaultBackoffMaxTryTime = 600
 )
 
 // BackoffConfig is used to configure job backoff

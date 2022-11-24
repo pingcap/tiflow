@@ -1281,11 +1281,6 @@ error = '''
 0-length response with status code: %d
 '''
 
-["DFLOW:ErrCapacityNotEnough"]
-error = '''
-capacity not enough
-'''
-
 ["DFLOW:ErrCleaningLocalTempFiles"]
 error = '''
 errors is encountered when cleaning local temp files
@@ -1594,6 +1589,11 @@ metastore id duplicated
 ["DFLOW:ErrMetaStoreNotExists"]
 error = '''
 metastore %s does not exist
+'''
+
+["DFLOW:ErrNoQualifiedExecutor"]
+error = '''
+no executor is available for scheduling
 '''
 
 ["DFLOW:ErrNoRPCClient"]

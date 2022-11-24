@@ -131,20 +131,22 @@ func TestQueryStatusAPI(t *testing.T) {
 				"task2": {
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMDump,
-							Task:           "task2",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 3,
+							Unit:             frameModel.WorkerDMDump,
+							Task:             "task2",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   3,
+							StageUpdatedTime: loadTime,
 						},
 						Status:   dumpStatusBytes,
 						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMLoad,
-							Task:           "task2",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 3,
+							Unit:             frameModel.WorkerDMLoad,
+							Task:             "task2",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   3,
+							StageUpdatedTime: syncTime,
 						},
 						Status:   loadStatusBytes,
 						Duration: loadDuration,
@@ -153,20 +155,22 @@ func TestQueryStatusAPI(t *testing.T) {
 				"task7": {
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMDump,
-							Task:           "task7",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 4,
+							Unit:             frameModel.WorkerDMDump,
+							Task:             "task7",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   4,
+							StageUpdatedTime: loadTime,
 						},
 						Status:   dumpStatusBytes,
 						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMLoad,
-							Task:           "task7",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 4,
+							Unit:             frameModel.WorkerDMLoad,
+							Task:             "task7",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   4,
+							StageUpdatedTime: syncTime,
 						},
 						Status:   loadStatusBytes,
 						Duration: loadDuration,
@@ -369,6 +373,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -386,6 +391,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -404,6 +410,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -421,6 +428,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,

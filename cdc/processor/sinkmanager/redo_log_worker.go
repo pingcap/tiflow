@@ -17,10 +17,12 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"go.uber.org/zap"
 )
 
 type redoWorker struct {
@@ -75,63 +77,133 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
 	// be released after they are written into redo files. Then we need to release their
-	// memory quota, which can be calculated based on batchSize and cachedSize.
-	batchSize := uint64(0)
+	// memory quota, which can be calculated based on rowsSize and cachedSize.
+	rowsSize := uint64(0)
 	cachedSize := uint64(0)
 
-	memAllocated := true
+	availableMemSize := requestMemSize
+	usedMemSize := uint64(0)
 
-	var lastPos engine.Position
+	var lastPos, lastEmitPos engine.Position
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
-		if batchSize == 0 || (!allFinished && batchSize < requestMemSize) {
-			return nil
+		// If used memory size exceeds the required limit, do a force require.
+		if usedMemSize > availableMemSize {
+			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
+			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", usedMemSize-availableMemSize))
+			availableMemSize = usedMemSize
 		}
 
-		releaseMem := func() { w.memQuota.refund(batchSize - cachedSize) }
-		err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
-		if err != nil {
-			return errors.Trace(err)
+		if allFinished {
+			// There is no more events and some required memory isn't used.
+			if availableMemSize > usedMemSize {
+				w.memQuota.refund(availableMemSize - usedMemSize)
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("memory", availableMemSize-usedMemSize))
+			}
+		} else if usedMemSize >= availableMemSize {
+			if txnFinished {
+				if w.memQuota.tryAcquire(requestMemSize) {
+					availableMemSize += requestMemSize
+					log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("memory", requestMemSize))
+				}
+			} else {
+				w.memQuota.forceAcquire(requestMemSize)
+				availableMemSize += requestMemSize
+				log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("memory", requestMemSize))
+			}
 		}
-		if lastPos.Valid() {
-			err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
+
+		shouldUpdateResolvedTs := lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0
+		if rowsSize >= maxUpdateIntervalSize || shouldUpdateResolvedTs {
+			releaseMem := func() { w.memQuota.refund(rowsSize - cachedSize) }
+			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
 			if err != nil {
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("memory", rowsSize))
 				return errors.Trace(err)
 			}
-		}
-
-		rows = rows[0:]
-		if cap(rows) > 1024 {
-			rows = make([]*model.RowChangedEvent, 0, 1024)
-		}
-		batchSize = 0
-		cachedSize = 0
-
-		if !allFinished {
-			if !txnFinished {
-				w.memQuota.forceAcquire(requestMemSize)
-			} else {
-				memAllocated = w.memQuota.tryAcquire(requestMemSize)
+			if shouldUpdateResolvedTs {
+				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				log.Debug("update resolved ts to redo",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("resolvedTs", lastPos.CommitTs))
+				lastEmitPos = lastPos
+			}
+			rowsSize = 0
+			cachedSize = 0
+			rows = rows[0:]
+			if cap(rows) > 1024 {
+				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}
 		}
+
 		return nil
 	}
 
-	// lowerBound and upperBound are both closed intervals.
+	upperBound := task.getUpperBound()
 	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, task.getUpperBound()),
+		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound),
 		w.mg, 256)
-	defer iter.Close()
-	for memAllocated {
+
+	defer func() {
+		if err := iter.Close(); err != nil {
+			log.Error("sink redo worker fails to close iterator",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Error(err))
+		}
+
+		log.Debug("redo task finished",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Uint64("commitTs", lastPos.CommitTs),
+			zap.Uint64("startTs", lastPos.StartTs))
+		task.callback(lastPos)
+	}()
+
+	for availableMemSize > usedMemSize {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if e == nil {
 			// There is no more data.
+			if !lastPos.Valid() {
+				lastPos = upperBound
+			}
 			if err = maybeEmitBatchEvents(true, true); e != nil {
 				return errors.Trace(err)
 			}
 			return nil
+		}
+		if e.Row == nil {
+			// NOTICE: This could happen when the event is filtered by the event filter.
+			continue
 		}
 		if pos.Valid() {
 			lastPos = pos
@@ -141,19 +213,19 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		usedMemSize += size
 
 		rows = append(rows, x...)
-		batchSize += size
+		rowsSize += size
 		if cache.pushBatch(x, size, pos.Valid()) {
 			cachedSize += size
 		} else {
 			cachedSize -= cache.cleanBrokenEvents()
 		}
+
 		if err = maybeEmitBatchEvents(false, pos.Valid()); err != nil {
 			return errors.Trace(err)
 		}
 	}
-	// Can't allocate memory.
-	task.callback(lastPos)
 	return nil
 }

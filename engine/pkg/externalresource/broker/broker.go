@@ -78,7 +78,7 @@ func NewBroker(
 		return nil, errors.New(fmt.Sprintf("query storage config failed: %v, %v", err, resp))
 	}
 	var storageConfig resModel.Config
-	err = json.Unmarshal([]byte(resp.Config), &storageConfig)
+	err = json.Unmarshal(resp.Config, &storageConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -268,15 +268,15 @@ func (b *DefaultBroker) RemoveResource(
 	}
 
 	fm := b.fileManagers[tp]
-	if request.GetCreatorId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty creatorID")
+	if request.GetWorkerId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "empty WorkerId")
 	}
 
 	ident := internal.ResourceIdent{
 		Name: resName,
 		ResourceScope: internal.ResourceScope{
 			Executor: b.executorID,
-			WorkerID: request.GetCreatorId(),
+			WorkerID: request.GetWorkerId(),
 		},
 	}
 	err = fm.RemoveResource(ctx, ident)
