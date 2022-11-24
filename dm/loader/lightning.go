@@ -193,7 +193,13 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
-	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
+	var cpdb checkpoints.DB
+	if l.cfg.ExtStorage != nil {
+		cpdb, err = checkpoints.NewFileCheckpointsDBWithExstorageFileName(
+			ctx, l.cfg.ExtStorage.URI(), l.cfg.ExtStorage, lightningCheckpointFileName)
+	} else {
+		cpdb, err = checkpoints.OpenCheckpointsDB(ctx, cfg)
+	}
 	if err != nil {
 		return err
 	}
