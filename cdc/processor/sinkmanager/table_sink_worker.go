@@ -77,7 +77,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// First time to run the task, we have initialized memory quota for the table.
 	availableMem := int(requestMemSize)
 	events := make([]*model.PolymorphicEvent, 0, 1024)
-
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound()
 
@@ -91,7 +90,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
 	var lastPos engine.Position
+	// currentCommitTs is used to record the commitTs of the current event.
 	currentCommitTs := uint64(0)
+	// lastTimeCommitTs is used to record the last time commitTs.
+	// Sometimes, we meet the situation that the commitTs of the event is the same.
+	// But we can't advance this kind of event, so we need to record the last time commitTs.
+	// If the current commitTs is the same as the last time commitTs, we don't need to advance.
 	lastTimeCommitTs := uint64(0)
 	currentTotalSize := uint64(0)
 	batchID := uint64(1)
@@ -99,6 +103,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// Two functions to simplify the code.
 	// It captures some variables in the outer scope.
 	appendEventsAndRecordCurrentSize := func(commitTs model.Ts) error {
+		// Only less or equal.
 		i := sort.Search(len(events), func(i int) bool {
 			return events[i].CRTs > commitTs
 		})
@@ -279,6 +284,15 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 		} else {
 			if w.splitTxn {
+				// If it is a split transaction, we should append the event with current commit ts.
+				// Also need to update the lastTimeCommitTs.
+				// For example:
+				// 1. We have two transactions, txn1 and txn2, txn1 has two events, txn2 has one event.
+				// 2. There are all small transactions, so we do not advance the table sink.
+				// 3. We meet the txn3, and it is a big transaction, if we do not update the lastTimeCommitTs,
+				//    next time we will only just advance the table sink with txn2's commit ts.
+				// This is make no sense, so we should update the lastTimeCommitTs. Then next time we will
+				// advance the table sink with txn3's commit ts.(One big transaction + two small transactions).
 				lastTimeCommitTs = currentCommitTs
 				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
 					return errors.Trace(err)
@@ -341,6 +355,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		)
 
 	} else {
+		// This happens when there is no workload for this table on upstream.
 		if lastTimeCommitTs == 0 {
 			lastTimeCommitTs = upperBound.CommitTs
 			log.Debug("No more events, set lastTimeCommitTs to upperBound",
@@ -358,9 +373,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			lastPos = upperBound
 		}
-		// This means that we append all the events to the table sink.
-		// But we have not updated the resolved ts.
-		// Because we do not reach the maxUpdateIntervalSize.
+		// This happens when:
+		// 1. We just leave the last txn in the events.
+		//    Because we only advance the table sink when meet a new commit ts.
+		// 2. We append all the events to the table sink, but because we do not reach the update interval,
+		//    we do not advance the table sink.
 		if len(events) > 0 || currentTotalSize > 0 {
 			if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
 				return errors.Trace(err)
