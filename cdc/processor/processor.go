@@ -77,8 +77,8 @@ type processor struct {
 	sinkV2Factory *factory.SinkFactory
 
 	// These fields are used to sinking data in pull-based mode.
-	sourceManger *sourcemanager.SourceManager
-	sinkManager  *sinkmanager.SinkManager
+	sourceManager *sourcemanager.SourceManager
+	sinkManager   *sinkmanager.SinkManager
 
 	redoManager redo.LogManager
 
@@ -211,7 +211,10 @@ func (p *processor) AddTable(
 	}
 
 	if p.pullBasedSinking {
-		p.sourceManger.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		if p.redoManager.Enabled() {
+			p.redoManager.AddTable(tableID, startTs)
+		}
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if !isPrepare {
 			p.sinkManager.StartTable(tableID, startTs)
@@ -434,8 +437,11 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 				zap.Error(err))
 			return 0, false
 		}
-		p.sourceManger.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
+		if p.redoManager.Enabled() {
+			p.redoManager.RemoveTable(tableID)
+		}
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -530,7 +536,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 }
 
 func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats pipeline.Stats) tablepb.Stats {
-	pullerStats := p.sourceManger.GetTablePullerStats(tableID)
+	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
 	now, _ := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
@@ -554,7 +560,7 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 	}
 
 	// FIXME: add the stats of the sort engine.
-	//sortStats := p.sourceManger.GetTableSortStats(tableID)
+	//sortStats := p.sourceManager.GetTableSortStats(tableID)
 	//stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
 	//	CheckpointTs: sortStats.CheckpointTsIngress,
 	//	ResolvedTs:   sortStats.ResolvedTsIngress,
@@ -851,6 +857,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
 	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
+
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
+	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+
 	if p.pullBasedSinking {
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		sortEngine, err := engineFactory.Create(p.changefeedID)
@@ -862,9 +878,11 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManger = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
 		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager,
 			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
+		// Bind them so that sourceManager can notify sinkManager.
+		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
 			log.Info("Processor creates sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -917,15 +935,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeed.ID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
-
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
-	if err != nil {
-		return err
-	}
-	log.Info("processor creates redo manager",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
@@ -1086,6 +1095,11 @@ func (p *processor) handlePosition(currentTs int64) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Debug("sink manager gets table stats",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Any("stats", stats))
 			if stats.ResolvedTs < minResolvedTs {
 				minResolvedTs = stats.ResolvedTs
 				minResolvedTableID = tableID
@@ -1298,19 +1312,22 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
-		if err := p.sourceManger.Close(); err != nil {
+		if err := p.sourceManager.Close(); err != nil {
 			log.Error("Failed to close source manager",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err))
 			return errors.Trace(err)
 		}
-		if err := p.sinkManager.Close(); err != nil {
-			log.Error("Failed to close sink manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
+		if p.sinkManager != nil {
+			if err := p.sinkManager.Close(); err != nil {
+				log.Error("Failed to close sink manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			p.sinkManager = nil
 		}
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		if engineFactory != nil {

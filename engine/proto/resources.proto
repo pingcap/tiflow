@@ -10,8 +10,8 @@ service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
   rpc QueryResource(QueryResourceRequest) returns (QueryResourceResponse){}
 
-  // RemoveResource cleans up the metadata only of the resource.
-  // The invoker should handle the actual cleaning up on its own.
+  // RemoveResource only cleans up the metadata of the resource.
+  // The invoker should handle the actual resource cleaning up on its own.
   rpc RemoveResource(RemoveResourceRequest) returns (RemoveResourceResponse){}
 }
 

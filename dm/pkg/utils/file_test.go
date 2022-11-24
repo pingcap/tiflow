@@ -16,44 +16,41 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"testing"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testFileSuite{})
-
-type testFileSuite struct{}
-
-func (t *testFileSuite) TestFile(c *C) {
+func TestFile(t *testing.T) {
 	// dir not exists
-	c.Assert(IsFileExists("invalid-path"), IsFalse)
-	c.Assert(IsDirExists("invalid-path"), IsFalse)
+	require.False(t, IsFileExists("invalid-path"))
+	require.False(t, IsDirExists("invalid-path"))
 	size, err := GetFileSize("invalid-path")
-	c.Assert(terror.ErrGetFileSize.Equal(err), IsTrue)
-	c.Assert(size, Equals, int64(0))
+	require.True(t, terror.ErrGetFileSize.Equal(err))
+	require.Equal(t, int64(0), size)
 
 	// dir exists
-	d := c.MkDir()
-	c.Assert(IsFileExists(d), IsFalse)
-	c.Assert(IsDirExists(d), IsTrue)
+	d := t.TempDir()
+	require.False(t, IsFileExists(d))
+	require.True(t, IsDirExists(d))
 	size, err = GetFileSize(d)
-	c.Assert(terror.ErrGetFileSize.Equal(err), IsTrue)
-	c.Assert(size, Equals, int64(0))
+	require.True(t, terror.ErrGetFileSize.Equal(err))
+	require.Equal(t, int64(0), size)
 
 	// file not exists
 	f := filepath.Join(d, "text-file")
-	c.Assert(IsFileExists(f), IsFalse)
-	c.Assert(IsDirExists(f), IsFalse)
+	require.False(t, IsFileExists(f))
+	require.False(t, IsDirExists(f))
 	size, err = GetFileSize(f)
-	c.Assert(terror.ErrGetFileSize.Equal(err), IsTrue)
-	c.Assert(size, Equals, int64(0))
+	require.True(t, terror.ErrGetFileSize.Equal(err))
+	require.Equal(t, int64(0), size)
 
 	// create a file
-	c.Assert(os.WriteFile(f, []byte("some content"), 0o644), IsNil)
-	c.Assert(IsFileExists(f), IsTrue)
-	c.Assert(IsDirExists(f), IsFalse)
+	require.NoError(t, os.WriteFile(f, []byte("some content"), 0o644))
+	require.True(t, IsFileExists(f))
+	require.False(t, IsDirExists(f))
 	size, err = GetFileSize(f)
-	c.Assert(err, IsNil)
-	c.Assert(size, Equals, int64(len("some content")))
+	require.NoError(t, err)
+	require.Equal(t, int64(len("some content")), size)
 }

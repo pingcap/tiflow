@@ -41,6 +41,8 @@ func TestConnNumberChecker(t *testing.T) {
 	// test loader: fail
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 16))
+	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
 	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
 		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
 		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
@@ -57,6 +59,8 @@ func TestConnNumberChecker(t *testing.T) {
 	baseDB = conn.NewBaseDB(db, func() {})
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 17))
+	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
 	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
 		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
 		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
@@ -65,4 +69,41 @@ func TestConnNumberChecker(t *testing.T) {
 	result = loaderChecker.Check(context.Background())
 	require.Equal(t, 0, len(result.Errors))
 	require.Equal(t, StateSuccess, result.State)
+
+	// test loader maxConn - usedConn < neededConn: warn
+	db, dbMock, err = sqlmock.New()
+	require.NoError(t, err)
+	baseDB = conn.NewBaseDB(db, func() {})
+	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 17))
+	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
+	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
+		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
+		AddRow(1, "root", "localhost", "test", "Query", 0, "init", "").
+		AddRow(2, "root", "localhost", "test", "Query", 0, "init", ""),
+	)
+	loaderChecker = NewLoaderConnNumberChecker(baseDB, stCfgs)
+	result = loaderChecker.Check(context.Background())
+	require.Equal(t, 1, len(result.Errors))
+	require.Equal(t, StateWarning, result.State)
+	require.Regexp(t, "(.|\n)*is less than loader needs(.|\n)*", result.Errors[0].ShortErr)
+
+	// test loader no enough privilege: warn
+	db, dbMock, err = sqlmock.New()
+	require.NoError(t, err)
+	baseDB = conn.NewBaseDB(db, func() {})
+	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 17))
+	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT INDEX ON *.* TO 'test'@'%'"))
+	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
+		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
+		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
+	)
+	loaderChecker = NewLoaderConnNumberChecker(baseDB, stCfgs)
+	result = loaderChecker.Check(context.Background())
+	require.Equal(t, 1, len(result.Errors))
+	require.Equal(t, StateWarning, result.State)
+	require.Regexp(t, "(.|\n)*lack of Super global(.|\n)*", result.Errors[0].ShortErr)
 }

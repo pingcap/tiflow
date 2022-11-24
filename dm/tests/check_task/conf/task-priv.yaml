@@ -1,0 +1,22 @@
+---
+name: test
+task-mode: "all"
+is-sharding: false
+meta-schema: "dm_meta"
+# enable-heartbeat: true
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "test1"
+  password: "123456"
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+
+block-allow-list:
+  instance:
+    do-dbs: ["checktask1"]
