@@ -26,6 +26,94 @@ import (
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
+type LoaderPath struct {
+	// the path in config
+	Origin string
+	// the path we actually use, format is 'Origin/taskName.sourceID'
+	Actual string
+	// the path we use in old version and should be moved to actual, format is 'Origin.taskName'
+	Moved string
+}
+
+// VerifyLoaderPath verify loader path, return Origin/Actual/Moved paths.
+// it should be no side effect and can be called repeatedly.
+// before v6.1 loader path is like:
+// s3 --> user_set_dir + / + taskName + . + sourceID
+// local --> user_set_dir + . + taskName
+// after v6.1 loader path is like:
+// s3 --> user_set_dir + / + taskName + . + sourceID
+// local --> user_set_dir + . + sourceID + . + taskName
+// For upgrade:
+// s3 --> do nothing
+// local --> dm should automatically move files, users do nothing
+// For downgrade:
+// s3 --> do nothing
+// local --> do nothing, because new path's suffix is still '.taskName'.
+func VerifyLoaderPath(raw string, taskName string, sourceID string) (*LoaderPath, error) {
+	loaderPath := &LoaderPath{}
+	var err error
+	if raw == "" || taskName == "" || sourceID == "" {
+		return loaderPath, err
+	}
+	s3ActualSuffix := "/" + taskName + "." + sourceID
+	actualSuffix := "/" + sourceID + "." + taskName
+	movedSuffix := "." + taskName
+	trimPath := ""
+
+	u, err := bstorage.ParseRawURL(raw)
+	if err != nil {
+		return loaderPath, errors.Trace(err)
+	}
+	// local
+	if u.Scheme == "" {
+		// avoid duplicate add uniqueID, and trim suffix '/' like './dump_data/'
+		trimPath = strings.TrimRight(raw, string(filepath.Separator))
+		if strings.HasSuffix(trimPath, actualSuffix) {
+			loaderPath.Origin = strings.TrimSuffix(raw, actualSuffix)
+			loaderPath.Actual = raw
+			loaderPath.Moved = loaderPath.Origin + movedSuffix
+		} else if strings.HasSuffix(trimPath, movedSuffix) {
+			loaderPath.Origin = strings.TrimSuffix(trimPath, movedSuffix)
+			loaderPath.Actual = loaderPath.Origin + actualSuffix
+			loaderPath.Moved = raw
+		} else {
+			loaderPath.Origin = raw
+			loaderPath.Actual = trimPath + actualSuffix
+			loaderPath.Moved = loaderPath.Origin + movedSuffix
+		}
+		// check Moved exist
+		_, err := os.Stat(loaderPath.Actual)
+		if err == nil {
+			loaderPath.Moved = ""
+		} else {
+			if os.IsNotExist(err) {
+				_, err = os.Stat(loaderPath.Moved)
+				if err != nil {
+					if os.IsNotExist(err) {
+						loaderPath.Moved = ""
+					} else {
+						return nil, err
+					}
+				}
+			} else {
+				return nil, err
+			}
+		}
+	} else {
+		trimPath = strings.TrimRight(u.Path, string(filepath.Separator))
+		if strings.HasSuffix(trimPath, s3ActualSuffix) {
+			u.Path = strings.TrimSuffix(trimPath, actualSuffix)
+			loaderPath.Origin = u.String()
+			loaderPath.Actual = raw
+		} else {
+			u.Path = trimPath + actualSuffix
+			loaderPath.Origin = raw
+			loaderPath.Actual = u.String()
+		}
+	}
+	return loaderPath, err
+}
+
 // AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path and will not change rawURL.
 // This function supports both local dir or s3 path. It can be used like the following:
 // 1. adjust subtask's `LoaderConfig.Dir`, uniqueID like `.test-mysql01`.

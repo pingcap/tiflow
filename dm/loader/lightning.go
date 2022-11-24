@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -287,9 +288,20 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 	cfg.Routes = l.cfg.RouteRules
 
 	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+	loderPath, err := storage.VerifyLoaderPath(l.cfg.LoaderConfig.Dir, l.cfg.Name, l.cfg.SourceID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if loderPath.Moved != "" {
+		err = os.Rename(loderPath.Moved, loderPath.Actual)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	var cpPath string
 	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
-	cpPath, err := storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+	cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
 	if err != nil {
 		return nil, err
 	}
