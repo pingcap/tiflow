@@ -106,16 +106,16 @@ func NewMockProducer() *mockProducer {
 	}
 }
 
-func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
+func newBatchEncodeWorker(ctx context.Context, protocol config.Protocol) (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	encoderConfig := codec.NewConfig(protocol).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}
 	producer := NewMockProducer()
 	return newFlushWorker(builder, producer,
-		metrics.NewStatistics(ctx, metrics.SinkTypeMQ), config.ProtocolOpen, 4, model.DefaultChangeFeedID("changefeed-test")), producer
+		metrics.NewStatistics(ctx, metrics.SinkTypeMQ), protocol, 4, model.DefaultChangeFeedID("changefeed-test")), producer
 }
 
 func TestBatchNormal(t *testing.T) {
@@ -123,7 +123,7 @@ func TestBatchNormal(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	key := topicPartitionKey{
 		topic:     "test",
@@ -168,7 +168,7 @@ func TestBatchFlushEventAtFirst(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	events := []mqEvent{
@@ -198,7 +198,7 @@ func TestBatchFlushEventInTheMiddle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	key := topicPartitionKey{
 		topic:     "test",
@@ -267,7 +267,7 @@ func TestGroup(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -344,7 +344,7 @@ func TestSendMessages(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -429,6 +429,53 @@ func TestSendMessages(t *testing.T) {
 	wg.Wait()
 }
 
+func TestNonBatchEncodeSendMessages(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolCanalJSON)
+	defer worker.close()
+
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
+	count := 64
+	for i := 0; i < count; i++ {
+		err := worker.addEvent(context.Background(), mqEvent{
+			row: row,
+			key: key,
+		})
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		return producer.getKeysCount() == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.getEventsByKey(key)) == count
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
+}
+
 func TestFlush(t *testing.T) {
 	t.Parallel()
 
@@ -438,7 +485,7 @@ func TestFlush(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	flushedChan := make(chan struct{})
 	flushed := atomic.NewBool(false)
@@ -511,7 +558,7 @@ func TestAbort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	var wg sync.WaitGroup
@@ -531,7 +578,7 @@ func TestProducerError(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, prod := newTestWorker(ctx)
+	worker, prod := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	var wg sync.WaitGroup
@@ -568,7 +615,7 @@ func TestWorker(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	var wg sync.WaitGroup
