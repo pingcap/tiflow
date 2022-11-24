@@ -334,13 +334,17 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 		return nil
 	}
 
-	w.Logger().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
 	subtaskStage := &pb.SubTaskStatus{
 		Stage:  pb.Stage_Paused,
 		Result: result,
 	}
 	strategy := w.autoResume.CheckResumeSubtask(subtaskStage, dmconfig.DefaultBackoffRollback)
-	w.Logger().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+
+	previousStage := w.getStage()
+	if stage != previousStage {
+		w.Logger().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
+		w.Logger().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+	}
 
 	if strategy == worker.ResumeDispatch {
 		w.Logger().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
