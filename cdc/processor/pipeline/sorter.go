@@ -44,7 +44,7 @@ import (
 const (
 	flushMemoryMetricsDuration = time.Second * 5
 	// defaultBatchReadSize is the default batch size of read from sorter
-	defaultBatchReadSize = 256
+	defaultBatchReadSize = 512
 )
 
 type sorterNode struct {
