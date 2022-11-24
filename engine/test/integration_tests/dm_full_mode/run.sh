@@ -20,7 +20,7 @@ function run() {
 	run_sql "SET @@global.time_zone = '+01:00';"
 	run_sql --port 4000 "SET @@global.time_zone = '+02:00';"
 	run_sql --port 4000 "CREATE USER 'dm_full'@'%' IDENTIFIED BY '123456';"
-	run_sql --port 4000 "GRANT ALL PRIVILEGE ON *.* TO 'dm_full'@'%';"
+	run_sql --port 4000 "GRANT ALL PRIVILEGES ON *.* TO 'dm_full'@'%';"
 	run_sql --port 4000 "REVOKE ALTER ON *.* FROM 'dm_full'@'%';"
 
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
@@ -60,8 +60,8 @@ function run() {
 	# check the error is not related to lightning checkpoint
 	exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | grep -q 'Error 1142: ALTER command denied'"
 
-	read -p 123
 	run_sql --port 4000 "GRANT ALTER ON *.* TO 'dm_full'@'%';"
+	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	curl http://127.0.0.1:10245/api/v1/jobs/$job_id | tee /dev/stderr | jq -r '.detail' | base64 --decode | jq -e '.finished_unit_status."mysql-01"[1].Status.finishedBytes == 144'
