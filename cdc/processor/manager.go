@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -71,7 +73,9 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		*config.SchedulerConfig,
 	) *processor
+	cfg *config.SchedulerConfig
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -118,7 +122,15 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
+
+			// TODO: Remove the hack once span replication is compatible with
+			//       all sinks.
+			cfg := *m.cfg
+			if !sink.IsSinkCompatibleWithSpanReplication(changefeedState.Info.SinkURI) {
+				cfg.RegionPerSpan = 0
+			}
+			p = m.newProcessor(
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness, &cfg)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{

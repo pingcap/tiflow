@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -48,12 +49,13 @@ func newProcessor4Test(
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
 	p := newProcessor(
 		state,
 		captureInfo,
-		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, cfg)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		p.sinkV1 = mocksink.NewNormalMockSink()
@@ -106,7 +108,8 @@ func initProcessor4Test(
 	changefeed := orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
-	p := newProcessor4Test(t, changefeed, captureInfo, newMockTablePipeline, liveness)
+	cfg := config.NewDefaultSchedulerConfig()
+	p := newProcessor4Test(t, changefeed, captureInfo, newMockTablePipeline, liveness, cfg)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID

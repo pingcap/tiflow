@@ -57,8 +57,9 @@ func NewManager4Test(
 		changefeedID model.ChangeFeedID,
 		up *upstream.Upstream,
 		liveness *model.Liveness,
+		cfg *config.SchedulerConfig,
 	) *processor {
-		return newProcessor4Test(t, state, captureInfo, createTablePipeline, m.liveness)
+		return newProcessor4Test(t, state, captureInfo, createTablePipeline, m.liveness, cfg)
 	}
 	return m
 }

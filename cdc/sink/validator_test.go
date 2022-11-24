@@ -87,3 +87,67 @@ func TestPreCheckSinkURI(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		uri        string
+		compatible bool
+	}{
+		{
+			name:       "MySQL URI",
+			uri:        "mysql://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "TiDB URI",
+			uri:        "tidb://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "MySQL URI",
+			uri:        "mysql+ssl://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "TiDB URI",
+			uri:        "tidb+ssl://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "Kafka URI",
+			uri:        "kafka://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Kafka URI",
+			uri:        "kafka+ssl://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Blackhole URI",
+			uri:        "blackhole://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Unknown URI",
+			uri:        "unknown://foo.bar:3306",
+			compatible: false,
+		},
+		{
+			name:       "Error URI",
+			uri:        "error/foo.bar:3306",
+			compatible: false,
+		},
+	}
+
+	for _, tt := range tests {
+		test := tt
+		t.Run(test.name, func(t *testing.T) {
+			compatible := IsSinkCompatibleWithSpanReplication(test.uri)
+			require.Equal(t, compatible, tt.compatible)
+		})
+	}
+}

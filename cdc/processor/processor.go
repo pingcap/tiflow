@@ -94,6 +94,7 @@ type processor struct {
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
 	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	cfg      *config.SchedulerConfig
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -537,6 +538,7 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) *processor {
 	p := &processor{
 		changefeed:   state,
@@ -580,6 +582,7 @@ func newProcessor(
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
+	p.cfg = cfg
 	return p
 }
 
