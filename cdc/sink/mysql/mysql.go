@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -101,6 +102,7 @@ func NewMySQLSink(
 		username = "root"
 	}
 	password, _ := sinkURI.User.Password()
+
 	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if port == "" {
@@ -126,7 +128,8 @@ func NewMySQLSink(
 	dsn.Params["readTimeout"] = params.readTimeout
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
+
+	testDB, err := pmysql.CheckAndAdjustPassword(ctx, dsn, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}

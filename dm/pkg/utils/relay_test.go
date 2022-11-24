@@ -19,20 +19,14 @@ import (
 	"testing"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testUtilsSuite{})
+func TestParseUUIDIndex(t *testing.T) {
+	t.Parallel()
 
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-type testUtilsSuite struct{}
-
-func (t *testUtilsSuite) TestParseUUIDIndex(c *C) {
 	f, err := os.CreateTemp("", "server-uuid.index")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
 	uuids := []string{
@@ -42,22 +36,24 @@ func (t *testUtilsSuite) TestParseUUIDIndex(c *C) {
 	}
 
 	err = os.WriteFile(f.Name(), []byte(strings.Join(uuids, "\n")), 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	obtainedUUIDs, err := ParseUUIDIndex(f.Name())
-	c.Assert(err, IsNil)
-	c.Assert(obtainedUUIDs, DeepEquals, uuids)
+	require.NoError(t, err)
+	require.Equal(t, uuids, obtainedUUIDs)
 
 	// test GetUUIDBySuffix
 	uuid := uuids[1]
 	uuidWS := GetUUIDBySuffix(uuids, uuid[len(uuid)-6:])
-	c.Assert(uuidWS, Equals, uuid)
+	require.Equal(t, uuid, uuidWS)
 
 	uuidWS = GetUUIDBySuffix(uuids, "100000")
-	c.Assert(uuidWS, Equals, "")
+	require.Equal(t, "", uuidWS)
 }
 
-func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
+func TestSuffixForUUID(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		uuid           string
 		ID             int
@@ -69,32 +65,34 @@ func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
 
 	for _, cs := range cases {
 		uuidWS := AddSuffixForUUID(cs.uuid, cs.ID)
-		c.Assert(uuidWS, Equals, cs.uuidWithSuffix)
+		require.Equal(t, cs.uuidWithSuffix, uuidWS)
 
 		uuidWOS, id, err := ParseRelaySubDir(cs.uuidWithSuffix)
-		c.Assert(err, IsNil)
-		c.Assert(uuidWOS, Equals, cs.uuid)
-		c.Assert(id, Equals, cs.ID)
+		require.NoError(t, err)
+		require.Equal(t, cs.uuid, uuidWOS)
+		require.Equal(t, cs.ID, id)
 
 		suffix := SuffixIntToStr(cs.ID)
 		hasSuffix := strings.HasSuffix(cs.uuidWithSuffix, suffix)
-		c.Assert(hasSuffix, Equals, true)
+		require.Equal(t, true, hasSuffix)
 	}
 
 	_, _, err := ParseRelaySubDir("uuid-with-out-suffix")
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	_, _, err = ParseRelaySubDir("uuid-invalid-suffix-len.01")
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	_, _, err = ParseRelaySubDir("uuid-invalid-suffix-fmt.abc")
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	_, _, err = ParseRelaySubDir("uuid-invalid-fmt.abc.000001")
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 }
 
-func (t *testUtilsSuite) TestGenFakeRotateEvent(c *C) {
+func TestGenFakeRotateEvent(t *testing.T) {
+	t.Parallel()
+
 	var (
 		nextLogName = "mysql-bin.000123"
 		logPos      = uint64(456)
@@ -102,14 +100,14 @@ func (t *testUtilsSuite) TestGenFakeRotateEvent(c *C) {
 	)
 
 	ev, err := GenFakeRotateEvent(nextLogName, logPos, serverID)
-	c.Assert(err, IsNil)
-	c.Assert(ev.Header.ServerID, Equals, serverID)
-	c.Assert(ev.Header.Timestamp, Equals, uint32(0))
-	c.Assert(ev.Header.LogPos, Equals, uint32(0))
-	c.Assert(ev.Header.EventType, Equals, replication.ROTATE_EVENT)
+	require.NoError(t, err)
+	require.Equal(t, serverID, ev.Header.ServerID)
+	require.Equal(t, uint32(0), ev.Header.Timestamp)
+	require.Equal(t, uint32(0), ev.Header.LogPos)
+	require.Equal(t, replication.ROTATE_EVENT, ev.Header.EventType)
 
 	evR, ok := ev.Event.(*replication.RotateEvent)
-	c.Assert(ok, IsTrue)
-	c.Assert(string(evR.NextLogName), Equals, nextLogName)
-	c.Assert(evR.Position, Equals, logPos)
+	require.True(t, ok)
+	require.Equal(t, nextLogName, string(evR.NextLogName))
+	require.Equal(t, logPos, evR.Position)
 }
