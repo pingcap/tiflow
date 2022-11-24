@@ -221,19 +221,20 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 				return nil
 			}
 
+			if event.row != nil {
+				if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
+					return errors.Trace(err)
+				}
+				w.statistics.ObserveRows(event.row)
+				continue
+			}
+
 			if event.flush != nil {
 				if err := w.encoderGroup.AddFlush(ctx, event.flush.flushed); err != nil {
 					return errors.Trace(err)
 				}
-				continue
 			}
 
-			if event.row != nil {
-				w.statistics.ObserveRows(event.row)
-				if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
-					return errors.Trace(err)
-				}
-			}
 		}
 	}
 }
@@ -274,10 +275,10 @@ func (w *flushWorker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
-			w.statistics.ObserveRows(events...)
 			if err := w.encoderGroup.AddEvents(ctx, key.topic, key.partition, events...); err != nil {
 				return errors.Trace(err)
 			}
+			w.statistics.ObserveRows(events...)
 		}
 
 		if w.needsFlush != nil {
