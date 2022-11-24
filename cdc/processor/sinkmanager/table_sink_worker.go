@@ -173,8 +173,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			break
 		}
 		if e.Row == nil {
-			// FIXME: Maybe we meet a txn finished event.
 			// NOTICE: This could happen when the event is filtered by the event filter.
+			// Maybe we just ignore the last event. So we need to record the last position.
+			if pos.Valid() {
+				lastPos = pos
+			}
 			continue
 		}
 		for availableMem-e.Row.ApproximateBytes() < 0 {
