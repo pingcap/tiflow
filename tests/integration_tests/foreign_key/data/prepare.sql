@@ -19,7 +19,7 @@ set @@foreign_key_checks=1;
 
 -- Check foreign key on delete/update set null.
 create table t3 (id int key);
-create table t4 (id int key, b int, constraint fk_2 foreign key (b) references t3 (id) on delete set null on update set null);
+create table t4 (id int key, b int, index idx(b), constraint fk_2 foreign key (b) references t3 (id) on delete set null on update set null);
 begin;
 insert into t3 values (1),(2),(3),(4),(5);
 insert into t4 values (1, 1),(2, 2),(3, 3),(4, 4),(5, 5);
@@ -54,7 +54,7 @@ delete from t9 where id=1;
 
 -- Test ddl add foreign key.
 create table t10 (id int key, b int, index(b));
-create table t11 (id int key, b int);
+create table t11 (id int key, b int, index(b));
 insert into t10 values (1,1),(2,2),(3,3);
 insert into t11 values (1,1),(2,2),(3,3);
 alter table t11 add constraint fk_6 foreign key (b) references t10(id) on delete cascade on update cascade;
