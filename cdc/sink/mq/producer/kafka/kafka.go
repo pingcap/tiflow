@@ -111,7 +111,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 	})
 
-	_ = &sarama.ProducerMessage{
+	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
@@ -119,8 +119,8 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 	}
 
 	k.mu.Lock()
-	//k.mu.inflight++
-	//log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
+	k.mu.inflight++
+	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
 	select {
@@ -128,17 +128,8 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	default:
+	case k.asyncProducer.Input() <- msg:
 	}
-
-	//
-	//select {
-	//case <-ctx.Done():
-	//	return ctx.Err()
-	//case <-k.closeCh:
-	//	return nil
-	//case k.asyncProducer.Input() <- msg:
-	//}
 	return nil
 }
 
