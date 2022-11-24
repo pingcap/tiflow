@@ -359,6 +359,7 @@ func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1,
 	// CREATE DATABASE/TABLE, 3 DDL
 	queries := []string{
 		"CREATE DATABASE `db`",
+		"COMMIT",
 		"CREATE TABLE `db`.`tbl1` (c1 INT)",
 		"CREATE TABLE `db`.`tbl2` (c1 INT)",
 	}
@@ -814,7 +815,7 @@ func (t *testRelaySuite) TestRecoverMySQL(c *C) {
 	// expected latest pos/GTID set
 	expectedPos := gmysql.Position{Name: filename, Pos: uint32(len(baseData))}
 	// 3 DDL + 10 DML
-	expectedGTIDsStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-17,53bfca22-690d-11e7-8a62-18ded7a37b78:1-505,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
+	expectedGTIDsStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-18,53bfca22-690d-11e7-8a62-18ded7a37b78:1-505,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
 	expectedGTIDs, err := gtid.ParserGTID(flavor, expectedGTIDsStr)
 	c.Assert(err, IsNil)
 
@@ -910,7 +911,7 @@ func (t *testRelaySuite) TestRecoverMySQL(c *C) {
 	// try recover, no operation applied
 	expectedPos.Pos += uint32(len(extraData))
 	// 4 DDL + 10 DML
-	expectedGTIDsStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-17,53bfca22-690d-11e7-8a62-18ded7a37b78:1-506,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
+	expectedGTIDsStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-18,53bfca22-690d-11e7-8a62-18ded7a37b78:1-506,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
 	expectedGTIDs, err = gtid.ParserGTID(flavor, expectedGTIDsStr)
 	c.Assert(err, IsNil)
 	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
