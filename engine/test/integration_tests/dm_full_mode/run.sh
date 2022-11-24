@@ -46,10 +46,15 @@ function run() {
 	curl -X POST "http://127.0.0.1:10245/api/v1/jobs/$job_id/cancel"
 	curl -X DELETE "http://127.0.0.1:10245/api/v1/jobs/$job_id"
 
-	# happy path
+  # test downstream has no ALTER privilege
+  run_sql "create table full_mode.auto(c int primary key auto_increment);"
+  run_sql "insert into full_mode.auto values(1),(2);"
+  run_sql --port 4000 "revoke alter on *.* from 'root'@'%';"
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "dm_full_mode")
+
+	read -p 123
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	curl http://127.0.0.1:10245/api/v1/jobs/$job_id | tee /dev/stderr | jq -r '.detail' | base64 --decode | jq -e '.finished_unit_status."mysql-01"[1].Status.finishedBytes == 144'
 
