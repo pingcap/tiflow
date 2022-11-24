@@ -198,7 +198,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 3)
+	require.Len(suite.T(), sink.GetEvents(), 3)
 }
 
 // Test the case that the worker will stop when no memory quota and meet the txn boundary.
@@ -304,7 +304,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 3)
+	require.Len(suite.T(), sink.GetEvents(), 3)
 }
 
 // Test the case that worker will block when no memory quota until the mem quota is aborted.
@@ -429,12 +429,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return len(sink.events) == 3
+		return len(sink.GetEvents()) == 3
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
 	w.memQuota.close()
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 3, "Only three events should be sent to sink")
+	require.Len(suite.T(), sink.GetEvents(), 3, "Only three events should be sent to sink")
 }
 
 // Test the case that worker will advance the table sink only when it reaches the batch size.
@@ -559,8 +559,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
-	require.Equal(suite.T(), 3, sink.writeTimes, "Three txn batch should be sent to sink")
+	require.Len(suite.T(), sink.GetEvents(), 5, "All events should be sent to sink")
+	require.Equal(suite.T(), 3, sink.GetWriteTimes(), "Three txn batch should be sent to sink")
 }
 
 // Test the case that the worker will force consume only one Txn when the memory quota is not enough.
@@ -685,7 +685,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
+	require.Len(suite.T(), sink.GetEvents(), 5, "All events should be sent to sink")
 }
 
 // Test the case that the worker will advance the table sink only when it reaches the max update interval size.
@@ -810,8 +810,8 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
-	require.Equal(suite.T(), 2, sink.writeTimes, "Only two times write to sink")
+	require.Len(suite.T(), sink.GetEvents(), 5, "All events should be sent to sink")
+	require.Equal(suite.T(), 2, sink.GetWriteTimes(), "Only two times write to sink")
 }
 
 // Test the case that the worker will advance the table sink only when meet the new commit ts.
@@ -927,14 +927,15 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return len(sink.events) == 3
+		return len(sink.GetEvents()) == 3
 	}, 5*time.Second, 10*time.Millisecond)
 	cancel()
 	wg.Wait()
-	sink.events[0].Callback()
-	sink.events[1].Callback()
-	sink.events[2].Callback()
-	require.Len(suite.T(), sink.events, 3, "No more events should be sent to sink")
+	receivedEvents := sink.GetEvents()
+	receivedEvents[0].Callback()
+	receivedEvents[1].Callback()
+	receivedEvents[2].Callback()
+	require.Len(suite.T(), sink.GetEvents(), 3, "No more events should be sent to sink")
 	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(), "Only can advance resolved mark to 1")
 }
 

@@ -46,6 +46,18 @@ func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.Row
 	return nil
 }
 
+func (m *mockSink) GetEvents() []*eventsink.CallbackableEvent[*model.RowChangedEvent] {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.events
+}
+
+func (m *mockSink) GetWriteTimes() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeTimes
+}
+
 func (m *mockSink) Close() error {
 	return nil
 }
