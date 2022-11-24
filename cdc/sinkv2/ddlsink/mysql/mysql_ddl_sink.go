@@ -39,6 +39,9 @@ import (
 
 const (
 	defaultDDLMaxRetry uint64 = 20
+
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
 )
 
 // Assert DDLEventSink implementation
@@ -48,7 +51,8 @@ type mysqlDDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// db is the database connection.
-	db *sql.DB
+	db  *sql.DB
+	cfg *pmysql.Config
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
@@ -81,6 +85,7 @@ func NewMySQLDDLSink(
 	m := &mysqlDDLSink{
 		id:         changefeedID,
 		db:         db,
+		cfg:        cfg,
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 	}
 
@@ -96,6 +101,11 @@ func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	defer cancelFunc()
+
 	return retry.Do(ctx, func() error {
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {

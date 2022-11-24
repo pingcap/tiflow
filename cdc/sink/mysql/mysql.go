@@ -51,6 +51,9 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
 )
 
 type mysqlSink struct {
@@ -304,6 +307,11 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	defer cancelFunc()
+
 	return retry.Do(ctx, func() error {
 		err := s.execDDL(ctx, ddl)
 		if errorutil.IsIgnorableMySQLDDLError(err) {
@@ -635,6 +643,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
+
+	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	defer cancelFunc()
 
 	start := time.Now()
 	return retry.Do(ctx, func() error {

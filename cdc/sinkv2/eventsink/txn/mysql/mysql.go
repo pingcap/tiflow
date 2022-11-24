@@ -46,6 +46,9 @@ const (
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = 10 * time.Millisecond
 
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
+
 	defaultDMLMaxRetry uint64 = 8
 )
 
@@ -488,6 +491,11 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
+
+	writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	defer cancelFunc()
 
 	start := time.Now()
 	return retry.Do(ctx, func() error {
