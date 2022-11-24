@@ -228,9 +228,11 @@ func (w *flushWorker) nonBatchEncodeRun(ctx context.Context) error {
 				continue
 			}
 
-			w.statistics.ObserveRows(event.row)
-			if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
-				return errors.Trace(err)
+			if event.row != nil {
+				w.statistics.ObserveRows(event.row)
+				if err := w.encoderGroup.AddEvents(ctx, event.key.topic, event.key.partition, event.row); err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	}
