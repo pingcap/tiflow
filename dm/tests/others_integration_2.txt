@@ -8,3 +8,4 @@ sql_mode
 http_proxies
 openapi
 duplicate_event
+binlog_parse
