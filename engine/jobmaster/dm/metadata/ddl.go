@@ -81,7 +81,6 @@ type DDLItem struct {
 
 // DroppedColumns represents the state of dropped columns
 type DroppedColumns struct {
-	state
 	// column -> source table
 	Cols map[string]map[SourceTable]struct{}
 }
