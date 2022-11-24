@@ -84,7 +84,7 @@ func (suite *workerSuite) TearDownSuite() {
 }
 
 // Test the case that the worker will ignore filtered events.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndGotSomeFilteredEvents() {
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -201,7 +201,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndGotSomeFiltered
 }
 
 // Test the case that the worker will stop when no memory quota and meet the txn boundary.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -307,7 +307,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 }
 
 // Test the case that worker will block when no memory quota until the mem quota is aborted.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -424,7 +424,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndAbortWhenNoMemA
 }
 
 // Test the case that worker will advance the table sink only when it reaches the batch size.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -550,7 +550,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithSplitTxnAndOnlyAdvanceTabl
 }
 
 // Test the case that the worker will force consume only one Txn when the memory quota is not enough.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
+func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -675,7 +675,7 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnAndAbortWhenNoM
 }
 
 // Test the case that the worker will advance the table sink only when it reaches the max update interval size.
-func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize() {
+func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize() {
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -798,6 +798,126 @@ func (suite *workerSuite) TestReceiveTableSinkTaskWithoutSplitTxnOnlyAdvanceTabl
 	wg.Wait()
 	require.Len(suite.T(), sink.events, 5, "All events should be sent to sink")
 	require.Equal(suite.T(), 2, sink.writeTimes, "Only two times write to sink")
+}
+
+// Test the case that the worker will advance the table sink only when meet the new commit ts.
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMeetNewCommitTs() {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Only for three events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 2)
+
+	events := []*model.PolymorphicEvent{
+		{
+			StartTs: 1,
+			CRTs:    1,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    1,
+			},
+			Row: genRowChangedEvent(1, 1, tableID),
+		},
+		// Although the commit ts is 2, the event is not sent to sink because the commit ts is not changed.
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		// We will block at this event.
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 1,
+			CRTs:    3,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    3,
+			},
+			Row: genRowChangedEvent(1, 3, tableID),
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   4,
+			},
+		},
+	}
+	w := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func() engine.Position {
+		return engine.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}
+	}
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  1,
+			CommitTs: 2,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  2,
+			CommitTs: 2,
+		}, lastWritePos.Next())
+		cancel()
+	}
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	w.memQuota.close()
+	wg.Wait()
+	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
+	sink.events[0].Callback()
+	require.Equal(suite.T(), uint64(1), wrapper.getCheckpointTs().ResolvedMark(), "Only advance resolved mark to 1")
 }
 
 func TestWorkerSuite(t *testing.T) {

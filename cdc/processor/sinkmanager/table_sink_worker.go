@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -90,35 +91,39 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
 	var lastPos engine.Position
-	lastCommitTs := uint64(0)
+	currentCommitTs := uint64(0)
+	lastTimeCommitTs := uint64(0)
 	currentTotalSize := uint64(0)
 	batchID := uint64(1)
 
 	// Two functions to simplify the code.
 	// It captures some variables in the outer scope.
-	appendEventsAndRecordCurrentSize := func() error {
-		if len(events) == 0 {
+	appendEventsAndRecordCurrentSize := func(commitTs model.Ts) error {
+		i := sort.Search(len(events), func(i int) bool {
+			return events[i].CRTs > commitTs
+		})
+		resolvedEvents := events[:i]
+		if len(resolvedEvents) == 0 {
 			return nil
 		}
-		size, err := w.appendEventsToTableSink(task, events)
+		size, err := w.appendEventsToTableSink(task, resolvedEvents)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		currentTotalSize += size
-		events = events[:0]
+		events = append(make([]*model.PolymorphicEvent, 0, len(events[i:])), events[i:]...)
 		return nil
 	}
-	advanceTableSinkAndResetCurrentSizeWithBatchID := func() error {
-		err := w.advanceTableSinkWithBatchID(task, lastCommitTs, currentTotalSize, batchID)
+	advanceTableSinkAndResetCurrentSizeWithBatchID := func(commitTs model.Ts) error {
+		err := w.advanceTableSinkWithBatchID(task, commitTs, currentTotalSize, batchID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		currentTotalSize = 0
 		return nil
 	}
-
-	advanceTableSinkAndResetCurrentSize := func() error {
-		err := w.advanceTableSink(task, lastCommitTs, currentTotalSize)
+	advanceTableSinkAndResetCurrentSize := func(commitTs model.Ts) error {
+		err := w.advanceTableSink(task, commitTs, currentTotalSize)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -161,13 +166,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				zap.Int64("tableID", task.tableID),
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
-				zap.Uint64("lastCommitTs", lastCommitTs),
+				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 				zap.Uint64("currentTotalSize", currentTotalSize),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
 			break
 		}
 		if e.Row == nil {
+			// FIXME: Maybe we meet a txn finished event.
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
@@ -208,34 +214,47 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		eventSize := e.Row.ApproximateBytes()
 		availableMem -= eventSize
 		events = append(events, e)
-		lastCommitTs = e.CRTs
+		currentCommitTs = e.CRTs
 		// We meet a finished transaction.
 		if pos.Valid() {
 			lastPos = pos
-			// Always append the events to the sink.
-			// Whatever splitTxn is true or false, we should emit the events to the sink as soon as possible.
-			if err := appendEventsAndRecordCurrentSize(); err != nil {
-				return errors.Trace(err)
+			if lastTimeCommitTs == 0 {
+				// First time meet a finished transaction. So we always need to append the event with current commit ts.
+				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				if err := appendEventsAndRecordCurrentSize(lastTimeCommitTs); err != nil {
+					return errors.Trace(err)
+				}
 			}
 			// 1) If we need to split the transaction into multiple batches,
 			// 	  we have to update the resolved ts as soon as possible.
 			// 2) If we do not need to split the transaction into multiple batches,
 			//    we only update the resolved ts when the currentTotalSize reaches the maxUpdateIntervalSize
 			//    to avoid updating the resolved ts too frequently.
-			if w.splitTxn || currentTotalSize >= maxUpdateIntervalSize {
+			if (w.splitTxn || currentTotalSize >= maxUpdateIntervalSize) && currentCommitTs > lastTimeCommitTs {
 				log.Debug("Advance table sink because met a finished transaction",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("upperBound", upperBound),
-					zap.Uint64("lastCommitTs", lastCommitTs),
+					zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 					zap.Uint64("currentTotalSize", currentTotalSize),
 					zap.Bool("splitTxn", w.splitTxn),
 				)
-				if err := advanceTableSinkAndResetCurrentSize(); err != nil {
-					return errors.Trace(err)
+				if lastTimeCommitTs == 0 {
+					// First time meet a finished transaction. So we always need to advance the with current commit ts.
+					if err := advanceTableSinkAndResetCurrentSize(currentCommitTs); err != nil {
+						return errors.Trace(err)
+					}
+				} else {
+					if err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs); err != nil {
+						return errors.Trace(err)
+					}
 				}
+				lastTimeCommitTs = currentCommitTs
 			}
 			if w.splitTxn {
 				batchID = 1
@@ -249,7 +268,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 					zap.Int64("tableID", task.tableID),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("upperBound", upperBound),
-					zap.Uint64("lastCommitTs", lastCommitTs),
+					zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 					zap.Uint64("currentTotalSize", currentTotalSize),
 					zap.Bool("splitTxn", w.splitTxn),
 				)
@@ -257,7 +276,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 		} else {
 			if w.splitTxn {
-				if err := appendEventsAndRecordCurrentSize(); err != nil {
+				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
 					return errors.Trace(err)
 				}
 				// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
@@ -268,11 +287,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 						zap.Int64("tableID", task.tableID),
 						zap.Any("lowerBound", lowerBound),
 						zap.Any("upperBound", upperBound),
-						zap.Uint64("lastCommitTs", lastCommitTs),
+						zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 						zap.Uint64("currentTotalSize", currentTotalSize),
 						zap.Bool("splitTxn", w.splitTxn),
 					)
-					if err := advanceTableSinkAndResetCurrentSizeWithBatchID(); err != nil {
+					if err := advanceTableSinkAndResetCurrentSizeWithBatchID(currentCommitTs); err != nil {
 						return errors.Trace(err)
 					}
 					batchID++
@@ -317,18 +336,18 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		)
 
 	} else {
-		if lastCommitTs == 0 {
-			lastCommitTs = upperBound.CommitTs
-			log.Debug("No more events, set lastCommitTs to upperBound",
+		if lastTimeCommitTs == 0 {
+			lastTimeCommitTs = upperBound.CommitTs
+			log.Debug("No more events, set lastTimeCommitTs to upperBound",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
-				zap.Uint64("lastCommitTs", lastCommitTs),
+				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
-			err := advanceTableSinkAndResetCurrentSize()
+			err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -337,18 +356,21 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		// This means that we append all the events to the table sink.
 		// But we have not updated the resolved ts.
 		// Because we do not reach the maxUpdateIntervalSize.
-		if currentTotalSize != 0 {
+		if len(events) > 0 || currentTotalSize > 0 {
+			if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
+				return errors.Trace(err)
+			}
 			log.Debug("Advance table sink because some events are not flushed",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
-				zap.Uint64("lastCommitTs", lastCommitTs),
+				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
 				zap.Uint64("currentTotalSize", currentTotalSize),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
-			if err := appendEventsAndRecordCurrentSize(); err != nil {
+			if err := advanceTableSinkAndResetCurrentSize(currentCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 		}
