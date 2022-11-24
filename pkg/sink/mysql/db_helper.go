@@ -249,10 +249,8 @@ func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConn
 	testDB, err := dbConnFactory(ctx, dbConfig.FormatDSN())
 	if err != nil {
 		// If access is denied and password is encoded by base64, try to decoded password.
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
-			ok && mysqlErr.Number == tmysql.ErrAccessDenied {
-			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password);
-				decodeErr == nil && string(dePassword) != password {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && mysqlErr.Number == tmysql.ErrAccessDenied {
+			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
 				dbConfig.Passwd = string(dePassword)
 				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
 				if err != nil {
