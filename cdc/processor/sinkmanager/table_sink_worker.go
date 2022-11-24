@@ -228,12 +228,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 					return errors.Trace(err)
 				}
 			}
-			// 1) If we need to split the transaction into multiple batches,
-			// 	  we have to update the resolved ts as soon as possible.
-			// 2) If we do not need to split the transaction into multiple batches,
-			//    we only update the resolved ts when the currentTotalSize reaches the maxUpdateIntervalSize
-			//    to avoid updating the resolved ts too frequently.
-			if (w.splitTxn || currentTotalSize >= maxUpdateIntervalSize) && currentCommitTs > lastTimeCommitTs {
+			// We only update the resolved ts when the currentTotalSize reaches the maxUpdateIntervalSize
+			// to avoid updating the resolved ts too frequently.
+			if currentTotalSize >= maxUpdateIntervalSize && currentCommitTs > lastTimeCommitTs {
 				log.Debug("Advance table sink because met a finished transaction",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
@@ -276,6 +273,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 		} else {
 			if w.splitTxn {
+				lastTimeCommitTs = currentCommitTs
 				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
 					return errors.Trace(err)
 				}

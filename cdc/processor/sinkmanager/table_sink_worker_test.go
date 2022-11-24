@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -329,6 +330,16 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		},
 		{
 			StartTs: 1,
+			CRTs:    1,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    1,
+			},
+			Row: genRowChangedEvent(1, 1, tableID),
+		},
+		{
+			StartTs: 1,
 			CRTs:    2,
 			RawKV: &model.RawKVEntry{
 				OpType:  model.OpTypePut,
@@ -417,10 +428,13 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		callback:      callback,
 		isCanceled:    func() bool { return false },
 	}
+	require.Eventually(suite.T(), func() bool {
+		return len(sink.events) == 3
+	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
 	w.memQuota.close()
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
+	require.Len(suite.T(), sink.events, 3, "Only three events should be sent to sink")
 }
 
 // Test the case that worker will advance the table sink only when it reaches the batch size.
@@ -880,7 +894,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 	go func() {
 		defer wg.Done()
 		err := w.handleTasks(ctx, taskChan)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
@@ -903,7 +917,6 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
-		cancel()
 	}
 	taskChan <- &sinkTask{
 		tableID:       tableID,
@@ -913,11 +926,16 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		callback:      callback,
 		isCanceled:    func() bool { return false },
 	}
-	w.memQuota.close()
+	require.Eventually(suite.T(), func() bool {
+		return len(sink.events) == 3
+	}, 5*time.Second, 10*time.Millisecond)
+	cancel()
 	wg.Wait()
-	require.Len(suite.T(), sink.events, 1, "Only one txn should be sent to sink before abort")
 	sink.events[0].Callback()
-	require.Equal(suite.T(), uint64(1), wrapper.getCheckpointTs().ResolvedMark(), "Only advance resolved mark to 1")
+	sink.events[1].Callback()
+	sink.events[2].Callback()
+	require.Len(suite.T(), sink.events, 3, "No more events should be sent to sink")
+	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(), "Only can advance resolved mark to 1")
 }
 
 func TestWorkerSuite(t *testing.T) {
