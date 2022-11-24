@@ -66,3 +66,9 @@ tools/bin/protoc-gen-openapiv2: tools/check/go.mod
 
 tools/bin/gci: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/gci github.com/daixiang0/gci
+
+tools/bin/stringer: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/stringer golang.org/x/tools/cmd/stringer
+
+tools/bin/mockery: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/mockery github.com/vektra/mockery/v2

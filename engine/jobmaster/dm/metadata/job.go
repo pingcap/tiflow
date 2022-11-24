@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -118,15 +119,17 @@ func NewJob(jobCfg *config.JobCfg) *Job {
 // Task is the minimum working unit of a job.
 // A job may contain multiple upstream and it will be converted into multiple tasks.
 type Task struct {
-	Cfg   *config.TaskCfg
-	Stage TaskStage
+	Cfg              *config.TaskCfg
+	Stage            TaskStage
+	StageUpdatedTime time.Time
 }
 
 // NewTask creates a new Task instance
 func NewTask(taskCfg *config.TaskCfg) *Task {
 	return &Task{
-		Cfg:   taskCfg,
-		Stage: StageRunning, // TODO: support set stage when create task.
+		Cfg:              taskCfg,
+		Stage:            StageRunning, // TODO: support set stage when create task.
+		StageUpdatedTime: time.Now(),
 	}
 }
 
@@ -181,11 +184,12 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 		}
 	}
 	for _, taskID := range taskIDs {
-		if _, ok := job.Tasks[taskID]; !ok {
+		t, ok := job.Tasks[taskID]
+		if !ok {
 			return errors.Errorf("task %s not found", taskID)
 		}
-		t := job.Tasks[taskID]
 		t.Stage = stage
+		t.StageUpdatedTime = time.Now()
 	}
 
 	return jobStore.Put(ctx, job)
@@ -218,6 +222,7 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 		// task stage will not be updated.
 		if oldTask, ok := oldJob.Tasks[taskID]; ok {
 			newTask.Stage = oldTask.Stage
+			newTask.StageUpdatedTime = oldTask.StageUpdatedTime
 		}
 	}
 

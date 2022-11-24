@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	var (
 		ctx               = context.Background()
 		metaKVClient      = kvmock.NewMetaMock()
-		mockBaseJobmaster = &MockBaseJobmaster{}
+		mockBaseJobmaster = &MockBaseJobmaster{t: t}
 		jm                = &JobMaster{
 			BaseJobMaster: mockBaseJobmaster,
 			metadata:      metadata.NewMetaData(metaKVClient, log.L()),
@@ -130,20 +131,22 @@ func TestQueryStatusAPI(t *testing.T) {
 				"task2": {
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMDump,
-							Task:           "task2",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 3,
+							Unit:             frameModel.WorkerDMDump,
+							Task:             "task2",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   3,
+							StageUpdatedTime: loadTime,
 						},
 						Status:   dumpStatusBytes,
 						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMLoad,
-							Task:           "task2",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 3,
+							Unit:             frameModel.WorkerDMLoad,
+							Task:             "task2",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   3,
+							StageUpdatedTime: syncTime,
 						},
 						Status:   loadStatusBytes,
 						Duration: loadDuration,
@@ -152,20 +155,22 @@ func TestQueryStatusAPI(t *testing.T) {
 				"task7": {
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMDump,
-							Task:           "task7",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 4,
+							Unit:             frameModel.WorkerDMDump,
+							Task:             "task7",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   4,
+							StageUpdatedTime: loadTime,
 						},
 						Status:   dumpStatusBytes,
 						Duration: dumpDuration,
 					},
 					&metadata.FinishedTaskStatus{
 						TaskStatus: metadata.TaskStatus{
-							Unit:           frameModel.WorkerDMLoad,
-							Task:           "task7",
-							Stage:          metadata.StageFinished,
-							CfgModRevision: 4,
+							Unit:             frameModel.WorkerDMLoad,
+							Task:             "task7",
+							Stage:            metadata.StageFinished,
+							CfgModRevision:   4,
+							StageUpdatedTime: syncTime,
 						},
 						Status:   loadStatusBytes,
 						Duration: loadDuration,
@@ -177,7 +182,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
-	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
 	messageAgent.On("SendRequest", mock.Anything, "task3", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", frameModel.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
@@ -368,6 +373,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -385,6 +391,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
+				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -403,6 +410,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -420,6 +428,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
+				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -441,7 +450,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L()),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L(), promutil.NewFactory4Test(t.TempDir())),
 	}
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupported op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
@@ -467,7 +476,7 @@ func TestGetJobCfg(t *testing.T) {
 
 func TestUpdateJobCfg(t *testing.T) {
 	var (
-		mockBaseJobmaster   = &MockBaseJobmaster{}
+		mockBaseJobmaster   = &MockBaseJobmaster{t: t}
 		metaKVClient        = kvmock.NewMetaMock()
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
@@ -478,7 +487,7 @@ func TestUpdateJobCfg(t *testing.T) {
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), messageAgent, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), messageAgent, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }

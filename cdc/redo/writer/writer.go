@@ -37,7 +37,7 @@ import (
 
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 //
-//go:generate mockery --name=RedoLogWriter --inpackage
+//go:generate mockery --name=RedoLogWriter --inpackage --quiet
 type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file.
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error

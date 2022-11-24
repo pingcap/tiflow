@@ -28,12 +28,9 @@ type DiscoveryClient interface {
 	ListExecutors(ctx context.Context, in *ListExecutorsRequest, opts ...grpc.CallOption) (*ListExecutorsResponse, error)
 	ListMasters(ctx context.Context, in *ListMastersRequest, opts ...grpc.CallOption) (*ListMastersResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
-	// RegisterMetaStore is called from backend metastore and
-	// registers to server master metastore manager
-	RegisterMetaStore(ctx context.Context, in *RegisterMetaStoreRequest, opts ...grpc.CallOption) (*RegisterMetaStoreResponse, error)
-	// QueryMetaStore queries metastore manager and returns
-	// the information of a matching metastore
+	// QueryMetaStore queries metastore manager and returns the information of a matching metastore.
 	QueryMetaStore(ctx context.Context, in *QueryMetaStoreRequest, opts ...grpc.CallOption) (*QueryMetaStoreResponse, error)
+	// QueryStorageConfig queries and returns external storage config.
 	QueryStorageConfig(ctx context.Context, in *QueryStorageConfigRequest, opts ...grpc.CallOption) (*QueryStorageConfigResponse, error)
 	GetLeader(ctx context.Context, in *GetLeaderRequest, opts ...grpc.CallOption) (*GetLeaderResponse, error)
 	ResignLeader(ctx context.Context, in *ResignLeaderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -77,15 +74,6 @@ func (c *discoveryClient) ListMasters(ctx context.Context, in *ListMastersReques
 func (c *discoveryClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
 	out := new(HeartbeatResponse)
 	err := c.cc.Invoke(ctx, "/enginepb.Discovery/Heartbeat", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *discoveryClient) RegisterMetaStore(ctx context.Context, in *RegisterMetaStoreRequest, opts ...grpc.CallOption) (*RegisterMetaStoreResponse, error) {
-	out := new(RegisterMetaStoreResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Discovery/RegisterMetaStore", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +129,9 @@ type DiscoveryServer interface {
 	ListExecutors(context.Context, *ListExecutorsRequest) (*ListExecutorsResponse, error)
 	ListMasters(context.Context, *ListMastersRequest) (*ListMastersResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
-	// RegisterMetaStore is called from backend metastore and
-	// registers to server master metastore manager
-	RegisterMetaStore(context.Context, *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error)
-	// QueryMetaStore queries metastore manager and returns
-	// the information of a matching metastore
+	// QueryMetaStore queries metastore manager and returns the information of a matching metastore.
 	QueryMetaStore(context.Context, *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error)
+	// QueryStorageConfig queries and returns external storage config.
 	QueryStorageConfig(context.Context, *QueryStorageConfigRequest) (*QueryStorageConfigResponse, error)
 	GetLeader(context.Context, *GetLeaderRequest) (*GetLeaderResponse, error)
 	ResignLeader(context.Context, *ResignLeaderRequest) (*emptypb.Empty, error)
@@ -167,9 +152,6 @@ func (UnimplementedDiscoveryServer) ListMasters(context.Context, *ListMastersReq
 }
 func (UnimplementedDiscoveryServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
-}
-func (UnimplementedDiscoveryServer) RegisterMetaStore(context.Context, *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RegisterMetaStore not implemented")
 }
 func (UnimplementedDiscoveryServer) QueryMetaStore(context.Context, *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMetaStore not implemented")
@@ -263,24 +245,6 @@ func _Discovery_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DiscoveryServer).Heartbeat(ctx, req.(*HeartbeatRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Discovery_RegisterMetaStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterMetaStoreRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DiscoveryServer).RegisterMetaStore(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Discovery/RegisterMetaStore",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DiscoveryServer).RegisterMetaStore(ctx, req.(*RegisterMetaStoreRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -381,10 +345,6 @@ var Discovery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Discovery_Heartbeat_Handler,
 		},
 		{
-			MethodName: "RegisterMetaStore",
-			Handler:    _Discovery_RegisterMetaStore_Handler,
-		},
-		{
 			MethodName: "QueryMetaStore",
 			Handler:    _Discovery_QueryMetaStore_Handler,
 		},
@@ -410,9 +370,6 @@ var Discovery_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TaskSchedulerClient interface {
 	ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error)
-	// ReportExecutorWorkload is called from executor to server master to report
-	// resource usage in executor.
-	ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error)
 }
 
 type taskSchedulerClient struct {
@@ -432,23 +389,11 @@ func (c *taskSchedulerClient) ScheduleTask(ctx context.Context, in *ScheduleTask
 	return out, nil
 }
 
-func (c *taskSchedulerClient) ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error) {
-	out := new(ExecWorkloadResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.TaskScheduler/ReportExecutorWorkload", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // TaskSchedulerServer is the server API for TaskScheduler service.
 // All implementations should embed UnimplementedTaskSchedulerServer
 // for forward compatibility
 type TaskSchedulerServer interface {
 	ScheduleTask(context.Context, *ScheduleTaskRequest) (*ScheduleTaskResponse, error)
-	// ReportExecutorWorkload is called from executor to server master to report
-	// resource usage in executor.
-	ReportExecutorWorkload(context.Context, *ExecWorkloadRequest) (*ExecWorkloadResponse, error)
 }
 
 // UnimplementedTaskSchedulerServer should be embedded to have forward compatible implementations.
@@ -457,9 +402,6 @@ type UnimplementedTaskSchedulerServer struct {
 
 func (UnimplementedTaskSchedulerServer) ScheduleTask(context.Context, *ScheduleTaskRequest) (*ScheduleTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleTask not implemented")
-}
-func (UnimplementedTaskSchedulerServer) ReportExecutorWorkload(context.Context, *ExecWorkloadRequest) (*ExecWorkloadResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReportExecutorWorkload not implemented")
 }
 
 // UnsafeTaskSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -491,24 +433,6 @@ func _TaskScheduler_ScheduleTask_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TaskScheduler_ReportExecutorWorkload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExecWorkloadRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(TaskSchedulerServer).ReportExecutorWorkload(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.TaskScheduler/ReportExecutorWorkload",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TaskSchedulerServer).ReportExecutorWorkload(ctx, req.(*ExecWorkloadRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // TaskScheduler_ServiceDesc is the grpc.ServiceDesc for TaskScheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -519,10 +443,6 @@ var TaskScheduler_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ScheduleTask",
 			Handler:    _TaskScheduler_ScheduleTask_Handler,
-		},
-		{
-			MethodName: "ReportExecutorWorkload",
-			Handler:    _TaskScheduler_ReportExecutorWorkload_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

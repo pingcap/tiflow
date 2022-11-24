@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 )
 
 // redoEventCache caches events fetched from EventSortEngine.
@@ -56,31 +56,34 @@ func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 // pop some events from the cache.
 func (r *redoEventCache) pop(
 	tableID model.TableID,
-	upperBound ...sorter.Position,
-) ([]*model.RowChangedEvent, uint64, sorter.Position) {
+	upperBound ...engine.Position,
+) ([]*model.RowChangedEvent, uint64, engine.Position) {
 	r.mu.Lock()
 	item, exists := r.tables[tableID]
 	if !exists {
 		r.mu.Unlock()
-		return nil, 0, sorter.Position{}
+		return nil, 0, engine.Position{}
 	}
 	r.mu.Unlock()
 
 	item.mu.RLock()
 	defer item.mu.RUnlock()
 	if len(item.events) == 0 || item.readyCount == 0 {
-		return nil, 0, sorter.Position{}
+		return nil, 0, engine.Position{}
 	}
 
-	var fetchCount int = item.readyCount
+	fetchCount := item.readyCount
 	if len(upperBound) > 0 {
 		fetchCount = sort.Search(item.readyCount, func(i int) bool {
-			pos := sorter.Position{
+			pos := engine.Position{
 				CommitTs: item.events[i].CommitTs,
 				StartTs:  item.events[i].StartTs,
 			}
 			return pos.Compare(upperBound[0]) > 0
 		})
+		if fetchCount == 0 {
+			return nil, 0, engine.Position{}
+		}
 	}
 
 	events := item.events[0:fetchCount]
@@ -88,7 +91,7 @@ func (r *redoEventCache) pop(
 	for _, x := range item.sizes[0:fetchCount] {
 		size += x
 	}
-	pos := sorter.Position{
+	pos := engine.Position{
 		CommitTs: item.events[fetchCount-1].CommitTs,
 		StartTs:  item.events[fetchCount-1].StartTs,
 	}
