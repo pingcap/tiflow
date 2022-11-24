@@ -132,7 +132,7 @@ func New(
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
 	}
 
-	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
+	m.startWorkers(mg, changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 
 	log.Info("sink manager is created",
