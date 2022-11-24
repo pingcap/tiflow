@@ -124,7 +124,7 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 }
 
 // reduceReplace groups SQLs with the same replace statement format, as following
-// sql: `REPLACE INTO `test`.`t` (`a`,`b`) VALUES (?,?,?,?,?,?)`
+// sql: `REPLACE INTO `test`.`t` (`a`,`b`) VALUES (?,?),(?,?),(?,?)`
 // args: (1,"",2,"2",3,"")
 func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string, [][]interface{}) {
 	nextHolderString := func(query string, valueNum int, last bool) string {

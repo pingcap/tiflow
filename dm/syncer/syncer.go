@@ -364,7 +364,12 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return
 	}
 
-	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone)
+	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
+	if err != nil {
+		return terror.ErrSyncerUnitGenBAList.Delegate(err)
+	}
+
+	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone, s.baList)
 	if err != nil {
 		return err
 	}
@@ -391,11 +396,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		s.relay,
 		s.tctx.L(),
 	)
-
-	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
-	if err != nil {
-		return terror.ErrSyncerUnitGenBAList.Delegate(err)
-	}
 
 	s.binlogFilter, err = bf.NewBinlogEvent(s.cfg.CaseSensitive, s.cfg.FilterRules)
 	if err != nil {
@@ -3328,33 +3328,6 @@ func (s *Syncer) checkpointID() string {
 		return s.cfg.SourceID
 	}
 	return strconv.FormatUint(uint64(s.cfg.ServerID), 10)
-}
-
-// UpdateFromConfig updates config for `From`.
-func (s *Syncer) UpdateFromConfig(cfg *config.SubTaskConfig) error {
-	s.Lock()
-	defer s.Unlock()
-	s.fromDB.BaseDB.Close()
-
-	s.cfg.From = cfg.From
-
-	var err error
-	s.cfg.From.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	s.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From)
-	if err != nil {
-		s.tctx.L().Error("fail to create baseConn connection", log.ShortError(err))
-		return err
-	}
-
-	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone)
-	if err != nil {
-		return err
-	}
-
-	if s.streamerController != nil {
-		s.streamerController.UpdateSyncCfg(s.syncCfg, s.fromDB)
-	}
-	return nil
 }
 
 // ShardDDLOperation returns the current pending to handle shard DDL lock operation.
