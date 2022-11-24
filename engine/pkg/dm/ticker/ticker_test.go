@@ -44,7 +44,7 @@ func TestDefaultTicker(t *testing.T) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				dummyTicker.Tick(ctx)
+				dummyTicker.DoTick(ctx)
 			}
 		}
 	}()

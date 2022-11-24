@@ -389,7 +389,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 			return true
 		}
 		mockMessageAgent.Unlock()
-		jm.workerManager.Tick(context.Background())
+		jm.workerManager.DoTick(context.Background())
 		return false
 	}, 10*time.Second, 1*time.Second)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
