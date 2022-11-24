@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"math"
 	"math/big"
 	"testing"
 
@@ -61,8 +60,7 @@ func setupEncoderAndSchemaRegistry(
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		resultBuf:                  make([]*common.Message, 0, 4096),
-		maxMessageBytes:            math.MaxInt,
+		result:                     make([]*common.Message, 0, 1),
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,
 		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
@@ -898,4 +896,50 @@ func TestGetAvroNamespace(t *testing.T) {
 		"N_amespace.S_chema",
 		getAvroNamespace("N-amespace", &model.TableName{Schema: "S.chema", Table: "normalTable"}),
 	)
+}
+
+func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
+	t.Parallel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	require.NoError(t, err)
+	defer teardownEncoderAndSchemaRegistry()
+
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID:            1000,
+			IsPKHandle:    true,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeVarchar),
+		}},
+	}
+
+	ctx := context.Background()
+	expected := 0
+	count := 0
+	for i := 0; i < 5; i++ {
+		expected += i
+		bit := i
+		err := encoder.AppendRowChangedEvent(ctx, "", row, func() {
+			count += bit
+		})
+		require.NoError(t, err)
+
+		msgs = encoder.Build()
+		require.Len(t, msgs, 1, "one message should be built")
+
+		msgs[0].Callback()
+		require.Equal(t, expected, count, "expected one callback be called")
+	}
 }

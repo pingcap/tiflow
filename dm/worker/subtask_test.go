@@ -313,17 +313,6 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.CheckUnit(), IsFalse)
 
-	cfg1 := &config.SubTaskConfig{
-		Name: "xxx",
-		Mode: config.ModeFull,
-		From: config.DBConfig{
-			Host: "127.0.0.1",
-		},
-	}
-	c.Assert(st.UpdateFromConfig(cfg1), IsNil)
-	c.Assert(st.cfg.From, DeepEquals, cfg1.From)
-	c.Assert(st.cfg.Name, Equals, "testSubtaskScene")
-
 	// pause twice
 	c.Assert(st.Pause(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)

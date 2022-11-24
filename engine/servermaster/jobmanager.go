@@ -836,10 +836,8 @@ func (jm *JobManagerImpl) bgJobOperatorLoop(ctx context.Context) {
 }
 
 func (jm *JobManagerImpl) frameworkCreateWorker(job *frameModel.MasterMeta) (string, error) {
-	return jm.BaseMaster.CreateWorker(
-		job.Type, job, framework.CreateWorkerWithCost(defaultJobMasterCost),
-		framework.CreateWorkerWithSelectors(job.Ext.Selectors...),
-	)
+	return jm.BaseMaster.CreateWorker(job.Type, job,
+		framework.CreateWorkerWithSelectors(job.Ext.Selectors...))
 }
 
 func (jm *JobManagerImpl) terminateJob(
