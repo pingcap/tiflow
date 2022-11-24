@@ -444,13 +444,15 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
 	}
+	newCtx, cancel := context.WithTimeout(ctx, 10*runtime.HeartbeatInterval)
+	defer cancel()
 	// wait all worker exit
 	jm.workerManager.SetNextCheckTime(time.Now())
 	for {
 		select {
-		case <-ctx.Done():
+		case <-newCtx.Done():
 			jm.Logger().Warn("cancel context is timeout", zap.Error(ctx.Err()))
-			return ctx.Err()
+			return jm.Exit(ctx, framework.ExitReasonCanceled, newCtx.Err(), detail)
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
 				jm.Logger().Info("all worker are offline, will exit")
