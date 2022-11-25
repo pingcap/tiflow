@@ -176,6 +176,7 @@ function run() {
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(1,'haha');"
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(2,'hihi');"
 	# write different data in downstream, to test on-duplicate-logical = ignore
+	run_sql_tidb "create database if not exists full_mode;"
 	run_sql_tidb "create table full_mode.\`tb\"1\` (id int,name varchar(10), primary key(\`id\`));"
 	run_sql_tidb "insert into full_mode.\`tb\"1\` values(1,'hoho');"
 
