@@ -500,11 +500,20 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		defer cancelFunc()
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
+			fmt.Printf("start to random error")
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			time.Sleep(time.Hour)
+			timer := time.NewTimer(time.Hour)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				failpoint.Return(context.Canceled)
+			}
 		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
