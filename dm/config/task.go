@@ -322,6 +322,10 @@ func (m *LoaderConfig) adjust() error {
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 
+	if m.PoolSize == 0 {
+		m.PoolSize = defaultPoolSize
+	}
+
 	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
 		m.OnDuplicateLogical = m.OnDuplicate
 	}
