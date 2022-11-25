@@ -160,6 +160,8 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	if baList != nil {
 		// we don't track delete table events, so simply reset the cache if it's full
 		// TODO: use LRU or CLOCK cache if needed.
+		// NOTE: use Table as Key rather than TableID
+		// because TableID may change when upstream switches master, and also RenameTable will not change TableID.
 		allowListCache := make(map[filter.Table]struct{}, maxCapacity)
 		blockListCache := make(map[filter.Table]struct{}, maxCapacity)
 
