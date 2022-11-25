@@ -37,6 +37,10 @@ const (
 	BinlogDBChecking             = "binlog_db"
 	ConnNumberChecking           = "conn_number"
 	TargetDBPrivilegeChecking    = "target_privilege"
+	// lighting prechecks.
+	LightningEmptyRegionChecking        = "empty_region"
+	LightningRegionDistributionChecking = "region_distribution"
+	LightningDownstreamVersionChecking  = "downstream_version"
 )
 
 // AllCheckingItems contains all checking items.
@@ -56,6 +60,10 @@ var AllCheckingItems = map[string]string{
 	BinlogDBChecking:             "binlog db checking item",
 	ConnNumberChecking:           "connection number checking item",
 	TargetDBPrivilegeChecking:    "privileges of target DB checking item",
+	// lightning prechecks
+	LightningEmptyRegionChecking:        "physical import mode empty region checking item",
+	LightningRegionDistributionChecking: "physical import mode region distribution checking item",
+	LightningDownstreamVersionChecking:  "physical import mode downstream TiDB/PD/TiKV version checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

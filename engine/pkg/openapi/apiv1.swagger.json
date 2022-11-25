@@ -112,7 +112,7 @@
         "parameters": [
           {
             "name": "page_size",
-            "description": "The maximum number of jobs to return.\nIf it is unspecified or less than 1, currently server will return all jobs.",
+            "description": "The maximum number of jobs to return.\nIf it is unspecified or less than 1, at most 100 jobs will be returned.\nThe maximum value is 1000. Larger values will be coerced to 1000.",
             "in": "query",
             "required": false,
             "type": "integer",
@@ -143,6 +143,32 @@
             "in": "query",
             "required": false,
             "type": "boolean"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "CVSDemo",
+              "DM",
+              "CDC",
+              "FakeJob"
+            ]
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "Created",
+              "Running",
+              "Failed",
+              "Finished",
+              "Canceling",
+              "Canceled"
+            ]
           }
         ],
         "tags": [
@@ -573,7 +599,7 @@
         },
         "next_page_token": {
           "type": "string",
-          "description": "A token to retrieve next page of results."
+          "description": "A token to retrieve next page of results.\nIf this field is empty, it means no more pages."
         }
       }
     },
