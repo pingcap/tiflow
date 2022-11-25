@@ -192,6 +192,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	err = cfg.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
+		EncoderConcurrency: 16,
 		DispatchRules: []*config.DispatchRule{
 			{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
 			{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},

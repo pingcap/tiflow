@@ -30,6 +30,7 @@ const (
     "worker-num": 3
   },
   "sink": {
+    "encoder-concurrency": 16,
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -169,7 +170,8 @@ const (
       }
     ],
     "schema-registry": "",
-    "transaction-atomicity": ""
+    "transaction-atomicity": "",
+    "encoder-concurrency": 16
   },
   "cyclic-replication": {
     "enable": false,
@@ -201,6 +203,7 @@ const (
     "worker-num": 3
   },
   "sink": {
+    "encoder-concurrency": 16,
     "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [

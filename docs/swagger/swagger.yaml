@@ -37,6 +37,8 @@ definitions:
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
+      encoder-concurrency:
+        type: integer
       protocol:
         type: string
       schema-registry:
