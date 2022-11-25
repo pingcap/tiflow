@@ -160,36 +160,38 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	if baList != nil {
 		// we don't track delete table events, so simply reset the cache if it's full
 		// TODO: use LRU or CLOCK cache if needed.
-		allowListCache := make(map[uint64]struct{}, maxCapacity)
-		blockListCache := make(map[uint64]struct{}, maxCapacity)
+		// NOTE: use Table as Key rather than TableID
+		// because TableID may change when upstream switches master, and also RenameTable will not change TableID.
+		allowListCache := make(map[filter.Table]struct{}, maxCapacity)
+		blockListCache := make(map[filter.Table]struct{}, maxCapacity)
 
 		rowsEventDecodeFunc = func(re *replication.RowsEvent, data []byte) error {
 			pos, err := re.DecodeHeader(data)
 			if err != nil {
 				return err
 			}
-			if _, ok := blockListCache[re.TableID]; ok {
-				return nil
-			} else if _, ok := allowListCache[re.TableID]; ok {
-				return re.DecodeData(pos, data)
-			}
-
-			tb := &filter.Table{
+			tb := filter.Table{
 				Schema: string(re.Table.Schema),
 				Name:   string(re.Table.Table),
 			}
-			if skipByTable(baList, tb) {
+			if _, ok := blockListCache[tb]; ok {
+				return nil
+			} else if _, ok := allowListCache[tb]; ok {
+				return re.DecodeData(pos, data)
+			}
+
+			if skipByTable(baList, &tb) {
 				if len(blockListCache) >= maxCapacity {
-					blockListCache = make(map[uint64]struct{}, maxCapacity)
+					blockListCache = make(map[filter.Table]struct{}, maxCapacity)
 				}
-				blockListCache[re.TableID] = struct{}{}
+				blockListCache[tb] = struct{}{}
 				return nil
 			}
 
 			if len(allowListCache) >= maxCapacity {
-				allowListCache = make(map[uint64]struct{}, maxCapacity)
+				allowListCache = make(map[filter.Table]struct{}, maxCapacity)
 			}
-			allowListCache[re.TableID] = struct{}{}
+			allowListCache[tb] = struct{}{}
 			return re.DecodeData(pos, data)
 		}
 	}
