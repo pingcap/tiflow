@@ -18,6 +18,7 @@ import (
 	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -29,6 +30,7 @@ import (
 )
 
 type mockProducer struct {
+	mu           sync.RWMutex
 	mqEvent      map[topicPartitionKey][]*codec.MQMessage
 	flushedTimes int
 
@@ -48,6 +50,9 @@ func (m *mockProducer) AsyncSendMessage(
 		topic:     topic,
 		partition: partition,
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.mqEvent[key]; !ok {
 		m.mqEvent[key] = make([]*codec.MQMessage, 0)
 	}
@@ -62,6 +67,8 @@ func (m *mockProducer) SyncBroadcastMessage(
 }
 
 func (m *mockProducer) Flush(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.flushedTimes += 1
 	return nil
 }
@@ -74,6 +81,24 @@ func (m *mockProducer) InjectError(err error) {
 	m.mockErr <- err
 }
 
+func (m *mockProducer) getFlushedTimes() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.flushedTimes
+}
+
+func (m *mockProducer) getEventsByKey(key topicPartitionKey) []*codec.MQMessage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.mqEvent[key]
+}
+
+func (m *mockProducer) getKeysCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.mqEvent)
+}
+
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
 		mqEvent: make(map[topicPartitionKey][]*codec.MQMessage),
@@ -81,131 +106,148 @@ func NewMockProducer() *mockProducer {
 	}
 }
 
-func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
+func newBatchEncodeWorker(ctx context.Context, protocol config.Protocol) (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	encoderConfig := codec.NewConfig(protocol).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}
-	encoder := builder.Build()
-	if err != nil {
-		panic(err)
-	}
 	producer := NewMockProducer()
-	return newFlushWorker(encoder, producer,
-		metrics.NewStatistics(ctx, metrics.SinkTypeMQ)), producer
+	return newFlushWorker(builder, producer,
+		metrics.NewStatistics(ctx, metrics.SinkTypeMQ), protocol, 4, model.DefaultChangeFeedID("changefeed-test")), producer
 }
 
-//nolint:tparallel
-func TestBatch(t *testing.T) {
+func TestBatchNormal(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
 	}
 
-	tests := []struct {
-		name      string
-		events    []mqEvent
-		expectedN int
-	}{
+	events := []mqEvent{
 		{
-			name: "Normal batching",
-			events: []mqEvent{
-				{
-					flush: nil,
-				},
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 1,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-					},
-					key: key,
-				},
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 2,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-					},
-					key: key,
-				},
-			},
-			expectedN: 2,
+			flush: nil,
 		},
 		{
-			name: "No row change events",
-			events: []mqEvent{
-				{
-					flush: &flushEvent{
-						resolvedTs: model.NewResolvedTs(1),
-						flushed:    make(chan struct{}),
-					},
-				},
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			expectedN: 0,
+			key: key,
 		},
 		{
-			name: "The resolved ts event appears in the middle",
-			events: []mqEvent{
-				{
-					row: &model.RowChangedEvent{
-						CommitTs: 1,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-					},
-					key: key,
-				},
-				{
-					flush: &flushEvent{
-						resolvedTs: model.NewResolvedTs(1),
-						flushed:    make(chan struct{}),
-					},
-				},
-				{
-					row: &model.RowChangedEvent{
-						// Indicates that this event is not expected to be processed
-						CommitTs: math.MaxUint64,
-						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-					},
-					key: key,
-				},
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			expectedN: 1,
+			key: key,
+		},
+	}
+
+	batch := make([]mqEvent, 3)
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
+	}
+
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 2, endIndex)
+}
+
+func TestBatchFlushEventAtFirst(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
+	defer worker.close()
+
+	events := []mqEvent{
+		{
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    make(chan struct{}),
+			},
+		},
+	}
+
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
+	}
+
+	batch := make([]mqEvent, 0)
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 0, endIndex)
+	require.NotNil(t, worker.needsFlush)
+}
+
+func TestBatchFlushEventInTheMiddle(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
+	defer worker.close()
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	events := []mqEvent{
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			},
+			key: key,
+		},
+		{
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    make(chan struct{}),
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				// Indicates that this event is not expected to be processed
+				CommitTs: math.MaxUint64,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			key: key,
 		},
 	}
 
 	var wg sync.WaitGroup
-	batch := make([]mqEvent, 3)
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Can not be parallel, it tests reusing the same batch.
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				endIndex, err := worker.batch(ctx, batch)
-				require.NoError(t, err)
-				require.Equal(t, test.expectedN, endIndex)
-			}()
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for _, event := range test.events {
-					err := worker.addEvent(ctx, event)
-					require.NoError(t, err)
-				}
-			}()
-			wg.Wait()
-		})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.encoderGroup.Run(ctx)
+	}()
+
+	for _, event := range events {
+		err := worker.addEvent(ctx, event)
+		require.NoError(t, err)
 	}
+
+	batch := make([]mqEvent, 1)
+	endIndex, err := worker.batch(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, 1, endIndex)
+	require.NotNil(t, worker.needsFlush)
 }
 
 func TestGroup(t *testing.T) {
@@ -225,7 +267,7 @@ func TestGroup(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -270,20 +312,20 @@ func TestGroup(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	require.Len(t, paritionedRows, 3)
-	require.Len(t, paritionedRows[key1], 3)
+	partitionedRows := worker.group(events)
+	require.Len(t, partitionedRows, 3)
+	require.Len(t, partitionedRows[key1], 3)
 	// We must ensure that the sequence is not broken.
 	require.LessOrEqual(
 		t,
-		paritionedRows[key1][0].CommitTs, paritionedRows[key1][1].CommitTs,
-		paritionedRows[key1][2].CommitTs,
+		partitionedRows[key1][0].CommitTs, partitionedRows[key1][1].CommitTs,
+		partitionedRows[key1][2].CommitTs,
 	)
-	require.Len(t, paritionedRows[key2], 1)
-	require.Len(t, paritionedRows[key3], 1)
+	require.Len(t, partitionedRows[key2], 1)
+	require.Len(t, partitionedRows[key3], 1)
 }
 
-func TestAsyncSend(t *testing.T) {
+func TestSendMessages(t *testing.T) {
 	t.Parallel()
 
 	key1 := topicPartitionKey{
@@ -302,8 +344,7 @@ func TestAsyncSend(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -356,13 +397,83 @@ func TestAsyncSend(t *testing.T) {
 		},
 	}
 
-	paritionedRows := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedRows)
-	require.NoError(t, err)
-	require.Len(t, producer.mqEvent, 3)
-	require.Len(t, producer.mqEvent[key1], 3)
-	require.Len(t, producer.mqEvent[key2], 1)
-	require.Len(t, producer.mqEvent[key3], 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
+	for _, event := range events {
+		err := worker.addEvent(context.Background(), event)
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		return producer.getKeysCount() == 3
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.getEventsByKey(key1)) == 3
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.getEventsByKey(key2)) == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.getEventsByKey(key3)) == 2
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestNonBatchEncodeSendMessages(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolCanalJSON)
+	defer worker.close()
+
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
+	count := 64
+	for i := 0; i < count; i++ {
+		err := worker.addEvent(context.Background(), mqEvent{
+			row: row,
+			key: key,
+		})
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		return producer.getKeysCount() == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return len(producer.getEventsByKey(key)) == count
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestFlush(t *testing.T) {
@@ -374,8 +485,7 @@ func TestFlush(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 	flushedChan := make(chan struct{})
 	flushed := atomic.NewBool(false)
@@ -416,27 +526,14 @@ func TestFlush(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		select {
-		case <-flushedChan:
-			flushed.Store(true)
-		}
+		_ = worker.run(ctx)
 	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		batchBuf := make([]mqEvent, 4)
-		ctx := context.Background()
-		endIndex, err := worker.batch(ctx, batchBuf)
-		require.NoError(t, err)
-		require.Equal(t, 3, endIndex)
-		require.NotNil(t, worker.needsFlush)
-		msgs := batchBuf[:endIndex]
-		paritionedRows := worker.group(msgs)
-		err = worker.asyncSend(ctx, paritionedRows)
-		require.NoError(t, err)
-		require.Equal(t, 1, producer.flushedTimes)
-		require.Nil(t, worker.needsFlush)
+		<-flushedChan
+		flushed.Store(true)
 	}()
 
 	for _, event := range events {
@@ -444,16 +541,24 @@ func TestFlush(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	wg.Wait()
 	// Make sure the flush event is processed and notify the flushedChan.
-	require.True(t, flushed.Load())
+	require.Eventually(t, func() bool {
+		return flushed.Load()
+	}, 3*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return producer.getFlushedTimes() == 1
+	}, 3*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestAbort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newTestWorker(ctx)
+	worker, _ := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	var wg sync.WaitGroup
@@ -473,7 +578,7 @@ func TestProducerError(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, prod := newTestWorker(ctx)
+	worker, prod := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
 
 	var wg sync.WaitGroup
@@ -510,10 +615,13 @@ func TestWorker(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	worker, producer := newTestWorker(ctx)
+	worker, producer := newBatchEncodeWorker(ctx, config.ProtocolOpen)
 	defer worker.close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		_ = worker.run(ctx)
 	}()
 
@@ -541,18 +649,17 @@ func TestWorker(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	var wg sync.WaitGroup
 
 	flushedChan1 := make(chan struct{})
 	flushed1 := atomic.NewBool(false)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan1:
-			flushed1.Store(true)
-		}
+
+		<-flushedChan1
+		flushed1.Store(true)
 	}()
+
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(100),
 		flushed:    flushedChan1,
@@ -564,10 +671,9 @@ func TestWorker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-flushedChan2:
-			flushed2.Store(true)
-		}
+
+		<-flushedChan2
+		flushed2.Store(true)
 	}()
 	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
 		resolvedTs: model.NewResolvedTs(200),
@@ -575,10 +681,20 @@ func TestWorker(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	wg.Wait()
-
 	// Make sure we don't get a block even if we flush multiple times.
-	require.Equal(t, 2, producer.flushedTimes)
-	require.True(t, flushed1.Load())
-	require.True(t, flushed2.Load())
+
+	require.Eventually(t, func() bool {
+		return flushed1.Load()
+	}, 3*time.Second, 100*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return flushed2.Load()
+	}, 3*time.Second, 100*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return producer.getFlushedTimes() == 2
+	}, 3*time.Second, 100*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }

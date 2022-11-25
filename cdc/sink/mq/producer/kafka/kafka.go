@@ -117,6 +117,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
+
 	k.mu.Lock()
 	k.mu.inflight++
 	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
