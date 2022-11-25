@@ -58,7 +58,8 @@ var (
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
 
-func removeVAndHash(v string) string {
+// SanitizeVersion remove the prefix "v" and suffix git hash.
+func SanitizeVersion(v string) string {
 	if v == "" {
 		return v
 	}
@@ -106,17 +107,17 @@ func CheckTiCDCVersion(versions map[string]struct{}) error {
 
 	ver := &semver.Version{}
 	for v := range versions {
-		if err := ver.Set(removeVAndHash(v)); err != nil {
+		if err := ver.Set(SanitizeVersion(v)); err != nil {
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if ver.Compare(*MinTiCDCVersion) < 0 {
 			arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s",
-				removeVAndHash(v), MinTiCDCVersion)
+				SanitizeVersion(v), MinTiCDCVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 		if ver.Compare(*MaxTiCDCVersion) >= 0 {
 			arg := fmt.Sprintf("TiCDC %s is not supported, only support version less than %s",
-				removeVAndHash(v), MaxTiCDCVersion)
+				SanitizeVersion(v), MaxTiCDCVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
@@ -157,7 +158,7 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
-	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
+	ver, err := semver.NewVersion(SanitizeVersion(pdVer.Version))
 	if err != nil {
 		err = errors.Annotate(err, "invalid PD version")
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
@@ -166,13 +167,13 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	minOrd := ver.Compare(*minPDVersion)
 	if minOrd < 0 {
 		arg := fmt.Sprintf("PD %s is not supported, the minimal compatible version is %s",
-			removeVAndHash(pdVer.Version), minPDVersion)
+			SanitizeVersion(pdVer.Version), minPDVersion)
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	maxOrd := ver.Compare(*maxPDVersion)
 	if maxOrd >= 0 {
 		arg := fmt.Sprintf("PD %s is not supported, only support version less than %s",
-			removeVAndHash(pdVer.Version), maxPDVersion)
+			SanitizeVersion(pdVer.Version), maxPDVersion)
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	return nil
@@ -194,7 +195,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	}
 
 	for _, s := range stores {
-		ver, err := semver.NewVersion(removeVAndHash(s.Version))
+		ver, err := semver.NewVersion(SanitizeVersion(s.Version))
 		if err != nil {
 			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
@@ -202,13 +203,13 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		minOrd := ver.Compare(*MinTiKVVersion)
 		if minOrd < 0 {
 			arg := fmt.Sprintf("TiKV %s is not supported, the minimal compatible version is %s",
-				removeVAndHash(s.Version), MinTiKVVersion)
+				SanitizeVersion(s.Version), MinTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 		maxOrd := ver.Compare(*maxTiKVVersion)
 		if maxOrd >= 0 {
 			arg := fmt.Sprintf("TiKV %s is not supported, only support version less than %s",
-				removeVAndHash(s.Version), maxTiKVVersion)
+				SanitizeVersion(s.Version), maxTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
@@ -262,7 +263,7 @@ func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error
 		var ver *semver.Version
 		var err error
 		if versionStr != "" {
-			ver, err = semver.NewVersion(removeVAndHash(versionStr))
+			ver, err = semver.NewVersion(SanitizeVersion(versionStr))
 		} else {
 			ver = defaultTiCDCVersion
 		}
