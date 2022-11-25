@@ -364,7 +364,7 @@ func (c *TablesChecker) checkConstraint(cst *ast.Constraint) *incompatibilityOpt
 	if cst.Tp == ast.ConstraintForeignKey {
 		return &incompatibilityOption{
 			state:       StateWarning,
-			instruction: "please ref document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
+			instruction: "TiDB does not support foreign key constraints. See the document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 			errMessage:  fmt.Sprintf("Foreign Key %s is parsed but ignored by TiDB.", cst.Name),
 		}
 	}
@@ -410,7 +410,7 @@ func (c *TablesChecker) checkTableStructurePair(
 		!strings.EqualFold(upstreamCollation, downstreamCollation) {
 		options = append(options, &incompatibilityOption{
 			state:       StateWarning,
-			instruction: "Please make sure the collations are the same between upstream and downstream. Or the query results from the two databases would be different.",
+			instruction: "Please use the same collations for both upstream and downstream databases. Otherwise the query results from the two databases might be inconsistent.",
 			errMessage: fmt.Sprintf("collation is not same, upstream: (%s %s), downstream: (%s %s)",
 				upstream.Table.Name.O, upstreamCollation,
 				downstream.Table.Name.O, downstreamCollation),

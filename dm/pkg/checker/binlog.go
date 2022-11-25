@@ -53,7 +53,7 @@ func (pc *MySQLBinlogEnableChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "ON" {
 		result.Errors = append(result.Errors, NewError("log_bin is %s, and should be ON", value))
-		result.Instruction = "ref document: https://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html"
+		result.Instruction = "MySQL as source: please refer to the document to enable the binlog https://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html"
 		return result
 	}
 	result.State = StateSuccess
@@ -94,7 +94,7 @@ func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "ROW" {
 		result.Errors = append(result.Errors, NewError("binlog_format is %s, and should be ROW", value))
-		result.Instruction = "please execute 'set global binlog_format=ROW;'"
+		result.Instruction = "MySQL as source: please execute 'set global binlog_format=ROW; AWS Aurora (MySQL)/RDS MySQL as source : please refer to the document to create a new DB parameter group and set the binlog_format=row: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html. Then modify the instance to use the new DB parameter group and restart the instance to take effect."
 		return result
 	}
 	result.State = StateSuccess
@@ -172,7 +172,7 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "FULL" {
 		result.Errors = append(result.Errors, NewError("binlog_row_image is %s, and should be FULL", value))
-		result.Instruction = "please execute 'set global binlog_row_image = FULL;'"
+		result.Instruction = "MySQL as source: please execute 'set global binlog_row_image = FULL;' AWS Aurora (MySQL)/RDS MySQL as source : please refer to the document to create a new DB parameter group and set the binlog_row_image = FULL: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html Then modify the instance to use the new DB parameter group and restart the instance to take effect."
 		return result
 	}
 	result.State = StateSuccess
@@ -238,7 +238,7 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		if len(c.schemas) > 0 {
 			dbs := utils.SetToSlice(c.schemas)
 			result.Errors = append(result.Errors, NewWarn("these dbs [%s] are not in binlog_do_db[%s]", strings.Join(dbs, ","), binlogDoDB))
-			result.Instruction = "Please check if the do_dbs contains the dbs you want to migrate."
+			result.Instruction = "Ensure that the do_dbs contains the dbs you want to migrate"
 			return result
 		}
 	} else {
@@ -250,7 +250,7 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		}
 		if len(ignoreDBs) > 0 {
 			result.Errors = append(result.Errors, NewWarn("these dbs [%s] are in binlog_ignore_db[%s]", strings.Join(ignoreDBs, ","), binlogIgnoreDB))
-			result.Instruction = "Please check if the ignore_dbs not contains the dbs you want to migrate"
+			result.Instruction = "Ensure that the ignore_dbs does not contain the dbs you want to migrate"
 			return result
 		}
 	}

@@ -399,7 +399,7 @@ func TestCombineInstruction(t *testing.T) {
 		1)
 	result := checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
-	require.Contains(t, result.Instruction, "please ref document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features")
+	require.Contains(t, result.Instruction, "TiDB does not support foreign key constraints. See the document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features")
 	require.Contains(t, result.Instruction, "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised")
 	require.Contains(t, result.Errors[0].ShortErr, "is parsed but ignored by TiDB.")
 	require.Contains(t, result.Errors[1].ShortErr, "primary/unique key does not exist")
@@ -479,7 +479,7 @@ func TestCombineInstruction(t *testing.T) {
 	require.Contains(t, result.Errors[0].ShortErr, "charset is not same")
 	require.Contains(t, result.Errors[1].ShortErr, "collation is not same")
 	require.Contains(t, result.Instruction, "Please make sure the charsets are the same between upstream and downstream. Or the data might be inconsistent.")
-	require.Contains(t, result.Instruction, "Please make sure the collations are the same between upstream and downstream. Or the query results from the two databases would be different.")
+	require.Contains(t, result.Instruction, "Please use the same collations for both upstream and downstream databases. Otherwise the query results from the two databases might be inconsistent.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 

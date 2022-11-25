@@ -60,5 +60,5 @@ func TestVersionInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version';").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "8.0.20"))
 	result := versionChecker.Check(context.Background())
 	require.Equal(t, result.State, StateWarning)
-	require.Equal(t, result.Instruction, "It is recommended that you select a database version that meets the requirements before performing data migration, otherwise data inconsistency or task exceptions may occur.")
+	require.Equal(t, result.Instruction, "It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur.")
 }

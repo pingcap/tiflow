@@ -64,8 +64,9 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 
 	err2 := pc.checkVersion(value, result)
 	if err2 != nil {
+		result.Instruction = err2.Instruction
+		err2.Instruction = ""
 		result.Errors = append(result.Errors, err2)
-		result.Instruction = "It is recommended that you select a database version that meets the requirements before performing data migration, otherwise data inconsistency or task exceptions may occur."
 	}
 	return result
 }
@@ -73,10 +74,14 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
 	if utils.IsMariaDB(value) {
-		return NewWarn("Migrating from MariaDB is experimentally supported. If you must use DM to migrate data from MariaDB, we suggest make your MariaDB >= 10.1.2")
+		err := NewWarn("Migrating from MariaDB is still experimental. It is recommended that you upgrade MariaDB to 10.1.2 or a later version.")
+		err.Instruction = "It is recommended that you upgrade MariaDB to10.1.2 or a later version."
+		return err
 	}
 	if IsTiDBFromVersion(value) {
-		return NewWarn("Not support migrate from TiDB")
+		err := NewWarn("migration from TiDB not supported")
+		err.Instruction = "TiDB is not supported as an upstream database."
+		return err
 	}
 
 	version, err := toMySQLVersion(value)
@@ -86,11 +91,15 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error
 	}
 
 	if !version.Ge(needVersion.Min) {
-		return NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
+		err := NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
+		err.Instruction = "It is recommended that you upgrade the database to the required version before performing data migration. Otherwise data inconsistency or task exceptions might occur."
+		return err
 	}
 
 	if !version.Lt(needVersion.Max) {
-		return NewWarn("version suggested less than %v but got %v", needVersion.Max, version)
+		err := NewWarn("version suggested earlier than %v but got %v", needVersion.Max, version)
+		err.Instruction = "It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur."
+		return err
 	}
 
 	result.State = StateSuccess
