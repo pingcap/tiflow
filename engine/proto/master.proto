@@ -228,7 +228,8 @@ message GetJobRequest {
 
 message ListJobsRequest {
     // The maximum number of jobs to return.
-    // If it is unspecified or less than 1, currently server will return all jobs.
+    // If it is unspecified or less than 1, at most 100 jobs will be returned.
+    // The maximum value is 1000. Larger values will be coerced to 1000.
     int32 page_size = 1;
     // The page token, returned by a previous call, to request the next page of results.
     string page_token = 2;
@@ -237,11 +238,14 @@ message ListJobsRequest {
     // Whether to return the config of the job.
     // Config may contain sensitive information, it is not returned by default.
     bool include_config = 5;
+    Job.Type type = 6;
+    Job.State state = 7;
 }
 
 message ListJobsResponse {
     repeated Job jobs = 1;
     // A token to retrieve next page of results.
+    // If this field is empty, it means no more pages.
     string next_page_token = 2;
 }
 
