@@ -75,7 +75,7 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 
 func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string) unit.Unit {
 	// tidb-lightning doesn't support column mapping currently
-	if cfg.ImportMode == config.LoadModeLoader || len(cfg.ColumnMappingRules) > 0 {
+	if !cfg.NeedUseLightning() || len(cfg.ColumnMappingRules) > 0 {
 		return loader.NewLoader(cfg, etcdClient, workerName)
 	}
 	return loader.NewLightning(cfg, etcdClient, workerName)
