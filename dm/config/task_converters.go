@@ -205,7 +205,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 			if fullCfg.DataDir != nil {
 				subTaskCfg.LoaderConfig.Dir = *fullCfg.DataDir
 			}
-			subTaskCfg.LoaderConfig.OnDuplicate = DuplicateResolveType(task.OnDuplicate)
+			subTaskCfg.LoaderConfig.OnDuplicateLogical = DuplicateResolveType(task.OnDuplicate)
 		}
 		// set incremental config
 		subTaskCfg.SyncerConfig = DefaultSyncerConfig()
@@ -596,7 +596,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		TaskMode:                  openapi.TaskTaskMode(oneSubtaskConfig.Mode),
 		EnhanceOnlineSchemaChange: oneSubtaskConfig.OnlineDDL,
 		MetaSchema:                &oneSubtaskConfig.MetaSchema,
-		OnDuplicate:               openapi.TaskOnDuplicate(oneSubtaskConfig.LoaderConfig.OnDuplicate),
+		OnDuplicate:               openapi.TaskOnDuplicate(oneSubtaskConfig.LoaderConfig.OnDuplicateLogical),
 		SourceConfig:              taskSourceConfig,
 		TargetConfig: openapi.TaskTargetDataBase{
 			Host:     oneSubtaskConfig.To.Host,

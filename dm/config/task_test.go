@@ -695,10 +695,10 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				ExtraArgs:     "--escape-backslash",
 			},
 			LoaderConfig: LoaderConfig{
-				PoolSize:    32,
-				Dir:         "./dumpped_data",
-				ImportMode:  LoadModePhysical,
-				OnDuplicate: OnDuplicateReplace,
+				PoolSize:           32,
+				Dir:                "./dumpped_data",
+				ImportMode:         LoadModePhysical,
+				OnDuplicateLogical: OnDuplicateReplace,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,
