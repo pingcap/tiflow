@@ -640,7 +640,6 @@ func logDMLTxnErr(
 	return err
 }
 
-<<<<<<< HEAD
 func isRetryableDMLError(err error) bool {
 	if !cerror.IsRetryableError(err) {
 		return false
@@ -653,10 +652,7 @@ func isRetryableDMLError(err error) bool {
 	return dbutil.IsRetryableError(err)
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
-=======
 func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs, bucket int) error {
->>>>>>> 29d6a6bab3 (sink(cdc): cancel sink operations when network becomes unavailable (#7707))
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
