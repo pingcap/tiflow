@@ -79,6 +79,7 @@ func (t *testReaderSuite) setActiveRelayLog(r Process, uuid, filename string, of
 	writer.out.uuid.Store(uuid)
 	writer.out.filename.Store(filename)
 	writer.out.offset.Store(offset)
+	writer.out.fileOffset.Store(offset)
 }
 
 func (t *testReaderSuite) createBinlogFileParseState(c *C, relayLogDir, relayLogFile string, offset int64, possibleLast bool) *binlogFileParseState {
