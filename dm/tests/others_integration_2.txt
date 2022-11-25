@@ -9,3 +9,4 @@ http_proxies
 openapi
 duplicate_event
 binlog_parse
+foreign_key

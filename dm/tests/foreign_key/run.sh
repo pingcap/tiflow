@@ -8,13 +8,6 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	# need to return error three times, first for switch to remote binlog, second for auto retry
-	inject_points=(
-		"github.com/pingcap/tiflow/dm/syncer/binlogstream/SyncerGetEventError=1*return"
-		"github.com/pingcap/tiflow/dm/syncer/binlogstream/GetEventError=3*return"
-	)
-	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
-
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -36,31 +29,6 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	check_log_contain_with_retry "mock upstream instance restart" $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry "meet error when read from local binlog, will switch to remote binlog" $WORK_DIR/worker1/log/dm-worker.log
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"go-mysql returned an error" 1 \
-		"\"stage\": \"Paused\"" 1 \
-		"\"isCanceled\": false" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task test" \
-		"\"result\": true" 2 \
-		"go-mysql returned an error" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"go-mysql returned an error" 1 \
-		"\"stage\": \"Paused\"" 1 \
-		"\"isCanceled\": true" 1
-
-	sleep 5
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "dispatch auto resume task"
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 2
-
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	# use sync_diff_inspector to check data now!
@@ -70,8 +38,6 @@ function run() {
 		"query-status test" \
 		"\"stage\": \"Running\"" 2 \
 		"\"synced\": true" 1
-
-	export GO_FAILPOINTS=""
 }
 
 cleanup_data foreign_key
