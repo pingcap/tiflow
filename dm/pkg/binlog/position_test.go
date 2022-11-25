@@ -17,19 +17,12 @@ import (
 	"testing"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testPositionSuite{})
-
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-type testPositionSuite struct{}
-
-func (t *testPositionSuite) TestPositionFromStr(c *C) {
+func TestPositionFromStr(t *testing.T) {
+	t.Parallel()
 	emptyPos := gmysql.Position{}
 	cases := []struct {
 		str      string
@@ -66,15 +59,16 @@ func (t *testPositionSuite) TestPositionFromStr(c *C) {
 	for _, cs := range cases {
 		pos, err := PositionFromStr(cs.str)
 		if cs.hasError {
-			c.Assert(err, NotNil)
+			require.NotNil(t, err)
 		} else {
-			c.Assert(err, IsNil)
+			require.Nil(t, err)
 		}
-		c.Assert(pos, DeepEquals, cs.pos)
+		require.Equal(t, cs.pos, pos)
 	}
 }
 
-func (t *testPositionSuite) TestRealMySQLPos(c *C) {
+func TestRealMySQLPos(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pos       gmysql.Position
 		expect    gmysql.Position
@@ -106,15 +100,16 @@ func (t *testPositionSuite) TestRealMySQLPos(c *C) {
 	for _, cs := range cases {
 		pos, err := RealMySQLPos(cs.pos)
 		if len(cs.errMsgReg) > 0 {
-			c.Assert(err, ErrorMatches, cs.errMsgReg)
+			require.Regexp(t, cs.errMsgReg, err)
 		} else {
-			c.Assert(err, IsNil)
+			require.Nil(t, err)
 		}
-		c.Assert(pos, DeepEquals, cs.expect)
+		require.Equal(t, cs.expect, pos)
 	}
 }
 
-func (t *testPositionSuite) TestExtractPos(c *C) {
+func TestExtractPos(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pos            gmysql.Position
 		uuids          []string
@@ -175,17 +170,18 @@ func (t *testPositionSuite) TestExtractPos(c *C) {
 	for _, cs := range cases {
 		uuidWithSuffix, uuidSuffix, realPos, err := ExtractPos(cs.pos, cs.uuids)
 		if len(cs.errMsgReg) > 0 {
-			c.Assert(err, ErrorMatches, cs.errMsgReg)
+			require.Regexp(t, cs.errMsgReg, err)
 		} else {
-			c.Assert(err, IsNil)
+			require.Nil(t, err)
 		}
-		c.Assert(uuidWithSuffix, Equals, cs.uuidWithSuffix)
-		c.Assert(uuidSuffix, Equals, cs.uuidSuffix)
-		c.Assert(realPos, DeepEquals, cs.realPos)
+		require.Equal(t, cs.uuidWithSuffix, uuidWithSuffix)
+		require.Equal(t, cs.uuidSuffix, uuidSuffix)
+		require.Equal(t, cs.realPos, realPos)
 	}
 }
 
-func (t *testPositionSuite) TestVerifyUUIDSuffix(c *C) {
+func TestVerifyUUIDSuffix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		suffix string
 		valid  bool
@@ -226,11 +222,12 @@ func (t *testPositionSuite) TestVerifyUUIDSuffix(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(verifyRelaySubDirSuffix(cs.suffix), Equals, cs.valid)
+		require.Equal(t, cs.valid, verifyRelaySubDirSuffix(cs.suffix))
 	}
 }
 
-func (t *testPositionSuite) TestAdjustPosition(c *C) {
+func TestAdjustPosition(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pos         gmysql.Position
 		adjustedPos gmysql.Position
@@ -267,12 +264,13 @@ func (t *testPositionSuite) TestAdjustPosition(c *C) {
 
 	for _, cs := range cases {
 		adjustedPos := RemoveRelaySubDirSuffix(cs.pos)
-		c.Assert(adjustedPos.Name, Equals, cs.adjustedPos.Name)
-		c.Assert(adjustedPos.Pos, Equals, cs.adjustedPos.Pos)
+		require.Equal(t, cs.adjustedPos.Name, adjustedPos.Name)
+		require.Equal(t, cs.adjustedPos.Pos, adjustedPos.Pos)
 	}
 }
 
-func (t *testPositionSuite) TestComparePosition(c *C) {
+func TestComparePosition(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pos1 gmysql.Position
 		pos2 gmysql.Position
@@ -343,11 +341,12 @@ func (t *testPositionSuite) TestComparePosition(c *C) {
 
 	for _, cs := range cases {
 		cmp := ComparePosition(cs.pos1, cs.pos2)
-		c.Assert(cmp, Equals, cs.cmp)
+		require.Equal(t, cs.cmp, cmp)
 	}
 }
 
-func (t *testPositionSuite) TestCompareCompareLocation(c *C) {
+func TestCompareCompareLocation(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		flavor  string
 		pos1    gmysql.Position
@@ -669,21 +668,22 @@ func (t *testPositionSuite) TestCompareCompareLocation(c *C) {
 	}
 
 	for _, cs := range testCases {
-		c.Log(cs)
+		t.Log(cs)
 		gset1, err := gtid.ParserGTID(cs.flavor, cs.gset1)
-		c.Assert(err, IsNil)
+		require.Nil(t, err)
 		gset2, err := gtid.ParserGTID(cs.flavor, cs.gset2)
-		c.Assert(err, IsNil)
+		require.Nil(t, err)
 
 		cmpGTID := CompareLocation(Location{cs.pos1, gset1, cs.suffix1}, Location{cs.pos2, gset2, cs.suffix2}, true)
-		c.Assert(cmpGTID, Equals, cs.cmpGTID)
+		require.Equal(t, cs.cmpGTID, cmpGTID)
 
 		cmpPos := CompareLocation(Location{cs.pos1, gset1, cs.suffix1}, Location{cs.pos2, gset2, cs.suffix2}, false)
-		c.Assert(cmpPos, Equals, cs.cmpPos)
+		require.Equal(t, cs.cmpPos, cmpPos)
 	}
 }
 
-func (t *testPositionSuite) TestVerifyBinlogPos(c *C) {
+func TestVerifyBinlogPos(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input  string
 		hasErr bool
@@ -714,14 +714,15 @@ func (t *testPositionSuite) TestVerifyBinlogPos(c *C) {
 	for _, ca := range cases {
 		ret, err := VerifyBinlogPos(ca.input)
 		if ca.hasErr {
-			c.Assert(err, NotNil)
+			require.NotNil(t, err)
 		} else {
-			c.Assert(ret, DeepEquals, ca.pos)
+			require.Equal(t, ca.pos, ret)
 		}
 	}
 }
 
-func (t *testPositionSuite) TestSetGTID(c *C) {
+func TestSetGTID(t *testing.T) {
+	t.Parallel()
 	GTIDSetStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
 	GTIDSetStr2 := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-15"
 	gset, _ := gtid.ParserGTID("mysql", GTIDSetStr)
@@ -739,37 +740,37 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	}
 	loc2 := loc
 
-	c.Assert(CompareLocation(loc, loc2, false), Equals, 0)
-
+	require.Equal(t, 0, CompareLocation(loc, loc2, false))
 	loc2.Position.Pos++
-	c.Assert(loc.Position.Pos, Equals, uint32(2333))
-	c.Assert(CompareLocation(loc, loc2, false), Equals, -1)
+	require.Equal(t, uint32(2333), loc.Position.Pos)
+	require.Equal(t, -1, CompareLocation(loc, loc2, false))
 
 	loc2.Position.Name = "mysql-bin.00001"
-	c.Assert(loc.Position.Name, Equals, "mysql-bin.00002")
-	c.Assert(CompareLocation(loc, loc2, false), Equals, 1)
+	require.Equal(t, "mysql-bin.00002", loc.Position.Name)
+	require.Equal(t, 1, CompareLocation(loc, loc2, false))
 
 	// will not change other location's gtid
 	loc2.gtidSet = mysqlSet2
-	c.Assert(loc.gtidSet.String(), Not(Equals), GTIDSetStr2)
-	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
+	require.NotEqual(t, GTIDSetStr2, loc.gtidSet.String())
+	require.Equal(t, GTIDSetStr2, loc2.gtidSet.String())
 
 	err := loc2.SetGTID(mysqlSet2)
-	c.Assert(err, IsNil)
-	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr)
-	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
-	c.Assert(CompareLocation(loc, loc2, true), Equals, -1)
+	require.Nil(t, err)
+	require.Equal(t, GTIDSetStr, loc.gtidSet.String())
+	require.Equal(t, GTIDSetStr2, loc2.gtidSet.String())
+	require.Equal(t, -1, CompareLocation(loc, loc2, true))
 
 	loc2.gtidSet = nil
 	err = loc2.SetGTID(mysqlSet)
-	c.Assert(err, IsNil)
-	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
+	require.Nil(t, err)
+	require.Equal(t, GTIDSetStr, loc2.gtidSet.String())
 }
 
-func (t *testPositionSuite) TestSetGTIDMariaDB(c *C) {
+func TestSetGTIDMariaDB(t *testing.T) {
+	t.Parallel()
 	gSetStr := "1-1-1,2-2-2"
 	gSet, err := gtid.ParserGTID("mariadb", gSetStr)
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	gSetOrigin := gSet
 
 	loc := Location{
@@ -781,11 +782,12 @@ func (t *testPositionSuite) TestSetGTIDMariaDB(c *C) {
 		Suffix:  0,
 	}
 	err = loc.SetGTID(gSetOrigin)
-	c.Assert(err, IsNil)
-	c.Assert(loc.gtidSet.String(), Equals, gSetStr)
+	require.Nil(t, err)
+	require.Equal(t, gSetStr, loc.gtidSet.String())
 }
 
-func (t *testPositionSuite) TestExtractSuffix(c *C) {
+func TestExtractSuffix(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name   string
 		suffix int
@@ -810,20 +812,21 @@ func (t *testPositionSuite) TestExtractSuffix(c *C) {
 
 	for _, tc := range testCases {
 		suffix, err := ExtractSuffix(tc.name)
-		c.Assert(err, IsNil)
-		c.Assert(suffix, Equals, tc.suffix)
+		require.Nil(t, err)
+		require.Equal(t, tc.suffix, suffix)
 	}
 }
 
-func (t *testPositionSuite) TestIsFreshPosition(c *C) {
+func TestIsFreshPosition(t *testing.T) {
+	t.Parallel()
 	mysqlPos := gmysql.Position{
 		Name: "mysql-binlog.00001",
 		Pos:  123,
 	}
 	mysqlGTIDSet, err := gtid.ParserGTID(gmysql.MySQLFlavor, "e8e592a6-7a59-11eb-8da1-0242ac110002:1-36")
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	mariaGTIDSet, err := gtid.ParserGTID(gmysql.MariaDBFlavor, "0-1001-233")
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 	testCases := []struct {
 		loc     Location
 		flavor  string
@@ -895,6 +898,6 @@ func (t *testPositionSuite) TestIsFreshPosition(c *C) {
 
 	for _, tc := range testCases {
 		fresh := IsFreshPosition(tc.loc, tc.flavor, tc.cmpGTID)
-		c.Assert(fresh, Equals, tc.fresh)
+		require.Equal(t, tc.fresh, fresh)
 	}
 }

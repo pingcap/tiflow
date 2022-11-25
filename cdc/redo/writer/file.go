@@ -54,7 +54,7 @@ var (
 	defaultMaxLogSize       = 64 * megabyte
 )
 
-//go:generate mockery --name=fileWriter --inpackage
+//go:generate mockery --name=fileWriter --inpackage --quiet
 type fileWriter interface {
 	io.WriteCloser
 	flusher

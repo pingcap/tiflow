@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -49,6 +48,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/mock"
@@ -186,7 +186,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
-	mockBaseJobmaster := &MockBaseJobmaster{}
+	mockBaseJobmaster := &MockBaseJobmaster{t: t.T()}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
@@ -294,9 +294,10 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// worker1 online, worker2 dispatch error
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
+	require.NoError(t.T(), jm.OnWorkerOnline(workerHandle1))
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1}))
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
@@ -310,7 +311,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), err)
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle2)
+	jm.OnWorkerStatusUpdated(workerHandle2, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes2})
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	worker4 := "worker4"
@@ -322,7 +323,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle1.WorkerID = worker4
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker1 finished
@@ -342,7 +343,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
-	jm.OnWorkerOnline(workerHandle1)
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// master failover
@@ -367,7 +368,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage(context.Background(), "", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&framework.MockWorkerHandler{}, "", ""))
-	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
 	jm.CloseImpl(context.Background())
@@ -389,7 +389,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 			return true
 		}
 		mockMessageAgent.Unlock()
-		jm.workerManager.Tick(context.Background())
+		jm.workerManager.DoTick(context.Background())
 		return false
 	}, 10*time.Second, 1*time.Second)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -410,7 +410,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 func TestDuplicateFinishedState(t *testing.T) {
 	ctx := context.Background()
 	metaKVClient := kvmock.NewMetaMock()
-	mockBaseJobmaster := &MockBaseJobmaster{}
+	mockBaseJobmaster := &MockBaseJobmaster{t: t}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
@@ -494,6 +494,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 type MockBaseJobmaster struct {
 	mu sync.Mutex
 	mock.Mock
+	t *testing.T
 
 	framework.BaseJobMaster
 }
@@ -542,6 +543,10 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 
 func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
 	return false
+}
+
+func (m *MockBaseJobmaster) MetricFactory() promutil.Factory {
+	return promutil.NewFactory4Test(m.t.TempDir())
 }
 
 type MockCheckpointAgent struct {
