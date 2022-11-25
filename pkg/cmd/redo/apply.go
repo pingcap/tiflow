@@ -14,11 +14,12 @@
 package redo
 
 import (
+	"net/url"
+
 	"github.com/pingcap/tiflow/pkg/applier"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
-	"net/url"
 )
 
 // applyRedoOptions defines flags for the `redo apply` command.
