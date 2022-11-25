@@ -432,6 +432,12 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// we must clean cached ddl and tables in changefeed initialization
+	// otherwise, the changefeed will loss tables that are needed to be replicated
+	// ref: https://github.com/pingcap/tiflow/issues/7682
+	c.ddlEventCache = nil
+	c.currentTableNames = nil
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
