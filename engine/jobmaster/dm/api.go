@@ -131,6 +131,8 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	}
 	wg.Wait()
 
+	// should be done after we get current task-status, since some unit status might be missing if
+	// current unit finish between we get finished unit status and get current task-status
 	state, err := jm.metadata.UnitStateStore().Get(ctx)
 	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
 		return nil, err
