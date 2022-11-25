@@ -33,6 +33,8 @@ const (
 	chanSize   = 1024
 )
 
+var nilErr error
+
 // BinlogWriter is a binlog event writer which writes binlog events to a file.
 // Open/Write/Close cannot be called concurrently.
 type BinlogWriter struct {
@@ -91,13 +93,13 @@ func (w *BinlogWriter) run() {
 		}
 
 		if w.file == nil {
-			w.err.CompareAndSwap(nil, terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")))
+			w.err.CompareAndSwap(nilErr, terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")))
 			errOccurs = true
 			return
 		}
 		n, err := w.file.Write(buf.Bytes())
 		if err != nil {
-			w.err.CompareAndSwap(nil, terror.ErrBinlogWriterWriteDataLen.Delegate(err, n))
+			w.err.CompareAndSwap(nilErr, terror.ErrBinlogWriterWriteDataLen.Delegate(err, n))
 			errOccurs = true
 			return
 		}
@@ -168,7 +170,7 @@ func (w *BinlogWriter) Close() error {
 			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err))
 		}
 		if err := w.file.Close(); err != nil {
-			w.err.CompareAndSwap(nil, err)
+			w.err.CompareAndSwap(nilErr, err)
 		}
 	}
 
@@ -178,7 +180,7 @@ func (w *BinlogWriter) Close() error {
 	w.uuid.Store("")
 	w.filename.Store("")
 	w.input = nil
-	return w.err.Swap(nil)
+	return w.err.Swap(nilErr)
 }
 
 func (w *BinlogWriter) Write(rawData []byte) error {
