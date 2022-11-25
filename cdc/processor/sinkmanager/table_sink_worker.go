@@ -186,7 +186,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			continue
 		}
-		for availableMem-e.Row.ApproximateBytes() < 0 {
+		eventSize := e.Row.ApproximateBytes()
+		for availableMem-eventSize < 0 {
 			if !w.splitTxn {
 				// If we do not split the transaction, we do not need to wait for the memory quota.
 				// The worst case is all workers are exceeding the memory quota.
@@ -220,7 +221,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			availableMem += int(requestMemSize)
 		}
-		eventSize := e.Row.ApproximateBytes()
 		availableMem -= eventSize
 		events = append(events, e)
 		currentCommitTs = e.CRTs
