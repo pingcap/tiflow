@@ -45,7 +45,7 @@ const (
 	// globalTxnAtomicity AtomicityLevel = "global"
 
 	defaultMqTxnAtomicity    AtomicityLevel = noneTxnAtomicity
-	defaultMysqlTxnAtomicity AtomicityLevel = tableTxnAtomicity
+	defaultMysqlTxnAtomicity AtomicityLevel = noneTxnAtomicity
 )
 
 // ShouldSplitTxn returns whether the sink should split txn.

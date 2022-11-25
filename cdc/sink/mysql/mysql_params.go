@@ -50,7 +50,7 @@ const (
 	defaultReadTimeout         = "2m"
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
-	defaultSafeMode            = true
+	defaultSafeMode            = false
 	defaultTxnIsolationRC      = "READ-COMMITTED"
 	defaultCharacterSet        = "utf8mb4"
 )

@@ -204,13 +204,13 @@ func TestParseSinkURIToParams(t *testing.T) {
 	expected.maxTxnRow = 20
 	expected.batchReplaceEnabled = true
 	expected.batchReplaceSize = 50
-	expected.safeMode = true
+	expected.safeMode = false
 	expected.timezone = `"UTC"`
 	expected.changefeedID = model.DefaultChangeFeedID("cf-id")
 	expected.captureAddr = "127.0.0.1:8300"
 	expected.tidbTxnMode = "pessimistic"
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
-		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
+		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
 		"&tidb-txn-mode=pessimistic"
 	opts := map[string]string{
 		metrics.OptCaptureAddr: expected.captureAddr,
