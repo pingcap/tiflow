@@ -19,6 +19,8 @@ set @@foreign_key_checks=1;
 
 -- Check foreign key on delete/update set null.
 create table t3 (id int key);
+-- Manual create index for column b, since if the downstream TiDB doesn't support foreign key, then the downstream TiDB
+-- won't auto-create index for column b, then the upstream and downstream table structures are inconsistent.
 create table t4 (id int key, b int, index idx(b), constraint fk_2 foreign key (b) references t3 (id) on delete set null on update set null);
 begin;
 insert into t3 values (1),(2),(3),(4),(5);
