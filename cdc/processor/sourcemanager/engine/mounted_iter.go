@@ -82,7 +82,7 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		}
 		for idx := i.nextToMount; idx < len(i.rawEvents); idx++ {
 			i.rawEvents[idx].event.SetUpFinishedCh()
-			if err = i.mg.AddEvent(ctx, i.rawEvents[idx].event); err != nil {
+			if err = i.mg.AddEvent(ctx, i.rawEvents[idx].event, nil); err != nil {
 				i.mg = nil
 				return
 			}

@@ -14,6 +14,7 @@
 package model
 
 import (
+	"context"
 	"math"
 
 	"github.com/pingcap/log"
@@ -40,6 +41,8 @@ type PolymorphicEvent struct {
 
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
+
+	finished chan struct{}
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
@@ -70,6 +73,32 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
 		Row:   nil,
 	}
+}
+
+// SetUpFinishedCh set up the finished chan, should be called before mounting the event.
+func (e *PolymorphicEvent) SetUpFinishedCh() {
+	if e.finished == nil {
+		e.finished = make(chan struct{})
+	}
+}
+
+// MarkFinished is called to indicate that mount is finished.
+func (e *PolymorphicEvent) MarkFinished() {
+	if e.finished != nil {
+		close(e.finished)
+	}
+}
+
+// WaitFinished is called by caller to wait for the mount finished.
+func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
+	if e.finished != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-e.finished:
+		}
+	}
+	return nil
 }
 
 // RegionID returns the region ID where the event comes from.
