@@ -99,19 +99,15 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(ctx context.Context) error {
+func (t *tableSinkWrapper) close(ctx context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	err := t.tableSink.Close(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Info("sink is closed",
+	t.tableSink.Close(ctx)
+	log.Info("Sink is closed",
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
-	return nil
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.

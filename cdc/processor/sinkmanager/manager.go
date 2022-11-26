@@ -501,15 +501,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
 		}
-		err := tableSink.(*tableSinkWrapper).close(m.ctx)
-		if err != nil && !cerrors.Is(err, context.Canceled) {
-			log.Warn("Failed to close table sink",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			m.errChan <- err
-		}
+		tableSink.(*tableSinkWrapper).close(m.ctx)
 		cleanedBytes := m.memQuota.clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -600,14 +592,7 @@ func (m *SinkManager) Close() error {
 		return errors.Trace(err)
 	}
 	m.tableSinks.Range(func(key, value interface{}) bool {
-		err := value.(*tableSinkWrapper).close(m.ctx)
-		if err != nil {
-			log.Error("Close table sink failed",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", key.(model.TableID)),
-				zap.Error(err))
-		}
+		value.(*tableSinkWrapper).close(m.ctx)
 		return true
 	})
 	m.wg.Wait()
