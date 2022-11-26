@@ -273,16 +273,15 @@ func (m *SinkManager) generateSinkTasks() error {
 				continue
 			}
 			tableState := tableSink.(*tableSinkWrapper).getState()
-			if tableState < tablepb.TableStateReplicating {
-				log.Panic("Tables that are not started should not appear in the progress heap",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID))
-			}
 			// It means table sink is stopping or stopped.
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
-			if tableState > tablepb.TableStateReplicating {
+			if tableState != tablepb.TableStateReplicating {
+				log.Info("Table sink is not replicating, skip it",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID),
+					zap.String("tableState", tableState.String()))
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
