@@ -309,10 +309,10 @@ func TestCloseCancellable(t *testing.T) {
 		tb.Close(ctx)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopped == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
 func TestCloseReentrant(t *testing.T) {
@@ -334,10 +334,10 @@ func TestCloseReentrant(t *testing.T) {
 		tb.Close(ctx)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopped == tb.state.Load()
+	}, 5*time.Second, time.Millisecond*10, "table should be stopped")
 	tb.Close(ctx)
 }
 
