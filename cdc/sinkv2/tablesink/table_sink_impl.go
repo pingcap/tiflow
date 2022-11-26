@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -149,17 +148,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
-	err := e.progressTracker.close(ctx)
-	if err != nil && !cerrors.Is(err, context.Canceled) {
-		failedCheckpointTs := e.GetCheckpointTs()
-		log.Error("Failed to stop table sink",
-			zap.String("namespace", e.changefeedID.Namespace),
-			zap.String("changefeed", e.changefeedID.ID),
-			zap.Int64("tableID", e.tableID),
-			zap.Uint64("checkpointTs", failedCheckpointTs.Ts),
-			zap.Duration("duration", time.Since(start)), zap.Error(err))
-		return err
-	}
+	e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
 	log.Info("Table sink stopped",
