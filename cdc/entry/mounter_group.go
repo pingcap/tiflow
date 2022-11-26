@@ -28,12 +28,12 @@ import (
 // MounterGroup is a group of mounter workers
 type MounterGroup interface {
 	Run(ctx context.Context) error
-	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	AddEvent(ctx context.Context, event *model.PolymorphicEvent, outputCh chan<- *Future) error
 }
 
 type mounterGroup struct {
 	schemaStorage  SchemaStorage
-	inputCh        []chan *model.PolymorphicEvent
+	inputCh        []chan *Future
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
@@ -62,9 +62,9 @@ func NewMounterGroup(
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
-	inputCh := make([]chan *model.PolymorphicEvent, workerNum)
+	inputCh := make([]chan *Future, workerNum)
 	for i := 0; i < workerNum; i++ {
-		inputCh[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
+		inputCh[i] = make(chan *Future, defaultInputChanSize)
 	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,
@@ -95,40 +95,78 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 
 func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
 	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
-	rawCh := m.inputCh[index]
+	inputCh := m.inputCh[index]
 	metrics := mounterGroupInputChanSizeGauge.
 		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))
 	ticker := time.NewTicker(defaultMetricInterval)
 	defer ticker.Stop()
 	for {
-		var pEvent *model.PolymorphicEvent
+		var future *Future
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			metrics.Set(float64(len(rawCh)))
-		case pEvent = <-rawCh:
-			if pEvent.RawKV.OpType == model.OpTypeResolved {
-				pEvent.MarkFinished()
-				continue
-			}
-			err := mounter.DecodeEvent(ctx, pEvent)
+			metrics.Set(float64(len(inputCh)))
+		case future = <-inputCh:
+			err := mounter.DecodeEvent(ctx, future.Raw)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			pEvent.MarkFinished()
+			future.ready()
 		}
 	}
 }
 
-func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+func (m *mounterGroup) AddEvent(
+	ctx context.Context,
+	event *model.PolymorphicEvent,
+	outputCh chan<- *Future,
+) error {
 	index := atomic.AddUint64(&m.index, 1) % uint64(m.workerNum)
+	future := newFuture(event)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.inputCh[index] <- event:
-		return nil
+	case m.inputCh[index] <- future:
 	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case outputCh <- future:
+	}
+	return nil
+}
+
+func NewMounterFutureOutput() chan *Future {
+	return make(chan *Future, 1024)
+}
+
+type Future struct {
+	Raw *model.PolymorphicEvent
+
+	Result *model.RowChangedEvent
+	done   chan struct{}
+}
+
+func newFuture(raw *model.PolymorphicEvent) *Future {
+	return &Future{
+		Raw:  raw,
+		done: make(chan struct{}),
+	}
+}
+
+func (f *Future) ready() {
+	close(f.done)
+}
+
+func (f *Future) Wait(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-f.done:
+	}
+	return nil
 }
 
 // MockMountGroup is used for tests.
@@ -140,7 +178,6 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 }
 
 // AddEvent implements MountGroup.
-func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
-	event.MarkFinished()
+func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent, outputCh chan<- *Future) error {
 	return nil
 }

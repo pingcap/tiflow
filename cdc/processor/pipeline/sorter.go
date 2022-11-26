@@ -83,6 +83,8 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
+	replicateTs model.Ts
+
 	state      *tablepb.TableState
 	preparedCh chan struct{}
 
@@ -253,6 +255,7 @@ func (n *sorterNode) start(
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 
+	mounterOutputCh := entry.NewMounterFutureOutput()
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
@@ -261,169 +264,196 @@ func (n *sorterNode) start(
 		return nil
 	})
 	n.eg.Go(func() error {
-		lastSentResolvedTs := uint64(0)
-		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
-		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
+		ctx.Throw(errors.Trace(n.mountRawEvents(stdCtx, mounterOutputCh)))
+		return nil
+	})
+	n.eg.Go(func() error {
+		ctx.Throw(errors.Trace(n.sendEvents(stdCtx, ctx, tableActorID, tableActorRouter, mounterOutputCh)))
+		return nil
+	})
 
-		resolvedTsInterpolateFunc := func(commitTs uint64) {
-			// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
-			// If this is true, it implies that (1) the last transaction has finished, and we are
-			// processing the first event in a new transaction, (2) a resolved-ts is safe to be
-			// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
-			// as a resolved-ts, improving the frequency at which the sink flushes.
-			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
-				lastSentResolvedTs = lastCRTs
-				lastSendResolvedTsTime = time.Now()
-				msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
-				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-			}
-		}
+	return nil
+}
 
-		select {
-		case <-stdCtx.Done():
-			return nil
-		case <-n.preparedCh:
-			log.Debug("table is prepared",
-				zap.Int64("tableID", n.tableID),
-				zap.String("tableName", n.tableName),
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID))
-		}
+func (n *sorterNode) mountRawEvents(
+	ctx context.Context,
+	mounterCh chan *entry.Future,
+) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-n.preparedCh:
+		log.Debug("table is prepared",
+			zap.Int64("tableID", n.tableID),
+			zap.String("tableName", n.tableName),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
+	}
 
-		// The latest ts from PD when the table becomes replicating.
-		var replicateTs model.Ts
-		// Sink should start replicating data to downstream from the start ts.
-		var startTs model.Ts
-		select {
-		case <-stdCtx.Done():
-			return nil
-		case startTs = <-n.startTsCh:
-			backoffBaseDelayInMs := int64(100)
-			totalRetryDuration := 10 * time.Second
-			start := time.Now()
-			err := retry.Do(stdCtx, func() error {
-				phy, logic, err := n.pdClient.GetTS(ctx)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				replicateTs = oracle.ComposeTS(phy, logic)
-				return nil
-			}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-				retry.WithTotalRetryDuratoin(totalRetryDuration),
-				retry.WithIsRetryableErr(cerror.IsRetryableError))
+	// The latest ts from PD when the table becomes replicating.
+	var replicateTs model.Ts
+	// Sink should start replicating data to downstream from the start ts.
+	var startTs model.Ts
+	select {
+	case <-ctx.Done():
+		return nil
+	case startTs = <-n.startTsCh:
+		backoffBaseDelayInMs := int64(100)
+		totalRetryDuration := 10 * time.Second
+		start := time.Now()
+		err := retry.Do(ctx, func() error {
+			phy, logic, err := n.pdClient.GetTS(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Info("table is replicating",
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID),
-				zap.Int64("tableID", n.tableID),
-				zap.String("tableName", n.tableName),
-				zap.Uint64("replicateTs", replicateTs),
-				zap.Duration("duration", time.Since(start)))
-			n.startTs = startTs
+			replicateTs = oracle.ComposeTS(phy, logic)
+			return nil
+		}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+			retry.WithTotalRetryDuratoin(totalRetryDuration),
+			retry.WithIsRetryableErr(cerror.IsRetryableError))
+		if err != nil {
+			return errors.Trace(err)
 		}
+		log.Info("table is replicating",
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID),
+			zap.Int64("tableID", n.tableID),
+			zap.String("tableName", n.tableName),
+			zap.Uint64("replicateTs", replicateTs),
+			zap.Duration("duration", time.Since(start)))
+		n.startTs = startTs
+		n.replicateTs = replicateTs
+	}
 
-		n.state.Store(tablepb.TableStateReplicating)
-		n.sorter.EmitStartTs(stdCtx, startTs)
+	n.state.Store(tablepb.TableStateReplicating)
+	n.sorter.EmitStartTs(ctx, startTs)
 
-		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
-		for {
-			select {
-			case <-stdCtx.Done():
-				return nil
-			default:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event := <-n.sorter.Output():
+			if event == nil || event.RawKV == nil {
+				log.Panic("unexpected empty event",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.Int64("tableID", n.tableID),
+					zap.String("tableName", n.tableName),
+					zap.Any("event", event))
 			}
-			index, ok := n.batchRead(stdCtx, events)
-			if !ok {
-				// sorter output channel closed
-				return nil
-			}
-			for i := 0; i < index; i++ {
-				e := events[i]
-				e.SetUpFinishedCh()
-				if err := n.mg.AddEvent(stdCtx, e); err != nil {
+			if event.CRTs >= n.startTs {
+				if err := n.mg.AddEvent(ctx, event, mounterCh); err != nil {
 					return errors.Trace(err)
 				}
 			}
+		}
+	}
+}
 
-			for i := 0; i < index; i++ {
-				e := events[i]
-				if e.RawKV.OpType == model.OpTypeResolved {
-					if e.CRTs < lastSentResolvedTs {
-						continue
-					}
-					tickMsg := message.ValueMessage(pmessage.TickMessage())
-					_ = tableActorRouter.Send(tableActorID, tickMsg)
-					lastSentResolvedTs = e.CRTs
-					lastSendResolvedTsTime = time.Now()
-					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
+func (n *sorterNode) sendEvents(
+	stdCtx context.Context,
+	ctx pipeline.NodeContext,
+	tableActorID actor.ID,
+	tableActorRouter *actor.Router[pmessage.Message],
+	inputCh chan *entry.Future,
+) error {
+	lastSentResolvedTs := uint64(0)
+	lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
+	lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
+	resolvedTsInterpolateFunc := func(commitTs uint64) {
+		// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
+		// If this is true, it implies that (1) the last transaction has finished, and we are
+		// processing the first event in a new transaction, (2) a resolved-ts is safe to be
+		// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
+		// as a resolved-ts, improving the frequency at which the sink flushes.
+		if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
+			lastSentResolvedTs = lastCRTs
+			lastSendResolvedTsTime = time.Now()
+			msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
+			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+		}
+	}
+
+	for {
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case future := <-inputCh:
+			if err := future.Wait(stdCtx); err != nil {
+				if errors.Cause(err) != context.Canceled {
+					ctx.Throw(err)
+				}
+				return errors.Trace(err)
+			}
+			e := future.Raw
+			if e.RawKV.OpType == model.OpTypeResolved {
+				if e.CRTs < lastSentResolvedTs {
 					continue
 				}
-
-				atomic.AddInt64(&n.remainEvents, -1)
-				if err := e.WaitFinished(ctx); err != nil {
-					if errors.Cause(err) != context.Canceled {
-						ctx.Throw(err)
-					}
-					return errors.Trace(err)
-				}
-				if e.Row == nil {
-					continue
-				}
-
-				commitTs := e.CRTs
-				// We interpolate a resolved-ts if none has been sent for some time.
-				if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
-					resolvedTsInterpolateFunc(commitTs)
-				}
-
-				// For all rows, we add table replicate ts, so mysql sink can
-				// determine when to turn off safe-mode.
-				e.Row.ReplicatingTs = replicateTs
-				// We calculate memory consumption by RowChangedEvent size.
-				// It's much larger than RawKVEntry.
-				size := uint64(e.Row.ApproximateBytes())
-				// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
-				// means interrupting a transaction. Otherwise, the pipeline would deadlock.
-				err := n.flowController.Consume(e, size, func(batchID uint64) error {
-					if commitTs > lastCRTs {
-						// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
-						// Not sending a Resolved Event here will very likely deadlock the pipeline.
-						resolvedTsInterpolateFunc(commitTs)
-					} else if commitTs == lastCRTs {
-						// send batch resolve event
-						msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
-						msg.Resolved = &model.ResolvedTs{
-							Ts:      commitTs,
-							Mode:    model.BatchResolvedMode,
-							BatchID: batchID,
-						}
-						ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-					} else {
-						log.Panic("flow control blocked, report a bug",
-							zap.Uint64("commitTs", commitTs),
-							zap.Uint64("lastCommitTs", lastCRTs),
-							zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
-					}
-					return nil
-				})
-				if err != nil {
-					if cerror.ErrFlowControllerAborted.Equal(err) {
-						log.Debug("flow control cancelled for table",
-							zap.Int64("tableID", n.tableID),
-							zap.String("tableName", n.tableName))
-					} else {
-						ctx.Throw(err)
-					}
-					return nil
-				}
-				lastCRTs = e.CRTs
+				tickMsg := message.ValueMessage(pmessage.TickMessage())
+				_ = tableActorRouter.Send(tableActorID, tickMsg)
+				lastSentResolvedTs = e.CRTs
+				lastSendResolvedTsTime = time.Now()
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
+				continue
 			}
+
+			atomic.AddInt64(&n.remainEvents, -1)
+			if e.Row == nil {
+				continue
+			}
+
+			commitTs := e.CRTs
+			// We interpolate a resolved-ts if none has been sent for some time.
+			if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
+				resolvedTsInterpolateFunc(commitTs)
+			}
+
+			// For all rows, we add table replicate ts, so mysql sink can
+			// determine when to turn off safe-mode.
+			e.Row.ReplicatingTs = n.replicateTs
+
+			// We calculate memory consumption by RowChangedEvent size.
+			// It's much larger than RawKVEntry.
+			size := uint64(e.Row.ApproximateBytes())
+			// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
+			// means interrupting a transaction. Otherwise, the pipeline would deadlock.
+			err := n.flowController.Consume(e, size, func(batchID uint64) error {
+				if commitTs > lastCRTs {
+					// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
+					// Not sending a Resolved Event here will very likely deadlock the pipeline.
+					resolvedTsInterpolateFunc(commitTs)
+				} else if commitTs == lastCRTs {
+					// send batch resolve event
+					msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+					msg.Resolved = &model.ResolvedTs{
+						Ts:      commitTs,
+						Mode:    model.BatchResolvedMode,
+						BatchID: batchID,
+					}
+					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+				} else {
+					log.Panic("flow control blocked, report a bug",
+						zap.Uint64("commitTs", commitTs),
+						zap.Uint64("lastCommitTs", lastCRTs),
+						zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
+				}
+				return nil
+			})
+			if err != nil {
+				if cerror.ErrFlowControllerAborted.Equal(err) {
+					log.Debug("flow control cancelled for table",
+						zap.Int64("tableID", n.tableID),
+						zap.String("tableName", n.tableName))
+				} else {
+					ctx.Throw(err)
+				}
+				return nil
+			}
+			lastCRTs = e.CRTs
+			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 		}
-	})
-	return nil
+	}
 }
 
 // handleRawEvent process the raw kv event,send it to sorter
