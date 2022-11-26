@@ -56,6 +56,7 @@ function resume_changefeed_in_stopped_state() {
 		run_sql "$stmt" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
 
+  echo "Resume changefeed with checkpointTs3 $checkpointTs3"
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$checkpointTs3 --no-confirm=true
 	for i in $(seq 5 6); do
 		table="test.table$i"
@@ -68,7 +69,8 @@ function resume_changefeed_in_stopped_state() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config1.toml
 
 	cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
-	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$checkpointTs1 --no-confirm=true
+	echo "Resume changefeed with checkpointTs2 $checkpointTs2"
+	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$checkpointTs2 --no-confirm=true
 	for i in $(seq 3 4); do
 		table="test.table$i"
 		check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
