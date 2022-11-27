@@ -156,8 +156,8 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		}
 
 		tbl = versionedTable{
-			TableName: *txn.Event.Table,
-			version:   txn.Event.TableVersion,
+			TableName: txn.Event.Table.TableName,
+			version:   txn.Event.Table.TableInfoVersion,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.

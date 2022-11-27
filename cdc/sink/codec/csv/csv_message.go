@@ -114,6 +114,7 @@ func (c *csvMessage) encode() []byte {
 }
 
 func (c *csvMessage) decode(datums []types.Datum) error {
+	var dataColIdx int
 	if len(datums) < minimumColsCnt {
 		return cerror.WrapError(cerror.ErrCSVDecodeFailed,
 			errors.New("the csv row should have at least four columns"+
@@ -123,8 +124,11 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 	if err := c.opType.FromString(datums[0].GetString()); err != nil {
 		return cerror.WrapError(cerror.ErrCSVDecodeFailed, err)
 	}
+	dataColIdx++
 	c.tableName = datums[1].GetString()
+	dataColIdx++
 	c.schemaName = datums[2].GetString()
+	dataColIdx++
 	if c.config.IncludeCommitTs {
 		commitTs, err := strconv.ParseUint(datums[3].GetString(), 10, 64)
 		if err != nil {
@@ -132,12 +136,13 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 				fmt.Errorf("the 4th column(%s) of csv row should be a valid commit-ts", datums[3].GetString()))
 		}
 		c.commitTs = commitTs
+		dataColIdx++
 	} else {
 		c.commitTs = 0
 	}
 	c.columns = c.columns[:0]
 
-	for i := 4; i < len(datums); i++ {
+	for i := dataColIdx; i < len(datums); i++ {
 		if datums[i].IsNull() {
 			c.columns = append(c.columns, nil)
 		} else {
@@ -318,7 +323,8 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	}
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.PreColumns, e.ColInfos)
+		_, _, colInfos := e.TableInfo.GetRowColInfos()
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.PreColumns, colInfos)
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +335,8 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 			csvMsg.opType = operationUpdate
 		}
 		// for insert and update operation, we only record the after columns.
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.Columns, e.ColInfos)
+		_, _, colInfos := e.TableInfo.GetRowColInfos()
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.Columns, colInfos)
 		if err != nil {
 			return nil, err
 		}

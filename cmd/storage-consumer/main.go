@@ -499,6 +499,7 @@ func (c *consumer) run(ctx context.Context) error {
 			fileRange := fileMap[k]
 			for i := fileRange.start; i <= fileRange.end; i++ {
 				filePath := k.generateDMLFilePath(i, c.fileExtension)
+				log.Debug("read from dml file path", zap.String("path", filePath))
 				content, err := c.externalStorage.ReadFile(ctx, filePath)
 				if err != nil {
 					return errors.Trace(err)

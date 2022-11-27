@@ -62,10 +62,12 @@ func TestEncodeEvents(t *testing.T) {
 		seqNumber: 1,
 		event: &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				Table: &model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
+				Table: &model.TableInfo{
+					TableName: model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 				},
 				Rows: []*model.RowChangedEvent{
 					{
@@ -109,10 +111,12 @@ func TestEncodingWorkerRun(t *testing.T) {
 		TableID: 100,
 	}
 	event := &model.SingleTableTxn{
-		Table: &model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 100,
+		Table: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:  "test",
+				Table:   "table1",
+				TableID: 100,
+			},
 		},
 		Rows: []*model.RowChangedEvent{
 			{

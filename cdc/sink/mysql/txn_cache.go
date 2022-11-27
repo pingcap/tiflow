@@ -39,7 +39,7 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 		txn = &model.SingleTableTxn{
 			StartTs:  row.StartTs,
 			CommitTs: row.CommitTs,
-			Table:    row.Table,
+			Table:    row.TableInfo,
 		}
 		t.txns = append(t.txns, txn)
 	} else if t.txns[len(t.txns)-1].StartTs == row.StartTs {

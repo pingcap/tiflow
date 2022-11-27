@@ -15,6 +15,7 @@ package cloudstorage
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -64,7 +65,7 @@ func newTableEventsMap() *tableEventsMap {
 
 // flushTask defines a task containing the tables to be flushed.
 type flushTask struct {
-	targetTables []versionedTable
+	targetTables []*model.TableInfo
 }
 
 func newDMLWorker(
@@ -113,9 +114,13 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				for _, table := range task.targetTables {
+				for _, tableInfo := range task.targetTables {
 					buf.Reset()
 					var callbacks []func()
+					table := versionedTable{
+						TableName: tableInfo.TableName,
+						version:   tableInfo.TableInfoVersion,
+					}
 					d.tableEvents.mu.Lock()
 					events := d.tableEvents.fragments[table]
 					d.tableEvents.fragments[table] = d.tableEvents.fragments[table][:0]
@@ -132,7 +137,23 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 						}
 					}
 
-					path := d.generateCloudStoragePath(table)
+					// mandatorarily generate scheme.json file before generating the first data file
+					if d.fileIndex[table] == 0 {
+						var tableDetail cloudstorage.TableDetail
+						tableDetail.FromTableInfo(tableInfo)
+						path := d.generateSchemaFilePath(tableDetail)
+						encodedDetail, err := json.MarshalIndent(tableDetail, "", "    ")
+						if err != nil {
+							d.errCh <- err
+						}
+
+						err = d.storage.WriteFile(ctx, path, encodedDetail)
+						if err != nil {
+							d.errCh <- err
+						}
+					}
+
+					path := d.generateDataFilePath(table)
 					err := d.storage.WriteFile(ctx, path, buf.Bytes())
 					if err != nil {
 						d.errCh <- err
@@ -161,7 +182,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 // 1. the flush interval exceeds the upper limit.
 // 2. the file size exceeds the upper limit.
 func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) {
-	tableSet := make(map[versionedTable]struct{})
+	tableSet := make(map[*model.TableInfo]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
 	d.wg.Add(1)
@@ -178,7 +199,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				var readyTables []versionedTable
+				var readyTables []*model.TableInfo
 				for tbl := range tableSet {
 					readyTables = append(readyTables, tbl)
 				}
@@ -194,10 +215,14 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				case d.flushNotifyCh <- task:
 					log.Debug("flush task is emitted successfully when flush interval exceeds",
 						zap.Any("tables", task.targetTables))
-					for tbl := range tableSet {
+					for tableInfo := range tableSet {
+						tbl := versionedTable{
+							TableName: tableInfo.TableName,
+							version:   tableInfo.TableInfoVersion,
+						}
 						d.fileSize[tbl] = 0
 					}
-					tableSet = make(map[versionedTable]struct{})
+					tableSet = make(map[*model.TableInfo]struct{})
 				default:
 				}
 			case frag, ok := <-ch.Out():
@@ -209,7 +234,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
 				d.tableEvents.mu.Unlock()
 
-				tableSet[table] = struct{}{}
+				tableSet[frag.event.Event.Table] = struct{}{}
 				for _, msg := range frag.encodedMsgs {
 					if msg.Value != nil {
 						d.fileSize[table] += uint64(len(msg.Value))
@@ -219,7 +244,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				// as soon as possible.
 				if d.fileSize[table] > uint64(d.config.FileSize) {
 					task := flushTask{
-						targetTables: []versionedTable{table},
+						targetTables: []*model.TableInfo{frag.event.Event.Table},
 					}
 					select {
 					case <-ctx.Done():
@@ -236,7 +261,11 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 	}()
 }
 
-func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
+func (d *dmlWorker) generateSchemaFilePath(def cloudstorage.TableDetail) string {
+	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.Version)
+}
+
+func (d *dmlWorker) generateDataFilePath(tbl versionedTable) string {
 	var elems []string
 
 	d.fileIndex[tbl]++

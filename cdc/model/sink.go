@@ -255,10 +255,9 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table    *TableName         `json:"table" msg:"table"`
-	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
-
-	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
+	Table     *TableName         `json:"table" msg:"table"`
+	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	TableInfo *TableInfo         `json:"table-info" msg:"-"`
 
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
@@ -653,11 +652,10 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table        *TableName
-	TableVersion uint64
-	StartTs      uint64
-	CommitTs     uint64
-	Rows         []*RowChangedEvent
+	Table    *TableInfo
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
@@ -672,7 +670,7 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.ID {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),

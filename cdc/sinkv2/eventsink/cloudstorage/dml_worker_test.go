@@ -22,6 +22,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -60,9 +63,9 @@ func TestGenerateCloudStoragePath(t *testing.T) {
 		},
 		version: 5,
 	}
-	path := w.generateCloudStoragePath(table)
+	path := w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000001.json", path)
-	path = w.generateCloudStoragePath(table)
+	path = w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000002.json", path)
 	w.close()
 }
@@ -82,6 +85,19 @@ func TestDMLWorkerRun(t *testing.T) {
 		Table:   "table1",
 		TableID: 100,
 	}
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 100,
+		},
+		TableInfoVersion: 99,
+		TableInfo: &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: timodel.NewCIStr("name"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			},
+		},
+	}
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
@@ -91,11 +107,7 @@ func TestDMLWorkerRun(t *testing.T) {
 			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
+					Table: tableInfo,
 					Rows: []*model.RowChangedEvent{
 						{
 							Table: &model.TableName{
@@ -126,8 +138,12 @@ func TestDMLWorkerRun(t *testing.T) {
 	// check whether files for table1 has been generated
 	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
-	require.Len(t, files, 1)
-	require.Equal(t, "CDC000001.json", files[0].Name())
+	require.Len(t, files, 2)
+	var fileNames []string
+	for _, f := range files {
+		fileNames = append(fileNames, f.Name())
+	}
+	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json"}, fileNames)
 	cancel()
 	d.close()
 	fragCh.Close()
