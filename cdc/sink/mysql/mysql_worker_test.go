@@ -31,7 +31,7 @@ import (
 
 func TestMysqlSinkWorker(t *testing.T) {
 	t.Parallel()
-	tbl := model.TableName{
+	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
 		TableID:     1,
@@ -49,7 +49,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 1,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
@@ -60,7 +60,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 1,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
 				},
@@ -73,17 +73,17 @@ func TestMysqlSinkWorker(t *testing.T) {
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 1,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 2,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 3,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
 				},
@@ -97,17 +97,17 @@ func TestMysqlSinkWorker(t *testing.T) {
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 1,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 2,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 3,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 				},
@@ -121,22 +121,22 @@ func TestMysqlSinkWorker(t *testing.T) {
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 1,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 2,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 3,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 				},
 				{
-					Table:    &model.TableInfo{TableName: tbl},
+					Table:    tbl,
 					CommitTs: 4,
 					Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
 				},
@@ -189,7 +189,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 
 func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	t.Parallel()
-	tbl := model.TableName{
+	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
 		TableID:     1,
@@ -197,34 +197,34 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	}
 	txns1 := []*model.SingleTableTxn{
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 1,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 		},
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 2,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 		},
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 3,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 		},
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 4,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 5,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
 		},
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 6,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
 		},
@@ -280,7 +280,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 
 func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	t.Parallel()
-	tbl := model.TableName{
+	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
 		TableID:     1,
@@ -288,19 +288,19 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	}
 	txns1 := []*model.SingleTableTxn{
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 1,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 		},
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 2,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 		},
 	}
 	txns2 := []*model.SingleTableTxn{
 		{
-			Table:    &model.TableInfo{TableName: tbl},
+			Table:    tbl,
 			CommitTs: 5,
 			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
 		},

@@ -257,7 +257,7 @@ type RowChangedEvent struct {
 
 	Table     *TableName         `json:"table" msg:"table"`
 	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
-	TableInfo *TableInfo         `json:"table-info" msg:"-"`
+	TableInfo *TableInfo         `json:"-" msg:"-"`
 
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
@@ -652,10 +652,11 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table    *TableInfo
-	StartTs  uint64
-	CommitTs uint64
-	Rows     []*RowChangedEvent
+	Table     *TableName
+	TableInfo *TableInfo
+	StartTs   uint64
+	CommitTs  uint64
+	Rows      []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
@@ -670,7 +671,7 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.ID {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),

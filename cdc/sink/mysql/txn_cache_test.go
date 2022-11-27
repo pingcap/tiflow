@@ -48,7 +48,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {{
-						Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+						Table:    &model.TableName{TableID: 1},
 						StartTs:  1,
 						CommitTs: 5,
 						Rows: []*model.RowChangedEvent{
@@ -57,9 +57,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 						},
 					}},
 					2: {{
-						Table:    &model.TableInfo{TableName: model.TableName{TableID: 2}},
-						StartTs:  1,
-						CommitTs: 6,
+						Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6,
 						Rows: []*model.RowChangedEvent{
 							{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
 						},
@@ -78,7 +76,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  1,
 							CommitTs: 8,
 							Rows: []*model.RowChangedEvent{
@@ -86,7 +84,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 							},
 						},
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  1,
 							CommitTs: 11,
 							Rows: []*model.RowChangedEvent{
@@ -96,7 +94,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					},
 					2: {
 						{
-							Table:   &model.TableInfo{TableName: model.TableName{TableID: 2}},
+							Table:   &model.TableName{TableID: 2},
 							StartTs: 1, CommitTs: 12,
 							Rows: []*model.RowChangedEvent{
 								{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
@@ -105,7 +103,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					},
 					3: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 3}},
+							Table:    &model.TableName{TableID: 3},
 							StartTs:  1,
 							CommitTs: 7,
 							Rows: []*model.RowChangedEvent{
@@ -113,7 +111,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 							},
 						},
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 3}},
+							Table:    &model.TableName{TableID: 3},
 							StartTs:  1,
 							CommitTs: 8,
 							Rows: []*model.RowChangedEvent{
@@ -169,7 +167,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  1,
 							CommitTs: 5,
 							Rows: []*model.RowChangedEvent{
@@ -179,7 +177,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					},
 					2: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 2}},
+							Table:    &model.TableName{TableID: 2},
 							StartTs:  1,
 							CommitTs: 6,
 							Rows: []*model.RowChangedEvent{
@@ -187,7 +185,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 								{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
 							},
 						}, {
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 2}},
+							Table:    &model.TableName{TableID: 2},
 							StartTs:  2,
 							CommitTs: 6,
 							Rows: []*model.RowChangedEvent{
@@ -213,7 +211,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  1,
 							CommitTs: 8,
 							Rows: []*model.RowChangedEvent{
@@ -223,7 +221,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 							},
 						},
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  2,
 							CommitTs: 8,
 							Rows: []*model.RowChangedEvent{
@@ -233,7 +231,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 							},
 						},
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 1}},
+							Table:    &model.TableName{TableID: 1},
 							StartTs:  1,
 							CommitTs: 9,
 							Rows: []*model.RowChangedEvent{
@@ -243,7 +241,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					},
 					2: {
 						{
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 2}},
+							Table:    &model.TableName{TableID: 2},
 							StartTs:  1,
 							CommitTs: 7,
 							Rows: []*model.RowChangedEvent{
@@ -251,7 +249,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 								{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
 							},
 						}, {
-							Table:    &model.TableInfo{TableName: model.TableName{TableID: 2}},
+							Table:    &model.TableName{TableID: 2},
 							StartTs:  2,
 							CommitTs: 7,
 							Rows: []*model.RowChangedEvent{

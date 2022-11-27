@@ -1135,9 +1135,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 
 	rows := []*model.RowChangedEvent{
 		{
-			StartTs:  1,
-			CommitTs: 2,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   1,
+			CommitTs:  2,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1154,9 +1155,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  1,
-			CommitTs: 2,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   1,
+			CommitTs:  2,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1173,9 +1175,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  5,
-			CommitTs: 6,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   5,
+			CommitTs:  6,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1192,9 +1195,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			StartTs:   3,
+			CommitTs:  4,
+			Table:     &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 2}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1211,9 +1215,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			StartTs:   3,
+			CommitTs:  4,
+			Table:     &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 2}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1864,8 +1869,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.True(t, checkpoint.Ts <= 1)
 	rows := []*model.RowChangedEvent{
 		{
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			CommitTs: 5,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
+			CommitTs:  5,
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1884,8 +1890,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.True(t, sink.getTableCheckpointTs(model.TableID(1)).Ts <= 6)
 	rows = []*model.RowChangedEvent{
 		{
-			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			CommitTs: 4,
+			Table:     &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 2}},
+			CommitTs:  4,
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -1970,7 +1977,8 @@ func TestCleanTableResource(t *testing.T) {
 		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),
 	}
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
-		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
+		Table:     &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
+		TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: tblID}},
 	}))
 	s.tableCheckpointTs.Store(tblID, model.NewResolvedTs(uint64(1)))
 	s.tableMaxResolvedTs.Store(tblID, model.NewResolvedTs(uint64(2)))
@@ -2044,9 +2052,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 
 	rows := []*model.RowChangedEvent{
 		{
-			StartTs:  1,
-			CommitTs: 2,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   1,
+			CommitTs:  2,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -2063,9 +2072,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  2,
-			CommitTs: 3,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   2,
+			CommitTs:  3,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -2082,9 +2092,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   3,
+			CommitTs:  4,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -2101,9 +2112,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  4,
-			CommitTs: 5,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   4,
+			CommitTs:  5,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -2120,9 +2132,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			},
 		},
 		{
-			StartTs:  5,
-			CommitTs: 6,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:   5,
+			CommitTs:  6,
+			Table:     &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{TableInfo: &timodel.TableInfo{ID: 1}},
 			Columns: []*model.Column{
 				{
 					Name:  "a",

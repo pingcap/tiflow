@@ -323,8 +323,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	}
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		_, _, colInfos := e.TableInfo.GetRowColInfos()
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.PreColumns, colInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.PreColumns, e.ColInfos)
 		if err != nil {
 			return nil, err
 		}
@@ -335,8 +334,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 			csvMsg.opType = operationUpdate
 		}
 		// for insert and update operation, we only record the after columns.
-		_, _, colInfos := e.TableInfo.GetRowColInfos()
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.Columns, colInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.Columns, e.ColInfos)
 		if err != nil {
 			return nil, err
 		}

@@ -52,8 +52,8 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				CommitTs: 100,
-				Table:    &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, TableInfoVersion: 33},
+				CommitTs:  100,
+				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, TableInfoVersion: 33},
 			},
 			Callback: func() {
 				atomic.AddUint64(&cnt, uint64(batch))
@@ -63,7 +63,6 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
 				CommitTs:  100,
-				Table:     &model.TableName{Schema: "test", Table: "table1"},
 				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, TableInfoVersion: 33},
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},

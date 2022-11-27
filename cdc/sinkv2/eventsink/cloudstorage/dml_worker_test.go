@@ -107,7 +107,7 @@ func TestDMLWorkerRun(t *testing.T) {
 			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
-					Table: tableInfo,
+					TableInfo: tableInfo,
 					Rows: []*model.RowChangedEvent{
 						{
 							Table: &model.TableName{

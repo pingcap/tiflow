@@ -234,7 +234,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
 				d.tableEvents.mu.Unlock()
 
-				tableSet[frag.event.Event.Table] = struct{}{}
+				tableSet[frag.event.Event.TableInfo] = struct{}{}
 				for _, msg := range frag.encodedMsgs {
 					if msg.Value != nil {
 						d.fileSize[table] += uint64(len(msg.Value))
@@ -244,7 +244,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 				// as soon as possible.
 				if d.fileSize[table] > uint64(d.config.FileSize) {
 					task := flushTask{
-						targetTables: []*model.TableInfo{frag.event.Event.Table},
+						targetTables: []*model.TableInfo{frag.event.Event.TableInfo},
 					}
 					select {
 					case <-ctx.Done():
