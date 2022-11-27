@@ -137,7 +137,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 						}
 					}
 
-					// mandatorarily generate scheme.json file before generating the first data file
+					// mandatorily generate scheme.json file before generating the first data file
 					if d.fileIndex[table] == 0 {
 						var tableDetail cloudstorage.TableDetail
 						tableDetail.FromTableInfo(tableInfo)
