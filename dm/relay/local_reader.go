@@ -43,9 +43,10 @@ var ErrorMaybeDuplicateEvent = errors.New("truncate binlog file found, event may
 
 // BinlogReaderConfig is the configuration for BinlogReader.
 type BinlogReaderConfig struct {
-	RelayDir string
-	Timezone *time.Location
-	Flavor   string
+	RelayDir            string
+	Timezone            *time.Location
+	Flavor              string
+	RowsEventDecodeFunc func(*replication.RowsEvent, []byte) error
 }
 
 // BinlogReader is a binlog reader.
@@ -82,6 +83,7 @@ func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) 
 	parser.SetVerifyChecksum(true)
 	// use string representation of decimal, to replicate the exact value
 	parser.SetUseDecimal(false)
+	parser.SetRowsEventDecodeFunc(cfg.RowsEventDecodeFunc)
 	if cfg.Timezone != nil {
 		parser.SetTimestampStringLocation(cfg.Timezone)
 	}

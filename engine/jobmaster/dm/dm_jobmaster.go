@@ -159,8 +159,8 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 // Tick implements JobMasterImpl.Tick
 // Do not do heavy work in Tick, it will block the message processing.
 func (jm *JobMaster) Tick(ctx context.Context) error {
-	jm.workerManager.Tick(ctx)
-	jm.taskManager.Tick(ctx)
+	jm.workerManager.DoTick(ctx)
+	jm.taskManager.DoTick(ctx)
 	if err := jm.messageAgent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -261,6 +261,10 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
+
+	// we should call this after we set "state.FinishedUnitStatus" to make sure finished-unit-status is persisted
+	// before client is removed. else in status of get-job-api, status of current unit might be missing, since
+	// query-status might not get status of current unit status and the status is not in "state.FinishedUnitStatus"
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
 		return errors.Trace(err)
 	}
