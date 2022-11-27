@@ -123,8 +123,6 @@ func TestWriteCheckpointTs(t *testing.T) {
 
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)
-	_, err = os.Stat(path.Join(table1Dir, "schema.json"))
-	require.Nil(t, err)
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))
 	require.Nil(t, err)
 	require.JSONEq(t, `{"checkpoint-ts":100}`, string(metadata))
