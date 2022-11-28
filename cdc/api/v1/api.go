@@ -304,6 +304,18 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+
+	o, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = o.ValidateChangefeed(info)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
