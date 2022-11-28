@@ -945,6 +945,11 @@ func TestValidateChangefeed(t *testing.T) {
 		SinkURI:   sinkURI,
 	}))
 
+	// Test invalid sink URI
+	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		SinkURI: "wrong uri\n\t",
+	}))
+
 	// Test limit passed.
 	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
 	o.removedSinkURI[url.URL{
