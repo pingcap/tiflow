@@ -136,7 +136,8 @@ const (
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50
+      "add-table-batch-size": 50,
+      "region-per-span": 0
     },
     "enable-new-sink": true
   },
