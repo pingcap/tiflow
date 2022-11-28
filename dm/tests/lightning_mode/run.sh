@@ -40,10 +40,10 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	read -p 123
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task.yaml" \
-		"\"state\": \"warn\"" 1
+		"Cluster doesn't have enough space" 1 \
+		"but we need 4EiB" 1
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
