@@ -74,6 +74,16 @@ const (
 	grpcConnBufSize      = 32 * 1024
 )
 
+// use a slice instead of map because in small data size, slice search is faster
+// than map search.
+var masterRPCLimiterAllowList = []string{
+	"CreateJob",
+	"CancelJob",
+	"ScheduleTask",
+	"CreateResource",
+	"RemoveResource",
+}
+
 // Server handles PRC requests for df master.
 type Server struct {
 	id string // Server id, randomly generated when server is created.
@@ -564,12 +574,14 @@ func (s *Server) serve(ctx context.Context) error {
 }
 
 func (s *Server) createGRPCServer() *grpc.Server {
+	logLimiter := rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/)
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 		grpc.ChainUnaryInterceptor(
 			grpcprometheus.UnaryServerInterceptor,
 			rpcutil.ForwardToLeader[multiClient](s.forwardChecker),
 			rpcutil.CheckAvailable(s.leaderDegrader),
+			rpcutil.Logger(masterRPCLimiterAllowList, logLimiter),
 			rpcutil.NormalizeError(),
 		),
 	)

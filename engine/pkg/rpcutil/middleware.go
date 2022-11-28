@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -108,7 +109,8 @@ func ForwardToLeader[T any](fc ForwardChecker[T]) grpc.UnaryServerInterceptor {
 
 		leaderCli, err := waitForLeader(ctx, fc)
 		if err != nil {
-			return nil, err
+			// Return gRPC error to avoid depending on NormalizeError middleware.
+			return nil, ToGRPCError(err)
 		}
 
 		fv := reflect.ValueOf(leaderCli).MethodByName(method)
@@ -170,25 +172,22 @@ func CheckAvailable(fc FeatureChecker) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		method := extractMethod(info.FullMethod)
 		if !fc.Available(method) {
-			return nil, errors.ErrMasterNotReady.GenWithStackByArgs()
+			// Return gRPC error to avoid depending on NormalizeError middleware.
+			return nil, ToGRPCError(errors.ErrMasterNotReady.GenWithStackByArgs())
 		}
 		return handler(ctx, req)
 	}
 }
 
-// extract method name from full method name. fullMethod is the full RPC method string, i.e., /package.service/method.
-func extractMethod(fullMethod string) string {
-	return fullMethod[strings.LastIndexByte(fullMethod, '/')+1:]
-}
-
 // NormalizeError is a gRPC middleware that normalizes the error.
 func NormalizeError() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
 		resp, err := handler(ctx, req)
 		if err != nil {
 			errOut := ToGRPCError(err)
 			s, _ := status.FromError(errOut)
-			logger := log.L().With(zap.String("method", info.FullMethod), zap.Error(err), zap.Any("request", req))
+			logger := log.L().With(zap.String("method", method), zap.Error(err), zap.Any("request", req))
 			switch s.Code() {
 			case codes.Unknown:
 				logger.Warn("request handled with an unknown error")
@@ -200,7 +199,32 @@ func NormalizeError() grpc.UnaryServerInterceptor {
 			return nil, errOut
 		}
 
-		log.Debug("request handled successfully", zap.String("method", info.FullMethod), zap.Any("request", req), zap.Any("response", resp))
+		log.Debug("request handled successfully", zap.String("method", method), zap.Any("request", req), zap.Any("response", resp))
 		return resp, nil
 	}
+}
+
+// Logger is a gRPC middleware that logs the request and response.
+// allowList is a list of methods that will be logged. limiter is used to limit the log rate.
+func Logger(allowList []string, limiter *rate.Limiter) grpc.UnaryServerInterceptor {
+	allow := func(method string) bool {
+		for _, m := range allowList {
+			if m == method {
+				return true
+			}
+		}
+		return limiter.Allow()
+	}
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
+		if allow(method) {
+			log.Info("", zap.Any("request", req), zap.String("method", method))
+		}
+		return handler(ctx, req)
+	}
+}
+
+// extract method name from full method name. fullMethod is the full RPC method string, i.e., /package.service/method.
+func extractMethod(fullMethod string) string {
+	return fullMethod[strings.LastIndexByte(fullMethod, '/')+1:]
 }
