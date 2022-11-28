@@ -312,17 +312,19 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	}
 
 	sinkURI, err := url.Parse(info.SinkURI)
-	if err == nil {
-		t, ok := o.removedSinkURI[url.URL{
-			Scheme: sinkURI.Scheme,
-			Host:   sinkURI.Host,
-		}]
-		if ok {
-			remain := recreateChangefeedDelayLimit - time.Since(t)
-			if remain >= 0 {
-				return cerror.ErrInternalServerError.GenWithStackByArgs(fmt.Sprintf(
-					"changefeed with same sink URI was just removed, please wait %s", remain))
-			}
+	if err != nil {
+		return cerror.ErrInternalServerError.GenWithStackByArgs(
+			fmt.Sprintf("invalid sink URI %s", err))
+	}
+	t, ok = o.removedSinkURI[url.URL{
+		Scheme: sinkURI.Scheme,
+		Host:   sinkURI.Host,
+	}]
+	if ok {
+		remain := recreateChangefeedDelayLimit - time.Since(t)
+		if remain >= 0 {
+			return cerror.ErrInternalServerError.GenWithStackByArgs(fmt.Sprintf(
+				"changefeed with same sink URI was just removed, please wait %s", remain))
 		}
 	}
 	return nil
