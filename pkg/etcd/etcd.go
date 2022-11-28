@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -633,24 +632,6 @@ func (c *CDCEtcdClientImpl) GetUpstreamInfo(ctx context.Context,
 	info := &model.UpstreamInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return info, errors.Trace(err)
-}
-
-// GetUpstreamTiDBSourceID returns the `tidb_source_id` of the upstream TiDB cluster
-func (c *CDCEtcdClientImpl) GetUpstreamTiDBSourceID(ctx context.Context) (uint64, error) {
-	key := fmt.Sprintf("/global/config/source_id")
-	resp, err := c.Client.Get(ctx, key)
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	// If the key does not exist, we set the source ID to 1.
-	if resp.Count == 0 {
-		return 1, nil
-	}
-	sourceID, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return sourceID, nil
 }
 
 // GcServiceIDForTest returns the gc service ID for tests
