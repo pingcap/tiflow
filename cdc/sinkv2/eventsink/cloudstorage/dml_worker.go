@@ -142,8 +142,10 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					rowsCnt := 0
 					for _, frag := range events {
 						msgs := frag.encodedMsgs
+						d.statistics.ObserveRows(frag.event.Event.Rows...)
 						for _, msg := range msgs {
 							d.metricWriteBytes.Add(float64(len(msg.Value)))
+							rowsCnt += msg.GetRowsCount()
 							buf.Write(msg.Value)
 							callbacks = append(callbacks, msg.Callback)
 						}
