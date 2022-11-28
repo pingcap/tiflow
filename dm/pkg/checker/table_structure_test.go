@@ -352,7 +352,7 @@ func TestTablesChecker(t *testing.T) {
 	require.Equal(t,
 		"table `test-db`.`test-table-1` downstream table must contain extended columns [ext1 ext2]",
 		result.Errors[1].ShortErr)
-	require.Contains(t, result.Instruction, "values of extended columns will be automatically filled by DM, please remove these columns or change configuration")
+	require.Contains(t, result.Instruction, "DM automatically fills the values of extended columns. You need to remove these columns or change configuration.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 }
@@ -400,7 +400,7 @@ func TestCombineInstruction(t *testing.T) {
 	result := checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Contains(t, result.Instruction, "TiDB does not support foreign key constraints. See the document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features")
-	require.Contains(t, result.Instruction, "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised")
+	require.Contains(t, result.Instruction, "You need to set primary/unique keys for the table. Otherwise replication efficiency might become very low and exactly-once replication cannot be guaranteed.")
 	require.Contains(t, result.Errors[0].ShortErr, "is parsed but ignored by TiDB.")
 	require.Contains(t, result.Errors[1].ShortErr, "primary/unique key does not exist")
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -440,7 +440,7 @@ func TestCombineInstruction(t *testing.T) {
 	require.Equal(t, StateWarning, result.State)
 	require.Equal(t, result.State, StateWarning)
 	require.Contains(t, result.Errors[0].ShortErr, "upstream has more PK or NOT NULL UK than downstream")
-	require.Contains(t, result.Instruction, "Please make sure the index columns are the same. Or the migration might fail or cause data inconsistency.")
+	require.Contains(t, result.Instruction, "Ensure that you use the same index columns for both upstream and downstream databases. Otherwise the migration job might fail or data inconsistency might occur.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 
@@ -478,8 +478,8 @@ func TestCombineInstruction(t *testing.T) {
 	require.Equal(t, result.State, StateWarning)
 	require.Contains(t, result.Errors[0].ShortErr, "charset is not same")
 	require.Contains(t, result.Errors[1].ShortErr, "collation is not same")
-	require.Contains(t, result.Instruction, "Please make sure the charsets are the same between upstream and downstream. Or the data might be inconsistent.")
-	require.Contains(t, result.Instruction, "Please use the same collations for both upstream and downstream databases. Otherwise the query results from the two databases might be inconsistent.")
+	require.Contains(t, result.Instruction, "Ensure that you use the same charsets for both upstream and downstream databases. Different charsets might cause data inconsistency.")
+	require.Contains(t, result.Instruction, "Ensure that you use the same collations for both upstream and downstream databases. Otherwise the query results from the two databases might be inconsistent.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 
@@ -515,7 +515,7 @@ func TestCombineInstruction(t *testing.T) {
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "upstream has more columns than downstream")
-	require.Contains(t, result.Instruction, "Please make sure the column number are the same. Or the migration might fail")
+	require.Contains(t, result.Instruction, "Ensure that the column numbers are the same between upstream and downstream databases. Otherwise the migration job may fail.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 
@@ -555,8 +555,8 @@ func TestCombineInstruction(t *testing.T) {
 	require.Equal(t, StateFailure, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "upstream table must not contain extended column")
 	require.Contains(t, result.Errors[1].ShortErr, "downstream table must contain extended columns")
-	require.Contains(t, result.Instruction, "values of extended columns will be automatically filled by DM, please remove these columns or change configuration")
-	require.Contains(t, result.Instruction, "please manually add extended column to downstream table")
+	require.Contains(t, result.Instruction, "DM automatically fills the values of extended columns. You need to remove these columns or change configuration.")
+	require.Contains(t, result.Instruction, "You need to manually add extended columns to the downstream table.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 
@@ -587,7 +587,7 @@ func TestCombineInstruction(t *testing.T) {
 	result = checker.Check(ctx)
 	require.Equal(t, StateFailure, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "does not exist in downstream table")
-	require.Contains(t, result.Instruction, "extended column feature needs the table to be created with extended columns before replication")
+	require.Contains(t, result.Instruction, "You need to create a table with extended columns before replication.")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 }

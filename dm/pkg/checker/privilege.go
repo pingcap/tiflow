@@ -157,7 +157,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
-		result.Instruction = "Please grant the required privileges to the account."
+		result.Instruction = "Grant the required privileges to the account."
 	}
 	return result
 }

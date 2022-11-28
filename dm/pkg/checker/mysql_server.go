@@ -74,8 +74,8 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
 	if utils.IsMariaDB(value) {
-		err := NewWarn("Migrating from MariaDB is still experimental. It is recommended that you upgrade MariaDB to 10.1.2 or a later version.")
-		err.Instruction = "It is recommended that you upgrade MariaDB to10.1.2 or a later version."
+		err := NewWarn("Migrating from MariaDB is still experimental.")
+		err.Instruction = "It is recommended that you upgrade MariaDB to 10.1.2 or a later version."
 		return err
 	}
 	if IsTiDBFromVersion(value) {
@@ -140,13 +140,13 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 			return result
 		}
 		result.Errors = append(result.Errors, NewError("server_id not set"))
-		result.Instruction = "please set server_id in your database, or error may happen in master/slave switchover"
+		result.Instruction = "Set server_id in your database, or errors might happen in master/slave switchover"
 		return result
 	}
 
 	if serverID == 0 {
 		result.Errors = append(result.Errors, NewError("server_id is 0"))
-		result.Instruction = "please set server_id greater than 0, or error may happen in master/slave switchover"
+		result.Instruction = "Set server_id greater than 0, or errors might happen in master/slave switchover"
 		return result
 	}
 	result.State = StateSuccess

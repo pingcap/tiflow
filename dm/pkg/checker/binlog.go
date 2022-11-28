@@ -94,7 +94,7 @@ func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "ROW" {
 		result.Errors = append(result.Errors, NewError("binlog_format is %s, and should be ROW", value))
-		result.Instruction = "MySQL as source: please execute 'set global binlog_format=ROW; AWS Aurora (MySQL)/RDS MySQL as source : please refer to the document to create a new DB parameter group and set the binlog_format=row: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html. Then modify the instance to use the new DB parameter group and restart the instance to take effect."
+		result.Instruction = "MySQL as source: please execute 'set global binlog_format=ROW;'; AWS Aurora (MySQL)/RDS MySQL as source: please refer to the document to create a new DB parameter group and set the binlog_format=row: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html. Then modify the instance to use the new DB parameter group and restart the instance to take effect."
 		return result
 	}
 	result.State = StateSuccess
@@ -172,7 +172,7 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "FULL" {
 		result.Errors = append(result.Errors, NewError("binlog_row_image is %s, and should be FULL", value))
-		result.Instruction = "MySQL as source: please execute 'set global binlog_row_image = FULL;' AWS Aurora (MySQL)/RDS MySQL as source : please refer to the document to create a new DB parameter group and set the binlog_row_image = FULL: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html Then modify the instance to use the new DB parameter group and restart the instance to take effect."
+		result.Instruction = "MySQL as source: please execute 'set global binlog_row_image = FULL;'; AWS Aurora (MySQL)/RDS MySQL as source: please refer to the document to create a new DB parameter group and set the binlog_row_image = FULL: https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html Then modify the instance to use the new DB parameter group and restart the instance to take effect."
 		return result
 	}
 	result.State = StateSuccess
