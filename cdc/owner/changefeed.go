@@ -501,7 +501,11 @@ LOOP:
 		return errors.Trace(err)
 	}
 	c.state.Info.Config.Sink.TiDBSourceID = sourceID
-	log.Info("fizz, set source id", zap.Uint64("source-id", sourceID))
+	log.Info("set source id",
+		zap.Uint64("source-id", sourceID),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+	)
 
 	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.sink.run(cancelCtx)

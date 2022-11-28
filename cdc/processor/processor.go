@@ -656,7 +656,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
-	log.Info("fizz, set source id", zap.Uint64("source-id", sourceID))
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()

@@ -361,7 +361,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 					return 0, err
 				}
 			}
-			if err = s.setWriteSource(ctx, s.db); err != nil {
+			if err = s.setWriteSource(ctx, tx); err != nil {
 				return 0, err
 			}
 			if err = tx.Commit(); err != nil {
@@ -435,20 +435,17 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
 }
 
-func (s *mysqlBackend) setWriteSource(ctx context.Context, db *sql.DB) error {
+func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
 	// downstream is TiDB, set system variables.
 	// We should always try to set this variable, and ignore the error if
 	// downstream does not support this variable, it is by design.
 	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
 	//TODO: remove this log after fully testing
-	log.Info("fizz set session variable", zap.String("query", query))
-	_, err := db.ExecContext(ctx, query)
+	_, err := txn.ExecContext(ctx, query)
 	if err != nil {
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
 			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
 			//TODO: remove this log after fully testing
-			log.Info("fizz, This version of TiDB does not " +
-				"support system variable: tidb_cdc_write_source")
 		}
 		return err
 	}

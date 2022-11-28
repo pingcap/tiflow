@@ -18,7 +18,7 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
-	if len(sourceIDConfig) != 0 {
+	if len(sourceIDConfig) != 0 && sourceIDConfig[0].Value != "" {
 		sourceID, err = strconv.ParseUint(sourceIDConfig[0].Value, 10, 64)
 		if err != nil {
 			return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
