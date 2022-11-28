@@ -121,23 +121,22 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 
 // tablePairInfo records information about a upstream-downstream table pair including
 // members may have repeated meanings but have different data structure to satisfy different usages.
-// TODO: unify upstream/downstream vs source/target
 type tablePairInfo struct {
-	// target table -> sourceID -> source tables
-	tablesPerTargetTable map[filter.Table]map[string][]filter.Table
-	// target database -> tables under this database
-	targetTablesPerDB map[string][]filter.Table
-	// number of sharding tables of a target table among all upstreams.
-	shardNumPerTargetTable map[filter.Table]int
-	// sourceID -> tables in allow-list
-	allowTablesPerUpstream map[string][]filter.Table
+	// downstream table -> sourceID -> upstream tables
+	tablesPerDownstreamTable map[filter.Table]map[string][]filter.Table
+	// downstream database -> tables under this database
+	downstreamTablesPerDB map[string][]filter.Table
+	// number of sharding tables of a downstream table among all upstreams.
+	shardNumPerDownstreamTable map[filter.Table]int
+	// sourceID -> tables of this upstream in allow-list
+	tablesPerSourceID map[string][]filter.Table
 	// sourceID -> databases that contain block-list tables
 	interestedDBPerUpstream []map[string]struct{}
-	// sourceID -> target table -> source tables
+	// sourceID -> downstream table -> source tables
 	tableMapPerUpstreamWithSourceID map[string]map[filter.Table][]filter.Table
-	// target table -> extended columns
+	// downstream table -> extended columns
 	extendedColumnPerTable map[filter.Table][]string
-	// source index -> source tables -> size
+	// source index -> upstream tables -> size
 	tableSizePerSource []map[filter.Table]int64
 }
 
@@ -181,14 +180,14 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 			eg.Go(func() error {
 				for _, sourceTables := range tableMapPerUpstream[i] {
 					for _, sourceTable := range sourceTables {
-						size, err := utils.FetchTableEstimatedBytes(
+						size, err2 := utils.FetchTableEstimatedBytes(
 							ctx,
 							c.instances[i].sourceDB.DB,
 							sourceTable.Schema,
 							sourceTable.Name,
 						)
-						if err != nil {
-							return err
+						if err2 != nil {
+							return err2
 						}
 						tableSizeMu.Lock()
 						tableSize[i][sourceTable] = size
@@ -205,9 +204,9 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 
 	info.tableSizePerSource = tableSize
 	info.extendedColumnPerTable = extendedColumnPerTable
-	info.tablesPerTargetTable = make(map[filter.Table]map[string][]filter.Table)
-	info.shardNumPerTargetTable = make(map[filter.Table]int)
-	info.targetTablesPerDB = make(map[string][]filter.Table)
+	info.tablesPerDownstreamTable = make(map[filter.Table]map[string][]filter.Table)
+	info.shardNumPerDownstreamTable = make(map[filter.Table]int)
+	info.downstreamTablesPerDB = make(map[string][]filter.Table)
 
 	for i, inst := range c.instances {
 		mapping := tableMapPerUpstream[i]
@@ -218,18 +217,18 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 
 		sourceID := inst.cfg.SourceID
 		for targetTable, sourceTables := range mapping {
-			tablesPerSource, ok := info.tablesPerTargetTable[targetTable]
+			tablesPerSource, ok := info.tablesPerDownstreamTable[targetTable]
 			if !ok {
 				tablesPerSource = make(map[string][]filter.Table)
-				info.tablesPerTargetTable[targetTable] = tablesPerSource
+				info.tablesPerDownstreamTable[targetTable] = tablesPerSource
 			}
 			tablesPerSource[sourceID] = append(tablesPerSource[sourceID], sourceTables...)
-			info.shardNumPerTargetTable[targetTable] += len(sourceTables)
-			info.targetTablesPerDB[targetTable.Schema] = append(info.targetTablesPerDB[targetTable.Schema], targetTable)
+			info.shardNumPerDownstreamTable[targetTable] += len(sourceTables)
+			info.downstreamTablesPerDB[targetTable.Schema] = append(info.downstreamTablesPerDB[targetTable.Schema], targetTable)
 		}
 	}
 
-	info.allowTablesPerUpstream = make(map[string][]filter.Table, len(c.instances))
+	info.tablesPerSourceID = make(map[string][]filter.Table, len(c.instances))
 	info.interestedDBPerUpstream = make([]map[string]struct{}, len(c.instances))
 	info.tableMapPerUpstreamWithSourceID = make(map[string]map[filter.Table][]filter.Table, len(c.instances))
 	for i, inst := range c.instances {
@@ -238,7 +237,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		mapping := tableMapPerUpstream[i]
 		info.tableMapPerUpstreamWithSourceID[sourceID] = mapping
 		for _, tables := range mapping {
-			info.allowTablesPerUpstream[sourceID] = append(info.allowTablesPerUpstream[sourceID], tables...)
+			info.tablesPerSourceID[sourceID] = append(info.tablesPerSourceID[sourceID], tables...)
 			for _, table := range tables {
 				info.interestedDBPerUpstream[i][table.Schema] = struct{}{}
 			}
@@ -320,7 +319,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
-					info.allowTablesPerUpstream[sourceID],
+					info.tablesPerSourceID[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
 				))
@@ -374,8 +373,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 		if isFresh {
-			for targetTable, shardingSet := range info.tablesPerTargetTable {
-				if info.shardNumPerTargetTable[targetTable] <= 1 {
+			for targetTable, shardingSet := range info.tablesPerDownstreamTable {
+				if info.shardNumPerDownstreamTable[targetTable] <= 1 {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
@@ -434,7 +433,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		var dbMetas []*mydump.MDDatabaseMeta
 
 		// use downstream table for shard merging
-		for db, tables := range info.targetTablesPerDB {
+		for db, tables := range info.downstreamTablesPerDB {
 			mdTables := make([]*mydump.MDTableMeta, 0, len(tables))
 			for _, table := range tables {
 				mdTables = append(mdTables, &mydump.MDTableMeta{
@@ -823,7 +822,7 @@ func newLightningPrecheckAdaptor(
 			}
 		}
 	}
-	for db, tables := range info.targetTablesPerDB {
+	for db, tables := range info.downstreamTablesPerDB {
 		allTables[db] = &checkpoints.TidbDBInfo{
 			Name:   db,
 			Tables: make(map[string]*checkpoints.TidbTableInfo),
