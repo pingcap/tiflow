@@ -1,3 +1,4 @@
+foreign_key
 load_task
 downstream_more_column
 expression_filter
@@ -9,4 +10,3 @@ http_proxies
 openapi
 duplicate_event
 binlog_parse
-foreign_key
