@@ -509,19 +509,21 @@ func (s *Server) serve(ctx context.Context) error {
 	// To make the gRPC interceptors work, we have to create a client connection to the gRPC server and register it to
 	// the gRPC-Gateway ServerMux. bufconn is used to create an in-process gRPC server, so the client connection can
 	// bypass the network stack. See https://github.com/grpc/grpc-go/issues/906 for more details.
-	bufConn := bufconn.Listen(grpcConnBufSize)
+	ln := bufconn.Listen(grpcConnBufSize)
 	cleaupFuncs = append(cleaupFuncs, func() {
-		if err := bufConn.Close(); err != nil {
+		if err := ln.Close(); err != nil {
 			log.Warn("failed to close bufconn", zap.Error(err))
 		}
 	})
 	inProcessGRPCServer := s.createGRPCServer()
 	cleaupFuncs = append(cleaupFuncs, inProcessGRPCServer.Stop)
 	errGroup.Go(func() error {
-		return inProcessGRPCServer.Serve(bufConn)
+		return inProcessGRPCServer.Serve(ln)
 	})
 
-	dial := func(context.Context, string) (net.Conn, error) { return bufConn.Dial() }
+	dial := func(ctx context.Context, target string) (net.Conn, error) {
+		return ln.DialContext(ctx)
+	}
 	conn, err := grpc.DialContext(
 		ctx,
 		"bufnet",
