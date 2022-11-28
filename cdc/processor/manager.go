@@ -55,6 +55,7 @@ type Manager interface {
 	QueryTableCount(ctx context.Context, tableCh chan int, done chan<- error)
 	WriteDebugInfo(ctx context.Context, w io.Writer, done chan<- error)
 	AsyncClose()
+	Close()
 }
 
 // managerImpl is a manager of processor, which maintains the state and behavior of processors
@@ -180,6 +181,16 @@ func (m *managerImpl) AsyncClose() {
 	if err != nil {
 		log.Warn("async close failed", zap.Error(err))
 	}
+}
+
+// Close sends a signal to Manager to close all processors.
+func (m *managerImpl) Close() {
+	done := make(chan error, 1)
+	err := m.sendCommand(context.TODO(), commandTpClose, nil, done)
+	if err != nil {
+		log.Warn("async close failed", zap.Error(err))
+	}
+	_ = <-done
 }
 
 // QueryTableCount query the number of tables in the manager.

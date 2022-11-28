@@ -552,6 +552,11 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
 		metaCheckpoint, metaResolved := m.prepareForFlushMeta()
+		log.Debug("Flush redo log",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.Any("tableRtsMap", tableRtsMap),
+			zap.Uint64("minResolvedTs", minResolvedTs))
 		err := m.withLock(func(m *ManagerImpl) error {
 			return m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
 		})

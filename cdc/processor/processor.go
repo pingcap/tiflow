@@ -430,6 +430,12 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
+		p.sourceManager.RemoveTable(tableID)
+		p.sinkManager.RemoveTable(tableID)
+		if p.redoManager.Enabled() {
+			p.redoManager.RemoveTable(tableID)
+		}
+
 		stats, err := p.sinkManager.GetTableStats(tableID)
 		// TODO: handle error
 		if err != nil {
@@ -440,11 +446,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 				zap.Int64("tableID", tableID),
 				zap.Error(err))
 			return 0, false
-		}
-		p.sourceManager.RemoveTable(tableID)
-		p.sinkManager.RemoveTable(tableID)
-		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(tableID)
 		}
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
@@ -1316,12 +1317,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
-		if err := p.sourceManager.Close(); err != nil {
-			log.Error("Failed to close source manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
+		if p.sourceManager != nil {
+			if err := p.sourceManager.Close(); err != nil {
+				log.Error("Failed to close source manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			p.sourceManager = nil
 		}
 		if p.sinkManager != nil {
 			if err := p.sinkManager.Close(); err != nil {
