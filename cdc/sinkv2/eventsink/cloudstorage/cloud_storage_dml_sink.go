@@ -75,8 +75,8 @@ type dmlSink struct {
 	defragmenter *defragmenter
 	// writer is a dmlWriter which manages a group of dmlWorkers and
 	// sends encoded messages to individual dmlWorkers.
-	writer *dmlWriter
-	statistics  *metrics.Statistics
+	writer     *dmlWriter
+	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
 }

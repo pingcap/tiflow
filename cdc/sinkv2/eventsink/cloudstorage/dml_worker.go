@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
-
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
@@ -89,6 +88,7 @@ func newDMLWorker(
 		changeFeedID:     changefeedID,
 		storage:          storage,
 		config:           config,
+		tableEvents:      newTableEventsMap(),
 		flushNotifyCh:    make(chan flushTask, 1),
 		fileIndex:        make(map[versionedTable]uint64),
 		fileSize:         make(map[versionedTable]uint64),
@@ -140,14 +140,16 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					}
 
 					rowsCnt := 0
-					for _, msg := range msgs {
-						buf.Write(msg.Value)
-						d.metricWriteBytes.Add(float64(len(msg.Value)))
-						rowsCnt += msg.GetRowsCount()
-						callbacks = append(callbacks, msg.Callback)
+					for _, frag := range events {
+						msgs := frag.encodedMsgs
+						for _, msg := range msgs {
+							d.metricWriteBytes.Add(float64(len(msg.Value)))
+							buf.Write(msg.Value)
+							callbacks = append(callbacks, msg.Callback)
+						}
 					}
-          
-          // mandatorily generate scheme.json file before generating the first data file
+
+					// mandatorily generate scheme.json file before generating the first data file
 					if d.fileIndex[table] == 0 {
 						var tableDetail cloudstorage.TableDetail
 						tableDetail.FromTableInfo(tableInfo)
@@ -165,7 +167,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 						}
 					}
 
-					path := d.generateCloudStoragePath(table)
+					path := d.generateDataFilePath(table)
 					if err := d.statistics.RecordBatchExecution(func() (int, error) {
 						err := d.storage.WriteFile(ctx, path, buf.Bytes())
 						if err != nil {
