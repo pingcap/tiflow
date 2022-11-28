@@ -240,6 +240,71 @@ function run() {
 
 		cleanup_process
 	done
+
+	test_COMMIT_in_QueryEvent
+}
+
+function prepare_data_MyISAM() {
+	run_sql 'DROP DATABASE if exists start_task;' $TIDB_PORT $TIDB_PASSWORD
+	run_sql 'DROP DATABASE if exists start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'CREATE DATABASE start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "CREATE TABLE start_task.t1(i TINYINT, j INT UNIQUE KEY) engine=MyISAM;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+  for j in $(seq 10); do
+    run_sql "INSERT INTO start_task.t1 VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+  done
+}
+
+function test_COMMIT_in_QueryEvent() {
+	echo "[$(date)] <<<<<< start test_COMMIT_in_QueryEvent >>>>>>"
+	cleanup_process
+	cleanup_data start_task
+	prepare_data_MyISAM
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/dm-master.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-task.yaml $WORK_DIR/
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "check master alive"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member" \
+		"\"alive\": true" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true" \
+		"\"result\": true" 2
+
+	run_sql "CREATE TABLE start_task.t2(i TINYINT, j INT UNIQUE KEY) engine=MyISAM;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'INSERT INTO start_task.t1 VALUES (99,9999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'INSERT INTO start_task.t2 VALUES (99,9999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'show binlog events;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "originSQL: COMMIT"
+  cat $WORK_DIR/worker1/log/dm-worker.log
+
+	echo "<<<<<< test_COMMIT_in_QueryEvent success! >>>>>>"
 }
 
 cleanup_data start_task
