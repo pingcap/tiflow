@@ -81,7 +81,7 @@ type Server struct {
 	cfg     *Config
 	metrics *serverMasterMetric
 
-	elector *election.Elector
+	elector election.Elector
 
 	leaderServiceFn func(context.Context) error
 
@@ -535,6 +535,8 @@ func (s *Server) serve(ctx context.Context) error {
 		return httpServer.Serve(tcpServer.HTTP1Listener())
 	})
 
+	// Some background goroutines may still be running after context is canceled.
+	// We need to explicitly stop or close them and wait for them to exit.
 	errGroup.Go(func() error {
 		<-ctx.Done()
 		cleanup()

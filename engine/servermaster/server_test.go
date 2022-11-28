@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,32 +74,9 @@ schema = "test1"
 	return cfg
 }
 
-func newMockElector(t *testing.T) *election.Elector {
-	s := electionMock.NewMockStorage(gomock.NewController(t))
-
-	var atomicRecord atomic.Value
-	atomicRecord.Store(&election.Record{})
-	s.EXPECT().
-		Get(gomock.Any()).AnyTimes().
-		DoAndReturn(func(ctx context.Context) (*election.Record, error) {
-			return atomicRecord.Load().(*election.Record), nil
-		})
-	s.EXPECT().
-		Update(gomock.Any(), gomock.Any()).AnyTimes().
-		DoAndReturn(func(ctx context.Context, record *election.Record) error {
-			atomicRecord.Store(record)
-			return nil
-		})
-
-	elector, err := election.NewElector(election.Config{
-		ID:      "test",
-		Storage: s,
-		LeaderCallback: func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	})
-	require.NoError(t, err)
+func newMockElector(t *testing.T) election.Elector {
+	elector := electionMock.NewMockElector(gomock.NewController(t))
+	elector.EXPECT().IsLeader().AnyTimes().Return(true)
 	return elector
 }
 
@@ -112,7 +88,7 @@ func TestServe(t *testing.T) {
 		cfg:            cfg,
 		msgService:     p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
 		leaderDegrader: newFeatureDegrader(),
-		elector:        newMockElector(t),
+		elector:        electionMock.NewMockElector(gomock.NewController(t)),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -311,11 +287,6 @@ func TestHTTPErrorHandler(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		_ = s.serve(ctx)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = s.elector.Run(ctx)
 	}()
 
 	require.Eventually(t, func() bool {

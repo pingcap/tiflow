@@ -31,7 +31,36 @@ func init() {
 }
 
 // Elector is a leader election client.
-type Elector struct {
+type Elector interface {
+	// Run runs the elector to continuously campaign for leadership
+	// until the context is canceled.
+	Run(ctx context.Context) error
+	// IsLeader returns true if the current member is the leader
+	// and its lease is still valid.
+	IsLeader() bool
+	// GetLeader returns the last observed leader whose lease is still valid.
+	GetLeader() (*Member, bool)
+	// GetMembers returns all members.
+	GetMembers() []*Member
+	// ResignLeader resigns the leadership and let the elector
+	// not to try to campaign for leadership during the duration.
+	ResignLeader(ctx context.Context, duration time.Duration) error
+}
+
+// NewElector creates a new electorImpl.
+func NewElector(config Config) (Elector, error) {
+	if err := config.AdjustAndValidate(); err != nil {
+		return nil, err
+	}
+	return &electorImpl{
+		config:         config,
+		observedRenews: make(map[string]time.Time),
+		resignCh:       make(chan *resignReq),
+	}, nil
+}
+
+// electorImpl is the default implementation of Elector.
+type electorImpl struct {
 	config Config
 
 	observeLock    sync.RWMutex
@@ -44,7 +73,7 @@ type Elector struct {
 
 	// resignCh is used to notify the elector to resign leadership.
 	resignCh chan *resignReq
-	// Elector will not be leader until this time.
+	// electorImpl will not be leader until this time.
 	resignUntil time.Time
 
 	callbackWg        sync.WaitGroup
@@ -58,21 +87,8 @@ type resignReq struct {
 	errCh    chan error
 }
 
-// NewElector creates a new Elector.
-func NewElector(config Config) (*Elector, error) {
-	if err := config.AdjustAndValidate(); err != nil {
-		return nil, err
-	}
-	return &Elector{
-		config:         config,
-		observedRenews: make(map[string]time.Time),
-		resignCh:       make(chan *resignReq),
-	}, nil
-}
-
-// Run runs the elector to continuously campaign for leadership
-// until the context is canceled.
-func (e *Elector) Run(ctx context.Context) error {
+// Run implements Elector.Run.
+func (e *electorImpl) Run(ctx context.Context) error {
 	for {
 		if err := e.renew(ctx); err != nil {
 			log.Warn("failed to renew lease after renew deadline", zap.Error(err),
@@ -111,7 +127,7 @@ func (e *Elector) Run(ctx context.Context) error {
 	}
 }
 
-func (e *Elector) renew(ctx context.Context) (err error) {
+func (e *electorImpl) renew(ctx context.Context) (err error) {
 	start := time.Now()
 	defer func() {
 		log.Debug("renew", zap.Duration("cost", time.Since(start)), zap.Error(err))
@@ -178,7 +194,7 @@ func (e *Elector) renew(ctx context.Context) (err error) {
 	})
 }
 
-func (e *Elector) ensureCallbackIsRunning(ctx context.Context) {
+func (e *electorImpl) ensureCallbackIsRunning(ctx context.Context) {
 	if !e.callbackIsRunning.Load() {
 		leaderCallback := e.config.LeaderCallback
 		leaderCtx, leaderCancel := context.WithCancel(ctx)
@@ -206,7 +222,7 @@ func (e *Elector) ensureCallbackIsRunning(ctx context.Context) {
 	}
 }
 
-func (e *Elector) cancelCallback(reason string) {
+func (e *electorImpl) cancelCallback(reason string) {
 	if e.callbackIsRunning.Load() {
 		log.Info("cancel leader callback", zap.String("reason", reason))
 		start := time.Now()
@@ -216,7 +232,7 @@ func (e *Elector) cancelCallback(reason string) {
 	}
 }
 
-func (e *Elector) release(ctx context.Context, removeSelf bool) error {
+func (e *electorImpl) release(ctx context.Context, removeSelf bool) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultReleaseTimeout)
 	defer cancel()
 
@@ -236,7 +252,7 @@ func (e *Elector) release(ctx context.Context, removeSelf bool) error {
 	})
 }
 
-func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error {
+func (e *electorImpl) updateRecord(ctx context.Context, f func(*Record) error) error {
 	// Divide 2 is for more retries.
 	backoffBaseDelayInMs := int64(e.config.RenewInterval/time.Millisecond) / 2
 	// Make sure the retry delay is less than the deadline, otherwise the retry has no chance to execute.
@@ -278,7 +294,7 @@ func (e *Elector) updateRecord(ctx context.Context, f func(*Record) error) error
 	)
 }
 
-func (e *Elector) setObservedRecord(record *Record) {
+func (e *electorImpl) setObservedRecord(record *Record) {
 	e.observeLock.Lock()
 	defer e.observeLock.Unlock()
 
@@ -315,14 +331,14 @@ func (e *Elector) setObservedRecord(record *Record) {
 	e.observedRecord = *record.Clone()
 }
 
-func (e *Elector) isLeaseExpired(memberID string) bool {
+func (e *electorImpl) isLeaseExpired(memberID string) bool {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
 	return e.isLeaseExpiredLocked(memberID)
 }
 
-func (e *Elector) isLeaseExpiredLocked(memberID string) bool {
+func (e *electorImpl) isLeaseExpiredLocked(memberID string) bool {
 	member, ok := e.observedRecord.FindMember(memberID)
 	if !ok {
 		return true
@@ -331,9 +347,8 @@ func (e *Elector) isLeaseExpiredLocked(memberID string) bool {
 	return renewTime.Add(member.LeaseDuration).Before(time.Now())
 }
 
-// IsLeader returns true if the current member is the leader
-// and its lease is still valid.
-func (e *Elector) IsLeader() bool {
+// IsLeader implements the Elector.IsLeader.
+func (e *electorImpl) IsLeader() bool {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
@@ -343,8 +358,8 @@ func (e *Elector) IsLeader() bool {
 	return e.observedRecord.LeaderID == e.config.ID
 }
 
-// GetLeader returns the last observed leader whose lease is still valid.
-func (e *Elector) GetLeader() (*Member, bool) {
+// GetLeader implements the Elector.GetLeader.
+func (e *electorImpl) GetLeader() (*Member, bool) {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
@@ -355,8 +370,8 @@ func (e *Elector) GetLeader() (*Member, bool) {
 	return nil, false
 }
 
-// GetMembers returns all members.
-func (e *Elector) GetMembers() []*Member {
+// GetMembers implements the Elector.GetMembers.
+func (e *electorImpl) GetMembers() []*Member {
 	e.observeLock.RLock()
 	defer e.observeLock.RUnlock()
 
@@ -367,9 +382,8 @@ func (e *Elector) GetMembers() []*Member {
 	return members
 }
 
-// ResignLeader resigns the leadership and let the elector
-// not to try to campaign for leadership during the duration.
-func (e *Elector) ResignLeader(ctx context.Context, duration time.Duration) error {
+// ResignLeader implements the Elector.ResignLeader.
+func (e *electorImpl) ResignLeader(ctx context.Context, duration time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultResignTimeout)
 	defer cancel()
 

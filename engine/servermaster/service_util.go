@@ -80,14 +80,14 @@ var leaderOnlyMethods = map[string]struct{}{
 var _ rpcutil.ForwardChecker[multiClient] = &forwardChecker{}
 
 type forwardChecker struct {
-	elector *election.Elector
+	elector election.Elector
 
 	rwm       sync.RWMutex
 	conn      *grpc.ClientConn
 	leaderCli multiClient
 }
 
-func newForwardChecker(elector *election.Elector) *forwardChecker {
+func newForwardChecker(elector election.Elector) *forwardChecker {
 	return &forwardChecker{
 		elector: elector,
 	}
@@ -100,11 +100,6 @@ func (f *forwardChecker) LeaderOnly(method string) bool {
 
 func (f *forwardChecker) IsLeader() bool {
 	return f.elector.IsLeader()
-}
-
-func (f *forwardChecker) HasLeader() bool {
-	_, ok := f.elector.GetLeader()
-	return ok
 }
 
 func (f *forwardChecker) LeaderClient() (multiClient, error) {

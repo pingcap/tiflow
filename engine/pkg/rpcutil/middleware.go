@@ -98,20 +98,9 @@ func FromGRPCError(errIn error) error {
 	return normalizedErr.GenWithStackByArgs()
 }
 
-// ForwardChecker is used for checking whether a request should be forwarded or not.
-type ForwardChecker[T any] interface {
-	// LeaderOnly returns whether the request is only allowed to handle by the leader.
-	LeaderOnly(method string) bool
-	// IsLeader returns whether the current node is the leader.
-	IsLeader() bool
-	// LeaderClient returns the leader client. If there is no leader, it should return
-	// nil and errors.ErrMasterNoLeader.
-	LeaderClient() (T, error)
-}
-
 // ForwardToLeader is a gRPC middleware that forwards the request to the leader if the current node is not the leader.
 func ForwardToLeader[T any](fc ForwardChecker[T]) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, _ error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		method := extractMethod(info.FullMethod)
 		if fc.IsLeader() || !fc.LeaderOnly(method) {
 			return handler(ctx, req)
@@ -152,14 +141,13 @@ func waitForLeader[T any](ctx context.Context, fc ForwardChecker[T]) (leaderCli 
 		return leaderCli, err
 	}
 
+	timer := time.NewTimer(waitForLeaderTimeout)
+	defer timer.Stop()
+
 	ticker := time.NewTicker(waitForLeaderTick)
 	defer ticker.Stop()
 
-	start := time.Now()
 	for {
-		if time.Since(start)+waitForLeaderTick > waitForLeaderTimeout {
-			return leaderCli, errors.ErrMasterNoLeader.GenWithStackByArgs()
-		}
 		select {
 		case <-ctx.Done():
 			return leaderCli, errors.Trace(ctx.Err())
@@ -171,19 +159,15 @@ func waitForLeader[T any](ctx context.Context, fc ForwardChecker[T]) (leaderCli 
 			if !errors.Is(err, errors.ErrMasterNoLeader) {
 				return leaderCli, err
 			}
+		case <-time.After(waitForLeaderTimeout):
+			return leaderCli, errors.ErrMasterNoLeader.GenWithStackByArgs()
 		}
 	}
 }
 
-// FeatureChecker defines an interface that checks whether a feature is available
-// or under degradation.
-type FeatureChecker interface {
-	Available(method string) bool
-}
-
 // CheckAvailable is a gRPC middleware that checks whether a method is ready to serve.
 func CheckAvailable(fc FeatureChecker) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, _ error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		method := extractMethod(info.FullMethod)
 		if !fc.Available(method) {
 			return nil, errors.ErrMasterNotReady.GenWithStackByArgs()
@@ -199,7 +183,7 @@ func extractMethod(fullMethod string) string {
 
 // NormalizeError is a gRPC middleware that normalizes the error.
 func NormalizeError() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, _ error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
 			errOut := ToGRPCError(err)
