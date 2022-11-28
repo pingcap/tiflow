@@ -302,7 +302,7 @@ function test_COMMIT_in_QueryEvent() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "originSQL: COMMIT"
-  cat $WORK_DIR/worker1/log/dm-worker.log
+	cat $WORK_DIR/worker1/log/dm-worker.log
 
 	echo "<<<<<< test_COMMIT_in_QueryEvent success! >>>>>>"
 }
