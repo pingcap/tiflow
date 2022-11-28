@@ -200,6 +200,7 @@ func TestCheckAvailable(t *testing.T) {
 
 	fc.EXPECT().Available("Heartbeat").Times(1).Return(false)
 	_, err := mw(context.Background(), "req", &grpc.UnaryServerInfo{FullMethod: "Heartbeat"}, handler)
+	err = rpcutil.FromGRPCError(err)
 	require.True(t, errors.Is(err, errors.ErrMasterNotReady))
 	require.False(t, handled.Load())
 
