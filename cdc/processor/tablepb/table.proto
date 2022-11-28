@@ -19,6 +19,21 @@ import "gogoproto/gogo.proto";
 
 option(gogoproto.goproto_enum_prefix_all) = false;
 
+// Span is a full extent of key space from an inclusive start_key to
+// an exclusive end_key.
+message Span {
+    option(gogoproto.stringer) = false;
+    option(gogoproto.goproto_stringer) = false;
+    option(gogoproto.goproto_getters) = false;
+
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    bytes start_key = 2 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 3 [(gogoproto.casttype) = "Key"];
+}
+
 // TableState is the state of table replication in processor.
 //
 //  ┌────────┐   ┌───────────┐   ┌──────────┐

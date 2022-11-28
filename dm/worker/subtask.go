@@ -678,23 +678,6 @@ func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchem
 	return syncUnit.OperateSchema(ctx, req)
 }
 
-// UpdateFromConfig updates config for `From`.
-func (st *SubTask) UpdateFromConfig(cfg *config.SubTaskConfig) error {
-	st.Lock()
-	defer st.Unlock()
-
-	if sync, ok := st.currUnit.(*syncer.Syncer); ok {
-		err := sync.UpdateFromConfig(cfg)
-		if err != nil {
-			return err
-		}
-	}
-
-	st.cfg.From = cfg.From
-
-	return nil
-}
-
 // CheckUnit checks whether current unit is sync unit.
 func (st *SubTask) CheckUnit() bool {
 	st.RLock()

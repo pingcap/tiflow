@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/br/pkg/lightning/metric"
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -81,7 +80,7 @@ type LightningLoader struct {
 
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
-	lightningCfg := makeGlobalConfig(cfg)
+	lightningCfg := MakeGlobalConfig(cfg)
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
 		logger = log.Logger{Logger: cfg.FrameworkLogger}
@@ -98,7 +97,8 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 	return loader
 }
 
-func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
+// MakeGlobalConfig converts subtask config to lightning global config.
+func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
@@ -194,7 +194,13 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
-	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
+	var cpdb checkpoints.DB
+	if l.cfg.ExtStorage != nil {
+		cpdb, err = checkpoints.NewFileCheckpointsDBWithExstorageFileName(
+			ctx, l.cfg.ExtStorage.URI(), l.cfg.ExtStorage, lightningCheckpointFileName)
+	} else {
+		cpdb, err = checkpoints.OpenCheckpointsDB(ctx, cfg)
+	}
 	if err != nil {
 		return err
 	}
@@ -276,42 +282,53 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
-func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+// GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
+func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig) (*lcfg.Config, error) {
 	cfg := lcfg.NewConfig()
-	if err := cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
+	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
-	cfg.App.RegionConcurrency = l.cfg.LoaderConfig.PoolSize
-	cfg.Routes = l.cfg.RouteRules
+	cfg.App.RegionConcurrency = subtaskCfg.LoaderConfig.PoolSize
+	cfg.Routes = subtaskCfg.RouteRules
 
 	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
 	var cpPath string
 	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
-	cpPath, err := storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+	cpPath, err := storage.AdjustPath(subtaskCfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
-	cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
+	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicate)
 	cfg.TiDB.Vars = make(map[string]string)
-	cfg.Routes = l.cfg.RouteRules
-	if l.cfg.To.Session != nil {
-		for k, v := range l.cfg.To.Session {
+	cfg.Routes = subtaskCfg.RouteRules
+	if subtaskCfg.To.Session != nil {
+		for k, v := range subtaskCfg.To.Session {
 			cfg.TiDB.Vars[k] = v
 		}
 	}
-	cfg.TiDB.StrSQLMode = l.sqlMode
 	cfg.TiDB.Vars = map[string]string{
-		"time_zone": l.timeZone,
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
+		// always disable foreign key check when do full sync.
+		"foreign_key_checks": "0",
 	}
-	cfg.Mydumper.SourceID = l.cfg.SourceID
+	cfg.Mydumper.SourceID = subtaskCfg.SourceID
+	return cfg, nil
+}
+
+func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg.TiDB.StrSQLMode = l.sqlMode
+	cfg.TiDB.Vars["time_zone"] = l.timeZone
 	return cfg, nil
 }
 
@@ -471,15 +488,6 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
-	// we need finished bytes to calculate speed. For tidb backend, BytesStateRestored in metrics is the source file size
-	// that has been written to downstream DB. For local backend, we need to wait TiKV finishing ingest SST files, so we
-	// use the value from Status() instead.
-	if l.cfg.LoaderConfig.ImportMode == config.LoadModeLogical {
-		m := l.core.Metrics()
-		if m != nil {
-			finished = int64(metric.ReadCounter(m.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
-		}
-	}
 	progress := percent(finished, total, l.finish.Load())
 	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
