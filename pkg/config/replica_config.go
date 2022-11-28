@@ -57,6 +57,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorNone.String(),
 		EnablePartitionSeparator: false,
+		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

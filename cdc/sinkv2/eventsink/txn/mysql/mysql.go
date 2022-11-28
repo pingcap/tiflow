@@ -19,7 +19,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"strconv"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -90,11 +89,8 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	//Note(dongmen): Only for BDR mode use for now.
-	sysVariables := make(map[string]string)
-	// TODO(dongmen): set a correct value for this variable after the `source_id` design is done.
-	sysVariables["tidb_cdc_write_source"] = strconv.Itoa(1)
-	if err := setTiDBSystemVariable(ctx, db, sysVariables); err != nil {
+	cfg.IsTiDB, err = isTiDB(ctx, db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -150,7 +146,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.Any("rows", s.rows),
+	log.Info("prepare DMLs", zap.Any("rows", s.rows),
 		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 
 	start := time.Now()
@@ -365,13 +361,14 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 					return 0, err
 				}
 			}
-
+			if err = s.setWriteSource(ctx, s.db); err != nil {
+				return 0, err
+			}
 			if err = tx.Commit(); err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-
 			return dmls.rowCount, nil
 		})
 		if err != nil {
@@ -438,41 +435,42 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
 }
 
-func setTiDBSystemVariable(ctx context.Context, db *sql.DB, vars map[string]string) error {
+func (s *mysqlBackend) setWriteSource(ctx context.Context, db *sql.DB) error {
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
+	//TODO: remove this log after fully testing
+	log.Info("fizz set session variable", zap.String("query", query))
+	_, err := db.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			//TODO: remove this log after fully testing
+			log.Info("fizz, This version of TiDB does not " +
+				"support system variable: tidb_cdc_write_source")
+		}
+		return err
+	}
+	return nil
+}
+
+// isTiDB check if the downstream is TiDB.
+func isTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 	var tidbVer string
 	// check if downstream is TiDB
 	row := db.QueryRowContext(ctx, "select tidb_version()")
 	err := row.Scan(&tidbVer)
 	if err != nil {
-		log.Error("err", zap.Error(err))
+		log.Error("check tidb version error", zap.Error(err))
 		// downstream is not TiDB, do nothing
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
 		// means downstream is not TiDB
 		ok && mysqlErr.Number == mysql.ErrNoDB ||
 			mysqlErr.Number == mysql.ErrSpDoesNotExist {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, errors.Trace(err)
 	}
-
-	// downstream is TiDB, set system variables.
-	// We should always try to set this variable, and ignore the error if
-	// downstream does not support this variable, it is by design.
-	for k, v := range vars {
-		query := fmt.Sprintf("SET SESSION %s = %s", k, v)
-		log.Info("set session variable", zap.String("query", query))
-		_, err := db.ExecContext(ctx, query)
-		if err != nil {
-			if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
-				mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-				log.Info("This version of TiDB does not "+
-					"support system variable: tidb_write_by_ticdc",
-					zap.String("version", tidbVer))
-				continue
-			}
-			return err
-		}
-	}
-
-	return nil
+	return true, nil
 }

@@ -16,6 +16,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"io"
 	"math"
 	"strconv"
@@ -649,6 +650,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		defer p.wg.Done()
 		p.sendError(p.mg.Run(ctx))
 	}()
+
+	sourceID, err := pdutil.GetSourceID(ctx, p.upstream.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
+	log.Info("fizz, set source id", zap.Uint64("source-id", sourceID))
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
