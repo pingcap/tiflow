@@ -276,6 +276,7 @@ func TestHTTPErrorHandler(t *testing.T) {
 		},
 		leaderDegrader: newFeatureDegrader(),
 		elector:        newMockElector(t),
+		forwardChecker: newForwardChecker(newMockElector(t)),
 	}
 	s.leaderDegrader.updateMasterWorkerManager(true)
 

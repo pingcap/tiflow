@@ -140,6 +140,19 @@ func (f *forwardChecker) getOrCreateLeaderClient(leaderAddr string) (multiClient
 	return f.leaderCli, nil
 }
 
+func (f *forwardChecker) Close() error {
+	f.rwm.Lock()
+	defer f.rwm.Unlock()
+
+	var err error
+	if f.conn != nil {
+		err = f.conn.Close()
+		f.conn = nil
+	}
+	f.leaderCli = nil
+	return err
+}
+
 // ensure featureDegrader implements rpcutil.FeatureChecker
 var _ rpcutil.FeatureChecker = &featureDegrader{}
 

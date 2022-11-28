@@ -102,6 +102,7 @@ type Server struct {
 	metaStoreManager MetaStoreManager
 
 	leaderDegrader *featureDegrader
+	forwardChecker *forwardChecker
 
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
@@ -347,6 +348,14 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	defer func() {
+		if s.forwardChecker != nil {
+			if err := s.forwardChecker.Close(); err != nil {
+				log.Warn("failed to close forward checker", zap.Error(err))
+			}
+		}
+	}()
+
 	wg, ctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() error {
@@ -442,13 +451,19 @@ func (s *Server) initElector() error {
 		return err
 	}
 
-	s.elector, err = election.NewElector(election.Config{
+	elector, err := election.NewElector(election.Config{
 		ID:             s.id,
 		Name:           s.cfg.Name,
 		Address:        s.cfg.AdvertiseAddr,
 		Storage:        sqlStorage,
 		LeaderCallback: s.leaderServiceFn,
 	})
+	if err != nil {
+		return err
+	}
+
+	s.elector = elector
+	s.forwardChecker = newForwardChecker(elector)
 	return err
 }
 
@@ -551,7 +566,7 @@ func (s *Server) createGRPCServer() *grpc.Server {
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 		grpc.ChainUnaryInterceptor(
 			grpcprometheus.UnaryServerInterceptor,
-			rpcutil.ForwardToLeader[multiClient](newForwardChecker(s.elector)),
+			rpcutil.ForwardToLeader[multiClient](s.forwardChecker),
 			rpcutil.CheckAvailable(s.leaderDegrader),
 			rpcutil.NormalizeError(),
 		),
