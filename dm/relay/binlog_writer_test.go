@@ -17,21 +17,27 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
+	"testing"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-var _ = Suite(&testBinlogWriterSuite{})
+type testBinlogWriterSuite struct {
+	suite.Suite
+}
 
-type testBinlogWriterSuite struct{}
+func TestBinlogWriterSuite(t *testing.T) {
+	suite.Run(t, new(testBinlogWriterSuite))
+}
 
-func (t *testBinlogWriterSuite) TestWrite(c *C) {
-	dir := c.MkDir()
+func (t *testBinlogWriterSuite) TestWrite() {
+	dir := t.T().TempDir()
 	uuid := "3ccc475b-2343-11e7-be21-6c0b84d59f30.000001"
 	binlogDir := filepath.Join(dir, uuid)
-	c.Assert(os.Mkdir(binlogDir, 0o755), IsNil)
+	require.NoError(t.T(), os.Mkdir(binlogDir, 0o755))
 
 	filename := "test-mysql-bin.000001"
 	var (
@@ -41,66 +47,82 @@ func (t *testBinlogWriterSuite) TestWrite(c *C) {
 
 	{
 		w := NewBinlogWriter(log.L(), dir)
-		c.Assert(w, NotNil)
-		c.Assert(w.Open(uuid, filename), IsNil)
+		require.NotNil(t.T(), w)
+		require.NoError(t.T(), w.Open(uuid, filename))
 		fwStatus := w.Status()
-		c.Assert(fwStatus.Filename, Equals, filename)
-		c.Assert(fwStatus.Offset, Equals, int64(allData.Len()))
+		require.Equal(t.T(), filename, fwStatus.Filename)
+		require.Equal(t.T(), int64(allData.Len()), fwStatus.Offset)
 		fwStatusStr := fwStatus.String()
-		c.Assert(strings.Contains(fwStatusStr, "filename"), IsTrue)
-		c.Assert(w.Close(), IsNil)
+		require.Contains(t.T(), fwStatusStr, filename)
+		require.NoError(t.T(), w.Close())
 	}
 
 	{
 		// not opened
 		w := NewBinlogWriter(log.L(), dir)
 		err := w.Write(data1)
-		c.Assert(err, ErrorMatches, "*not opened")
+		require.Contains(t.T(), err.Error(), "not opened")
 
 		// open non exist dir
 		err = w.Open("not-exist-uuid", "bin.000001")
-		c.Assert(err, ErrorMatches, "*no such file or directory")
+		require.Contains(t.T(), err.Error(), "no such file or directory")
 	}
 
 	{
 		// normal call flow
 		w := NewBinlogWriter(log.L(), dir)
 		err := w.Open(uuid, filename)
-		c.Assert(err, IsNil)
-		c.Assert(w.file, NotNil)
-		c.Assert(w.filename.Load(), Equals, filename)
-		c.Assert(w.offset.Load(), Equals, int64(0))
+		require.NoError(t.T(), err)
+		require.NotNil(t.T(), w.file)
+		require.Equal(t.T(), filename, w.filename.Load())
+		require.Equal(t.T(), int64(0), w.offset.Load())
 
 		err = w.Write(data1)
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		err = w.Flush()
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		allData.Write(data1)
 
 		fwStatus := w.Status()
-		c.Assert(fwStatus.Filename, Equals, filename)
-		c.Assert(fwStatus.Offset, Equals, int64(len(data1)))
+		require.Equal(t.T(), fwStatus.Filename, w.filename.Load())
+		require.Equal(t.T(), int64(len(data1)), fwStatus.Offset)
 
 		// write data again
 		data2 := []byte("another-data")
 		err = w.Write(data2)
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		allData.Write(data2)
 
-		c.Assert(w.offset.Load(), LessEqual, int64(allData.Len()))
+		require.LessOrEqual(t.T(), int64(allData.Len()), w.offset.Load())
 
 		err = w.Close()
-		c.Assert(err, IsNil)
-		c.Assert(w.file, IsNil)
-		c.Assert(w.filename.Load(), Equals, "")
-		c.Assert(w.offset.Load(), Equals, int64(0))
-
-		c.Assert(w.Close(), IsNil) // noop
+		require.NoError(t.T(), err)
+		require.Nil(t.T(), w.file)
+		require.Equal(t.T(), "", w.filename.Load())
+		require.Equal(t.T(), int64(0), w.offset.Load())
 
 		// try to read the data back
 		fullName := filepath.Join(binlogDir, filename)
 		dataInFile, err := os.ReadFile(fullName)
-		c.Assert(err, IsNil)
-		c.Assert(dataInFile, DeepEquals, allData.Bytes())
+		require.NoError(t.T(), err)
+		require.Equal(t.T(), allData.Bytes(), dataInFile)
+	}
+
+	{
+		// cover for error
+		w := NewBinlogWriter(log.L(), dir)
+		err := w.Open(uuid, filename)
+		require.NoError(t.T(), err)
+		require.NotNil(t.T(), w.file)
+
+		err = w.Write(data1)
+		require.NoError(t.T(), err)
+
+		w.file = nil
+		// write data again
+		data2 := []byte("another-data")
+		err = w.Write(data2)
+		require.True(t.T(), terror.ErrRelayWriterNotOpened.Equal(err))
+		require.True(t.T(), terror.ErrRelayWriterNotOpened.Equal(w.Close()))
 	}
 }

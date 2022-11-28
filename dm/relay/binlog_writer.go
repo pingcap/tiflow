@@ -148,6 +148,7 @@ func (w *BinlogWriter) Open(uuid, filename string) error {
 	w.file = f
 	w.uuid.Store(uuid)
 	w.filename.Store(filename)
+	w.err.Store(nilErr)
 
 	w.input = make(chan []byte, chanSize)
 	w.wg.Add(1)
