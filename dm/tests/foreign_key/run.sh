@@ -21,7 +21,6 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
-	# start DM task. don't check error because it will meet injected error soon
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/dm-task.yaml --remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -30,16 +29,6 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-
-	# use sync_diff_inspector to check data now!
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"stage\": \"Running\"" 2 \
-		"\"synced\": true" 1
 }
 
 cleanup_data foreign_key
