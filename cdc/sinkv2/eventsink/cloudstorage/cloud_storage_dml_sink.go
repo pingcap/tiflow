@@ -26,18 +26,20 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
 const defaultEncodingConcurrency = 8
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
+var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
 // versionedTable is used to wrap TableName with a version
 type versionedTable struct {
@@ -64,9 +66,9 @@ func eventFragmentLess(e1, e2 eventFragment) bool {
 	return e1.seqNumber < e2.seqNumber
 }
 
-// sink is the cloud storage sink.
+// dmlSink is the cloud storage dmlSink.
 // It will send the events to cloud storage systems.
-type sink struct {
+type dmlSink struct {
 	// msgChan is a unbounded channel to hold eventFragment.
 	msgChan *chann.Chann[eventFragment]
 	// encodingWorkers defines a group of workers for encoding events.
@@ -77,6 +79,7 @@ type sink struct {
 	// tableSeqMap maintains a <versionedTable, sequenceNumber> mapping.
 	tableSeqMap map[versionedTable]uint64
 	mu          sync.Mutex
+	statistics  *metrics.Statistics
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -84,8 +87,8 @@ func NewCloudStorageSink(ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
-) (*sink, error) {
-	s := &sink{}
+) (*dmlSink, error) {
+	s := &dmlSink{}
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
@@ -128,7 +131,8 @@ func NewCloudStorageSink(ctx context.Context,
 	}
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, errCh)
+	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
+	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, s.statistics, errCh)
 	s.msgChan = chann.New[eventFragment]()
 	s.tableSeqMap = make(map[versionedTable]uint64)
 
@@ -144,7 +148,7 @@ func NewCloudStorageSink(ctx context.Context,
 }
 
 // WriteEvents write events to cloud storage sink.
-func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
+func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
 	var seq uint64
 
@@ -176,7 +180,7 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 }
 
 // Close closes the cloud storage sink.
-func (s *sink) Close() error {
+func (s *dmlSink) Close() error {
 	s.msgChan.Close()
 	for range s.msgChan.Out() {
 		// drain the msgChan
@@ -185,5 +189,8 @@ func (s *sink) Close() error {
 		w.close()
 	}
 	s.writer.close()
+	if s.statistics != nil {
+		s.statistics.Close()
+	}
 	return nil
 }

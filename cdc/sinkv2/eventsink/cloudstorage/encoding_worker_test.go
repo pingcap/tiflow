@@ -22,9 +22,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +49,8 @@ func testEncodingWorker(ctx context.Context, t *testing.T) *encodingWorker {
 	storage, err := storage.New(ctx, bs, nil)
 	require.Nil(t, err)
 	cfg := cloudstorage.NewConfig()
-	dmlWriter := newDMLWriter(ctx, changefeedID, storage, cfg, ".json", errCh)
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
+	dmlWriter := newDMLWriter(ctx, changefeedID, storage, cfg, ".json", statistics, errCh)
 	worker := newEncodingWorker(1, changefeedID, encoder, dmlWriter, errCh)
 	return worker
 }
