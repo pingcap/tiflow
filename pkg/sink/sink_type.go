@@ -61,8 +61,8 @@ const (
 	AzblobScheme = "azblob"
 	// AzureScheme is an alias for "azblob"
 	AzureScheme = "azure"
-	// NoopScheme indicates the scheme is noop.
-	NoopScheme = "noop"
+	// CloudStorageNoopScheme indicates the scheme is noop.
+	CloudStorageNoopScheme = "noop"
 )
 
 // IsMQScheme returns true if the scheme belong to mq scheme.
@@ -79,5 +79,5 @@ func IsMySQLCompatibleScheme(scheme string) bool {
 // IsStorageScheme returns true if the scheme belong to storage scheme.
 func IsStorageScheme(scheme string) bool {
 	return scheme == FileScheme || scheme == S3Scheme || scheme == GCSScheme ||
-		scheme == GSScheme || scheme == AzblobScheme || scheme == AzureScheme || scheme == NoopScheme
+		scheme == GSScheme || scheme == AzblobScheme || scheme == AzureScheme || scheme == CloudStorageNoopScheme
 }

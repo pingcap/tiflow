@@ -40,7 +40,7 @@ func TestWriteDDLEvent(t *testing.T) {
 
 	ddlEvent := &model.DDLEvent{
 		TableInfo: &model.TableInfo{
-			TableInfoVersion: 100,
+			Version: 100,
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -98,7 +98,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 	require.Nil(t, err)
 	tables := []*model.TableInfo{
 		{
-			TableInfoVersion: 100,
+			Version: 100,
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",

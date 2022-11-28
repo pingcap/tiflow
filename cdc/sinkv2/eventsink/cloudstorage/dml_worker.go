@@ -119,7 +119,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					var callbacks []func()
 					table := versionedTable{
 						TableName: tableInfo.TableName,
-						version:   tableInfo.TableInfoVersion,
+						version:   tableInfo.Version,
 					}
 					d.tableEvents.mu.Lock()
 					events := d.tableEvents.fragments[table]
@@ -218,7 +218,7 @@ func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann
 					for tableInfo := range tableSet {
 						tbl := versionedTable{
 							TableName: tableInfo.TableName,
-							version:   tableInfo.TableInfoVersion,
+							version:   tableInfo.Version,
 						}
 						d.fileSize[tbl] = 0
 					}

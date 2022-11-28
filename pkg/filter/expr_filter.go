@@ -257,7 +257,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 	if oldTi, ok := r.tables[tableName]; ok {
 		// If one table's tableInfo was updated, we need to reset this rule
 		// and update the tableInfo in the cache.
-		if ti.TableInfoVersion != oldTi.TableInfoVersion {
+		if ti.Version != oldTi.Version {
 			r.tables[tableName] = ti.Clone()
 			r.resetExpr(ti.TableName.String())
 		}

@@ -61,7 +61,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 					TableName: model.TableName{
 						Schema: "test", Table: "table1",
 					},
-					TableInfoVersion: 33,
+					Version: 33,
 					TableInfo: &timodel.TableInfo{
 						Columns: []*timodel.ColumnInfo{
 							{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
@@ -79,7 +79,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 			row := &model.RowChangedEvent{
 				CommitTs:  100,
 				Table:     &model.TableName{Schema: "test", Table: "table1"},
-				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, TableInfoVersion: 33},
+				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, Version: 33},
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},

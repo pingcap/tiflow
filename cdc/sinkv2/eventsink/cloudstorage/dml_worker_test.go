@@ -91,7 +91,7 @@ func TestDMLWorkerRun(t *testing.T) {
 			Table:   "table1",
 			TableID: 100,
 		},
-		TableInfoVersion: 99,
+		Version: 99,
 		TableInfo: &timodel.TableInfo{
 			Columns: []*timodel.ColumnInfo{
 				{ID: 1, Name: timodel.NewCIStr("name"), FieldType: *types.NewFieldType(mysql.TypeLong)},
