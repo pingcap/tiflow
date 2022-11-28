@@ -205,6 +205,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
+		// For all rows, we add table replicate ts, so mysql sink can
+		// determine when to turn off safe-mode.
+		e.Row.ReplicatingTs = task.tableSink.replicateTs
+
 		if pos.Valid() {
 			lastPos = pos
 		}

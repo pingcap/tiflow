@@ -42,6 +42,8 @@ type tableSinkWrapper struct {
 	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
+	// replicateTs is the ts that the table sink has started to replicate.
+	replicateTs model.Ts
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
@@ -65,7 +67,14 @@ func newTableSinkWrapper(
 	}
 }
 
-func (t *tableSinkWrapper) start() {
+func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+	log.Info("Sink is started",
+		zap.String("namespace", t.changefeed.Namespace),
+		zap.String("changefeed", t.changefeed.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("replicateTs", replicateTs),
+	)
+	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
 

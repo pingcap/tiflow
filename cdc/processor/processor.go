@@ -169,7 +169,9 @@ func (p *processor) AddTable(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
-					p.sinkManager.StartTable(tableID, startTs)
+					if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+						return false, errors.Trace(err)
+					}
 				} else {
 					p.tables[tableID].Start(startTs)
 				}
@@ -217,7 +219,9 @@ func (p *processor) AddTable(
 		}
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if !isPrepare {
-			p.sinkManager.StartTable(tableID, startTs)
+			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+				return false, errors.Trace(err)
+			}
 		}
 	} else {
 		table, err := p.createTablePipeline(
@@ -879,7 +883,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
-		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager,
+		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
 		// Bind them so that sourceManager can notify sinkManager.
 		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
