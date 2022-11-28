@@ -152,6 +152,7 @@ func TestAddTable(t *testing.T) {
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
 	err := manager.StartTable(tableID, 1)
 	require.Nil(t, err)
+	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
