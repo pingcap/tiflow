@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager(nil, jobStore, nil, log.L())
+	taskManager := NewTaskManager(nil, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 	require.False(t.T(), taskManager.allFinished(context.Background()))
@@ -80,6 +81,8 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
+	// copy undetermined time.Now
+	loadStatus1.StageUpdatedTime = taskStatusMap[jobCfg.Upstreams[0].SourceID].StageUpdatedTime
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
@@ -110,7 +113,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	for _, taskStatus := range taskStatusMap {
 		taskStatusList = append(taskStatusList, taskStatus)
 	}
-	taskManager = NewTaskManager(taskStatusList, jobStore, nil, log.L())
+	taskManager = NewTaskManager(taskStatusList, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	taskStatusMap = taskManager.TaskStatus()
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
@@ -134,7 +137,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L())
+	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -187,7 +190,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 }
 
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
-	taskManager := NewTaskManager(nil, nil, nil, log.L())
+	taskManager := NewTaskManager(nil, nil, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	syncStatus1 := runtime.TaskStatus{
 		Unit:  frameModel.WorkerDMSync,
 		Task:  "source1",
@@ -228,42 +231,133 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 }
 
 func (t *testDMJobmasterSuite) TestGenOp() {
-	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StagePaused), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StageRunning), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StagePaused), dmpkg.Pause)
-	require.Equal(t.T(), genOp(metadata.StageError, metadata.StagePaused), dmpkg.Pause)
-	require.Equal(t.T(), genOp(metadata.StageFinished, metadata.StageRunning), dmpkg.None)
-	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StageRunning), dmpkg.Resume)
+	earlierTime := time.Now()
+	laterTime := earlierTime.Add(time.Second)
+	cases := []struct {
+		runningStage             metadata.TaskStage
+		runningStageUpdatedTime  time.Time
+		expectedStage            metadata.TaskStage
+		expectedStageUpdatedTime time.Time
+		op                       dmpkg.OperateType
+	}{
+		{
+			runningStage:             metadata.StagePaused,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Pause,
+		},
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Pause,
+		},
+		{
+			runningStage:             metadata.StageFinished,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StagePaused,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Resume,
+		},
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  earlierTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: laterTime,
+			op:                       dmpkg.Resume,
+		},
+		{
+			runningStage:             metadata.StageError,
+			runningStageUpdatedTime:  laterTime,
+			expectedStage:            metadata.StageRunning,
+			expectedStageUpdatedTime: earlierTime,
+			op:                       dmpkg.None,
+		},
+		{
+			runningStage:             metadata.StageRunning,
+			runningStageUpdatedTime:  laterTime,
+			expectedStage:            metadata.StagePaused,
+			expectedStageUpdatedTime: earlierTime,
+			op:                       dmpkg.Pause,
+		},
+	}
+
+	for i, c := range cases {
+		t.T().Logf("case %d", i)
+		op := genOp(c.runningStage, c.runningStageUpdatedTime, c.expectedStage, c.expectedStageUpdatedTime)
+		require.Equal(t.T(), c.op, op)
+	}
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
+	now := time.Now()
+	oldTime := now.Add(-time.Second)
+	newTime := now.Add(time.Second)
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, nil, mockAgent, log.L())
+	taskManager := NewTaskManager(nil, nil, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
 	dumpStatus1 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Task:  jobCfg.Upstreams[0].SourceID,
-		Stage: metadata.StageRunning,
+		Unit:             frameModel.WorkerDMDump,
+		Task:             jobCfg.Upstreams[0].SourceID,
+		Stage:            metadata.StageRunning,
+		StageUpdatedTime: now,
 	}
 	dumpStatus2 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Task:  jobCfg.Upstreams[1].SourceID,
-		Stage: metadata.StageRunning,
+		Unit:             frameModel.WorkerDMDump,
+		Task:             jobCfg.Upstreams[1].SourceID,
+		Stage:            metadata.StageRunning,
+		StageUpdatedTime: now,
 	}
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = newTime
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = newTime
 	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 
 	dumpStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	e := errors.New("operate task failed")
 	mockAgent.On("SendMessage").Return(e).Once()
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = newTime
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = newTime
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
+
+	// newer error stage will not trigger SendMessage, so will not meet injected error
+	dumpStatus2.Stage = metadata.StageError
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	e = errors.New("operate task failed")
+	mockAgent.On("SendMessage").Return(e).Once()
+	job.Tasks[jobCfg.Upstreams[0].SourceID].StageUpdatedTime = oldTime
+	job.Tasks[jobCfg.Upstreams[1].SourceID].StageUpdatedTime = oldTime
+	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 }
 
 func (t *testDMJobmasterSuite) TestTaskManager() {
@@ -275,7 +369,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, jobStore, mockAgent, log.L())
+	taskManager := NewTaskManager(nil, jobStore, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 
@@ -293,7 +387,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				taskManager.Tick(ctx)
+				taskManager.DoTick(ctx)
 			}
 		}
 	}()

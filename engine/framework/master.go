@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -105,7 +104,7 @@ type MasterImpl interface {
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
-	// Only after OnWorkerOnline, OnWorkerOffline of the same worker may be called.
+	// NOTE: OnWorkerOffline can appear without OnWorkerOnline
 	// Return:
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
@@ -164,11 +163,6 @@ const (
 
 // CreateWorkerOpt specifies an option for creating a worker.
 type CreateWorkerOpt = master.CreateWorkerOpt
-
-// CreateWorkerWithCost specifies the cost of a worker.
-func CreateWorkerWithCost(cost model.RescUnit) CreateWorkerOpt {
-	return master.CreateWorkerWithCost(cost)
-}
 
 // CreateWorkerWithResourceRequirements specifies the resource requirement of a worker.
 func CreateWorkerWithResourceRequirements(resources ...resModel.ResourceID) CreateWorkerOpt {

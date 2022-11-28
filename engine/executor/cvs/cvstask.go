@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -200,11 +199,6 @@ func (task *cvsTask) Status() frameModel.WorkerStatus {
 		ErrorMsg: "",
 		ExtBytes: statsBytes,
 	}
-}
-
-// Workload returns the current workload of the worker.
-func (task *cvsTask) Workload() model.RescUnit {
-	return 1
 }
 
 func (task *cvsTask) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {

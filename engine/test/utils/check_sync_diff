@@ -12,8 +12,8 @@ else
 	check_time=20
 fi
 
-PWD=$(pwd)
-binary=$PWD/bin/sync_diff_inspector
+PWD=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+binary=$PWD/../../../bin/sync_diff_inspector
 OUTPUT_DIR=/tmp/engine_test/output/
 STDOUT=$workdir/sync_diff_stdout.log
 

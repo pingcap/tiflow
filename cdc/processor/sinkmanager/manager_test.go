@@ -18,9 +18,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -34,20 +36,21 @@ func createManager(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	errChan chan error,
-) *ManagerImpl {
+) *SinkManager {
 	sortEngine := memory.New(context.Background())
-	manager, err := New(ctx, changefeedID, changefeedInfo, nil, sortEngine, errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+	manager, err := New(
+		ctx, changefeedID, changefeedInfo,
+		nil, sortEngine, &entry.MockMountGroup{},
+		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
-	return manager.(*ManagerImpl)
+	return manager
 }
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
-		Config: &config.ReplicaConfig{
-			MemoryQuota: 1024 * 1024 * 1024,
-		},
+		Config:  config.GetDefaultReplicaConfig(),
 	}
 }
 
@@ -132,7 +135,7 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 1)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
@@ -159,7 +162,7 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -169,8 +172,14 @@ func TestRemoveTable(t *testing.T) {
 		return manager.memQuota.getUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
-	err := manager.RemoveTable(tableID)
-	require.NoError(t, err)
+	manager.AsyncStopTable(tableID)
+	require.Eventually(t, func() bool {
+		state, ok := manager.GetTableState(tableID)
+		require.True(t, ok)
+		return state == tablepb.TableStateStopped
+	}, 5*time.Second, 10*time.Millisecond)
+
+	manager.RemoveTable(tableID)
 
 	_, ok = manager.tableSinks.Load(tableID)
 	require.False(t, ok)
@@ -212,13 +221,13 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(4)
+		return checkpointTS.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -241,13 +250,13 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(3)
+		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -269,7 +278,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID)
+	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)

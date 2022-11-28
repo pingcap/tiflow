@@ -34,9 +34,7 @@ var (
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
 	defaultMetricInterval    = 15 * time.Second
-
-	defaultCapability   int64 = 100 // TODO: make this configurable
-	defaultExecutorAddr       = "127.0.0.1:10340"
+	defaultExecutorAddr      = "127.0.0.1:10340"
 )
 
 // Config is the configuration.

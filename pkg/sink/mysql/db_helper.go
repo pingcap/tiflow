@@ -16,6 +16,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -58,6 +60,7 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 		username = "root"
 	}
 	password, _ := sinkURI.User.Password()
+
 	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if port == "" {
@@ -85,7 +88,7 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 	dsn.Params["timeout"] = cfg.DialTimeout
 
 	var testDB *sql.DB
-	testDB, err = dbConnFactory(ctx, dsn.FormatDSN())
+	testDB, err = CheckAndAdjustPassword(ctx, dsn, dbConnFactory)
 	if err != nil {
 		return
 	}
@@ -174,6 +177,9 @@ func generateDSNByConfig(
 	// equals to executing "SET NAMES utf8mb4"
 	dsnCfg.Params["charset"] = defaultCharacterSet
 
+	// disable foreign_key_checks
+	dsnCfg.Params["foreign_key_checks"] = "0"
+
 	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
 	if err != nil {
 		return "", err
@@ -234,4 +240,29 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	}
 	// session variable not exists, return "" to ignore it
 	return "", nil
+}
+
+// CheckAndAdjustPassword checks and adjusts the password of the given DSN,
+// it will return a DB instance opened with the adjusted password.
+func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
+	password := dbConfig.Passwd
+	if dbConnFactory == nil {
+		dbConnFactory = CreateMySQLDBConn
+	}
+	testDB, err := dbConnFactory(ctx, dbConfig.FormatDSN())
+	if err != nil {
+		// If access is denied and password is encoded by base64, try to decoded password.
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && mysqlErr.Number == tmysql.ErrAccessDenied {
+			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
+				dbConfig.Passwd = string(dePassword)
+				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
+				if err != nil {
+					return testDB, err
+				}
+			}
+		} else {
+			return nil, err
+		}
+	}
+	return testDB, nil
 }

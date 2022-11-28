@@ -51,6 +51,7 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.ShardAutoIncrementIDChecking,
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
+		config.TargetDBPrivilegeChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {
@@ -159,6 +160,46 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 		mock := initMockDB(t)
 		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 			AddRow("GRANT REPLICATION SLAVE,REPLICATION CLIENT ON *.* TO 'haha'@'%'"))
+	}, cfgs)
+}
+
+func TestTargetDBPrivilegeChecking(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetDBPrivilegeChecking: {}}),
+		},
+	}
+
+	// test not enough privileges
+
+	mock := initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.NoError(t, err)
+	require.Contains(t, msg, "lack of Drop global (*.*) privilege; lack of Index global (*.*) privilege; ")
+
+	mock = initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Summary.Warning)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Drop global (*.*) privilege")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Index global (*.*) privilege")
+
+	// happy path
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,INDEX,DROP ON *.* TO 'test'@'%'"))
+	}, cfgs)
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
 	}, cfgs)
 }
 

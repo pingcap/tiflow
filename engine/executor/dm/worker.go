@@ -33,9 +33,9 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -72,7 +72,7 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	cfg := conf.(*config.TaskCfg)
 	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.Stringer("worker_type", f.workerType), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Any("task_config", cfg))
-	return newDMWorker(ctx, masterID, f.workerType, cfg), nil
+	return newDMWorker(ctx, masterID, f.workerType, cfg)
 }
 
 // IsRetryableError implements WorkerFactory.IsRetryableError
@@ -80,9 +80,15 @@ func (f workerFactory) IsRetryableError(err error) bool {
 	return true
 }
 
+var (
+	workerNormalInterval = time.Second * 30
+	workerErrorInterval  = time.Second * 10
+)
+
 // dmWorker implements methods for framework.WorkerImpl
 type dmWorker struct {
 	framework.BaseWorker
+	*ticker.DefaultTicker
 
 	unitHolder   unitHolder
 	messageAgent dmpkg.MessageAgent
@@ -101,13 +107,23 @@ type dmWorker struct {
 	needExtStorage bool
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *config.TaskCfg) *dmWorker {
+func newDMWorker(
+	ctx *dcontext.Context,
+	masterID frameModel.MasterID,
+	workerType framework.WorkerType,
+	cfg *config.TaskCfg,
+) (*dmWorker, error) {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
 	dmSubtaskCfg := cfg.ToDMSubTaskCfg(masterID)
+	err := dmSubtaskCfg.Adjust(true)
+	if err != nil {
+		return nil, err
+	}
 	w := &dmWorker{
+		DefaultTicker:  ticker.NewDefaultTicker(workerNormalInterval, workerErrorInterval),
 		cfg:            dmSubtaskCfg,
 		stage:          metadata.StageInit,
 		workerType:     workerType,
@@ -118,13 +134,14 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 		cfgModRevision: cfg.ModRevision,
 		needExtStorage: cfg.NeedExtStorage,
 	}
+	w.DefaultTicker.Ticker = w
 
 	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
 		w.messageHandlerManager = m
 		return m, nil
 	})
-	return w
+	return w, nil
 }
 
 // InitImpl implements lib.WorkerImpl.InitImpl
@@ -146,23 +163,24 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 }
 
 // Tick implements lib.WorkerImpl.Tick
+// Do not do heavy work in Tick, it will block the message processing.
 func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.checkAndAutoResume(ctx); err != nil {
 		return err
 	}
-	if err := w.tryUpdateStatus(ctx); err != nil {
+	if err := w.updateStatusWhenStageChange(ctx); err != nil {
 		return err
 	}
 	// update unit status periodically to update metrics
-	w.unitHolder.CheckAndUpdateStatus(ctx)
+	w.unitHolder.CheckAndUpdateStatus()
 	w.discardResource4Syncer(ctx)
+	w.DoTick(ctx)
 	return w.messageAgent.Tick(ctx)
 }
 
-// Workload implements lib.WorkerImpl.Worload
-func (w *dmWorker) Workload() model.RescUnit {
-	w.Logger().Info("dmworker.Workload")
-	return 0
+func (w *dmWorker) TickImpl(ctx context.Context) error {
+	status := w.workerStatus(ctx)
+	return w.UpdateStatus(ctx, status)
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
@@ -218,8 +236,8 @@ func (w *dmWorker) persistStorage(ctx context.Context) error {
 	return w.storageWriteHandle.Persist(ctx)
 }
 
-// tryUpdateStatus updates status when task stage changed.
-func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
+// updateStatusWhenStageChange updates status when task stage changed.
+func (w *dmWorker) updateStatusWhenStageChange(ctx context.Context) error {
 	currentStage, _ := w.unitHolder.Stage()
 	previousStage := w.getStage()
 	if currentStage == previousStage {
@@ -263,9 +281,15 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 // workerStatus gets worker status.
 func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
 	var (
-		stage       = w.getStage()
-		code        frameModel.WorkerState
-		taskStatus  = &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
+		stage      = w.getStage()
+		code       frameModel.WorkerState
+		taskStatus = &runtime.TaskStatus{
+			Unit:             w.workerType,
+			Task:             w.taskID,
+			Stage:            stage,
+			StageUpdatedTime: time.Now(),
+			CfgModRevision:   w.cfgModRevision,
+		}
 		finalStatus any
 	)
 	if stage == metadata.StageFinished {
@@ -310,13 +334,17 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 		return nil
 	}
 
-	w.Logger().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
 	subtaskStage := &pb.SubTaskStatus{
 		Stage:  pb.Stage_Paused,
 		Result: result,
 	}
 	strategy := w.autoResume.CheckResumeSubtask(subtaskStage, dmconfig.DefaultBackoffRollback)
-	w.Logger().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+
+	previousStage := w.getStage()
+	if stage != previousStage {
+		w.Logger().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
+		w.Logger().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+	}
 
 	if strategy == worker.ResumeDispatch {
 		w.Logger().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
