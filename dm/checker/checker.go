@@ -142,6 +142,7 @@ type tablePairInfo struct {
 }
 
 func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, err error) {
+	info = &tablePairInfo{}
 	eg, ctx2 := errgroup.WithContext(ctx)
 
 	// do network things concurrently
@@ -172,7 +173,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 
 	var tableSizeMu sync.Mutex
 	tableSize := make([]map[filter.Table]int64, len(c.instances))
-	if c.stCfgs[0].Mode != config.ModeIncrement {
+	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok && c.stCfgs[0].Mode != config.ModeIncrement {
 		// TODO: concurrently read it intra-source later
 		for idx := range c.instances {
 			i := idx
@@ -258,6 +259,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
 	info, err := c.getTablePairInfo(ctx)
+	if err != nil {
+		return err
+	}
 
 	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
 		if len(c.stCfgs) > 0 {
@@ -393,7 +397,15 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	if instance.cfg.Mode != config.ModeIncrement {
+	hasLightningPrecheck := false
+	for _, item := range config.LightningPrechecks {
+		if _, ok := c.checkingItems[item]; ok {
+			hasLightningPrecheck = true
+			break
+		}
+	}
+
+	if instance.cfg.Mode != config.ModeIncrement && hasLightningPrecheck {
 		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
 		if err != nil {
 			return err
@@ -418,9 +430,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		var (
-			dbMetas []*mydump.MDDatabaseMeta
-		)
+		var dbMetas []*mydump.MDDatabaseMeta
 
 		// use downstream table for shard merging
 		for db, tables := range info.targetTablesPerDB {

@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-// DM definition checking items.
+// DM definition checking items. Don't forget to update AllCheckingItems and LightningPrechecks.
 const (
 	AllChecking                  = "all"
 	DumpPrivilegeChecking        = "dump_privilege"
@@ -44,6 +44,14 @@ const (
 	LightningFreeSpaceChecking          = "free_space"
 )
 
+// LightningPrechecks returns all checking items for lightning.
+var LightningPrechecks = []string{
+	LightningEmptyRegionChecking,
+	LightningRegionDistributionChecking,
+	LightningDownstreamVersionChecking,
+	LightningFreeSpaceChecking,
+}
+
 // AllCheckingItems contains all checking items.
 var AllCheckingItems = map[string]string{
 	AllChecking:                  "all checking items",
@@ -65,6 +73,7 @@ var AllCheckingItems = map[string]string{
 	LightningEmptyRegionChecking:        "physical import mode empty region checking item",
 	LightningRegionDistributionChecking: "physical import mode region distribution checking item",
 	LightningDownstreamVersionChecking:  "physical import mode downstream TiDB/PD/TiKV version checking item",
+	LightningFreeSpaceChecking:          "downstream free space checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.
