@@ -120,11 +120,14 @@ func (t *testBinlogWriterSuite) TestWrite() {
 		err = w.Flush()
 		require.NoError(t.T(), err)
 
-		w.file = nil
+		require.NoError(t.T(), w.file.Close())
 		// write data again
 		data2 := []byte("another-data")
-		err = w.Write(data2)
-		require.True(t.T(), terror.ErrRelayWriterNotOpened.Equal(err))
-		require.True(t.T(), terror.ErrRelayWriterNotOpened.Equal(w.Close()))
+		// we cannot determine the error is caused by `Write` or `Flush`
+		// nolint:errcheck
+		w.Write(data2)
+		// nolint:errcheck
+		w.Flush()
+		require.True(t.T(), terror.ErrBinlogWriterWriteDataLen.Equal(w.Close()))
 	}
 }
