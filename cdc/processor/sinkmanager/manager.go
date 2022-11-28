@@ -132,10 +132,10 @@ func New(
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
 	}
 
-	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
+	m.startWorkers(mg, changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 
-	log.Info("sink manager is created",
+	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoManager != nil))
@@ -306,8 +306,9 @@ func (m *SinkManager) generateSinkTasks() error {
 					CommitTs: upperBoundTs,
 				}
 			}
+			upperBound := getUpperBound()
 			// Only generate the table sink task if lower bound less or equal the upper bound.
-			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
+			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(upperBound)
 			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				// Next time.
@@ -342,11 +343,13 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
-
 			log.Debug("Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", tableID),
+				zap.Any("lowerBound", slowestTableProgress.nextLowerBoundPos),
+				zap.Any("currentUpperBound", upperBound),
+			)
 		}
 	}
 }
@@ -562,9 +565,10 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	}
 	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+	resolvedMark := checkpointTs.ResolvedMark()
 	cleanPos := engine.Position{
-		StartTs:  checkpointTs.Ts - 1,
-		CommitTs: checkpointTs.Ts,
+		StartTs:  resolvedMark - 1,
+		CommitTs: resolvedMark,
 	}
 	err := m.sortEngine.CleanByTable(tableID, cleanPos)
 	if err != nil {
@@ -578,7 +582,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
 	}
 	return pipeline.Stats{
-		CheckpointTs: checkpointTs.Ts,
+		CheckpointTs: resolvedMark,
 		ResolvedTs:   resolvedTs,
 		BarrierTs:    m.lastBarrierTs.Load(),
 	}, nil
