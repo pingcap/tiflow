@@ -177,6 +177,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		// TODO: concurrently read it intra-source later
 		for idx := range c.instances {
 			i := idx
+			tableSize[i] = make(map[filter.Table]int64)
 			eg.Go(func() error {
 				for _, sourceTables := range tableMapPerUpstream[i] {
 					for _, sourceTable := range sourceTables {
