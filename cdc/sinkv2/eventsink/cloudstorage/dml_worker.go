@@ -145,11 +145,13 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 						encodedDetail, err := json.MarshalIndent(tableDetail, "", "    ")
 						if err != nil {
 							d.errCh <- err
+							return
 						}
 
 						err = d.storage.WriteFile(ctx, path, encodedDetail)
 						if err != nil {
 							d.errCh <- err
+							return
 						}
 					}
 
