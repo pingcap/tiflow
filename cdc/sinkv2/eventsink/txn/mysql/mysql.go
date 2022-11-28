@@ -94,7 +94,7 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	cfg.IsTiDB, err = isTiDB(ctx, db)
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -546,9 +546,13 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					return 0, err
 				}
 			}
+
+			// we set write source for each txn,
+			// so we can use it to trace the data source
 			if err = s.setWriteSource(ctx, tx); err != nil {
 				return 0, err
 			}
+
 			if err = tx.Commit(); err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -620,39 +624,22 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
 }
 
+// setWriteSource sets write source for the transaction.
 func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
+	// we only set write source when donwstream is TiDB
+	if !s.cfg.IsTiDB {
+		return nil
+	}
 	// downstream is TiDB, set system variables.
 	// We should always try to set this variable, and ignore the error if
 	// downstream does not support this variable, it is by design.
 	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
-	//TODO: remove this log after fully testing
 	_, err := txn.ExecContext(ctx, query)
 	if err != nil {
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
 			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-			//TODO: remove this log after fully testing
 		}
 		return err
 	}
 	return nil
-}
-
-// isTiDB check if the downstream is TiDB.
-func isTiDB(ctx context.Context, db *sql.DB) (bool, error) {
-	var tidbVer string
-	// check if downstream is TiDB
-	row := db.QueryRowContext(ctx, "select tidb_version()")
-	err := row.Scan(&tidbVer)
-	if err != nil {
-		log.Error("check tidb version error", zap.Error(err))
-		// downstream is not TiDB, do nothing
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
-		// means downstream is not TiDB
-		ok && mysqlErr.Number == mysql.ErrNoDB ||
-			mysqlErr.Number == mysql.ErrSpDoesNotExist {
-			return false, nil
-		}
-		return false, errors.Trace(err)
-	}
-	return true, nil
 }

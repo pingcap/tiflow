@@ -81,9 +81,10 @@ type Config struct {
 	ForceReplicate      bool
 	EnableOldValue      bool
 
-	IsTiDB   bool // isTiDB is true if the downstream is TiDB
-	SourceID uint64
-	BatchDMLEnable      bool
+	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
+	SourceID       uint64
+	BDRMode        bool
+	BatchDMLEnable bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -154,6 +155,7 @@ func (c *Config) Apply(
 	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
+	c.BDRMode = replicaConfig.BDRMode
 
 	return nil
 }
