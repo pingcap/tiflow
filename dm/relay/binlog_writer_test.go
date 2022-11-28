@@ -117,6 +117,8 @@ func (t *testBinlogWriterSuite) TestWrite() {
 
 		err = w.Write(data1)
 		require.NoError(t.T(), err)
+		err = w.Flush()
+		require.NoError(t.T(), err)
 
 		w.file = nil
 		// write data again
