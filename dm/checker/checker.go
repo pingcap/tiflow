@@ -25,9 +25,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+	"github.com/pingcap/tidb/br/pkg/lightning/restore/opts"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -115,23 +119,32 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	return c
 }
 
-// Init implements Unit interface.
-func (c *Checker) Init(ctx context.Context) (err error) {
-	rollbackHolder := fr.NewRollbackHolder("checker")
-	defer func() {
-		if err != nil {
-			rollbackHolder.RollbackReverseOrder()
-		}
-	}()
+// tablePairInfo records information about a upstream-downstream table pair including
+// members may have repeated meanings but have different data structure to satisfy different usages.
+// TODO: unify upstream/downstream vs source/target
+type tablePairInfo struct {
+	// target table -> sourceID -> source tables
+	tablesPerTargetTable map[filter.Table]map[string][]filter.Table
+	// target database -> tables under this database
+	targetTablesPerDB map[string][]filter.Table
+	// number of sharding tables of a target table among all upstreams.
+	shardNumPerTargetTable map[filter.Table]int
+	// sourceID -> tables in allow-list
+	allowTablesPerUpstream map[string][]filter.Table
+	// sourceID -> databases that contain block-list tables
+	interestedDBPerUpstream []map[string]struct{}
+	// sourceID -> target table -> source tables
+	tableMapPerUpstreamWithSourceID map[string]map[filter.Table][]filter.Table
+	// target table -> extended columns
+	extendedColumnPerTable map[filter.Table][]string
+	// source index -> source tables -> size
+	tableSizePerSource []map[filter.Table]int64
+}
 
-	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
-
-	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
-
-	// 1. get allow-list of tables and routed table name from upstream and downstream
-
+func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, err error) {
 	eg, ctx2 := errgroup.WithContext(ctx)
-	// upstream instance index -> targetTable -> sourceTables
+
+	// do network things concurrently
 	tableMapPerUpstream := make([]map[filter.Table][]filter.Table, len(c.instances))
 	extendedColumnPerTable := map[filter.Table][]string{}
 	extendedColumnPerTableMu := sync.Mutex{}
@@ -154,55 +167,97 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		})
 	}
 	if egErr := eg.Wait(); egErr != nil {
-		return egErr
+		return nil, egErr
 	}
 
-	// 2. calculate needed data structure, like sharding tables of a target table
-	// from multiple upstream...
+	var tableSizeMu sync.Mutex
+	tableSize := make([]map[filter.Table]int64, len(c.instances))
+	if c.stCfgs[0].Mode != config.ModeIncrement {
+		// TODO: concurrently read it intra-source later
+		for idx := range c.instances {
+			i := idx
+			eg.Go(func() error {
+				for _, sourceTables := range tableMapPerUpstream[i] {
+					for _, sourceTable := range sourceTables {
+						size, err := utils.FetchTableEstimatedBytes(
+							ctx,
+							c.instances[i].sourceDB.DB,
+							sourceTable.Schema,
+							sourceTable.Name,
+						)
+						if err != nil {
+							return err
+						}
+						tableSizeMu.Lock()
+						tableSize[i][sourceTable] = size
+						tableSizeMu.Unlock()
+					}
+				}
+				return nil
+			})
+		}
+	}
+	if egErr := eg.Wait(); egErr != nil {
+		return nil, egErr
+	}
 
-	// targetTable -> sourceID -> sourceTables
-	tablesPerTargetTable := make(map[filter.Table]map[string][]filter.Table)
-	// sharding table number of a target table
-	shardNumPerTargetTable := make(map[filter.Table]int)
+	info.tableSizePerSource = tableSize
+	info.extendedColumnPerTable = extendedColumnPerTable
+	info.tablesPerTargetTable = make(map[filter.Table]map[string][]filter.Table)
+	info.shardNumPerTargetTable = make(map[filter.Table]int)
+	info.targetTablesPerDB = make(map[string][]filter.Table)
 
 	for i, inst := range c.instances {
 		mapping := tableMapPerUpstream[i]
 		err = sameTableNameDetection(mapping)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		sourceID := inst.cfg.SourceID
 		for targetTable, sourceTables := range mapping {
-			tablesPerSource, ok := tablesPerTargetTable[targetTable]
+			tablesPerSource, ok := info.tablesPerTargetTable[targetTable]
 			if !ok {
 				tablesPerSource = make(map[string][]filter.Table)
-				tablesPerTargetTable[targetTable] = tablesPerSource
+				info.tablesPerTargetTable[targetTable] = tablesPerSource
 			}
 			tablesPerSource[sourceID] = append(tablesPerSource[sourceID], sourceTables...)
-			shardNumPerTargetTable[targetTable] += len(sourceTables)
+			info.shardNumPerTargetTable[targetTable] += len(sourceTables)
+			info.targetTablesPerDB[targetTable.Schema] = append(info.targetTablesPerDB[targetTable.Schema], targetTable)
 		}
 	}
 
-	// calculate allow-list tables and databases they belongs to per upstream
-	// sourceID -> tables
-	allowTablesPerUpstream := make(map[string][]filter.Table, len(c.instances))
-	relatedDBPerUpstream := make([]map[string]struct{}, len(c.instances))
-	tableMapPerUpstreamWithSourceID := make(map[string]map[filter.Table][]filter.Table, len(c.instances))
+	info.allowTablesPerUpstream = make(map[string][]filter.Table, len(c.instances))
+	info.interestedDBPerUpstream = make([]map[string]struct{}, len(c.instances))
+	info.tableMapPerUpstreamWithSourceID = make(map[string]map[filter.Table][]filter.Table, len(c.instances))
 	for i, inst := range c.instances {
 		sourceID := inst.cfg.SourceID
-		relatedDBPerUpstream[i] = make(map[string]struct{})
+		info.interestedDBPerUpstream[i] = make(map[string]struct{})
 		mapping := tableMapPerUpstream[i]
-		tableMapPerUpstreamWithSourceID[sourceID] = mapping
+		info.tableMapPerUpstreamWithSourceID[sourceID] = mapping
 		for _, tables := range mapping {
-			allowTablesPerUpstream[sourceID] = append(allowTablesPerUpstream[sourceID], tables...)
+			info.allowTablesPerUpstream[sourceID] = append(info.allowTablesPerUpstream[sourceID], tables...)
 			for _, table := range tables {
-				relatedDBPerUpstream[i][table.Schema] = struct{}{}
+				info.interestedDBPerUpstream[i][table.Schema] = struct{}{}
 			}
 		}
 	}
+	return info, nil
+}
 
-	// 3. create checkers
+// Init implements Unit interface.
+func (c *Checker) Init(ctx context.Context) (err error) {
+	rollbackHolder := fr.NewRollbackHolder("checker")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
+	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
+
+	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
+	info, err := c.getTablePairInfo(ctx)
 
 	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
 		if len(c.stCfgs) > 0 {
@@ -260,7 +315,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
-					allowTablesPerUpstream[sourceID],
+					info.allowTablesPerUpstream[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
 				))
@@ -284,10 +339,10 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
-				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, relatedDBPerUpstream[i], c.onlineDDL, instance.baList))
+				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, info.interestedDBPerUpstream[i], c.onlineDDL, instance.baList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, relatedDBPerUpstream[i], instance.cfg.CaseSensitive))
+				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, info.interestedDBPerUpstream[i], instance.cfg.CaseSensitive))
 			}
 		}
 	}
@@ -297,8 +352,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(
 			upstreamDBs,
 			c.instances[0].targetDB.DB,
-			tableMapPerUpstreamWithSourceID,
-			extendedColumnPerTable,
+			info.tableMapPerUpstreamWithSourceID,
+			info.extendedColumnPerTable,
 			dumpThreads,
 		))
 	}
@@ -314,8 +369,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 		if isFresh {
-			for targetTable, shardingSet := range tablesPerTargetTable {
-				if shardNumPerTargetTable[targetTable] <= 1 {
+			for targetTable, shardingSet := range info.tablesPerTargetTable {
+				if info.shardNumPerTargetTable[targetTable] <= 1 {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
@@ -338,7 +393,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+	if instance.cfg.Mode != config.ModeIncrement {
 		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
 		if err != nil {
 			return err
@@ -350,30 +405,75 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
+		cpdb, err := checkpoints.OpenCheckpointsDB(ctx, lCfg)
 		if err != nil {
 			return err
 		}
-		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
-			if err != nil {
-				return err
-			}
-			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		targetDB, err := restore.DBFromConfig(ctx, lCfg.TiDB)
+		if err != nil {
+			return err
 		}
-		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
-			if err != nil {
-				return err
-			}
-			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+		targetInfoGetter, err := restore.NewTargetInfoGetterImpl(lCfg, targetDB)
+		if err != nil {
+			return err
 		}
-		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+
+		var (
+			dbMetas []*mydump.MDDatabaseMeta
+		)
+
+		// use downstream table for shard merging
+		for db, tables := range info.targetTablesPerDB {
+			mdTables := make([]*mydump.MDTableMeta, 0, len(tables))
+			for _, table := range tables {
+				mdTables = append(mdTables, &mydump.MDTableMeta{
+					DB:   db,
+					Name: table.Name,
+				})
+			}
+			dbMetas = append(dbMetas, &mydump.MDDatabaseMeta{
+				Name:   db,
+				Tables: mdTables,
+			})
+		}
+
+		builder := restore.NewPrecheckItemBuilder(
+			lCfg,
+			dbMetas,
+			newLightningPrecheckAdaptor(targetInfoGetter, info),
+			cpdb,
+		)
+
+		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterSize)
 			if err != nil {
 				return err
 			}
-			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+			c.checkList = append(c.checkList, checker.NewLightningFreeSpaceChecker(lChecker))
+		}
+
+		if instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+			if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+				if err != nil {
+					return err
+				}
+				c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+			}
+			if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+				if err != nil {
+					return err
+				}
+				c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+			}
+			if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+				if err != nil {
+					return err
+				}
+				c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+			}
 		}
 	}
 
@@ -688,4 +788,62 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 	}
 
 	return nil
+}
+
+// lightningPrecheckAdaptor implements the restore.PreRestoreInfoGetter interface.
+type lightningPrecheckAdaptor struct {
+	restore.TargetInfoGetter
+	allTables        map[string]*checkpoints.TidbDBInfo
+	sourceDataResult restore.EstimateSourceDataSizeResult
+}
+
+func newLightningPrecheckAdaptor(
+	targetInfoGetter restore.TargetInfoGetter,
+	info *tablePairInfo,
+) *lightningPrecheckAdaptor {
+	var (
+		sourceDataResult restore.EstimateSourceDataSizeResult
+		allTables        = make(map[string]*checkpoints.TidbDBInfo)
+	)
+	if info != nil {
+		for _, tables := range info.tableSizePerSource {
+			for _, size := range tables {
+				sourceDataResult.SizeWithIndex += size
+			}
+		}
+	}
+	for db, tables := range info.targetTablesPerDB {
+		allTables[db] = &checkpoints.TidbDBInfo{
+			Name:   db,
+			Tables: make(map[string]*checkpoints.TidbTableInfo),
+		}
+		for _, table := range tables {
+			allTables[db].Tables[table.Name] = &checkpoints.TidbTableInfo{
+				DB:   db,
+				Name: table.Name,
+			}
+		}
+	}
+	return &lightningPrecheckAdaptor{
+		TargetInfoGetter: targetInfoGetter,
+		allTables:        allTables,
+		sourceDataResult: sourceDataResult,
+	}
+}
+
+func (l *lightningPrecheckAdaptor) GetAllTableStructures(ctx context.Context, opts ...opts.GetPreInfoOption) (map[string]*checkpoints.TidbDBInfo, error) {
+	// re-use with other checker? or in fact we only use other information than structure?
+	return l.allTables, nil
+}
+
+func (l *lightningPrecheckAdaptor) ReadFirstNRowsByTableName(ctx context.Context, schemaName string, tableName string, n int) (cols []string, rows [][]types.Datum, err error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (l *lightningPrecheckAdaptor) ReadFirstNRowsByFileMeta(ctx context.Context, dataFileMeta mydump.SourceFileMeta, n int) (cols []string, rows [][]types.Datum, err error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (l *lightningPrecheckAdaptor) EstimateSourceDataSize(ctx context.Context, opts ...opts.GetPreInfoOption) (*restore.EstimateSourceDataSizeResult, error) {
+	return &l.sourceDataResult, nil
 }

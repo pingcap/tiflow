@@ -135,3 +135,35 @@ func (c *LightningClusterVersionChecker) Check(ctx context.Context) *Result {
 	)
 	return result
 }
+
+// LightningFreeSpaceChecker checks whether the cluster has enough free space.
+type LightningFreeSpaceChecker struct {
+	inner restore.PrecheckItem
+}
+
+// NewLightningFreeSpaceChecker creates a new LightningFreeSpaceChecker.
+func NewLightningFreeSpaceChecker(lightningChecker restore.PrecheckItem) RealChecker {
+	return &LightningFreeSpaceChecker{inner: lightningChecker}
+}
+
+// Name implements the RealChecker interface.
+func (c *LightningFreeSpaceChecker) Name() string {
+	return "lightning_free_space"
+}
+
+// Check implements the RealChecker interface.
+func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether the downstream has enough free space to store the data to be migrated",
+		State: StateFailure,
+	}
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateWarning,
+		`You can try to scale-out more TiKV to gain more storage space`,
+	)
+	return result
+}

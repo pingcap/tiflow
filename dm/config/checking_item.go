@@ -41,6 +41,7 @@ const (
 	LightningEmptyRegionChecking        = "empty_region"
 	LightningRegionDistributionChecking = "region_distribution"
 	LightningDownstreamVersionChecking  = "downstream_version"
+	LightningFreeSpaceChecking          = "free_space"
 )
 
 // AllCheckingItems contains all checking items.
