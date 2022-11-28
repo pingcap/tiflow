@@ -47,7 +47,7 @@ type Elector interface {
 	ResignLeader(ctx context.Context, duration time.Duration) error
 }
 
-// NewElector creates a new electorImpl.
+// NewElector creates a new Elector.
 func NewElector(config Config) (Elector, error) {
 	if err := config.AdjustAndValidate(); err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ type electorImpl struct {
 
 	// resignCh is used to notify the elector to resign leadership.
 	resignCh chan *resignReq
-	// electorImpl will not be leader until this time.
+	// elector will not be leader until this time.
 	resignUntil time.Time
 
 	callbackWg        sync.WaitGroup
