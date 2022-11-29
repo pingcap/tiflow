@@ -52,7 +52,7 @@ const (
 func GetFlavor(ctx context.Context, db *sql.DB) (string, error) {
 	value, err := dbutil.ShowVersion(ctx, db)
 	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return "", terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
 	if IsMariaDB(value) {
 		return gmysql.MariaDBFlavor, nil
@@ -104,7 +104,7 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
 	defer rows.Close()
 
@@ -132,13 +132,13 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	var rowsResult []string
 	rowsResult, err = export.GetSpecifiedColumnValueAndClose(rows, "Server_id")
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream
 	}
 	for _, serverID := range rowsResult {
 		// serverID will not be null
 		serverIDUInt, err := strconv.ParseUint(serverID, 10, 32)
 		if err != nil {
-			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream
 		}
 		serverIDs[uint32(serverIDUInt)] = struct{}{}
 	}
@@ -385,7 +385,7 @@ func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn)
 	err = row.Scan(&gtidStr)
 	if err != nil {
 		log.L().Error("can't get @@GLOBAL.gtid_purged when try to add it to gtid set", zap.Error(err))
-		return gset, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return gset, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
 	failpoint.Label("bypass")
 	if gtidStr == "" {
@@ -451,18 +451,6 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 		}
 	}
 	return strings.Join(sqlModeStr, ",")
-}
-
-// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
-func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
-	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
-	var table, createStr string
-	row := conn.QueryRowContext(ctx, querySQL)
-	err = row.Scan(&table, &createStr)
-	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	return createStr, nil
 }
 
 // GetMaxConnections gets max_connections for sql.DB which is suitable for session variable max_connections.

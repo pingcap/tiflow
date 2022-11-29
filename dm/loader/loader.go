@@ -1353,7 +1353,7 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
-								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")
+								return nil, terror.WithScope(terror.ErrDBBadConn.Generate("bad connection error restoreData"), terror.ScopeDownstream)
 							},
 						}
 					}

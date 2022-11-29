@@ -55,7 +55,7 @@ func GetGlobalVariable(ctx *tcontext.Context, db *BaseDB, variable string) (valu
 
 	conn, err := db.GetBaseConn(ctx.Context())
 	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return "", err
 	}
 	// nolint:errcheck
 	defer db.CloseBaseConn(conn)
@@ -113,7 +113,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
 	if err != nil {
-		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		err = terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	defer rows.Close()
@@ -146,7 +146,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	if flavor == gmysql.MySQLFlavor {
 		rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set")
 		if err != nil {
-			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			err = terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 
@@ -163,7 +163,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			var posInt int64
 			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
 			if err != nil {
-				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				err = terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
 			pos = uint32(posInt)
@@ -174,7 +174,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	} else {
 		rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB")
 		if err != nil {
-			err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			err = terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 
@@ -191,7 +191,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			var posInt int64
 			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
 			if err != nil {
-				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+				err = terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
 			pos = uint32(posInt)
@@ -211,11 +211,11 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		ctx.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
 	}
 	if rows.Close() != nil {
-		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		err = terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeUpstream)
 		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	if rows.Err() != nil {
-		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		err = terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeUpstream)
 		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 
