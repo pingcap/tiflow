@@ -570,6 +570,8 @@ func (r *Relay) handleEvents(
 	}
 
 	firstEvent := true
+	relayPosGauge := relayLogPosGauge.WithLabelValues("relay")
+	relayFileGauge := relayLogFileGauge.WithLabelValues("relay")
 	for {
 		// 1. read events from upstream server
 		readTimer := time.Now()
@@ -705,11 +707,11 @@ func (r *Relay) handleEvents(
 		}
 
 		relayLogWriteSizeHistogram.Observe(float64(e.Header.EventSize))
-		relayLogPosGauge.WithLabelValues("relay").Set(float64(lastPos.Pos))
+		relayPosGauge.Set(float64(lastPos.Pos))
 		if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
 			r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
 		} else {
-			relayLogFileGauge.WithLabelValues("relay").Set(float64(index))
+			relayFileGauge.Set(float64(index))
 		}
 
 		if needSavePos {
