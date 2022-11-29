@@ -304,7 +304,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
-	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicate)
+	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
 	if subtaskCfg.To.Session != nil {

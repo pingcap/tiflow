@@ -64,6 +64,8 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 
 	err2 := pc.checkVersion(value, result)
 	if err2 != nil {
+		result.Instruction = err2.Instruction
+		err2.Instruction = ""
 		result.Errors = append(result.Errors, err2)
 	}
 	return result
@@ -72,10 +74,14 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
 	if conn.IsMariaDB(value) {
-		return NewWarn("Migrating from MariaDB is experimentally supported. If you must use DM to migrate data from MariaDB, we suggest make your MariaDB >= 10.1.2")
+		err := NewWarn("Migrating from MariaDB is still experimental.")
+		err.Instruction = "It is recommended that you upgrade MariaDB to 10.1.2 or a later version."
+		return err
 	}
 	if IsTiDBFromVersion(value) {
-		return NewWarn("Not support migrate from TiDB")
+		err := NewWarn("migration from TiDB not supported")
+		err.Instruction = "TiDB is not supported as an upstream database."
+		return err
 	}
 
 	version, err := toMySQLVersion(value)
@@ -85,11 +91,15 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error
 	}
 
 	if !version.Ge(needVersion.Min) {
-		return NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
+		err := NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
+		err.Instruction = "It is recommended that you upgrade the database to the required version before performing data migration. Otherwise data inconsistency or task exceptions might occur."
+		return err
 	}
 
 	if !version.Lt(needVersion.Max) {
-		return NewWarn("version suggested less than %v but got %v", needVersion.Max, version)
+		err := NewWarn("version suggested earlier than %v but got %v", needVersion.Max, version)
+		err.Instruction = "It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur."
+		return err
 	}
 
 	result.State = StateSuccess
@@ -130,13 +140,13 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 			return result
 		}
 		result.Errors = append(result.Errors, NewError("server_id not set"))
-		result.Instruction = "please set server_id in your database, or error may happen in master/slave switchover"
+		result.Instruction = "Set server_id in your database, or errors might happen in master/slave switchover"
 		return result
 	}
 
 	if serverID == 0 {
 		result.Errors = append(result.Errors, NewError("server_id is 0"))
-		result.Instruction = "please set server_id greater than 0, or error may happen in master/slave switchover"
+		result.Instruction = "Set server_id greater than 0, or errors might happen in master/slave switchover"
 		return result
 	}
 	result.State = StateSuccess

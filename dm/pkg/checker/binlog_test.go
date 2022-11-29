@@ -126,6 +126,10 @@ func TestBinlogDB(t *testing.T) {
 		r := binlogDBChecker.Check(ctx)
 		require.Nil(t, mock.ExpectationsWereMet())
 		require.Equal(t, cs.state, r.State)
+		// the error message is moved to Errors
+		if r.State == StateFailure {
+			require.Equal(t, 1, len(r.Errors))
+		}
 	}
 }
 
