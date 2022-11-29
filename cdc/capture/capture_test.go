@@ -79,7 +79,6 @@ func TestReset(t *testing.T) {
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond)
-
 	info, err := cp.Info()
 	require.Nil(t, err)
 	require.NotNil(t, info)

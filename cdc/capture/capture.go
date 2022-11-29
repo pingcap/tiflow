@@ -217,7 +217,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
-  
+
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithLease(lease.ID))
@@ -349,6 +349,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 			log.Info("campaign owner routine exited, restart the capture",
 				zap.String("captureID", c.info.ID))
 		}
+		// If we throw an ErrCaptureSuicide error, the capture will restart.
 		return cerror.ErrCaptureSuicide.FastGenByArgs()
 	})
 
@@ -480,8 +481,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
-		// when owner exit, we don't `resign` because we will call `resign`
-		// at `AsyncClose`
+
 		if err != nil {
 			log.Warn("run owner exited with error",
 				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
@@ -489,15 +489,14 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
 		}
-
 		// if owner exits normally, continue the campaign loop and try to election owner again
 		log.Info("run owner exited normally",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
-
-		// before a new cycle starts, we need resign and just need ignore error
+		// before a new cycle starts, we need resign
 		if err := c.resign(ctx); err != nil {
 			log.Info("owner resign failed", zap.String("captureID", c.info.ID),
 				zap.Error(err), zap.Int64("ownerRev", ownerRev))
+			return err
 		}
 	}
 }
