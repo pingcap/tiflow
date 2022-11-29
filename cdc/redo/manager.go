@@ -650,6 +650,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				log.Debug("redo manager writes resolvedTs",
 					zap.String("namespace", m.changeFeedID.Namespace),
 					zap.String("changefeed", m.changeFeedID.ID),
+					zap.Int64("tableID", tableID),
 					zap.Uint64("resolvedTs", resolvedTs))
 			}
 			rtsMap = make(map[model.TableID]model.Ts)
