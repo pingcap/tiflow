@@ -43,8 +43,7 @@ type BatchEncoder struct {
 	namespace          string
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
-	resultBuf          []*common.Message
-	maxMessageBytes    int
+	result             []*common.Message
 
 	enableTiDBExtension        bool
 	decimalHandlingMode        string
@@ -64,7 +63,6 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
 	message := common.NewMsg(
 		config.ProtocolAvro,
 		nil,
@@ -112,22 +110,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		message.Key = nil
 	}
 	message.IncRowsCount()
-
-	if message.Length() > a.maxMessageBytes {
-		log.Error(
-			"Single message too large",
-			zap.Int(
-				"maxMessageBytes",
-				a.maxMessageBytes,
-			),
-			zap.Int("length", message.Length()),
-			zap.Any("table", e.Table),
-		)
-		return cerror.ErrAvroEncodeFailed.GenWithStackByArgs()
-	}
-
-	a.resultBuf = append(a.resultBuf, message)
-
+	a.result = append(a.result, message)
 	return nil
 }
 
@@ -143,9 +126,9 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 
 // Build Messages
 func (a *BatchEncoder) Build() (messages []*common.Message) {
-	old := a.resultBuf
-	a.resultBuf = nil
-	return old
+	result := a.result
+	a.result = nil
+	return result
 }
 
 const (
@@ -211,7 +194,7 @@ func (a *BatchEncoder) avroEncode(
 	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
-		e.TableInfoVersion,
+		e.TableInfo.Version,
 		schemaGen,
 	)
 	if err != nil {
@@ -334,7 +317,7 @@ func sanitizeName(name string) string {
 	return sanitizedName
 }
 
-// sanitizeTopic escapes ".", it may has special meanings for sink connectors
+// sanitizeTopic escapes ".", it may have special meanings for sink connectors
 func sanitizeTopic(name string) string {
 	return strings.ReplaceAll(name, ".", replacementChar)
 }
@@ -808,7 +791,7 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-// NewBatchEncoderBuilder creates a avro batchEncoderBuilder.
+// NewBatchEncoderBuilder creates an avro batchEncoderBuilder.
 func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (codec.EncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
@@ -844,8 +827,7 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.resultBuf = make([]*common.Message, 0, 4096)
-	encoder.maxMessageBytes = b.config.MaxMessageBytes
+	encoder.result = make([]*common.Message, 0, 1024)
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode

@@ -44,7 +44,7 @@ function run() {
 	# pause changefeed
 	run_cdc_cli changefeed pause -c ${changefeed_id}
 	# update changefeed to no batch dml mode
-	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="mysql://root@127.0.0.1:3306/?batch-dml-enable=true" --no-confirm
+	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="mysql://root@127.0.0.1:3306/?batch-dml-enable=false" --no-confirm
 	# resume changefeed
 	run_cdc_cli changefeed resume -c ${changefeed_id}
 
@@ -53,7 +53,7 @@ function run() {
 	# pause changefeed
 	run_cdc_cli changefeed pause -c ${changefeed_id}
 	# update changefeed to no batch dml mode
-	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="mysql://root@127.0.0.1:3306/?batch-dml-enable=false" --no-confirm
+	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="mysql://root@127.0.0.1:3306/?batch-dml-enable=true" --no-confirm
 	# resume changefeed
 	run_cdc_cli changefeed resume -c ${changefeed_id}
 

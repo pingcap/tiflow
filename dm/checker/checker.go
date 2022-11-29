@@ -25,12 +25,14 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/checker"
@@ -223,7 +225,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 	}
-
+	// check target DB's privilege
+	if _, ok := c.checkingItems[config.TargetDBPrivilegeChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
+			c.instances[0].targetDB.DB,
+			c.instances[0].targetDBInfo,
+		))
+	}
 	// sourceID -> DB
 	upstreamDBs := make(map[string]*sql.DB)
 	for i, instance := range c.instances {
@@ -327,6 +335,45 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					))
 				}
 			}
+		}
+	}
+
+	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
+		if err != nil {
+			return err
+		}
+		// Adjust will raise error when this field is empty, so we set any non empty value here.
+		lCfg.Mydumper.SourceDir = "noop://"
+		err = lCfg.Adjust(ctx)
+		if err != nil {
+			return err
+		}
+
+		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
+		if err != nil {
+			return err
+		}
+		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
 		}
 	}
 

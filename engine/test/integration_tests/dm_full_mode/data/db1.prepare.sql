@@ -23,9 +23,9 @@ create database `dm_full_special/ch"ar`;
 create table `dm_full_special/ch"ar`.`t/b"1` (id int primary key, name varchar(255));
 insert into `dm_full_special/ch"ar`.`t/b"1` values (1, 'a');
 
-drop database if exists `full_mode`;
-create database `full_mode`;
-use `full_mode`;
+drop database if exists `dm_full`;
+create database `dm_full`;
+use `dm_full`;
 create table t1 (
     id int,
     name varchar(20),

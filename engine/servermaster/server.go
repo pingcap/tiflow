@@ -17,11 +17,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -53,13 +55,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -68,6 +71,7 @@ import (
 const (
 	leaderElectionTable  = "leader_election"
 	resignLeaderDuration = 10 * time.Second
+	grpcConnBufSize      = 32 * 1024
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -87,12 +91,9 @@ type Server struct {
 	cfg     *Config
 	metrics *serverMasterMetric
 
-	elector   *election.Elector
-	leader    atomic.Value
-	masterCli *rpcutil.LeaderClientWithLock[multiClient]
+	elector election.Elector
 
 	leaderServiceFn func(context.Context) error
-	masterRPCHook   rpcutil.PreRPCHook
 
 	// sched scheduler
 	executorManager        ExecutorManager
@@ -111,6 +112,7 @@ type Server struct {
 	metaStoreManager MetaStoreManager
 
 	leaderDegrader *featureDegrader
+	forwardChecker *forwardChecker
 
 	// framework metastore client
 	frameMetaClient     pkgOrm.Client
@@ -126,15 +128,15 @@ type serverMasterMetric struct {
 func newServerMasterMetric() *serverMasterMetric {
 	// Following are leader only metrics
 	metricJobNum := make(map[pb.Job_State]prometheus.Gauge)
-	for status, statusName := range pb.Job_State_name {
+	for state, statusName := range pb.Job_State_name {
 		metric := serverJobNumGauge.WithLabelValues(statusName)
-		metricJobNum[pb.Job_State(status)] = metric
+		metricJobNum[pb.Job_State(state)] = metric
 	}
 
 	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
-	for status, name := range model.ExecutorStatusNameMapping {
+	for state, name := range model.ExecutorStatusNameMapping {
 		metric := serverExecutorNumGauge.WithLabelValues(name)
-		metricExecutorNum[status] = metric
+		metricExecutorNum[state] = metric
 	}
 
 	return &serverMasterMetric{
@@ -155,8 +157,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		id:               id,
 		cfg:              cfg,
 		leaderDegrader:   newFeatureDegrader(),
-		leader:           atomic.Value{},
-		masterCli:        &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:       msgService,
 		p2pMsgRouter:     p2pMsgRouter,
 		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
@@ -164,87 +164,41 @@ func NewServer(cfg *Config) (*Server, error) {
 		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
-		id,
-		&server.leader,
-		server.masterCli,
-		server.leaderDegrader,
-		server.rpcLogRL,
-		masterRPCLimiterAllowList,
-	)
-	server.masterRPCHook = masterRPCHook
 	return server, nil
 }
 
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	resp2 := &pb.HeartbeatResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-
 	return s.executorManager.HandleHeartbeat(req)
 }
 
 // CreateJob delegates request to leader's JobManager.CreateJob.
 func (s *Server) CreateJob(ctx context.Context, req *pb.CreateJobRequest) (*pb.Job, error) {
-	job := &pb.Job{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
-	if shouldRet {
-		return job, err
-	}
 	return s.jobManager.CreateJob(ctx, req)
 }
 
 // GetJob delegates request to leader's JobManager.GetJob.
 func (s *Server) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
-	job := &pb.Job{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
-	if shouldRet {
-		return job, err
-	}
 	return s.jobManager.GetJob(ctx, req)
 }
 
 // ListJobs delegates request to leader's JobManager.ListJobs.
 func (s *Server) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
-	resp := &pb.ListJobsResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
-	if shouldRet {
-		return resp, err
-	}
 	return s.jobManager.ListJobs(ctx, req)
 }
 
 // CancelJob delegates request to leader's JobManager.CancelJob.
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.Job, error) {
-	job := &pb.Job{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
-	if shouldRet {
-		return job, err
-	}
 	return s.jobManager.CancelJob(ctx, req)
 }
 
 // DeleteJob delegates request to leader's JobManager.DeleteJob.
 func (s *Server) DeleteJob(ctx context.Context, req *pb.DeleteJobRequest) (*emptypb.Empty, error) {
-	empty := &emptypb.Empty{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &empty)
-	if shouldRet {
-		return empty, err
-	}
 	return s.jobManager.DeleteJob(ctx, req)
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.Executor, error) {
-	pbExecutor := &pb.Executor{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &pbExecutor)
-	if shouldRet {
-		return pbExecutor, err
-	}
-
 	executorMeta, err := s.executorManager.AllocateNewExec(ctx, req)
 	if err != nil {
 		return nil, err
@@ -261,17 +215,13 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // ListExecutors implements DiscoveryServer.ListExecutors.
 func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest) (*pb.ListExecutorsResponse, error) {
 	resp := &pb.ListExecutorsResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
-	if shouldRet {
-		return resp, err
-	}
-
 	executors := s.executorManager.ListExecutors()
 	for _, executor := range executors {
 		resp.Executors = append(resp.Executors, &pb.Executor{
 			Id:      string(executor.ID),
 			Name:    executor.Name,
 			Address: executor.Address,
+			Labels:  executor.Labels.ToMap(),
 		})
 	}
 	sort.Slice(resp.Executors, func(i, j int) bool {
@@ -283,7 +233,7 @@ func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest
 // ListMasters implements DiscoveryServer.ListMasters.
 func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*pb.ListMastersResponse, error) {
 	resp := &pb.ListMastersResponse{}
-	leaderAddr, ok := s.LeaderAddr()
+	leaderAddr, ok := s.leaderAddr()
 	for _, m := range s.elector.GetMembers() {
 		isLeader := ok && m.Address == leaderAddr
 		resp.Masters = append(resp.Masters, &pb.Master{
@@ -304,12 +254,6 @@ func (s *Server) ListMasters(ctx context.Context, req *pb.ListMastersRequest) (*
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) (*pb.ScheduleTaskResponse, error) {
-	resp2 := &pb.ScheduleTaskResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-
 	schedulerReq, err := schedModel.NewSchedulerRequestFromPB(req)
 	if err != nil {
 		return nil, err
@@ -378,7 +322,7 @@ func (s *Server) QueryStorageConfig(
 
 // GetLeader implements DiscoveryServer.GetLeader.
 func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLeaderResponse, error) {
-	leaderAddr, ok := s.LeaderAddr()
+	leaderAddr, ok := s.leaderAddr()
 	if !ok {
 		return nil, status.Error(codes.NotFound, "no leader")
 	}
@@ -414,6 +358,14 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	defer func() {
+		if s.forwardChecker != nil {
+			if err := s.forwardChecker.Close(); err != nil {
+				log.Warn("failed to close forward checker", zap.Error(err))
+			}
+		}
+	}()
+
 	wg, ctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() error {
@@ -426,10 +378,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg.Go(func() error {
 		return s.elector.Run(ctx)
-	})
-
-	wg.Go(func() error {
-		return s.watchLeader(ctx)
 	})
 
 	return wg.Wait()
@@ -495,7 +443,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	s.resourceManagerService = externRescManager.NewService(s.frameMetaClient, s.masterRPCHook)
+	s.resourceManagerService = externRescManager.NewService(s.frameMetaClient)
 }
 
 func (s *Server) initElector() error {
@@ -513,17 +461,36 @@ func (s *Server) initElector() error {
 		return err
 	}
 
-	s.elector, err = election.NewElector(election.Config{
+	elector, err := election.NewElector(election.Config{
 		ID:             s.id,
 		Name:           s.cfg.Name,
 		Address:        s.cfg.AdvertiseAddr,
 		Storage:        sqlStorage,
 		LeaderCallback: s.leaderServiceFn,
 	})
+	if err != nil {
+		return err
+	}
+
+	s.elector = elector
+	s.forwardChecker = newForwardChecker(elector)
 	return err
 }
 
 func (s *Server) serve(ctx context.Context) error {
+	var (
+		cleaupFuncs []func()
+		cleanupOnce sync.Once
+	)
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			for _, f := range cleaupFuncs {
+				f()
+			}
+		})
+	}
+	defer cleanup()
+
 	errGroup, ctx := errgroup.WithContext(ctx)
 
 	// TODO: Support TLS.
@@ -531,34 +498,91 @@ func (s *Server) serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer tcpServer.Close()
+	cleaupFuncs = append(cleaupFuncs, func() {
+		if err := tcpServer.Close(); err != nil {
+			log.Warn("failed to close tcp server", zap.Error(err))
+		}
+	})
 	errGroup.Go(func() error {
 		return tcpServer.Run(ctx)
 	})
 
-	httpServer, err := s.createHTTPServer()
+	grpcServer := s.createGRPCServer()
+	cleaupFuncs = append(cleaupFuncs, grpcServer.Stop)
+	errGroup.Go(func() error {
+		return grpcServer.Serve(tcpServer.GrpcListener())
+	})
+
+	// gRPC-Gateway doesn't call gRPC interceptors when it directly forwards requests to the service handler.
+	// See https://github.com/grpc-ecosystem/grpc-gateway/issues/1043.
+	//
+	// To make the gRPC interceptors work, we have to create a client connection to the gRPC server and register it to
+	// the gRPC-Gateway ServerMux. bufconn is used to create an in-process gRPC server, so the client connection can
+	// bypass the network stack. See https://github.com/grpc/grpc-go/issues/906 for more details.
+	ln := bufconn.Listen(grpcConnBufSize)
+	cleaupFuncs = append(cleaupFuncs, func() {
+		if err := ln.Close(); err != nil {
+			log.Warn("failed to close bufconn", zap.Error(err))
+		}
+	})
+	inProcessGRPCServer := s.createGRPCServer()
+	cleaupFuncs = append(cleaupFuncs, inProcessGRPCServer.Stop)
+	errGroup.Go(func() error {
+		return inProcessGRPCServer.Serve(ln)
+	})
+
+	dial := func(ctx context.Context, target string) (net.Conn, error) {
+		return ln.DialContext(ctx)
+	}
+	conn, err := grpc.DialContext(
+		ctx,
+		"bufnet",
+		grpc.WithContextDialer(dial),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	cleaupFuncs = append(cleaupFuncs, func() {
+		if err := conn.Close(); err != nil {
+			log.Warn("failed to close grpc connection", zap.Error(err))
+		}
+	})
+
+	httpServer, err := s.createHTTPServer(conn)
 	if err != nil {
 		return err
 	}
-	defer httpServer.Close()
+	cleaupFuncs = append(cleaupFuncs, func() {
+		if err := httpServer.Close(); err != nil {
+			log.Warn("failed to close http server", zap.Error(err))
+		}
+	})
 	errGroup.Go(func() error {
 		return httpServer.Serve(tcpServer.HTTP1Listener())
 	})
 
-	grpcServer := s.createGRPCServer()
-	defer grpcServer.Stop()
+	// Some background goroutines may still be running after context is canceled.
+	// We need to explicitly stop or close them and wait for them to exit.
 	errGroup.Go(func() error {
-		return grpcServer.Serve(tcpServer.GrpcListener())
+		<-ctx.Done()
+		cleanup()
+		return errors.Trace(ctx.Err())
 	})
+
 	return errGroup.Wait()
 }
 
 func (s *Server) createGRPCServer() *grpc.Server {
+	logLimiter := rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/)
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 		grpc.ChainUnaryInterceptor(
 			grpcprometheus.UnaryServerInterceptor,
-			rpcutil.UnaryServerInterceptor,
+			rpcutil.ForwardToLeader[multiClient](s.forwardChecker),
+			rpcutil.CheckAvailable(s.leaderDegrader),
+			rpcutil.Logger(masterRPCLimiterAllowList, logLimiter),
+			rpcutil.NormalizeError(),
 		),
 	)
 	pb.RegisterDiscoveryServer(grpcServer, s)
@@ -569,7 +593,7 @@ func (s *Server) createGRPCServer() *grpc.Server {
 	return grpcServer
 }
 
-func (s *Server) createHTTPServer() (*http.Server, error) {
+func (s *Server) createHTTPServer(conn *grpc.ClientConn) (*http.Server, error) {
 	grpcMux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
 			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true},
@@ -583,10 +607,10 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 			openapi.WriteHTTPError(writer, rpcutil.FromGRPCError(err))
 		}),
 	)
-	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
+	if err := pb.RegisterJobManagerHandler(context.Background(), grpcMux, conn); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := pb.RegisterDiscoveryHandlerServer(context.Background(), grpcMux, s); err != nil {
+	if err := pb.RegisterDiscoveryHandler(context.Background(), grpcMux, conn); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -614,13 +638,13 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 	jobID := fields[0]
 
 	var targetAddr string
-	if s.IsLeader() {
+	if s.elector.IsLeader() {
 		forwardAddr, err := s.jobManager.GetJobMasterForwardAddress(r.Context(), jobID)
 		if err != nil {
 			return err
 		}
 		targetAddr = forwardAddr
-	} else if leaderAddr, ok := s.LeaderAddr(); ok {
+	} else if leaderAddr, ok := s.leaderAddr(); ok {
 		targetAddr = leaderAddr
 	} else {
 		return errors.New("no leader found")
@@ -736,14 +760,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	s.leader.Store(&rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-		IsLeader:      true,
-	})
 	defer func() {
 		s.leaderDegrader.reset()
-		s.leader.Store(&rpcutil.Member{})
 	}()
 
 	// The following member variables are used in leader only and released after
@@ -857,20 +875,10 @@ func (s *Server) collectLeaderMetric() {
 	}
 }
 
-// IsLeader implements ServerInfoProvider.IsLeader.
-func (s *Server) IsLeader() bool {
-	leader, ok := s.leader.Load().(*rpcutil.Member)
-	if !ok || leader == nil {
-		return false
+func (s *Server) leaderAddr() (string, bool) {
+	leader, ok := s.elector.GetLeader()
+	if ok {
+		return leader.Address, true
 	}
-	return leader.Name == s.id
-}
-
-// LeaderAddr implements ServerInfoProvider.LeaderAddr.
-func (s *Server) LeaderAddr() (string, bool) {
-	leader, ok := s.leader.Load().(*rpcutil.Member)
-	if !ok || leader == nil || leader.AdvertiseAddr == "" {
-		return "", false
-	}
-	return leader.AdvertiseAddr, true
+	return "", false
 }
