@@ -397,11 +397,9 @@ func VerifyPrivileges(
 					if dbPrivs.wholeDB {
 						continue
 					}
-					println(dbName, dbPatChar, dbPatType)
 					if !stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
 						continue
 					}
-					println("deleting!!!")
 					delete(dbPrivs.tables, tableName)
 				}
 			}
