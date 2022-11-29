@@ -224,6 +224,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		availableMem -= eventSize
 		events = append(events, e)
 		currentCommitTs = e.CRTs
+		// For all rows, we add table replicate ts, so mysql sink can
+		// determine when to turn off safe-mode.
+		e.Row.ReplicatingTs = task.tableSink.replicateTs
 		// We meet a finished transaction.
 		if pos.Valid() {
 			lastPos = pos
