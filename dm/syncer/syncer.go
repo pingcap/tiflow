@@ -2257,34 +2257,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var err2 error
 		var sourceTable *filter.Table
 
-		switch ev := e.Event.(type) {
-		case *replication.RotateEvent:
-			err2 = s.handleRotateEvent(ev, ec)
-		case *replication.RowsEvent:
-			eventIndex++
-			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
-			sourceTable, err2 = s.handleRowsEvent(ev, ec)
-			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
-				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
-					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
-				}
-				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
-			}
-		case *replication.QueryEvent:
-			originSQL = strings.TrimSpace(string(ev.Query))
-			if originSQL == "COMMIT" {
-				eventIndex = 0
-				for schemaName, tableMap := range affectedSourceTables {
-					for table := range tableMap {
-						s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, endLocation)
-					}
-				}
-				job := newXIDJob(endLocation, startLocation, endLocation)
-				_, err2 = s.handleJobFunc(job)
-			} else {
-				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
-			}
-		case *replication.XIDEvent:
+		funCommit := func() (needContinue bool, err error) {
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
 			for schemaName, tableMap := range affectedSourceTables {
@@ -2301,16 +2274,50 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "XID"), zap.Stringer("re-shard", shardingReSync))
 					err = closeShardingResync()
 					if err != nil {
-						return terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
+						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
+
 					}
-					continue
+					return true, nil
 				}
 			}
 
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
 
 			job := newXIDJob(endLocation, startLocation, endLocation)
-			_, err2 = s.handleJobFunc(job)
+			_, err = s.handleJobFunc(job)
+			return needContinue, err
+		}
+
+		switch ev := e.Event.(type) {
+		case *replication.RotateEvent:
+			err2 = s.handleRotateEvent(ev, ec)
+		case *replication.RowsEvent:
+			eventIndex++
+			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
+			sourceTable, err2 = s.handleRowsEvent(ev, ec)
+			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
+				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+				}
+				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+			}
+		case *replication.QueryEvent:
+			originSQL = strings.TrimSpace(string(ev.Query))
+			if originSQL == "COMMIT" {
+				needContinue, _ := funCommit()
+				if needContinue {
+					continue
+				}
+				_, err2 = funCommit()
+			} else {
+				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
+			}
+		case *replication.XIDEvent:
+			needContinue, _ := funCommit()
+			if needContinue {
+				continue
+			}
+			_, err2 = funCommit()
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
