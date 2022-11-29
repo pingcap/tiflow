@@ -1812,12 +1812,6 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					return
 				}
 			}
-		case "table-info-version":
-			z.TableInfoVersion, err = dc.ReadUint64()
-			if err != nil {
-				err = msgp.WrapError(err, "TableInfoVersion")
-				return
-			}
 		case "index-columns":
 			var zb0002 uint32
 			zb0002, err = dc.ReadArrayHeader()
@@ -1863,9 +1857,9 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 5
+	// map header, size 4
 	// write "start-ts"
-	err = en.Append(0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	err = en.Append(0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -1901,16 +1895,6 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "table-info-version"
-	err = en.Append(0xb2, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x6e, 0x66, 0x6f, 0x2d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
-	if err != nil {
-		return
-	}
-	err = en.WriteUint64(z.TableInfoVersion)
-	if err != nil {
-		err = msgp.WrapError(err, "TableInfoVersion")
-		return
-	}
 	// write "index-columns"
 	err = en.Append(0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
 	if err != nil {
@@ -1941,9 +1925,9 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 5
+	// map header, size 4
 	// string "start-ts"
-	o = append(o, 0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = append(o, 0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
 	// string "commit-ts"
 	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
@@ -1959,9 +1943,6 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			return
 		}
 	}
-	// string "table-info-version"
-	o = append(o, 0xb2, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x6e, 0x66, 0x6f, 0x2d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
-	o = msgp.AppendUint64(o, z.TableInfoVersion)
 	// string "index-columns"
 	o = append(o, 0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns)))
@@ -2021,12 +2002,6 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					return
 				}
 			}
-		case "table-info-version":
-			z.TableInfoVersion, bts, err = msgp.ReadUint64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "TableInfoVersion")
-				return
-			}
 		case "index-columns":
 			var zb0002 uint32
 			zb0002, bts, err = msgp.ReadArrayHeaderBytes(bts)
@@ -2079,7 +2054,7 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 	} else {
 		s += z.Table.Msgsize()
 	}
-	s += 19 + msgp.Uint64Size + 14 + msgp.ArrayHeaderSize
+	s += 14 + msgp.ArrayHeaderSize
 	for za0001 := range z.IndexColumns {
 		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0001]) * (msgp.IntSize))
 	}
