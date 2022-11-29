@@ -25,12 +25,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/phayes/freeport"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/election"
+	electionMock "github.com/pingcap/tiflow/engine/pkg/election/mock"
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -72,13 +74,21 @@ schema = "test1"
 	return cfg
 }
 
+func newMockElector(t *testing.T) election.Elector {
+	elector := electionMock.NewMockElector(gomock.NewController(t))
+	elector.EXPECT().IsLeader().AnyTimes().Return(true)
+	return elector
+}
+
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 func TestServe(t *testing.T) {
 	cfg := prepareServerEnv(t)
 	s := &Server{
-		cfg:        cfg,
-		msgService: p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		cfg:            cfg,
+		msgService:     p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		leaderDegrader: newFeatureDegrader(),
+		elector:        electionMock.NewMockElector(gomock.NewController(t)),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,9 +195,11 @@ func TestCollectMetric(t *testing.T) {
 	cfg := prepareServerEnv(t)
 
 	s := &Server{
-		cfg:        cfg,
-		metrics:    newServerMasterMetric(),
-		msgService: p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		cfg:            cfg,
+		metrics:        newServerMasterMetric(),
+		msgService:     p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
+		leaderDegrader: newFeatureDegrader(),
+		elector:        newMockElector(t),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -247,21 +259,12 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 	}, time.Second, time.Millisecond*20)
 }
 
-type mockPreRPCHook struct {
-	rpcutil.PreRPCHook
-}
-
-func (mockPreRPCHook) PreRPC(_ context.Context, _ interface{}, _ interface{}) (shouldRet bool, err error) {
-	return false, nil
-}
-
 func TestHTTPErrorHandler(t *testing.T) {
 	cfg := prepareServerEnv(t)
 
 	s := &Server{
-		cfg:           cfg,
-		msgService:    p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
-		masterRPCHook: mockPreRPCHook{},
+		cfg:        cfg,
+		msgService: p2p.NewMessageRPCServiceWithRPCServer("servermaster", nil, nil),
 		jobManager: &mockJobManager{
 			jobs: map[pb.Job_State][]*pb.Job{
 				pb.Job_Running: {
@@ -271,7 +274,11 @@ func TestHTTPErrorHandler(t *testing.T) {
 				},
 			},
 		},
+		leaderDegrader: newFeatureDegrader(),
+		elector:        newMockElector(t),
+		forwardChecker: newForwardChecker(newMockElector(t)),
 	}
+	s.leaderDegrader.updateMasterWorkerManager(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

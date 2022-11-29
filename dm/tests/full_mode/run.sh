@@ -175,6 +175,10 @@ function run() {
 	run_sql_source1 "create table full_mode.\`tb\"1\` (id int,name varchar(10), primary key(\`id\`));"
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(1,'haha');"
 	run_sql_source1 "insert into full_mode.\`tb\"1\` values(2,'hihi');"
+	# write different data in downstream, to test on-duplicate-logical = ignore
+	run_sql_tidb "create database if not exists full_mode;"
+	run_sql_tidb "create table full_mode.\`tb\"1\` (id int,name varchar(10), primary key(\`id\`));"
+	run_sql_tidb "insert into full_mode.\`tb\"1\` values(1,'hoho');"
 
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_count 'Query OK, 0 rows affected' 7
@@ -204,6 +208,10 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2
+
+	run_sql_tidb "SELECT name FROM full_mode.\`tb\"1\` WHERE id = 1;"
+	check_contains "hoho"
+	run_sql_source1 "REPLACE INTO full_mode.\`tb\"1\` values(1,'hoho');"
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

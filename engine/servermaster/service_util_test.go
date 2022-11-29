@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	electionMock "github.com/pingcap/tiflow/engine/pkg/election/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,4 +50,19 @@ func TestFeatureDegrader(t *testing.T) {
 	fd.updateMasterWorkerManager(true)
 	require.True(t, fd.Available("ListExecutors"))
 	require.True(t, fd.Available("CreateJob"))
+}
+
+func TestForwardChecker(t *testing.T) {
+	t.Parallel()
+
+	elector := electionMock.NewMockElector(gomock.NewController(t))
+	fc := newForwardChecker(elector)
+	for method := range leaderOnlyMethods {
+		require.True(t, fc.LeaderOnly(method))
+	}
+
+	elector.EXPECT().IsLeader().Times(1).Return(true)
+	require.True(t, fc.IsLeader())
+	elector.EXPECT().IsLeader().Times(1).Return(false)
+	require.False(t, fc.IsLeader())
 }

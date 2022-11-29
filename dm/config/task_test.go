@@ -695,10 +695,11 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				ExtraArgs:     "--escape-backslash",
 			},
 			LoaderConfig: LoaderConfig{
-				PoolSize:    32,
-				Dir:         "./dumpped_data",
-				ImportMode:  LoadModePhysical,
-				OnDuplicate: OnDuplicateReplace,
+				PoolSize:            32,
+				Dir:                 "./dumpped_data",
+				ImportMode:          LoadModePhysical,
+				OnDuplicateLogical:  OnDuplicateReplace,
+				OnDuplicatePhysical: OnDuplicateNone,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,
@@ -1140,4 +1141,31 @@ func cloneValues(dest, src reflect.Value) {
 			}
 		}
 	}
+}
+
+func TestLoadConfigAdjust(t *testing.T) {
+	t.Parallel()
+
+	cfg := &LoaderConfig{}
+	require.NoError(t, cfg.adjust())
+	require.Equal(t, &LoaderConfig{
+		PoolSize:            16,
+		Dir:                 "",
+		SQLMode:             "",
+		ImportMode:          "logical",
+		OnDuplicate:         "",
+		OnDuplicateLogical:  "replace",
+		OnDuplicatePhysical: "none",
+	}, cfg)
+
+	// test deprecated OnDuplicate will write to OnDuplicateLogical
+	cfg.OnDuplicate = "replace"
+	cfg.OnDuplicateLogical = ""
+	require.NoError(t, cfg.adjust())
+	require.Equal(t, OnDuplicateReplace, cfg.OnDuplicateLogical)
+
+	// test wrong value
+	cfg.OnDuplicatePhysical = "wrong"
+	err := cfg.adjust()
+	require.True(t, terror.ErrConfigInvalidPhysicalDuplicateResolution.Equal(err))
 }
