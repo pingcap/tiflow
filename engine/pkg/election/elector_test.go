@@ -61,7 +61,7 @@ func TestElectorBasic(t *testing.T) {
 		})
 
 	var (
-		electors  []*election.Elector
+		electors  []election.Elector
 		configs   []election.Config
 		cancelFns []context.CancelFunc
 		wg        sync.WaitGroup
