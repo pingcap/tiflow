@@ -400,7 +400,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	if instance.cfg.Mode != config.ModeIncrement && hasLightningPrecheck {
+	if instance.cfg.Mode != config.ModeIncrement &&
+		instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical &&
+		hasLightningPrecheck {
 		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
 		if err != nil {
 			return err
@@ -453,36 +455,33 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewLightningFreeSpaceChecker(
 				info.totalDataSize.Load(), targetInfoGetter))
 		}
-
-		if instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
-			if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
-				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
-				if err != nil {
-					return err
-				}
-				c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+			if err != nil {
+				return err
 			}
-			if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
-				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
-				if err != nil {
-					return err
-				}
-				c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+			if err != nil {
+				return err
 			}
-			if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
-				lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
-				if err != nil {
-					return err
-				}
-				c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+			if err != nil {
+				return err
 			}
-			if _, ok := c.checkingItems[config.LightningSortingSpaceChecking]; ok {
-				lChecker, err := builder.BuildPrecheckItem(restore.CheckLocalTempKVDir)
-				if err != nil {
-					return err
-				}
-				c.checkList = append(c.checkList, checker.NewLightningSortingSpaceChecker(lChecker))
+			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningSortingSpaceChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckLocalTempKVDir)
+			if err != nil {
+				return err
 			}
+			c.checkList = append(c.checkList, checker.NewLightningSortingSpaceChecker(lChecker))
 		}
 	}
 

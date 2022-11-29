@@ -43,7 +43,17 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task.yaml" \
 		"Cluster doesn't have enough space" 1 \
-		"but we need 4EiB" 1
+		"but we need 4EiB" 1 \
+		"local disk space may not enough to finish import, estimate sorted data size is 4EiB" 1
+
+	export GO_FAILPOINTS=''
+	kill_dm_worker
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
