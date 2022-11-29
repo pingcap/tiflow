@@ -47,7 +47,7 @@ func UpdateSchema(tctx *tcontext.Context, db *conn.BaseDB, cfg *config.SubTaskCo
 		return terror.ErrFailUpdateV1DBSchema.Delegate(err)
 	}
 	defer func() {
-		err2 := db.CloseBaseConn(dbConn)
+		err2 := db.ForceCloseConn(dbConn)
 		if err2 != nil {
 			tctx.L().Warn("fail to close connection", zap.Error(err2))
 		}

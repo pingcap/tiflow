@@ -88,20 +88,20 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 }
 
 func (s *testDBSuite) TestGetServerUUID(c *C) {
-	u, err := conn.GetServerUUID(context.Background(), s.db, "mysql")
+	u, err := conn.GetServerUUID(tcontext.Background(), conn.NewBaseDBForTest(s.db), "mysql")
 	c.Assert(err, IsNil)
 	_, err = uuid.Parse(u)
 	c.Assert(err, IsNil)
 }
 
 func (s *testDBSuite) TestGetServerID(c *C) {
-	id, err := conn.GetServerID(context.Background(), s.db)
+	id, err := conn.GetServerID(tcontext.Background(), conn.NewBaseDBForTest(s.db))
 	c.Assert(err, IsNil)
 	c.Assert(id, Greater, uint32(0))
 }
 
 func (s *testDBSuite) TestGetServerUnixTS(c *C) {
-	id, err := conn.GetServerUnixTS(context.Background(), s.db)
+	id, err := conn.GetServerUnixTS(context.Background(), conn.NewBaseDBForTest(s.db))
 	c.Assert(err, IsNil)
 	c.Assert(id, Greater, int64(0))
 }

@@ -388,7 +388,7 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 				if err2 != nil {
 					return err2
 				}
-				defer r.db.CloseBaseConn(dbConn)
+				defer r.db.CloseConn(dbConn)
 				result.LatestGTIDs, err2 = conn.AddGSetWithPurged(ctx, result.LatestGTIDs, dbConn)
 				if err2 != nil {
 					return err2
@@ -1188,7 +1188,7 @@ func (r *Relay) adjustGTID(ctx context.Context, gset mysql.GTIDSet) (mysql.GTIDS
 	if err2 != nil {
 		return nil, err2
 	}
-	defer r.db.CloseBaseConn(dbConn)
+	defer r.db.CloseConn(dbConn)
 	return conn.AddGSetWithPurged(ctx, resultGs, dbConn)
 }
 

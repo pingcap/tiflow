@@ -386,8 +386,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnError(errNoSuchTable)
 	checker := NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -425,8 +425,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableDown)
 	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -463,8 +463,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableDown)
 	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -501,8 +501,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableDown)
 	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -538,8 +538,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableDown)
 	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -571,8 +571,8 @@ func TestCombineInstruction(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRowUp)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnError(errNoSuchTable)
 	checker = NewTablesChecker(
-		map[string]*sql.DB{"test-source": db},
-		downDB,
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {

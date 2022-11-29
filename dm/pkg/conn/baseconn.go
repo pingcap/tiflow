@@ -275,8 +275,17 @@ func (conn *BaseConn) ApplyRetryStrategy(tctx *tcontext.Context, params retry.Pa
 	return conn.RetryStrategy.Apply(tctx, params, operateFn)
 }
 
-// close should not be used by functions other than BaseDB.CloseBaseConn.
+// close returns the connection to the connection pool, has the same meaning of sql.Conn.Close
 func (conn *BaseConn) close() error {
+	if conn == nil || conn.DBConn == nil {
+		return nil
+	}
+	return conn.DBConn.Close()
+}
+
+// forceClose will close the underlying connection completely,
+// should not be used by functions other than BaseDB.ForceCloseConn.
+func (conn *BaseConn) forceClose() error {
 	if conn == nil || conn.DBConn == nil {
 		return nil
 	}

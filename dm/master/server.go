@@ -1736,7 +1736,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
 	defer func() {
-		err2 := baseDB.CloseBaseConn(dbConn)
+		err2 := baseDB.ForceCloseConn(dbConn)
 		if err2 != nil {
 			log.L().Warn("fail to close connection", zap.Error(err2))
 		}

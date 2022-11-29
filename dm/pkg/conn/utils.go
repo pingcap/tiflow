@@ -53,7 +53,7 @@ func GetGlobalVariable(ctx *tcontext.Context, db *BaseDB, variable string) (valu
 		return "", err
 	}
 	// nolint:errcheck
-	defer db.CloseBaseConn(conn)
+	defer db.ForceCloseConn(conn)
 	return getVariable(ctx, conn, variable, true)
 }
 
@@ -261,7 +261,7 @@ func GetDBCaseSensitive(ctx context.Context, db *BaseDB) (bool, error) {
 	if err != nil {
 		return true, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
-	defer CloseBaseConnWithoutErr(db, conn)
+	defer db.CloseConn(conn)
 	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
 	if err != nil {
 		return true, err

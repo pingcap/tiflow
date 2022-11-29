@@ -1344,7 +1344,7 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							return err2
 						}
 						defer func(baseConn *conn.BaseConn) {
-							err2 := job.loader.toDB.CloseBaseConn(baseConn)
+							err2 := job.loader.toDB.ForceCloseConn(baseConn)
 							if err2 != nil {
 								job.loader.logger.Warn("fail to close connection", zap.Error(err2))
 							}

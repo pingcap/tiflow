@@ -23,6 +23,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 var _ = Suite(&testUtilSuite{})
@@ -36,27 +38,26 @@ func (t *testUtilSuite) TestIsNewServer(c *C) {
 	mockDB := conn.InitMockDB(c)
 	baseDB, err := conn.GetUpstreamDB(getDBConfigForTest())
 	c.Assert(err, IsNil)
-	db := baseDB.DB
 
 	flavor := gmysql.MySQLFlavor
 	// no prevUUID, is new server.
-	isNew, err := isNewServer(ctx, "", db, flavor)
+	isNew, err := isNewServer(ctx, "", baseDB, flavor)
 	c.Assert(err, IsNil)
 	c.Assert(isNew, IsTrue)
 
 	// different server
 	mockGetServerUUID(mockDB)
-	isNew, err = isNewServer(ctx, "not-exists-uuid.000001", db, flavor)
+	isNew, err = isNewServer(ctx, "not-exists-uuid.000001", baseDB, flavor)
 	c.Assert(err, IsNil)
 	c.Assert(isNew, IsTrue)
 
 	// the same server
 	mockGetServerUUID(mockDB)
-	currUUID, err := conn.GetServerUUID(ctx, db, flavor)
+	currUUID, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), baseDB, flavor)
 	c.Assert(err, IsNil)
 
 	mockGetServerUUID(mockDB)
-	isNew, err = isNewServer(ctx, fmt.Sprintf("%s.000001", currUUID), db, flavor)
+	isNew, err = isNewServer(ctx, fmt.Sprintf("%s.000001", currUUID), baseDB, flavor)
 	c.Assert(err, IsNil)
 	c.Assert(isNew, IsFalse)
 	c.Assert(mockDB.ExpectationsWereMet(), IsNil)

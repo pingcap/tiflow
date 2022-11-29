@@ -296,7 +296,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.S
 			return nil, nil, terror.WithScope(err, terror.ScopeDownstream)
 		}
 		resetBaseConnFn := func(tctx *tcontext.Context, baseConn *conn.BaseConn) (*conn.BaseConn, error) {
-			err := baseDB.CloseBaseConn(baseConn)
+			err := baseDB.ForceCloseConn(baseConn)
 			if err != nil {
 				tctx.L().Warn("failed to close BaseConn in reset")
 			}

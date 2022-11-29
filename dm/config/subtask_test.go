@@ -292,7 +292,7 @@ func TestDBConfigClone(t *testing.T) {
 		User:     "root",
 		Password: "123",
 		Session:  map[string]string{"1": "1"},
-		RawDBCfg: DefaultRawDBConfig(),
+		RawDBCfg: dbconfig.DefaultRawDBConfig(),
 	}
 
 	// When add new fields, also update this value

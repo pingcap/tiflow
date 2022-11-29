@@ -278,17 +278,27 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 	return err
 }
 
-// CloseBaseConn release BaseConn resource from BaseDB, and close BaseConn.
-func (d *BaseDB) CloseBaseConn(conn *BaseConn) error {
+// CloseConn release BaseConn resource from BaseDB, and returns the connection to the connection pool,
+// has the same meaning of sql.Conn.Close
+func (d *BaseDB) CloseConn(conn *BaseConn) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.conns, conn)
 	return conn.close()
 }
 
-// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error.
-func CloseBaseConnWithoutErr(d *BaseDB, conn *BaseConn) {
-	if err1 := d.CloseBaseConn(conn); err1 != nil {
+// ForceCloseConn release BaseConn resource from BaseDB, and close BaseConn completely(not return to the connection pool).
+func (d *BaseDB) ForceCloseConn(conn *BaseConn) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.conns, conn)
+	return conn.forceClose()
+}
+
+// ForceCloseConnWithoutErr close the connection completely(not return to the conn pool),
+// and output a warning log if meets an error.
+func ForceCloseConnWithoutErr(d *BaseDB, conn *BaseConn) {
+	if err1 := d.ForceCloseConn(conn); err1 != nil {
 		log.L().Warn("close db connection failed", zap.Error(err1))
 	}
 }
@@ -302,7 +312,7 @@ func (d *BaseDB) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for conn := range d.conns {
-		terr := conn.close()
+		terr := conn.forceClose()
 		if err == nil {
 			err = terr
 		}

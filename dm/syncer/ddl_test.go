@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -35,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/stretchr/testify/require"
@@ -77,7 +75,7 @@ func (s *testDDLSuite) TestAnsiQuotes(c *C) {
 			AddRow("sql_mode", "ANSI_QUOTES"))
 	c.Assert(err, IsNil)
 
-	parser, err := conn.GetParser(context.Background(), db)
+	parser, err := conn.GetParser(tcontext.Background(), conn.NewBaseDBForTest(db))
 	c.Assert(err, IsNil)
 
 	for _, sql := range ansiQuotesCases {
@@ -841,6 +839,6 @@ func (m mockOnlinePlugin) CheckAndUpdate(tctx *tcontext.Context, schemas map[str
 	return nil
 }
 
-func (m mockOnlinePlugin) CheckRegex(stmt ast.StmtNode, schema string, flavor utils.LowerCaseTableNamesFlavor) error {
+func (m mockOnlinePlugin) CheckRegex(stmt ast.StmtNode, schema string, flavor conn.LowerCaseTableNamesFlavor) error {
 	return nil
 }

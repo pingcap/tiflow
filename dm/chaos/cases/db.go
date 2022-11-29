@@ -48,7 +48,7 @@ func createDBConn(ctx context.Context, db *conn.BaseDB, currDB string) (*dbConn,
 		baseConn: c,
 		currDB:   currDB,
 		resetFunc: func(ctx context.Context, baseConn *conn.BaseConn) (*conn.BaseConn, error) {
-			err2 := db.CloseBaseConn(baseConn)
+			err2 := db.ForceCloseConn(baseConn)
 			if err2 != nil {
 				log.L().Warn("fail to close connection", zap.Error(err2))
 			}

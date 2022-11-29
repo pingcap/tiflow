@@ -52,7 +52,7 @@ func newDBConn(ctx context.Context, cfg conn.ScopedDBConfig, currDB string) (*db
 }
 
 func (dc *dbConn) resetConn(ctx context.Context) error {
-	err := dc.db.CloseBaseConn(dc.con)
+	err := dc.db.ForceCloseConn(dc.con)
 	if err != nil {
 		log.L().Warn("fail to close connection", zap.Error(err))
 	}
