@@ -136,8 +136,8 @@ type tablePairInfo struct {
 	tableMapPerUpstreamWithSourceID map[string]map[filter.Table][]filter.Table
 	// downstream table -> extended columns
 	extendedColumnPerTable map[filter.Table][]string
-	// source index -> upstream tables -> size
-	tableSizePerSource []map[filter.Table]int64
+	// byte size of all upstream tables, counting both data and index
+	totalDataSize *atomic.Int64
 }
 
 func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, err error) {
@@ -170,13 +170,11 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		return nil, egErr
 	}
 
-	var tableSizeMu sync.Mutex
-	tableSize := make([]map[filter.Table]int64, len(c.instances))
+	info.totalDataSize = atomic.NewInt64(0)
 	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok && c.stCfgs[0].Mode != config.ModeIncrement {
 		// TODO: concurrently read it intra-source later
 		for idx := range c.instances {
 			i := idx
-			tableSize[i] = make(map[filter.Table]int64)
 			eg.Go(func() error {
 				for _, sourceTables := range tableMapPerUpstream[i] {
 					for _, sourceTable := range sourceTables {
@@ -189,9 +187,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 						if err2 != nil {
 							return err2
 						}
-						tableSizeMu.Lock()
-						tableSize[i][sourceTable] = size
-						tableSizeMu.Unlock()
+						info.totalDataSize.Add(size)
 					}
 				}
 				return nil
@@ -202,7 +198,6 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		return nil, egErr
 	}
 
-	info.tableSizePerSource = tableSize
 	info.extendedColumnPerTable = extendedColumnPerTable
 	info.tablesPerDownstreamTable = make(map[filter.Table]map[string][]filter.Table)
 	info.shardNumPerDownstreamTable = make(map[filter.Table]int)
@@ -816,11 +811,7 @@ func newLightningPrecheckAdaptor(
 		allTables        = make(map[string]*checkpoints.TidbDBInfo)
 	)
 	if info != nil {
-		for _, tables := range info.tableSizePerSource {
-			for _, size := range tables {
-				sourceDataResult.SizeWithIndex += size
-			}
-		}
+		sourceDataResult.SizeWithIndex = info.totalDataSize.Load()
 	}
 	for db, tables := range info.downstreamTablesPerDB {
 		allTables[db] = &checkpoints.TidbDBInfo{
