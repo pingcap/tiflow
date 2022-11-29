@@ -16,6 +16,7 @@ package checker
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
@@ -227,7 +228,6 @@ func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
 		Desc:  "check whether the free space of sorting-dir-physical is enough for Physical import mode",
 		State: StateFailure,
 	}
-	// TODO: don't expose lightning's config name in message?
 	convertLightningPrecheck(
 		ctx,
 		result,
@@ -235,5 +235,10 @@ func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
 		StateWarning,
 		`you can change sorting-dir-physical to another mounting disk or set disk-quota-physical`,
 	)
+	// don't expose lightning's config name in message
+	if len(result.Errors) > 0 {
+		result.Errors[0].ShortErr = strings.ReplaceAll(result.Errors[0].ShortErr, "tikv-importer.disk-quota", "disk-quota-physical")
+		result.Errors[0].ShortErr = strings.ReplaceAll(result.Errors[0].ShortErr, "mydumper.sorted-kv-dir", "sorting-dir-physical")
+	}
 	return result
 }
