@@ -229,15 +229,10 @@ func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Facto
 			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
 				dbConfig.Passwd = string(dePassword)
 				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
-				if err != nil {
-					return testDB, err
-				}
 			}
-		} else {
-			return nil, err
 		}
 	}
-	return testDB, nil
+	return testDB, err
 }
 
 // GenBasicDSN generates a basic DSN from the given config.
@@ -279,8 +274,8 @@ func GenBasicDSN(sinkURI *url.URL, cfg *Config) (*dmysql.Config, error) {
 	return dsn, nil
 }
 
-// CheckIfSupportBDRMode checks if the downstream supports BDR mode.
-func CheckIfSupportBDRMode(ctx context.Context, db *sql.DB) (bool, error) {
+// CheckIfBDRModeIsSupported checks if the downstream supports BDR mode.
+func CheckIfBDRModeIsSupported(ctx context.Context, db *sql.DB) (bool, error) {
 	isTiDB, err := CheckIsTiDB(ctx, db)
 	if err != nil || !isTiDB {
 		return false, err
@@ -290,7 +285,6 @@ func CheckIfSupportBDRMode(ctx context.Context, db *sql.DB) (bool, error) {
 	// We should always try to set this variable, and ignore the error if
 	// downstream does not support this variable, it is by design.
 	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", testSourceID)
-	//TODO: remove this log after fully testing
 	_, err = db.ExecContext(ctx, query)
 	if err != nil {
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
@@ -311,10 +305,8 @@ func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 	if err != nil {
 		log.Error("check tidb version error", zap.Error(err))
 		// downstream is not TiDB, do nothing
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError);
-		// means downstream is not TiDB
-		ok && mysqlErr.Number == tmysql.ErrNoDB ||
-			mysqlErr.Number == tmysql.ErrSpDoesNotExist {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && (mysqlErr.Number == tmysql.ErrNoDB ||
+			mysqlErr.Number == tmysql.ErrSpDoesNotExist) {
 			return false, nil
 		}
 		return false, errors.Trace(err)

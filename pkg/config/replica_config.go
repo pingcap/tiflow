@@ -88,12 +88,15 @@ func (d *Duration) UnmarshalText(text []byte) error {
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	MemoryQuota        uint64            `toml:"memory-quota" json:"memory-quota"`
-	CaseSensitive      bool              `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue     bool              `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate     bool              `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint   bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	EnableSyncPoint    bool              `toml:"enable-sync-point" json:"enable-sync-point"`
+	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
+	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	EnableSyncPoint  bool   `toml:"enable-sync-point" json:"enable-sync-point"`
+	// BDR(Bidirectional Replication) is a feature that allows users to
+	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
+	// This feature is only available for TiDB.
 	BDRMode            bool              `toml:"bdr-mode" json:"bdr-mode"`
 	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
 	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`

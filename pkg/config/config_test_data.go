@@ -150,6 +150,7 @@ const (
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -187,7 +188,8 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+	"tidb-source-id": 1
   },
   "consistent": {
     "level": "none",
@@ -204,6 +206,7 @@ const (
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -238,7 +241,8 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+	"tidb-source-id": 1
   },
   "consistent": {
     "level": "none",

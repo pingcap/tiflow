@@ -15,9 +15,6 @@ package sink
 
 import (
 	"context"
-	"net/url"
-	"strings"
-
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
@@ -26,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/util"
+	"net/url"
 )
 
 // Validate sink if given valid parameters.
@@ -33,12 +31,13 @@ import (
 // Maybe we should support the dry-run mode to validate sink.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
 	var err error
-	if err = preCheckSinkURI(sinkURI); err != nil {
+	var uri *url.URL
+	if uri, err = preCheckSinkURI(sinkURI); err != nil {
 		return err
 	}
 
 	if cfg.BDRMode {
-		err = checkBDRMode(ctx, sinkURI, cfg)
+		err = checkBDRMode(ctx, uri, cfg)
 		if err != nil {
 			return err
 		}
@@ -84,14 +83,14 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 // preCheckSinkURI do some pre-check for sink URI.
 // 1. Check if sink URI is empty.
 // 2. Check if we use correct IPv6 format in URI.(if needed)
-func preCheckSinkURI(sinkURIStr string) error {
+func preCheckSinkURI(sinkURIStr string) (*url.URL, error) {
 	if sinkURIStr == "" {
-		return cerror.ErrSinkURIInvalid.GenWithStack("sink uri is empty")
+		return nil, cerror.ErrSinkURIInvalid.GenWithStack("sink uri is empty")
 	}
 
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
 	// Check if we use the correct IPv6 address format.
@@ -100,37 +99,30 @@ func preCheckSinkURI(sinkURIStr string) error {
 	// Also notice the host name different from host(host+port).
 	if util.IsIPv6Address(sinkURI.Hostname()) &&
 		!util.IsValidIPv6AddressFormatInURI(sinkURI.Host) {
-		return cerror.ErrSinkURIInvalid.GenWithStack("sink uri host is not valid IPv6 address, " +
+		return nil, cerror.ErrSinkURIInvalid.GenWithStack("sink uri host is not valid IPv6 address, " +
 			"when using IPv6 address in URI, please use [ipv6-address]:port")
 	}
 
-	return nil
+	return sinkURI, nil
 }
 
-func checkBDRMode(ctx context.Context, sinkURI string, replicaConfig *config.ReplicaConfig) error {
-	maskSinkUri, err := util.MaskSinkURI(sinkURI)
+func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
+	maskSinkUri, err := util.MaskSinkURI(sinkURI.String())
 	if err != nil {
 		return err
 	}
-	isDownstreamTiDBOrMySQL, err := checkIsDownstreamTiDBoRMySQL(sinkURI)
-	if err != nil {
-		return err
-	}
-	if !isDownstreamTiDBOrMySQL {
+
+	if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack("sink uri scheme is not supported in BDR mode, sink uri: %s", maskSinkUri)
 	}
 	cfg := pmysql.NewConfig()
 	id := model.DefaultChangeFeedID("sink-verify")
-	uri, err := url.Parse(sinkURI)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	err = cfg.Apply(ctx, id, uri, replicaConfig)
+	err = cfg.Apply(ctx, id, sinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}
-	dsn, err := pmysql.GenBasicDSN(uri, cfg)
+	dsn, err := pmysql.GenBasicDSN(sinkURI, cfg)
 	if err != nil {
 		return err
 	}
@@ -139,30 +131,14 @@ func checkBDRMode(ctx context.Context, sinkURI string, replicaConfig *config.Rep
 		return err
 	}
 	defer testDB.Close()
-	supported, err := pmysql.CheckIfSupportBDRMode(ctx, testDB)
+	supported, err := pmysql.CheckIfBDRModeIsSupported(ctx, testDB)
 	if err != nil {
 		return err
 	}
 	if !supported {
-		// TODO: refine this error message
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack("downstream database does not support BDR mode, "+
 				"please check your config, sink uri: %s", maskSinkUri)
 	}
 	return nil
-}
-
-func checkIsDownstreamTiDBoRMySQL(sinkURI string) (bool, error) {
-	var err error
-	var uri *url.URL
-	uri, err = url.Parse(sinkURI)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	schema := strings.ToLower(uri.Scheme)
-	switch schema {
-	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		return true, nil
-	}
-	return false, nil
 }

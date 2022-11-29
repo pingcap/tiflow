@@ -83,7 +83,6 @@ type Config struct {
 
 	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
 	SourceID       uint64
-	BDRMode        bool
 	BatchDMLEnable bool
 }
 
@@ -155,7 +154,6 @@ func (c *Config) Apply(
 	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
-	c.BDRMode = replicaConfig.BDRMode
 
 	return nil
 }

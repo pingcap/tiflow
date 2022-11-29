@@ -638,6 +638,7 @@ func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
 	if err != nil {
 		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
 			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
 		}
 		return err
 	}

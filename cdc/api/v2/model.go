@@ -95,7 +95,7 @@ type ReplicaConfig struct {
 	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
 	EnableSyncPoint       bool              `json:"enable_sync_point"`
-	BDRMode               bool              `json:"bdr-mode"`
+	BDRMode               bool              `json:"bdr_mode"`
 	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
 	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
