@@ -266,6 +266,7 @@ const (
 	codeConfigLoaderS3NotSupport
 	codeConfigInvalidSafeModeDuration
 	codeConfigConfictSafeModeDurationAndSafeMode
+	codeConfigInvalidLoadPhysicalDuplicateResolution
 )
 
 // Binlog operation error code list.
@@ -963,7 +964,7 @@ var (
 	ErrOpenAPITaskConfigNotExist                = New(codeConfigOpenAPITaskConfigNotExist, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' does not exist", "")
 	ErrConfigCollationCompatibleNotSupport      = New(codeCollationCompatibleNotSupport, ClassConfig, ScopeInternal, LevelMedium, "collation compatible %s not supported", "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`.")
 	ErrConfigInvalidLoadMode                    = New(codeConfigInvalidLoadMode, ClassConfig, ScopeInternal, LevelMedium, "invalid load mode '%s'", "Please choose a valid value in ['logical', 'physical']")
-	ErrConfigInvalidDuplicateResolution         = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate '%s'", "Please choose a valid value in ['replace', 'error', 'ignore']")
+	ErrConfigInvalidDuplicateResolution         = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-logical or on-duplicate option '%s'", "Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty.")
 	ErrConfigValidationMode                     = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
 	ErrContinuousValidatorCfgNotFound           = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `validator-config-name` config in task configuration file.")
 	ErrConfigStartTimeTooLate                   = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
@@ -971,6 +972,7 @@ var (
 	ErrConfigLoaderS3NotSupport                 = New(codeConfigLoaderS3NotSupport, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is s3 dir, but s3 is not supported", "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead.")
 	ErrConfigInvalidSafeModeDuration            = New(codeConfigInvalidSafeModeDuration, ClassConfig, ScopeInternal, LevelMedium, "safe-mode-duration '%s' parsed failed: %v", "Please check the `safe-mode-duration` is correct.")
 	ErrConfigConfictSafeModeDurationAndSafeMode = New(codeConfigConfictSafeModeDurationAndSafeMode, ClassConfig, ScopeInternal, LevelLow, "safe-mode(true) conflicts with safe-mode-duration(0s)", "Please set safe-mode to false or safe-mode-duration to non-zero.")
+	ErrConfigInvalidPhysicalDuplicateResolution = New(codeConfigInvalidLoadPhysicalDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-physical option '%s'", "Please choose a valid value in ['none', 'manual'] or leave it empty.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

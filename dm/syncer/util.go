@@ -37,11 +37,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// the time layout for TiDB SHOW DDL statements.
-const timeLayout = "2006-01-02 15:04:05"
-
-// everytime retrieve 10 new rows from TiDB history jobs.
-const linesOfRows = 10
+const (
+	// the time layout for TiDB SHOW DDL statements.
+	timeLayout = "2006-01-02 15:04:05"
+	// everytime retrieve 10 new rows from TiDB history jobs.
+	linesOfRows = 10
+	// max capacity of the block/allow list.
+	maxCapacity = 100000
+)
 
 // getTableByDML gets table from INSERT/UPDATE/DELETE statement.
 func getTableByDML(dml ast.DMLNode) (*filter.Table, error) {
@@ -136,7 +139,7 @@ func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DB
 	return loc, tzStr, nil
 }
 
-func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location) (replication.BinlogSyncerConfig, error) {
+func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location, baList *filter.Filter) (replication.BinlogSyncerConfig, error) {
 	var tlsConfig *tls.Config
 	var err error
 	if cfg.From.Security != nil {
@@ -153,6 +156,46 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		}
 	}
 
+	var rowsEventDecodeFunc func(*replication.RowsEvent, []byte) error
+	if baList != nil {
+		// we don't track delete table events, so simply reset the cache if it's full
+		// TODO: use LRU or CLOCK cache if needed.
+		// NOTE: use Table as Key rather than TableID
+		// because TableID may change when upstream switches master, and also RenameTable will not change TableID.
+		allowListCache := make(map[filter.Table]struct{}, maxCapacity)
+		blockListCache := make(map[filter.Table]struct{}, maxCapacity)
+
+		rowsEventDecodeFunc = func(re *replication.RowsEvent, data []byte) error {
+			pos, err := re.DecodeHeader(data)
+			if err != nil {
+				return err
+			}
+			tb := filter.Table{
+				Schema: string(re.Table.Schema),
+				Name:   string(re.Table.Table),
+			}
+			if _, ok := blockListCache[tb]; ok {
+				return nil
+			} else if _, ok := allowListCache[tb]; ok {
+				return re.DecodeData(pos, data)
+			}
+
+			if skipByTable(baList, &tb) {
+				if len(blockListCache) >= maxCapacity {
+					blockListCache = make(map[filter.Table]struct{}, maxCapacity)
+				}
+				blockListCache[tb] = struct{}{}
+				return nil
+			}
+
+			if len(allowListCache) >= maxCapacity {
+				allowListCache = make(map[filter.Table]struct{}, maxCapacity)
+			}
+			allowListCache[tb] = struct{}{}
+			return re.DecodeData(pos, data)
+		}
+	}
+
 	syncCfg := replication.BinlogSyncerConfig{
 		ServerID:                cfg.ServerID,
 		Flavor:                  cfg.Flavor,
@@ -162,6 +205,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		Password:                cfg.From.Password,
 		TimestampStringLocation: timezone,
 		TLSConfig:               tlsConfig,
+		RowsEventDecodeFunc:     rowsEventDecodeFunc,
 	}
 	// when retry count > 1, go-mysql will retry sync from the previous GTID set in GTID mode,
 	// which may get duplicate binlog event after retry success. so just set retry count = 1, and task

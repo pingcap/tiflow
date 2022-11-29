@@ -56,8 +56,7 @@ type SinkManager struct {
 	memQuota *memQuota
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
-	// redoManager was used to report the resolved ts of the table,
-	// if redo log is enabled.
+	// redoManager is used to report the resolved ts of the table if redo log is enabled.
 	redoManager redo.LogManager
 	// sortEngine is used by the sink manager to fetch data.
 	sortEngine engine.SortEngine
@@ -124,7 +123,7 @@ func New(
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 	}
 
-	if redoManager != nil {
+	if redoManager != nil && redoManager.Enabled() {
 		m.redoManager = redoManager
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
@@ -133,8 +132,14 @@ func New(
 		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
 	}
 
-	m.startWorkers(mg, changefeedInfo.Config.EnableOldValue, changefeedInfo.Config.EnableOldValue)
+	m.startWorkers(mg, changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
+
+	log.Info("Sink manager is created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Bool("withRedoEnabled", m.redoManager != nil))
+
 	return m, nil
 }
 
@@ -301,8 +306,9 @@ func (m *SinkManager) generateSinkTasks() error {
 					CommitTs: upperBoundTs,
 				}
 			}
+			upperBound := getUpperBound()
 			// Only generate the table sink task if lower bound less or equal the upper bound.
-			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound())
+			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(upperBound)
 			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				// Next time.
@@ -337,11 +343,13 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
-
 			log.Debug("Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", tableID),
+				zap.Any("lowerBound", slowestTableProgress.nextLowerBoundPos),
+				zap.Any("currentUpperBound", upperBound),
+			)
 		}
 	}
 }
@@ -384,20 +392,25 @@ func (m *SinkManager) generateRedoTasks() error {
 				// Next time.
 				continue
 			}
-			callback := func(lastWrittenPos engine.Position) {
-				p := &progress{
-					tableID:           tableID,
-					nextLowerBoundPos: lastWrittenPos.Next(),
-				}
-				m.redoProgressHeap.push(p)
-			}
+
+			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("memory", requestMemSize))
 
 			t := &redoTask{
 				tableID:       tableID,
 				lowerBound:    slowestTableProgress.nextLowerBoundPos,
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink.(*tableSinkWrapper),
-				callback:      callback,
+				callback: func(lastWrittenPos engine.Position) {
+					p := &progress{
+						tableID:           tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+					}
+					m.redoProgressHeap.push(p)
+				},
 			}
 			select {
 			case <-m.ctx.Done():
@@ -552,9 +565,10 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	}
 	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+	resolvedMark := checkpointTs.ResolvedMark()
 	cleanPos := engine.Position{
-		StartTs:  checkpointTs.Ts - 1,
-		CommitTs: checkpointTs.Ts,
+		StartTs:  resolvedMark - 1,
+		CommitTs: resolvedMark,
 	}
 	err := m.sortEngine.CleanByTable(tableID, cleanPos)
 	if err != nil {
@@ -568,7 +582,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
 	}
 	return pipeline.Stats{
-		CheckpointTs: checkpointTs.Ts,
+		CheckpointTs: resolvedMark,
 		ResolvedTs:   resolvedTs,
 		BarrierTs:    m.lastBarrierTs.Load(),
 	}, nil

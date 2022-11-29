@@ -133,7 +133,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
 		// This can happen when the table has no data and never been recorded.
-		log.Warn("Table consumed memory records not found.",
+		log.Debug("Table consumed memory records not found.",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))

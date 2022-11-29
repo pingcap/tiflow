@@ -135,7 +135,7 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	for _, event := range events {
 		state.ch.In() <- eventWithTableID{tableID, event}
 		if event.IsResolved() {
-			atomic.StoreUint64(&s.tables[tableID].pendingResolved, event.CRTs)
+			atomic.StoreUint64(&state.pendingResolved, event.CRTs)
 		}
 	}
 	return
