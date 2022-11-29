@@ -1133,9 +1133,9 @@ workaround = "Please choose a valid value in ['logical', 'physical']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]
-message = "invalid load on-duplicate '%s'"
+message = "invalid load on-duplicate-logical or on-duplicate option '%s'"
 description = ""
-workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
+workaround = "Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty."
 tags = ["internal", "medium"]
 
 [error.DM-config-20055]
@@ -1179,6 +1179,12 @@ message = "safe-mode(true) conflicts with safe-mode-duration(0s)"
 description = ""
 workaround = "Please set safe-mode to false or safe-mode-duration to non-zero."
 tags = ["internal", "low"]
+
+[error.DM-config-20062]
+message = "invalid load on-duplicate-physical option '%s'"
+description = ""
+workaround = "Please choose a valid value in ['none', 'manual'] or leave it empty."
+tags = ["internal", "medium"]
 
 [error.DM-binlog-op-22001]
 message = ""

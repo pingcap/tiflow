@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -23,6 +22,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -61,9 +63,9 @@ func TestGenerateCloudStoragePath(t *testing.T) {
 		},
 		version: 5,
 	}
-	path := w.generateCloudStoragePath(table)
+	path := w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000001.json", path)
-	path = w.generateCloudStoragePath(table)
+	path = w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000002.json", path)
 	w.close()
 }
@@ -75,9 +77,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	d := testDMLWorker(ctx, t, parentDir)
 	fragCh := chann.New[eventFragment]()
 	table1Dir := path.Join(parentDir, "test/table1/99")
-	table2Dir := path.Join(parentDir, "test/table2/199")
 	os.MkdirAll(table1Dir, 0o755)
-	os.MkdirAll(table2Dir, 0o755)
 	d.run(ctx, fragCh)
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
@@ -85,8 +85,20 @@ func TestDMLWorkerRun(t *testing.T) {
 		Table:   "table1",
 		TableID: 100,
 	}
-	// assume 5 event fragments of table 1 are arrived in reverse order
-	for i := 5; i > 0; i-- {
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 100,
+		},
+		Version: 99,
+		TableInfo: &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: timodel.NewCIStr("name"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+			},
+		},
+	}
+	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: versionedTable{
@@ -95,11 +107,7 @@ func TestDMLWorkerRun(t *testing.T) {
 			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
+					TableInfo: tableInfo,
 					Rows: []*model.RowChangedEvent{
 						{
 							Table: &model.TableName{
@@ -126,63 +134,16 @@ func TestDMLWorkerRun(t *testing.T) {
 		fragCh.In() <- frag
 	}
 
-	table2 := model.TableName{
-		Schema:  "test",
-		Table:   "table2",
-		TableID: 200,
-	}
-	// assume 3 event fragments of table 2 are arrived sequentially
-	for i := 1; i <= 3; i++ {
-		frag := eventFragment{
-			seqNumber: uint64(i),
-			versionedTable: versionedTable{
-				TableName: table2,
-				version:   199,
-			},
-			event: &eventsink.TxnCallbackableEvent{
-				Event: &model.SingleTableTxn{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 200,
-					},
-					Rows: []*model.RowChangedEvent{
-						{
-							Table: &model.TableName{
-								Schema:  "test",
-								Table:   "table1",
-								TableID: 200,
-							},
-							Columns: []*model.Column{
-								{Name: "c1", Value: 100},
-								{Name: "c2", Value: "你好，世界"},
-							},
-						},
-					},
-				},
-			},
-			encodedMsgs: []*common.Message{
-				{
-					Value: []byte(fmt.Sprintf(`{"id":%d,"database":"test","table":"table2","pkNames":[],"isDdl":false,`+
-						`"type":"INSERT","es":0,"ts":1663572946034,"sql":"","sqlType":{"c1":12,"c2":12},`+
-						`"data":[{"c1":"200","c2":"你好，世界"}],"old":null}`, i)),
-				},
-			},
-		}
-		fragCh.In() <- frag
-	}
-
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
-	files, err := ioutil.ReadDir(table1Dir)
+	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
-	require.Len(t, files, 1)
-	require.Equal(t, "CDC000001.json", files[0].Name())
-	// check whether files for table2 has been generated
-	files, err = ioutil.ReadDir(table2Dir)
-	require.Nil(t, err)
-	require.Len(t, files, 1)
-	require.Equal(t, "CDC000001.json", files[0].Name())
+	require.Len(t, files, 2)
+	var fileNames []string
+	for _, f := range files {
+		fileNames = append(fileNames, f.Name())
+	}
+	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json"}, fileNames)
 	cancel()
 	d.close()
 	fragCh.Close()

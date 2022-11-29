@@ -97,6 +97,6 @@ func TestTaskCfg(t *testing.T) {
 		expectCfg := &dmconfig.SubTaskConfig{}
 		_, err := toml.DecodeFile(fmt.Sprintf("%s/dm_subtask_%d.toml", subtaskTemplateDir, taskCfg.Upstreams[0].DBCfg.Port), expectCfg)
 		require.NoError(t, err)
-		require.EqualValues(t, subTaskCfg, expectCfg)
+		require.EqualValues(t, expectCfg, subTaskCfg)
 	}
 }
