@@ -2276,7 +2276,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					err = closeShardingResync()
 					if err != nil {
 						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
-
 					}
 					return true, nil
 				}
