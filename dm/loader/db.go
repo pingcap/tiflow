@@ -44,6 +44,14 @@ type DBConn struct {
 	resetBaseConnFn func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error)
 }
 
+// Scope return connection scope.
+func (conn *DBConn) Scope() terror.ErrScope {
+	if conn == nil || conn.baseConn == nil {
+		return terror.ScopeNotSet
+	}
+	return conn.baseConn.Scope
+}
+
 func (conn *DBConn) querySQL(ctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if conn == nil || conn.baseConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")

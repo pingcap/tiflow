@@ -1052,7 +1052,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	for rows.Next() {
 		err := rows.Scan(&cpSchema, &cpTable, &binlogName, &binlogPos, &binlogGTIDSet, &exitSafeBinlogName, &exitSafeBinlogPos, &exitSafeBinlogGTIDSet, &tiBytes, &isGlobal)
 		if err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return terror.DBErrorAdapt(err, cp.dbConn.Scope(), terror.ErrDBDriverError)
 		}
 
 		gset, err := gtid.ParserGTID(cp.cfg.Flavor, binlogGTIDSet.String) // default to "".
@@ -1120,7 +1120,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 		mSchema[cpTable] = newBinlogPoint(location, location, ti, ti, cp.cfg.EnableGTID)
 	}
 
-	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return terror.DBErrorAdapt(rows.Err(), cp.dbConn.Scope(), terror.ErrDBDriverError)
 }
 
 // LoadIntoSchemaTracker loads table infos of all points into schema tracker.

@@ -204,7 +204,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	for rows.Next() {
 		err := rows.Scan(&filename, &schema, &table, &offset, &endPos)
 		if err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return terror.DBErrorAdapt(err, cp.conn.Scope(), terror.ErrDBDriverError)
 		}
 
 		if _, ok := cp.restoringFiles.pos[schema]; !ok {
@@ -218,7 +218,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 		restoringFiles[filename] = []int64{offset, endPos}
 	}
 
-	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return terror.DBErrorAdapt(rows.Err(), cp.conn.Scope(), terror.ErrDBDriverError)
 }
 
 // GetRestoringFileInfo implements CheckPoint.GetRestoringFileInfo.
@@ -450,11 +450,11 @@ func (cp *RemoteCheckPoint) Count(tctx *tcontext.Context) (int, error) {
 	for rows.Next() {
 		err = rows.Scan(&count)
 		if err != nil {
-			return 0, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return 0, terror.DBErrorAdapt(err, cp.conn.Scope(), terror.ErrDBDriverError)
 		}
 	}
 	if rows.Err() != nil {
-		return 0, terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+		return 0, terror.DBErrorAdapt(rows.Err(), cp.conn.Scope(), terror.ErrDBDriverError)
 	}
 	cp.logger.Debug("checkpoint record", zap.Int("count", count))
 	return count, nil

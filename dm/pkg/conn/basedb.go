@@ -135,7 +135,7 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), config.Scope)
+		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
@@ -147,7 +147,7 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 	if err != nil {
 		db.Close()
 		doFuncInClose()
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), config.Scope)
+		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
 	db.SetMaxIdleConns(maxIdleConns)
@@ -165,7 +165,7 @@ type BaseDB struct {
 
 	Retry retry.Strategy
 
-	scope terror.ErrScope
+	Scope terror.ErrScope
 	// this function will do when close the BaseDB
 	doFuncInClose []func()
 }
@@ -177,7 +177,7 @@ func NewBaseDB(db *sql.DB, scope terror.ErrScope, doFuncInClose ...func()) *Base
 		DB:            db,
 		conns:         conns,
 		Retry:         &retry.FiniteRetryStrategy{},
-		scope:         scope,
+		Scope:         scope,
 		doFuncInClose: doFuncInClose,
 	}
 }
@@ -189,7 +189,7 @@ func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 		DB:            db,
 		conns:         conns,
 		Retry:         &retry.FiniteRetryStrategy{},
-		scope:         terror.ScopeNotSet,
+		Scope:         terror.ScopeNotSet,
 		doFuncInClose: doFuncInClose,
 	}
 }
@@ -200,13 +200,13 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), d.scope)
+		return nil, terror.DBErrorAdapt(err, d.Scope, terror.ErrDBDriverError)
 	}
 	err = conn.PingContext(ctx)
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), d.scope)
+		return nil, terror.DBErrorAdapt(err, d.Scope, terror.ErrDBDriverError)
 	}
-	baseConn := NewBaseConn(conn, d.scope, d.Retry)
+	baseConn := NewBaseConn(conn, d.Scope, d.Retry)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.conns[baseConn] = struct{}{}

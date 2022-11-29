@@ -26,7 +26,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -83,7 +82,7 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 
 	rows, err := conn.QuerySQL(tctx, nil, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
 	if err != nil {
-		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, nil, terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError)
 	}
 
 	defer rows.Close()
@@ -91,7 +90,7 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 		var collation, charset, isDefault string
 		var id int
 		if scanErr := rows.Scan(&collation, &charset, &id, &isDefault); scanErr != nil {
-			return nil, nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+			return nil, nil, terror.DBErrorAdapt(scanErr, conn.Scope(), terror.ErrDBDriverError)
 		}
 		idAndCollationMap[id] = strings.ToLower(collation)
 		if strings.ToLower(isDefault) == "yes" {
@@ -100,7 +99,7 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 	}
 
 	if err = rows.Close(); err != nil {
-		return nil, nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return nil, nil, terror.DBErrorAdapt(rows.Err(), conn.Scope(), terror.ErrDBDriverError)
 	}
 	return charsetAndDefaultCollation, idAndCollationMap, err
 }
@@ -117,7 +116,7 @@ func (c *UpStreamConn) KillConn(ctx context.Context, connID uint32) error {
 
 // FetchAllDoTables returns tables matches allow-list.
 func (c *UpStreamConn) FetchAllDoTables(ctx context.Context, bw *filter.Filter) (map[string][]string, error) {
-	return utils.FetchAllDoTables(ctx, c.BaseDB.DB, bw)
+	return conn.FetchAllDoTables(ctx, c.BaseDB, bw)
 }
 
 // CloseUpstreamConn closes the UpStreamConn.

@@ -175,7 +175,7 @@ func (s *Storage) Load(tctx *tcontext.Context) error {
 	for rows.Next() {
 		err := rows.Scan(&schema, &table, &ddls)
 		if err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return terror.DBErrorAdapt(err, s.dbConn.Scope(), terror.ErrDBDriverError)
 		}
 
 		mSchema, ok := s.ddls[schema]
@@ -194,7 +194,7 @@ func (s *Storage) Load(tctx *tcontext.Context) error {
 			zap.String("table", table))
 	}
 
-	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return terror.DBErrorAdapt(rows.Err(), s.dbConn.Scope(), terror.ErrDBDriverError)
 }
 
 // Get returns ddls by given schema/table.

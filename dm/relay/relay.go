@@ -1091,7 +1091,7 @@ func (r *Relay) Reload(newCfg *Config) error {
 	r.cfg.From.RawDBCfg.ReadTimeout = showStatusConnectionTimeout
 	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&r.cfg.From))
 	if err != nil {
-		return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+		return terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	r.db = db
 

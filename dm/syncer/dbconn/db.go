@@ -64,6 +64,14 @@ func NewDBConn(cfg *config.SubTaskConfig, baseConn *conn.BaseConn) *DBConn {
 	}
 }
 
+// Scope return connection scope.
+func (conn *DBConn) Scope() terror.ErrScope {
+	if conn == nil || conn.baseConn == nil {
+		return terror.ScopeNotSet
+	}
+	return conn.baseConn.Scope
+}
+
 // ResetConn reset one worker connection from specify *BaseDB.
 func (conn *DBConn) ResetConn(tctx *tcontext.Context) error {
 	baseConn, err := conn.ResetBaseConnFn(tctx, conn.baseConn)

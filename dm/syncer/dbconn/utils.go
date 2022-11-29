@@ -37,20 +37,20 @@ func GetTableCreateSQL(tctx *tcontext.Context, conn *DBConn, tableID string) (sq
 
 	rows, err := conn.QuerySQL(tctx, nil, querySQL)
 	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return "", terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError)
 	}
 
 	defer rows.Close()
 	if rows.Next() {
 		if scanErr := rows.Scan(&table, &createStr); scanErr != nil {
-			return "", terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+			return "", terror.DBErrorAdapt(scanErr, conn.Scope(), terror.ErrDBDriverError)
 		}
 	} else {
 		return "", terror.ErrSyncerDownstreamTableNotFound.Generate(tableID)
 	}
 
 	if err = rows.Close(); err != nil {
-		return "", terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return "", terror.DBErrorAdapt(rows.Err(), conn.Scope(), terror.ErrDBDriverError)
 	}
 	return createStr, nil
 }
@@ -78,23 +78,23 @@ func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (
 		if variable == variableName {
 			err = tmysql.NewErr(uint16(errCode))
 			log.L().Warn("GetSessionVariable failed", zap.String("variable", variable), zap.String("failpoint", "GetSessionVariableFailed"), zap.Error(err))
-			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
+			failpoint.Return("", terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError))
 		}
 	})
 	template := "SHOW VARIABLES LIKE '%s'"
 	query := fmt.Sprintf(template, variable)
 	rows, err := conn.QuerySQL(tctx, nil, query)
 	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return "", terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError)
 	}
 	defer rows.Close()
 	if rows.Next() {
 		if err = rows.Scan(&variable, &value); err != nil {
-			return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return "", terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError)
 		}
 	}
 	if err = rows.Close(); err != nil {
-		return "", terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return "", terror.DBErrorAdapt(rows.Err(), conn.Scope(), terror.ErrDBDriverError)
 	}
 	return value, nil
 }

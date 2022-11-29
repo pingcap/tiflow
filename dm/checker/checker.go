@@ -43,7 +43,6 @@ import (
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
 	"go.uber.org/atomic"
@@ -423,7 +422,7 @@ func (c *Checker) fetchSourceTargetDB(
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return utils.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB.DB, instance.baList, r)
+	return conn.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB, instance.baList, r)
 }
 
 func (c *Checker) displayCheckingItems() string {

@@ -32,6 +32,8 @@ import (
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/regexpr-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -53,7 +55,7 @@ const (
 func GetFlavor(ctx context.Context, db *BaseDB) (string, error) {
 	value, err := dbutil.ShowVersion(ctx, db.DB)
 	if err != nil {
-		return "", terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+		return "", terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	if IsMariaDB(value) {
 		return gmysql.MariaDBFlavor, nil
@@ -105,7 +107,7 @@ func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, e
 	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	defer rows.Close()
 
@@ -133,13 +135,13 @@ func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, e
 	var rowsResult []string
 	rowsResult, err = export.GetSpecifiedColumnValueAndClose(rows, "Server_id")
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	for _, serverID := range rowsResult {
 		// serverID will not be null
 		serverIDUInt, err := strconv.ParseUint(serverID, 10, 32)
 		if err != nil {
-			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+			return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 		}
 		serverIDs[uint32(serverIDUInt)] = struct{}{}
 	}
@@ -161,7 +163,7 @@ func GetSessionVariable(ctx *tcontext.Context, conn *BaseConn, variable string) 
 		if variable == variableName {
 			err = tmysql.NewErr(uint16(errCode))
 			log.L().Warn("GetSessionVariable failed", zap.String("variable", variable), zap.String("failpoint", "GetSessionVariableFailed"), zap.Error(err))
-			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
+			failpoint.Return("", terror.DBErrorAdapt(err, conn.Scope, terror.ErrDBDriverError))
 		}
 	})
 	return getVariable(ctx, conn, variable, false)
@@ -205,7 +207,7 @@ func GetServerUnixTS(ctx context.Context, db *BaseDB) (int64, error) {
 	err := row.Scan(&ts)
 	if err != nil {
 		log.L().Error("can't SELECT UNIX_TIMESTAMP()", zap.Error(err))
-		return ts, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return ts, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	return ts, err
 }
@@ -258,7 +260,7 @@ func GetParserFromSQLModeStr(sqlMode string) (*parser.Parser, error) {
 // KillConn kills the DB connection (thread in mysqld).
 func KillConn(ctx *tcontext.Context, db *BaseDB, connID uint32) error {
 	_, err := db.ExecContext(ctx, fmt.Sprintf("KILL %d", connID))
-	return terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	return terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 }
 
 // IsMySQLError checks whether err is MySQLError error.
@@ -332,7 +334,7 @@ func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *BaseConn)
 	err = row.Scan(&gtidStr)
 	if err != nil {
 		log.L().Error("can't get @@GLOBAL.gtid_purged when try to add it to gtid set", zap.Error(err))
-		return gset, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
+		return gset, terror.DBErrorAdapt(err, conn.Scope, terror.ErrDBDriverError)
 	}
 	failpoint.Label("bypass")
 	if gtidStr == "" {
@@ -430,4 +432,110 @@ func CreateTableSQLToOneRow(sql string) string {
 	sql = strings.ReplaceAll(sql, "\n", "")
 	sql = strings.ReplaceAll(sql, "  ", " ")
 	return sql
+}
+
+// FetchAllDoTables returns all need to do tables after filtered (fetches from upstream MySQL).
+func FetchAllDoTables(ctx context.Context, db *BaseDB, bw *filter.Filter) (map[string][]string, error) {
+	schemas, err := dbutil.GetSchemas(ctx, db.DB)
+
+	failpoint.Inject("FetchAllDoTablesFailed", func(val failpoint.Value) {
+		err = tmysql.NewErr(uint16(val.(int)))
+		log.L().Warn("FetchAllDoTables failed", zap.String("failpoint", "FetchAllDoTablesFailed"), zap.Error(err))
+	})
+
+	if err != nil {
+		return nil, terror.WithScope(err, db.Scope)
+	}
+
+	ftSchemas := make([]*filter.Table, 0, len(schemas))
+	for _, schema := range schemas {
+		if filter.IsSystemSchema(schema) {
+			continue
+		}
+		ftSchemas = append(ftSchemas, &filter.Table{
+			Schema: schema,
+			Name:   "", // schema level
+		})
+	}
+	ftSchemas = bw.Apply(ftSchemas)
+	if len(ftSchemas) == 0 {
+		log.L().Warn("no schema need to sync")
+		return nil, nil
+	}
+
+	schemaToTables := make(map[string][]string)
+	for _, ftSchema := range ftSchemas {
+		schema := ftSchema.Schema
+		// use `GetTables` from tidb-tools, no view included
+		tables, err := dbutil.GetTables(ctx, db.DB, schema)
+		if err != nil {
+			return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
+		}
+		ftTables := make([]*filter.Table, 0, len(tables))
+		for _, table := range tables {
+			ftTables = append(ftTables, &filter.Table{
+				Schema: schema,
+				Name:   table,
+			})
+		}
+		ftTables = bw.Apply(ftTables)
+		if len(ftTables) == 0 {
+			log.L().Info("no tables need to sync", zap.String("schema", schema))
+			continue // NOTE: should we still keep it as an empty elem?
+		}
+		tables = tables[:0]
+		for _, ftTable := range ftTables {
+			tables = append(tables, ftTable.Name)
+		}
+		schemaToTables[schema] = tables
+	}
+
+	return schemaToTables, nil
+}
+
+// FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
+func FetchTargetDoTables(
+	ctx context.Context,
+	source string,
+	db *BaseDB,
+	bw *filter.Filter,
+	router *regexprrouter.RouteTable,
+) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
+	// fetch tables from source and filter them
+	sourceTables, err := FetchAllDoTables(ctx, db, bw)
+
+	failpoint.Inject("FetchTargetDoTablesFailed", func(val failpoint.Value) {
+		err = tmysql.NewErr(uint16(val.(int)))
+		log.L().Warn("FetchTargetDoTables failed", zap.String("failpoint", "FetchTargetDoTablesFailed"), zap.Error(err))
+	})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tableMapper := make(map[filter.Table][]filter.Table)
+	extendedColumnPerTable := make(map[filter.Table][]string)
+	for schema, tables := range sourceTables {
+		for _, table := range tables {
+			targetSchema, targetTable, err := router.Route(schema, table)
+			if err != nil {
+				return nil, nil, terror.ErrGenTableRouter.Delegate(err)
+			}
+
+			target := filter.Table{
+				Schema: targetSchema,
+				Name:   targetTable,
+			}
+			tableMapper[target] = append(tableMapper[target], filter.Table{
+				Schema: schema,
+				Name:   table,
+			})
+			col, _ := router.FetchExtendColumn(schema, table, source)
+			if len(col) > 0 {
+				extendedColumnPerTable[target] = col
+			}
+		}
+	}
+
+	return tableMapper, extendedColumnPerTable, nil
 }

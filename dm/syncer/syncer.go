@@ -435,7 +435,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	var tableMap map[string]map[string]string
 	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// TODO: we should avoid call this function multi times
-		allTables, err1 := utils.FetchAllDoTables(ctx, s.fromDB.BaseDB.DB, s.baList)
+		allTables, err1 := conn.FetchAllDoTables(ctx, s.fromDB.BaseDB, s.baList)
 		if err1 != nil {
 			return err1
 		}
