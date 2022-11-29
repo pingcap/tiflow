@@ -108,9 +108,9 @@ func TestExecDDLEvents(t *testing.T) {
 	ddlSink.run(ctx)
 
 	ddlEvents := []*model.DDLEvent{
-		{CommitTs: 1},
-		{CommitTs: 2},
-		{CommitTs: 3},
+		{CommitTs: 1, Query: "create table t1(id int)"},
+		{CommitTs: 2, Query: "create table t2(id int)"},
+		{CommitTs: 3, Query: "create table t3(id int)"},
 	}
 
 	for _, event := range ddlEvents {

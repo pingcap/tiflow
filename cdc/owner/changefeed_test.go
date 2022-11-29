@@ -337,7 +337,7 @@ func TestExecDDL(t *testing.T) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
-	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE DATABASE `test1`")
+	require.Equal(t, "create database test1", mockDDLSink.ddlExecuting.Query)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
@@ -353,7 +353,7 @@ func TestExecDDL(t *testing.T) {
 	tickThreeTime()
 
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
-	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
+	require.Equal(t, "create table test1.test1(id int primary key)", mockDDLSink.ddlExecuting.Query)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
@@ -582,13 +582,13 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	}
 
 	execCreateStmt("database", "create database test1",
-		"CREATE DATABASE `test1`")
+		"create database test1")
 	execCreateStmt("table", "create table test1.tb1(id int primary key)",
-		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+		"create table test1.tb1(id int primary key)")
 	execCreateStmt("database", "create database test2",
-		"CREATE DATABASE `test2`")
+		"create database test2")
 	execCreateStmt("table", "create table test2.tb2(id int primary key)",
-		"CREATE TABLE `test2`.`tb2` (`id` INT PRIMARY KEY)")
+		"create table test2.tb2(id int primary key)")
 
 	require.Len(t, oldSchemaIDs, 2)
 	require.Len(t, oldTableIDs, 2)
@@ -662,11 +662,11 @@ func TestExecDropTablesDDL(t *testing.T) {
 	}
 
 	execCreateStmt("create database test1",
-		"CREATE DATABASE `test1`")
+		"create database test1")
 	execCreateStmt("create table test1.tb1(id int primary key)",
-		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+		"create table test1.tb1(id int primary key)")
 	execCreateStmt("create table test1.tb2(id int primary key)",
-		"CREATE TABLE `test1`.`tb2` (`id` INT PRIMARY KEY)")
+		"create table test1.tb2(id int primary key)")
 
 	// drop tables is different from rename tables, it will generate
 	// multiple DDL jobs instead of one.
@@ -715,19 +715,17 @@ func TestExecDropViewsDDL(t *testing.T) {
 		require.Equal(t, true, done)
 	}
 	execCreateStmt("create database test1",
-		"CREATE DATABASE `test1`")
+		"create database test1")
 	execCreateStmt("create table test1.tb1(id int primary key)",
-		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+		"create table test1.tb1(id int primary key)")
 	execCreateStmt("create view test1.view1 as "+
 		"select * from test1.tb1 where id > 100",
-		"CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL "+
-			"SECURITY DEFINER VIEW `test1`.`view1` AS "+
-			"SELECT * FROM `test1`.`tb1` WHERE `id`>100")
+		"create view test1.view1 as "+
+			"select * from test1.tb1 where id > 100")
 	execCreateStmt("create view test1.view2 as "+
 		"select * from test1.tb1 where id > 200",
-		"CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL "+
-			"SECURITY DEFINER VIEW `test1`.`view2` AS "+
-			"SELECT * FROM `test1`.`tb1` WHERE `id`>200")
+		"create view test1.view2 as "+
+			"select * from test1.tb1 where id > 200")
 
 	// drop views is similar to drop tables, it will also generate
 	// multiple DDL jobs.
