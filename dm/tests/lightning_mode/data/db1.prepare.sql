@@ -11,12 +11,6 @@ insert into t1 (id, name) values (1, 'ar"ya'), (2, 'catelyn');
 -- test sql_mode=NO_AUTO_VALUE_ON_ZERO
 insert into t1 (id, name) values (0, 'lalala');
 
--- test block-allow-list
-drop database if exists `ignore_db`;
-create database `ignore_db`;
-use `ignore_db`;
-create table `ignore_table`(id int);
-
 -- test duplicate detection
 create table dup (
     id INT PRIMARY KEY,
@@ -24,3 +18,9 @@ create table dup (
 );
 
 insert into dup values (1, 'a'), (2, 'b'), (3, 'c');
+
+-- test block-allow-list
+drop database if exists `ignore_db`;
+create database `ignore_db`;
+use `ignore_db`;
+create table `ignore_table`(id int);
