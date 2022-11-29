@@ -48,18 +48,6 @@ func (mr *MockManagerMockRecorder) AsyncClose() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncClose", reflect.TypeOf((*MockManager)(nil).AsyncClose))
 }
 
-// Close mocks base method.
-func (m *MockManager) Close() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockManagerMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockManager)(nil).Close))
-}
-
 // QueryTableCount mocks base method.
 func (m *MockManager) QueryTableCount(ctx context.Context, tableCh chan int, done chan<- error) {
 	m.ctrl.T.Helper()

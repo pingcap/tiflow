@@ -40,7 +40,7 @@ import (
 //go:generate mockery --name=RedoLogWriter --inpackage --quiet
 type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file.
-	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error
+	WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error
 
 	// SendDDL writer RedoDDLEvent to ddl log file.
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
@@ -234,7 +234,7 @@ func (l *LogWriter) GC(ctx context.Context, ts model.Ts) error {
 }
 
 // WriteLog implement WriteLog api
-func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error {
+func (l *LogWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())

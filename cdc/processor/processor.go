@@ -430,13 +430,20 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
+		stats, err := p.sinkManager.GetTableStats(tableID)
+
 		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
 			p.redoManager.RemoveTable(tableID)
 		}
+		log.Info("table removed",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", stats.CheckpointTs))
 
-		stats, err := p.sinkManager.GetTableStats(tableID)
 		// TODO: handle error
 		if err != nil {
 			log.Warn("Failed to get table stats",
@@ -447,12 +454,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 				zap.Error(err))
 			return 0, false
 		}
-		log.Info("table removed",
-			zap.String("captureID", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", stats.CheckpointTs))
 		return stats.CheckpointTs, true
 	}
 	table := p.tables[tableID]
