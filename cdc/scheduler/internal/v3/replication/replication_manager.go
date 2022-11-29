@@ -31,8 +31,8 @@ import (
 const (
 	checkpointCannotProceed = internal.CheckpointCannotProceed
 
-	defaultSlowTableHeapSize  = 16
-	logSlowTablesLagThreshold = 10 * time.Second
+	defaultSlowTableHeapSize  = 4
+	logSlowTablesLagThreshold = 30 * time.Second
 	logSlowTablesInterval     = 1 * time.Minute
 )
 
@@ -515,6 +515,9 @@ func (r *Manager) AdvanceCheckpoint(
 		r.slowestTableID = slowestTableID
 	}
 
+	// If changefeed's checkpoint lag is larger than 30s,
+	// log the 4 slowlest table infos every minute, which can
+	// help us find the problematic tables.
 	checkpointLag := currentTime.Sub(oracle.GetTimeFromTS(newCheckpointTs))
 	if checkpointLag > logSlowTablesLagThreshold &&
 		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
@@ -537,7 +540,9 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 			heap.Pop(&r.slowTableHeap)
 		}
 	}
-	for i := 0; i < defaultSlowTableHeapSize; i++ {
+
+	num := r.slowTableHeap.Len()
+	for i := 0; i < num; i++ {
 		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
 		lag := currentTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
 		if lag < logSlowTablesLagThreshold {

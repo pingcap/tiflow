@@ -721,3 +721,66 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.NotNil(t, r.runningTasks[1])
 	require.Equal(t, 1, <-addTableCh)
 }
+
+func TestLogSlowTableInfo(t *testing.T) {
+	t.Parallel()
+	r := NewReplicationManager(1, model.ChangeFeedID{})
+	r.tables[1] = &ReplicationSet{
+		TableID:    1,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
+		State:      ReplicationSetStateReplicating,
+	}
+	r.tables[2] = &ReplicationSet{
+		TableID:    2,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[3] = &ReplicationSet{
+		TableID:    3,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 3},
+		State:      ReplicationSetStatePrepare,
+	}
+	currentTables := []model.TableID{1, 2, 3}
+	r.logSlowTableInfo(currentTables, time.Now())
+	// make sure all tables are will be pop out from heal after logged
+	require.Equal(t, r.slowTableHeap.Len(), 0)
+	r.tables[4] = &ReplicationSet{
+		TableID:    4,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 4},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[5] = &ReplicationSet{
+		TableID:    5,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 5},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[6] = &ReplicationSet{
+		TableID:    6,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 6},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[7] = &ReplicationSet{
+		TableID:    7,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 7},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[8] = &ReplicationSet{
+		TableID:    8,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 8},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[9] = &ReplicationSet{
+		TableID:    9,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 9},
+		State:      ReplicationSetStatePrepare,
+	}
+	r.tables[10] = &ReplicationSet{
+		TableID:    10,
+		Checkpoint: tablepb.Checkpoint{CheckpointTs: 10},
+		State:      ReplicationSetStatePrepare,
+	}
+	currentTables = []model.TableID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	r.logSlowTableInfo(currentTables, time.Now())
+	// make sure the slowTableHeap's capacity will not extend
+	require.Equal(t, cap(r.slowTableHeap), 8)
+}
