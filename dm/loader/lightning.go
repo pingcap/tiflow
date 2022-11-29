@@ -267,6 +267,11 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		opts = append(opts, lightning.WithLogger(l.logger.Logger))
 	}
 
+	var hasDup bool
+	if l.cfg.Mode == config.LoadModePhysical {
+		opts = append(opts, lightning.WithDupIndicator(&hasDup))
+	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -279,7 +284,15 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	return terror.ErrLoadLightningRuntime.Delegate(err)
+	if err != nil {
+		return terror.ErrLoadLightningRuntime.Delegate(err)
+	}
+	if hasDup {
+		// TODO: use unique TaskInfoSchemaName
+		// TODO: expose the constant "conflict_error_v1"
+		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, "conflict_error_v1")
+	}
+	return nil
 }
 
 // GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
