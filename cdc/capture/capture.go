@@ -202,7 +202,6 @@ func (c *captureImpl) GetEtcdClient() (etcd.CDCEtcdClient, error) {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-
 	etcdClient, err := c.createEtcdClient()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
