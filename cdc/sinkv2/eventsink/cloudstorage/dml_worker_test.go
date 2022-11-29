@@ -28,8 +28,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
@@ -47,8 +49,9 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
 	require.Nil(t, err)
 
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", errCh)
+		cfg, ".json", statistics, errCh)
 	return d
 }
 

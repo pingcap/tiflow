@@ -26,10 +26,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
@@ -39,7 +41,7 @@ const (
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
+var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
 // versionedTable is used to wrap TableName with a version
 type versionedTable struct {
@@ -62,9 +64,9 @@ type eventFragment struct {
 	encodedMsgs []*common.Message
 }
 
-// sink is the cloud storage sink.
+// dmlSink is the cloud storage sink.
 // It will send the events to cloud storage systems.
-type sink struct {
+type dmlSink struct {
 	// msgCh is a channel to hold eventFragment.
 	msgCh chan eventFragment
 	// encodingWorkers defines a group of workers for encoding events.
@@ -73,7 +75,8 @@ type sink struct {
 	defragmenter *defragmenter
 	// writer is a dmlWriter which manages a group of dmlWorkers and
 	// sends encoded messages to individual dmlWorkers.
-	writer *dmlWriter
+	writer     *dmlWriter
+	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
 }
@@ -83,8 +86,8 @@ func NewCloudStorageSink(ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
-) (*sink, error) {
-	s := &sink{}
+) (*dmlSink, error) {
+	s := &dmlSink{}
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
@@ -130,7 +133,8 @@ func NewCloudStorageSink(ctx context.Context,
 	s.msgCh = make(chan eventFragment, defaultChannelSize)
 	s.defragmenter = newDefragmenter(ctx)
 	orderedCh := s.defragmenter.orderedOut()
-	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, orderedCh, errCh)
+	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
+	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
 
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
@@ -144,7 +148,7 @@ func NewCloudStorageSink(ctx context.Context,
 }
 
 // WriteEvents write events to cloud storage sink.
-func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
+func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
 
 	for _, txn := range txns {
@@ -172,11 +176,14 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 }
 
 // Close closes the cloud storage sink.
-func (s *sink) Close() error {
+func (s *dmlSink) Close() error {
 	s.defragmenter.close()
 	for _, w := range s.encodingWorkers {
 		w.close()
 	}
 	s.writer.close()
+	if s.statistics != nil {
+		s.statistics.Close()
+	}
 	return nil
 }
