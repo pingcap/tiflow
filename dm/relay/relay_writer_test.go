@@ -237,7 +237,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	defer w1.Close()
 	w1.Init(uuid, filename)
 	_, err = w1.WriteEvent(rotateEv)
-	c.Assert(err, check.ErrorMatches, ".*file not opened.*")
+	c.Assert(err, check.ErrorMatches, ".*no underlying writer opened")
 
 	// 2. fake RotateEvent before FormatDescriptionEvent
 	relayDir = c.MkDir() // use a new relay directory

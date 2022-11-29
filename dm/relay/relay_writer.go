@@ -154,7 +154,7 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 		}
 		err = w.Flush()
 		if err != nil {
-			return WResult{}, terror.Annotatef(err, "write binlog file header for %s", fullName)
+			return WResult{}, terror.Annotatef(err, "flush binlog file for %s", fullName)
 		}
 	}
 

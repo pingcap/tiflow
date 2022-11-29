@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/atomic"
@@ -93,7 +92,7 @@ func (w *BinlogWriter) run() {
 		}
 
 		if w.file == nil {
-			w.err.CompareAndSwap(nilErr, terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened")))
+			w.err.CompareAndSwap(nilErr, terror.ErrRelayWriterNotOpened.Generate())
 			errOccurs = true
 			return
 		}
@@ -186,7 +185,7 @@ func (w *BinlogWriter) Close() error {
 
 func (w *BinlogWriter) Write(rawData []byte) error {
 	if w.file == nil {
-		return terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened"))
+		return terror.ErrRelayWriterNotOpened.Generate()
 	}
 	w.input <- rawData
 	w.offset.Add(int64(len(rawData)))

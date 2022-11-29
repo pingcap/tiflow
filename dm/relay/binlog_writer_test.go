@@ -61,7 +61,7 @@ func (t *testBinlogWriterSuite) TestWrite() {
 		// not opened
 		w := NewBinlogWriter(log.L(), dir)
 		err := w.Write(data1)
-		require.Contains(t.T(), err.Error(), "not opened")
+		require.Contains(t.T(), err.Error(), "no underlying writer opened")
 
 		// open non exist dir
 		err = w.Open("not-exist-uuid", "bin.000001")
