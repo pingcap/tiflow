@@ -431,16 +431,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 
 	if p.pullBasedSinking {
 		stats, err := p.sinkManager.GetTableStats(tableID)
-		// TODO: handle error
-		if err != nil {
-			log.Warn("Failed to get table stats",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			return 0, false
-		}
+
 		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
@@ -452,6 +443,17 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", stats.CheckpointTs))
+
+		// TODO: handle error
+		if err != nil {
+			log.Warn("Failed to get table stats",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Error(err))
+			return 0, false
+		}
 		return stats.CheckpointTs, true
 	}
 	table := p.tables[tableID]
@@ -1316,12 +1318,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
-		if err := p.sourceManager.Close(); err != nil {
-			log.Error("Failed to close source manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
+		if p.sourceManager != nil {
+			if err := p.sourceManager.Close(); err != nil {
+				log.Error("Failed to close source manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			p.sourceManager = nil
 		}
 		if p.sinkManager != nil {
 			if err := p.sinkManager.Close(); err != nil {

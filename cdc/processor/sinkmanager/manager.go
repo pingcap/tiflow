@@ -428,7 +428,9 @@ func (m *SinkManager) generateRedoTasks() error {
 			log.Debug("Generate redo task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", tableID),
+				zap.Any("lowerBound", slowestTableProgress.nextLowerBoundPos),
+				zap.Any("currentUpperBound", getUpperBound()))
 		}
 	}
 }
