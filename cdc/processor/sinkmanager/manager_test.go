@@ -151,7 +151,7 @@ func TestAddTable(t *testing.T) {
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
 	err := manager.StartTable(tableID, 1)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 	require.Equal(t, &progress{
 		tableID: tableID,
@@ -180,7 +180,7 @@ func TestRemoveTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	err := manager.StartTable(tableID, 0)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -240,7 +240,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	err := manager.StartTable(tableID, 0)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -270,7 +270,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
 	err := manager.StartTable(tableID, 0)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -299,7 +299,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	err := manager.StartTable(tableID, 0)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)
