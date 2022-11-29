@@ -37,7 +37,13 @@ const (
 	sinkWorkerNum               = 8
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
+	defaultEngineGCChanSize     = 128
 )
+
+type gcEvent struct {
+	tableID  model.TableID
+	cleanPos engine.Position
+}
 
 // SinkManager is the implementation of SinkManager.
 type SinkManager struct {
@@ -67,6 +73,9 @@ type SinkManager struct {
 	tableSinks sync.Map
 	// lastBarrierTs is the last barrier ts.
 	lastBarrierTs atomic.Uint64
+
+	// engineGCChan is used to GC engine when the table is advanced.
+	engineGCChan chan *gcEvent
 
 	// sinkWorkers used to pull data from source manager.
 	sinkWorkers []*sinkWorker
@@ -134,6 +143,7 @@ func New(
 
 	m.startWorkers(mg, changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
+	m.backgroundGC()
 
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
@@ -242,6 +252,39 @@ func (m *SinkManager) startGenerateTasks() {
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Error(err))
+			}
+		}
+	}()
+}
+
+// backgroundGC is used to clean up the old data in the sorter.
+func (m *SinkManager) backgroundGC() {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		for {
+			select {
+			case <-m.ctx.Done():
+				log.Info("Background GC is stooped because context is canceled",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID))
+				return
+			case gcEvent := <-m.engineGCChan:
+				if err := m.sortEngine.CleanByTable(gcEvent.tableID, gcEvent.cleanPos); err != nil {
+					log.Error("Failed to clean table in sort engine",
+						zap.String("namespace", m.changefeedID.Namespace),
+						zap.String("changefeed", m.changefeedID.ID),
+						zap.Int64("tableID", gcEvent.tableID),
+						zap.Error(err))
+					select {
+					case m.errChan <- err:
+					default:
+						log.Error("Failed to send error to error channel, error channel is full",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Error(err))
+					}
+				}
 			}
 		}
 	}()
@@ -508,7 +551,14 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
 				zap.Error(err))
-			m.errChan <- err
+			select {
+			case m.errChan <- err:
+			default:
+				log.Error("Failed to send error to error channel, error channel is full",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+			}
 		}
 		cleanedBytes := m.memQuota.clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -555,7 +605,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
+func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -570,9 +620,18 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 		StartTs:  resolvedMark - 1,
 		CommitTs: resolvedMark,
 	}
-	err := m.sortEngine.CleanByTable(tableID, cleanPos)
-	if err != nil {
-		return pipeline.Stats{}, errors.Trace(err)
+	gcEvent := &gcEvent{
+		tableID:  tableID,
+		cleanPos: cleanPos,
+	}
+	select {
+	case m.engineGCChan <- gcEvent:
+	default:
+		log.Debug("Failed to send GC event to engine GC channel, engine GC channel is full",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Any("cleanPos", cleanPos))
 	}
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
@@ -585,7 +644,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 		CheckpointTs: resolvedMark,
 		ResolvedTs:   resolvedTs,
 		BarrierTs:    m.lastBarrierTs.Load(),
-	}, nil
+	}
 }
 
 // Close closes all workers.

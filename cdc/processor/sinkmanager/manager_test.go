@@ -281,8 +281,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.StartTable(tableID, 0)
 
 	require.Eventually(t, func() bool {
-		s, err := manager.GetTableStats(tableID)
-		require.NoError(t, err)
+		s := manager.GetTableStats(tableID)
 		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
