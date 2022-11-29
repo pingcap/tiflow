@@ -41,8 +41,8 @@ import (
 
 func TestLogWriterWriteLog(t *testing.T) {
 	type arg struct {
-		ctx     context.Context
-		rows    []*model.RedoRowChangedEvent
+		ctx  context.Context
+		rows []*model.RedoRowChangedEvent
 	}
 	tests := []struct {
 		name      string
@@ -55,7 +55,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 		{
 			name: "happy",
 			args: arg{
-				ctx:     context.Background(),
+				ctx: context.Background(),
 				rows: []*model.RedoRowChangedEvent{
 					{
 						Row: &model.RowChangedEvent{
@@ -70,7 +70,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 		{
 			name: "writer err",
 			args: arg{
-				ctx:     context.Background(),
+				ctx: context.Background(),
 				rows: []*model.RedoRowChangedEvent{
 					{Row: nil},
 					{
@@ -87,8 +87,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 		{
 			name: "len(rows)==0",
 			args: arg{
-				ctx:     context.Background(),
-				rows:    []*model.RedoRowChangedEvent{},
+				ctx:  context.Background(),
+				rows: []*model.RedoRowChangedEvent{},
 			},
 			writerErr: errors.New("err"),
 			isRunning: true,
@@ -96,8 +96,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 		{
 			name: "isStopped",
 			args: arg{
-				ctx:     context.Background(),
-				rows:    []*model.RedoRowChangedEvent{},
+				ctx:  context.Background(),
+				rows: []*model.RedoRowChangedEvent{},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -106,8 +106,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 		{
 			name: "context cancel",
 			args: arg{
-				ctx:     context.Background(),
-				rows:    []*model.RedoRowChangedEvent{},
+				ctx:  context.Background(),
+				rows: []*model.RedoRowChangedEvent{},
 			},
 			writerErr: nil,
 			isRunning: true,
