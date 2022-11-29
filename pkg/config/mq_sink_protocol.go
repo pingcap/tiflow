@@ -38,6 +38,11 @@ const (
 	ProtocolOpen
 )
 
+// IsBatchEncode returns whether the protocol is a batch encoder.
+func (p Protocol) IsBatchEncode() bool {
+	return p == ProtocolOpen || p == ProtocolCanal || p == ProtocolMaxwell || p == ProtocolCraft
+}
+
 // FromString converts the protocol from string to Protocol enum type.
 func (p *Protocol) FromString(protocol string) error {
 	switch strings.ToLower(protocol) {

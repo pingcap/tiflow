@@ -45,7 +45,7 @@ const (
 	// globalTxnAtomicity AtomicityLevel = "global"
 
 	defaultMqTxnAtomicity    AtomicityLevel = noneTxnAtomicity
-	defaultMysqlTxnAtomicity AtomicityLevel = tableTxnAtomicity
+	defaultMysqlTxnAtomicity AtomicityLevel = noneTxnAtomicity
 )
 
 // ShouldSplitTxn returns whether the sink should split txn.
@@ -62,11 +62,12 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	Protocol        string            `toml:"protocol" json:"protocol"`
-	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	DispatchRules      []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
+	Protocol           string            `toml:"protocol" json:"protocol"`
+	ColumnSelectors    []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry     string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity       AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	EncoderConcurrency int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
 }
 
 // DispatchRule represents partition rule for a table.
@@ -115,6 +116,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 			rule.PartitionRule = rule.DispatcherRule
 			rule.DispatcherRule = ""
 		}
+	}
+
+	if s.EncoderConcurrency < 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
 
 	return nil

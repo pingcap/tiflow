@@ -18,6 +18,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -196,7 +197,8 @@ func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int
 			latestPos = int64(e.Header.LogPos)
 		case *replication.QueryEvent:
 			isDDL := parserpkg.CheckIsDDL(string(ev.Query), p)
-			if isDDL {
+			originSQL := strings.TrimSpace(string(ev.Query))
+			if isDDL || originSQL == "COMMIT" {
 				if latestGSet != nil { // GTID may not be enabled in the binlog
 					err = latestGSet.Update(nextGTIDStr)
 					if err != nil {

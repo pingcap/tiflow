@@ -36,7 +36,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
-	Sink: &SinkConfig{},
+	Sink: &SinkConfig{
+		EncoderConcurrency: 16,
+	},
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
