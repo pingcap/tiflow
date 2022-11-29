@@ -232,7 +232,7 @@ func GetParser(ctx *tcontext.Context, db *BaseDB) (*parser.Parser, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.CloseConn(c)
+	defer db.CloseConnWithoutErr(c)
 	return GetParserForConn(ctx, c)
 }
 
@@ -408,7 +408,7 @@ func GetMaxConnections(ctx *tcontext.Context, db *BaseDB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer db.CloseConn(c)
+	defer db.CloseConnWithoutErr(c)
 	return GetMaxConnectionsForConn(ctx, c)
 }
 

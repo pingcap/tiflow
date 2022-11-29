@@ -279,12 +279,20 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 }
 
 // CloseConn release BaseConn resource from BaseDB, and returns the connection to the connection pool,
-// has the same meaning of sql.Conn.Close
+// has the same meaning of sql.Conn.Close.
 func (d *BaseDB) CloseConn(conn *BaseConn) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.conns, conn)
 	return conn.close()
+}
+
+// CloseConnWithoutErr release BaseConn resource from BaseDB, and returns the connection to the connection pool,
+// has the same meaning of sql.Conn.Close, and log warning on error.
+func (d *BaseDB) CloseConnWithoutErr(conn *BaseConn) {
+	if err := d.CloseConn(conn); err != nil {
+		log.L().Warn("close db connection failed", zap.Error(err))
+	}
 }
 
 // ForceCloseConn release BaseConn resource from BaseDB, and close BaseConn completely(not return to the connection pool).

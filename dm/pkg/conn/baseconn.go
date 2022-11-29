@@ -275,7 +275,7 @@ func (conn *BaseConn) ApplyRetryStrategy(tctx *tcontext.Context, params retry.Pa
 	return conn.RetryStrategy.Apply(tctx, params, operateFn)
 }
 
-// close returns the connection to the connection pool, has the same meaning of sql.Conn.Close
+// close returns the connection to the connection pool, has the same meaning of sql.Conn.Close.
 func (conn *BaseConn) close() error {
 	if conn == nil || conn.DBConn == nil {
 		return nil
