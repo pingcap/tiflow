@@ -2272,7 +2272,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
+			if originSQL == "COMMIT" {
+				eventIndex = 0
+				for schemaName, tableMap := range affectedSourceTables {
+					for table := range tableMap {
+						s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, endLocation)
+					}
+				}
+				job := newXIDJob(endLocation, startLocation, endLocation)
+				_, err2 = s.handleJobFunc(job)
+			} else {
+				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
+			}
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2777,7 +2788,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
 	originSQL := strings.TrimSpace(string(ev.Query))
-	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+	if originSQL == "BEGIN" || originSQL == "COMMIT" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
 		return nil, nil
 	}
 	var err error

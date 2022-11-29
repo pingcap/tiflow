@@ -290,7 +290,6 @@ function test_COMMIT_in_QueryEvent() {
 	run_sql "CREATE TABLE start_task.t2(i TINYINT, j INT UNIQUE KEY) engine=MyISAM;" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'INSERT INTO start_task.t1 VALUES (99,9999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'INSERT INTO start_task.t2 VALUES (99,9999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
-	run_sql 'show binlog events;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -301,8 +300,7 @@ function test_COMMIT_in_QueryEvent() {
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "originSQL: COMMIT"
-	cat $WORK_DIR/worker1/log/dm-worker.log
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "originSQL: COMMIT"
 
 	echo "<<<<<< test_COMMIT_in_QueryEvent success! >>>>>>"
 }
