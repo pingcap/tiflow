@@ -15,7 +15,6 @@ package master
 
 import (
 	"context"
-	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -1344,7 +1343,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 func innerCheckAndAdjustSourceConfig(
 	ctx context.Context,
 	cfg *config.SourceConfig,
-	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
+	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *conn.BaseDB) error,
 ) error {
 	dbConfig := cfg.GenerateDBConfig()
 	fromDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(dbConfig))
@@ -1352,11 +1351,11 @@ func innerCheckAndAdjustSourceConfig(
 		return err
 	}
 	defer fromDB.Close()
-	if err = cfg.Adjust(ctx, fromDB.DB); err != nil {
+	if err = cfg.Adjust(ctx, fromDB); err != nil {
 		return err
 	}
 	if hook != nil {
-		if err = hook(cfg, ctx, fromDB.DB); err != nil {
+		if err = hook(cfg, ctx, fromDB); err != nil {
 			return err
 		}
 	}
@@ -1432,7 +1431,7 @@ func AdjustTargetDB(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
 		return err
 	}
 
-	version, err := utils.ExtractTiDBVersion(value)
+	version, err := conn.ExtractTiDBVersion(value)
 	// Do not adjust if not TiDB
 	if err == nil {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)

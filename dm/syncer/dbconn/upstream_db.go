@@ -52,12 +52,12 @@ func (c *UpStreamConn) GetMasterStatus(ctx *tcontext.Context, flavor string) (my
 
 // GetServerUUID returns upstream server UUID.
 func (c *UpStreamConn) GetServerUUID(ctx context.Context, flavor string) (string, error) {
-	return utils.GetServerUUID(ctx, c.BaseDB.DB, flavor)
+	return conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), c.BaseDB, flavor)
 }
 
 // GetServerUnixTS returns the result of current timestamp in upstream.
 func (c *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
-	return utils.GetServerUnixTS(ctx, c.BaseDB.DB)
+	return conn.GetServerUnixTS(ctx, c.BaseDB)
 }
 
 // GetCharsetAndCollationInfo returns charset and collation info.
@@ -107,12 +107,12 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 
 // GetParser returns the parser with correct flag for upstream.
 func (c *UpStreamConn) GetParser(ctx context.Context) (*parser.Parser, error) {
-	return utils.GetParser(ctx, c.BaseDB.DB)
+	return conn.GetParser(tcontext.NewContext(ctx, log.L()), c.BaseDB)
 }
 
 // KillConn kills a connection in upstream.
 func (c *UpStreamConn) KillConn(ctx context.Context, connID uint32) error {
-	return utils.KillConn(ctx, c.BaseDB.DB, connID)
+	return conn.KillConn(tcontext.NewContext(ctx, log.L()), c.BaseDB, connID)
 }
 
 // FetchAllDoTables returns tables matches allow-list.

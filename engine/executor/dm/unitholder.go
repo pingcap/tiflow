@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -112,7 +111,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	case frameModel.WorkerDMDump:
 		u.unit = dumpling.NewDumpling(u.cfg)
 	case frameModel.WorkerDMLoad:
-		sqlMode, err2 := utils.GetGlobalVariable(ctx, u.upstreamDB.DB, "sql_mode")
+		sqlMode, err2 := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), u.upstreamDB, "sql_mode")
 		if err2 != nil {
 			u.logger.Error("get global sql_mode from upstream failed",
 				zap.String("db", u.cfg.From.Host),

@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -55,12 +55,12 @@ func GetTableCreateSQL(tctx *tcontext.Context, conn *DBConn, tableID string) (sq
 	return createStr, nil
 }
 
-func GetParserForConn(tctx *tcontext.Context, conn *DBConn) (*parser.Parser, error) {
-	sqlMode, err := getSessionVariable(tctx, conn, "sql_mode")
+func GetParserForConn(tctx *tcontext.Context, dbConn *DBConn) (*parser.Parser, error) {
+	sqlMode, err := getSessionVariable(tctx, dbConn, "sql_mode")
 	if err != nil {
 		return nil, err
 	}
-	return utils.GetParserFromSQLModeStr(sqlMode)
+	return conn.GetParserFromSQLModeStr(sqlMode)
 }
 
 //nolint:unparam

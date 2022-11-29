@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
@@ -28,11 +27,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
-)
-
-const (
-	// DefaultDBTimeout represents a DB operation timeout for common usages.
-	DefaultDBTimeout = 30 * time.Second
 )
 
 // GetGlobalVariable gets server's global variable.
@@ -88,12 +82,12 @@ func getVariable(ctx *tcontext.Context, conn *BaseConn, variable string, isGloba
 	*/
 
 	if !row.Next() {
-		return "", terror.ErrDBDriverError.Generatef("variable %s not found", variable)
+		return "", terror.WithScope(terror.ErrDBDriverError.Generatef("variable %s not found", variable), conn.Scope)
 	}
 
 	err = row.Scan(&variable, &value)
 	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return "", terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), conn.Scope)
 	}
 	return value, nil
 }

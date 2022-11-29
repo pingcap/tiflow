@@ -2892,7 +2892,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	p, err := utils.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
+	p, err := conn.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
@@ -2981,11 +2981,11 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		}
 	}
 	if !hasSQLMode {
-		sqlMode, err2 := utils.GetGlobalVariable(ctx, s.fromDB.BaseDB.DB, "sql_mode")
+		sqlMode, err2 := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), s.fromDB.BaseDB, "sql_mode")
 		if err2 != nil {
 			s.tctx.L().Warn("cannot get sql_mode from upstream database, the sql_mode will be assigned \"IGNORE_SPACE, NO_AUTO_VALUE_ON_ZERO, ALLOW_INVALID_DATES\"", log.ShortError(err2))
 		}
-		sqlModes, err3 := utils.AdjustSQLModeCompatible(sqlMode)
+		sqlModes, err3 := conn.AdjustSQLModeCompatible(sqlMode)
 		if err3 != nil {
 			s.tctx.L().Warn("cannot adjust sql_mode compatible, the sql_mode will be assigned  stay the same", log.ShortError(err3))
 		}
@@ -3416,7 +3416,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to build connection", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	gs, err = utils.AddGSetWithPurged(tctx.Context(), gs, dbConn.DBConn)
+	gs, err = conn.AddGSetWithPurged(tctx.Context(), gs, dbConn)
 	if err != nil {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err

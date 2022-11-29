@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package conn
 
 import (
 	"context"
@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
@@ -49,8 +50,8 @@ const (
 )
 
 // GetFlavor gets flavor from DB.
-func GetFlavor(ctx context.Context, db *sql.DB) (string, error) {
-	value, err := dbutil.ShowVersion(ctx, db)
+func GetFlavor(ctx context.Context, db *BaseDB) (string, error) {
+	value, err := dbutil.ShowVersion(ctx, db.DB)
 	if err != nil {
 		return "", terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
@@ -61,7 +62,7 @@ func GetFlavor(ctx context.Context, db *sql.DB) (string, error) {
 }
 
 // GetAllServerID gets all slave server id and master server id.
-func GetAllServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+func GetAllServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, error) {
 	serverIDs, err := GetSlaveServerID(ctx, db)
 	if err != nil {
 		return nil, err
@@ -77,7 +78,7 @@ func GetAllServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error
 }
 
 // GetRandomServerID gets a random server ID which is not used.
-func GetRandomServerID(ctx context.Context, db *sql.DB) (uint32, error) {
+func GetRandomServerID(ctx *tcontext.Context, db *BaseDB) (uint32, error) {
 	rand.Seed(time.Now().UnixNano())
 
 	serverIDs, err := GetAllServerID(ctx, db)
@@ -100,7 +101,7 @@ func GetRandomServerID(ctx context.Context, db *sql.DB) (uint32, error) {
 }
 
 // GetSlaveServerID gets all slave server id.
-func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, error) {
 	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
@@ -145,35 +146,8 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	return serverIDs, nil
 }
 
-// GetGlobalVariable gets server's global variable.
-func GetGlobalVariable(ctx context.Context, db *sql.DB, variable string) (value string, err error) {
-	failpoint.Inject("GetGlobalVariableFailed", func(val failpoint.Value) {
-		items := strings.Split(val.(string), ",")
-		if len(items) != 2 {
-			log.L().Fatal("failpoint GetGlobalVariableFailed's value is invalid", zap.String("val", val.(string)))
-		}
-		variableName := items[0]
-		errCode, err1 := strconv.ParseUint(items[1], 10, 16)
-		if err1 != nil {
-			log.L().Fatal("failpoint GetGlobalVariableFailed's value is invalid", zap.String("val", val.(string)))
-		}
-		if variable == variableName {
-			err = tmysql.NewErr(uint16(errCode))
-			log.L().Warn("GetGlobalVariable failed", zap.String("variable", variable), zap.String("failpoint", "GetGlobalVariableFailed"), zap.Error(err))
-			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
-		}
-	})
-
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-	return getVariable(ctx, conn, variable, true)
-}
-
 // GetSessionVariable gets connection's session variable.
-func GetSessionVariable(ctx context.Context, conn *sql.Conn, variable string) (value string, err error) {
+func GetSessionVariable(ctx *tcontext.Context, conn *BaseConn, variable string) (value string, err error) {
 	failpoint.Inject("GetSessionVariableFailed", func(val failpoint.Value) {
 		items := strings.Split(val.(string), ",")
 		if len(items) != 2 {
@@ -193,35 +167,8 @@ func GetSessionVariable(ctx context.Context, conn *sql.Conn, variable string) (v
 	return getVariable(ctx, conn, variable, false)
 }
 
-func getVariable(ctx context.Context, conn *sql.Conn, variable string, isGlobal bool) (value string, err error) {
-	var template string
-	if isGlobal {
-		template = "SHOW GLOBAL VARIABLES LIKE '%s'"
-	} else {
-		template = "SHOW VARIABLES LIKE '%s'"
-	}
-	query := fmt.Sprintf(template, variable)
-	row := conn.QueryRowContext(ctx, query)
-
-	// Show an example.
-	/*
-		mysql> SHOW GLOBAL VARIABLES LIKE "binlog_format";
-		+---------------+-------+
-		| Variable_name | Value |
-		+---------------+-------+
-		| binlog_format | ROW   |
-		+---------------+-------+
-	*/
-
-	err = row.Scan(&variable, &value)
-	if err != nil {
-		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	return value, nil
-}
-
 // GetServerID gets server's `server_id`.
-func GetServerID(ctx context.Context, db *sql.DB) (uint32, error) {
+func GetServerID(ctx *tcontext.Context, db *BaseDB) (uint32, error) {
 	serverIDStr, err := GetGlobalVariable(ctx, db, "server_id")
 	if err != nil {
 		return 0, err
@@ -232,7 +179,7 @@ func GetServerID(ctx context.Context, db *sql.DB) (uint32, error) {
 }
 
 // GetMariaDBGtidDomainID gets MariaDB server's `gtid_domain_id`.
-func GetMariaDBGtidDomainID(ctx context.Context, db *sql.DB) (uint32, error) {
+func GetMariaDBGtidDomainID(ctx *tcontext.Context, db *BaseDB) (uint32, error) {
 	domainIDStr, err := GetGlobalVariable(ctx, db, "gtid_domain_id")
 	if err != nil {
 		return 0, err
@@ -243,7 +190,7 @@ func GetMariaDBGtidDomainID(ctx context.Context, db *sql.DB) (uint32, error) {
 }
 
 // GetServerUUID gets server's `server_uuid`.
-func GetServerUUID(ctx context.Context, db *sql.DB, flavor string) (string, error) {
+func GetServerUUID(ctx *tcontext.Context, db *BaseDB, flavor string) (string, error) {
 	if flavor == gmysql.MariaDBFlavor {
 		return GetMariaDBUUID(ctx, db)
 	}
@@ -252,9 +199,9 @@ func GetServerUUID(ctx context.Context, db *sql.DB, flavor string) (string, erro
 }
 
 // GetServerUnixTS gets server's `UNIX_TIMESTAMP()`.
-func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
+func GetServerUnixTS(ctx context.Context, db *BaseDB) (int64, error) {
 	var ts int64
-	row := db.QueryRowContext(ctx, "SELECT UNIX_TIMESTAMP()")
+	row := db.DB.QueryRowContext(ctx, "SELECT UNIX_TIMESTAMP()")
 	err := row.Scan(&ts)
 	if err != nil {
 		log.L().Error("can't SELECT UNIX_TIMESTAMP()", zap.Error(err))
@@ -265,7 +212,7 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 
 // GetMariaDBUUID gets equivalent `server_uuid` for MariaDB
 // `gtid_domain_id` joined `server_id` with domainServerIDSeparator.
-func GetMariaDBUUID(ctx context.Context, db *sql.DB) (string, error) {
+func GetMariaDBUUID(ctx *tcontext.Context, db *BaseDB) (string, error) {
 	domainID, err := GetMariaDBGtidDomainID(ctx, db)
 	if err != nil {
 		return "", err
@@ -278,17 +225,17 @@ func GetMariaDBUUID(ctx context.Context, db *sql.DB) (string, error) {
 }
 
 // GetParser gets a parser for sql.DB which is suitable for session variable sql_mode.
-func GetParser(ctx context.Context, db *sql.DB) (*parser.Parser, error) {
-	c, err := db.Conn(ctx)
+func GetParser(ctx *tcontext.Context, db *BaseDB) (*parser.Parser, error) {
+	c, err := db.GetBaseConn(ctx.Ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer c.Close()
+	defer CloseBaseConnWithoutErr(db, c)
 	return GetParserForConn(ctx, c)
 }
 
-// GetParserForConn gets a parser for sql.Conn which is suitable for session variable sql_mode.
-func GetParserForConn(ctx context.Context, conn *sql.Conn) (*parser.Parser, error) {
+// GetParserForConn gets a parser for BaseConn which is suitable for session variable sql_mode.
+func GetParserForConn(ctx *tcontext.Context, conn *BaseConn) (*parser.Parser, error) {
 	sqlMode, err := GetSessionVariable(ctx, conn, "sql_mode")
 	if err != nil {
 		return nil, err
@@ -309,7 +256,7 @@ func GetParserFromSQLModeStr(sqlMode string) (*parser.Parser, error) {
 }
 
 // KillConn kills the DB connection (thread in mysqld).
-func KillConn(ctx context.Context, db *sql.DB, connID uint32) error {
+func KillConn(ctx *tcontext.Context, db *BaseDB, connID uint32) error {
 	_, err := db.ExecContext(ctx, fmt.Sprintf("KILL %d", connID))
 	return terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 }
@@ -337,7 +284,7 @@ func IsNoSuchThreadError(err error) bool {
 }
 
 // GetGTIDMode return GTID_MODE.
-func GetGTIDMode(ctx context.Context, db *sql.DB) (string, error) {
+func GetGTIDMode(ctx *tcontext.Context, db *BaseDB) (string, error) {
 	val, err := GetGlobalVariable(ctx, db, "GTID_MODE")
 	return val, err
 }
@@ -365,7 +312,7 @@ func ExtractTiDBVersion(version string) (*semver.Version, error) {
 // because it doesn't cover all gtid_purged. The error of using it will be
 // ERROR 1236 (HY000): The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires.
 // so we add gtid_purged to it.
-func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn) (gmysql.GTIDSet, error) {
+func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *BaseConn) (gmysql.GTIDSet, error) {
 	if _, ok := gset.(*gmysql.MariadbGTIDSet); ok {
 		return gset, nil
 	}
@@ -381,7 +328,7 @@ func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn)
 		gtidStr = str
 		failpoint.Goto("bypass")
 	})
-	row = conn.QueryRowContext(ctx, "select @@GLOBAL.gtid_purged")
+	row = conn.DBConn.QueryRowContext(ctx, "select @@GLOBAL.gtid_purged")
 	err = row.Scan(&gtidStr)
 	if err != nil {
 		log.L().Error("can't get @@GLOBAL.gtid_purged when try to add it to gtid set", zap.Error(err))
@@ -454,17 +401,17 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 }
 
 // GetMaxConnections gets max_connections for sql.DB which is suitable for session variable max_connections.
-func GetMaxConnections(ctx context.Context, db *sql.DB) (int, error) {
-	c, err := db.Conn(ctx)
+func GetMaxConnections(ctx *tcontext.Context, db *BaseDB) (int, error) {
+	c, err := db.GetBaseConn(ctx.Ctx)
 	if err != nil {
 		return 0, err
 	}
-	defer c.Close()
+	defer CloseBaseConnWithoutErr(db, c)
 	return GetMaxConnectionsForConn(ctx, c)
 }
 
-// GetMaxConnectionsForConn gets max_connections for sql.Conn which is suitable for session variable max_connections.
-func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) {
+// GetMaxConnectionsForConn gets max_connections for BaseConn which is suitable for session variable max_connections.
+func GetMaxConnectionsForConn(ctx *tcontext.Context, conn *BaseConn) (int, error) {
 	maxConnectionsStr, err := GetSessionVariable(ctx, conn, "max_connections")
 	if err != nil {
 		return 0, err

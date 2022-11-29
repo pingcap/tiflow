@@ -25,7 +25,6 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +65,7 @@ func TestGetBaseConn(t *testing.T) {
 func TestFailDBPing(t *testing.T) {
 	netTimeout = time.Second
 	defer func() {
-		netTimeout = utils.DefaultDBTimeout
+		netTimeout = DefaultDBTimeout
 	}()
 	port := freeport.GetPort()
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -86,7 +85,7 @@ func TestFailDBPing(t *testing.T) {
 func TestGetBaseConnWontBlock(t *testing.T) {
 	netTimeout = time.Second
 	defer func() {
-		netTimeout = utils.DefaultDBTimeout
+		netTimeout = DefaultDBTimeout
 	}()
 	ctx := context.Background()
 

@@ -229,7 +229,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 	if err != nil {
 		return "", err
 	}
-	return utils.CreateTableSQLToOneRow(result.String()), nil
+	return conn.CreateTableSQLToOneRow(result.String()), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -480,7 +480,7 @@ func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Conte
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
-	stmtParser, err := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	stmtParser, err := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
 	}

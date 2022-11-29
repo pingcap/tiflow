@@ -197,12 +197,12 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	parser2, err := utils.GetParser(ctx, r.db.DB) // refine to use user config later
+	parser2, err := conn.GetParser(tcontext.NewContext(ctx, log.L()), r.db) // refine to use user config later
 	if err != nil {
 		return err
 	}
 
-	isNew, err := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
+	isNew, err := isNewServer(ctx, r.meta.SubDir(), r.db, r.cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -384,16 +384,16 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 				zap.Stringer("from position", latestPos), zap.Stringer("to position", result.LatestPos), log.WrapStringerField("from GTID set", latestGTID), log.WrapStringerField("to GTID set", result.LatestGTIDs))
 
 			if result.LatestGTIDs != nil {
-				dbConn, err2 := r.db.DB.Conn(ctx)
+				dbConn, err2 := r.db.GetBaseConn(ctx)
 				if err2 != nil {
 					return err2
 				}
-				defer dbConn.Close()
-				result.LatestGTIDs, err2 = utils.AddGSetWithPurged(ctx, result.LatestGTIDs, dbConn)
+				defer r.db.CloseBaseConn(dbConn)
+				result.LatestGTIDs, err2 = conn.AddGSetWithPurged(ctx, result.LatestGTIDs, dbConn)
 				if err2 != nil {
 					return err2
 				}
-				latestGTID, err2 = utils.AddGSetWithPurged(ctx, latestGTID, dbConn)
+				latestGTID, err2 = conn.AddGSetWithPurged(ctx, latestGTID, dbConn)
 				if err2 != nil {
 					return err2
 				}
@@ -597,7 +597,7 @@ func (r *Relay) handleEvents(
 			case replication.ErrSyncClosed, replication.ErrNeedSyncAgain:
 				// do nothing, but the error will be returned
 			default:
-				if utils.IsErrBinlogPurged(err) {
+				if conn.IsErrBinlogPurged(err) {
 					// TODO: try auto fix GTID, and can support auto switching between upstream server later.
 					cfg := r.cfg.From
 					r.logger.Error("the requested binlog files have purged in the master server or the master server have switched, currently DM do no support to handle this error",
@@ -642,7 +642,7 @@ func (r *Relay) handleEvents(
 		}
 
 		if _, ok := e.Event.(*replication.RotateEvent); ok && utils.IsFakeRotateEvent(e.Header) {
-			isNew, err2 := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
+			isNew, err2 := isNewServer(ctx, r.meta.SubDir(), r.db, r.cfg.Flavor)
 			// should start from the transaction beginning when switch to a new server
 			if err2 != nil {
 				return err2
@@ -750,7 +750,7 @@ func (r *Relay) tryUpdateActiveRelayLog(e *replication.BinlogEvent, filename str
 
 // reSetupMeta re-setup the metadata when switching to a new upstream master server.
 func (r *Relay) reSetupMeta(ctx context.Context) error {
-	uuid, err := utils.GetServerUUID(ctx, r.db.DB, r.cfg.Flavor)
+	uuid, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), r.db, r.cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -870,7 +870,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				r.RUnlock()
 				return
 			}
-			ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
+			ctx2, cancel2 := context.WithTimeout(ctx, conn.DefaultDBTimeout)
 			tctx := tcontext.NewContext(ctx2, r.logger)
 			pos, _, err := conn.GetPosAndGs(tctx, r.db, r.cfg.Flavor)
 			cancel2()
@@ -909,11 +909,11 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 
 // setUpReader setups the underlying reader used to read binlog events from the upstream master server.
 func (r *Relay) setUpReader(ctx context.Context) (Reader, error) {
-	ctx2, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
+	ctx2, cancel := context.WithTimeout(ctx, conn.DefaultDBTimeout)
 	defer cancel()
 
 	// always use a new random serverID
-	randomServerID, err := utils.GetRandomServerID(ctx2, r.db.DB)
+	randomServerID, err := conn.GetRandomServerID(tcontext.NewContext(ctx2, log.L()), r.db)
 	if err != nil {
 		// should never happened unless the master has too many slave
 		return nil, terror.Annotate(err, "fail to get random server id for relay reader")
@@ -1173,7 +1173,7 @@ func (r *Relay) adjustGTID(ctx context.Context, gset mysql.GTIDSet) (mysql.GTIDS
 	// setup a TCP binlog reader (because no relay can be used when upgrading).
 	syncCfg := r.syncerCfg
 	// always use a new random serverID
-	randomServerID, err := utils.GetRandomServerID(ctx, r.db.DB)
+	randomServerID, err := conn.GetRandomServerID(tcontext.NewContext(ctx, log.L()), r.db)
 	if err != nil {
 		return nil, terror.Annotate(err, "fail to get random server id when relay adjust gtid")
 	}
@@ -1184,12 +1184,12 @@ func (r *Relay) adjustGTID(ctx context.Context, gset mysql.GTIDSet) (mysql.GTIDS
 		return nil, err
 	}
 
-	dbConn, err2 := r.db.DB.Conn(ctx)
+	dbConn, err2 := r.db.GetBaseConn(ctx)
 	if err2 != nil {
 		return nil, err2
 	}
-	defer dbConn.Close()
-	return utils.AddGSetWithPurged(ctx, resultGs, dbConn)
+	defer r.db.CloseBaseConn(dbConn)
+	return conn.AddGSetWithPurged(ctx, resultGs, dbConn)
 }
 
 func (r *Relay) notify(e *replication.BinlogEvent) {

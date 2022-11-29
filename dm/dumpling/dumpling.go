@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
@@ -421,9 +422,8 @@ func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
 		return
 	}
 	defer baseDB.Close()
-	db := baseDB.DB
 
-	sqlMode, err := utils.GetGlobalVariable(ctx, db, "sql_mode")
+	sqlMode, err := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), baseDB, "sql_mode")
 	if err != nil {
 		log.L().Warn("get global sql_mode from upstream failed", zap.Any("db", m.cfg.From), zap.Error(err))
 		return

@@ -16,7 +16,6 @@ package config
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"math"
@@ -31,6 +30,7 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -45,7 +45,7 @@ const (
 	defaultRelayDir     = "relay-dir"
 )
 
-var getAllServerIDFunc = utils.GetAllServerID
+var getAllServerIDFunc = conn.GetAllServerID
 
 // SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
@@ -271,17 +271,17 @@ func (c *SourceConfig) GenerateDBConfig() *dbconfig.DBConfig {
 	// decrypt password
 	clone := c.DecryptPassword()
 	from := &clone.From
-	from.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(utils.DefaultDBTimeout.String())
+	from.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(conn.DefaultDBTimeout.String())
 	return from
 }
 
 // Adjust flavor and server-id of SourceConfig.
-func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
+func (c *SourceConfig) Adjust(ctx context.Context, db *conn.BaseDB) (err error) {
 	c.From.Adjust()
 	c.Checker.Adjust()
 
 	// use one timeout for all following DB operations.
-	ctx2, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
+	ctx2, cancel := context.WithTimeout(ctx, conn.DefaultDBTimeout)
 	defer cancel()
 	if c.Flavor == "" || c.ServerID == 0 {
 		err = c.AdjustFlavor(ctx2, db)
@@ -297,7 +297,7 @@ func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
 
 	// MariaDB automatically enabled gtid after 10.0.2, refer to https://mariadb.com/kb/en/gtid/#using-global-transaction-ids
 	if c.EnableGTID && c.Flavor != mysql.MariaDBFlavor {
-		val, err := utils.GetGTIDMode(ctx2, db)
+		val, err := conn.GetGTIDMode(tcontext.NewContext(ctx2, log.L()), db)
 		if err != nil {
 			return err
 		}
@@ -317,8 +317,8 @@ func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
 }
 
 // AdjustCaseSensitive adjust CaseSensitive from DB.
-func (c *SourceConfig) AdjustCaseSensitive(ctx context.Context, db *sql.DB) (err error) {
-	caseSensitive, err2 := conn.GetDBCaseSensitive(ctx, conn.NewBaseDB(db, terror.ScopeUpstream))
+func (c *SourceConfig) AdjustCaseSensitive(ctx context.Context, db *conn.BaseDB) (err error) {
+	caseSensitive, err2 := conn.GetDBCaseSensitive(ctx, db)
 	if err2 != nil {
 		return err2
 	}
@@ -327,7 +327,7 @@ func (c *SourceConfig) AdjustCaseSensitive(ctx context.Context, db *sql.DB) (err
 }
 
 // AdjustFlavor adjust Flavor from DB.
-func (c *SourceConfig) AdjustFlavor(ctx context.Context, db *sql.DB) (err error) {
+func (c *SourceConfig) AdjustFlavor(ctx context.Context, db *conn.BaseDB) (err error) {
 	if c.Flavor != "" {
 		switch c.Flavor {
 		case mysql.MariaDBFlavor, mysql.MySQLFlavor:
@@ -337,7 +337,7 @@ func (c *SourceConfig) AdjustFlavor(ctx context.Context, db *sql.DB) (err error)
 		}
 	}
 
-	c.Flavor, err = utils.GetFlavor(ctx, db)
+	c.Flavor, err = conn.GetFlavor(ctx, db)
 	if ctx.Err() != nil {
 		err = terror.Annotatef(err, "fail to get flavor info %v", ctx.Err())
 	}
@@ -345,12 +345,12 @@ func (c *SourceConfig) AdjustFlavor(ctx context.Context, db *sql.DB) (err error)
 }
 
 // AdjustServerID adjust server id from DB.
-func (c *SourceConfig) AdjustServerID(ctx context.Context, db *sql.DB) error {
+func (c *SourceConfig) AdjustServerID(ctx context.Context, db *conn.BaseDB) error {
 	if c.ServerID != 0 {
 		return nil
 	}
 
-	serverIDs, err := getAllServerIDFunc(ctx, db)
+	serverIDs, err := getAllServerIDFunc(tcontext.NewContext(ctx, log.L()), db)
 	if ctx.Err() != nil {
 		err = terror.Annotatef(err, "fail to get server-id info %v", ctx.Err())
 	}

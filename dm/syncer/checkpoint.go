@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/uber-go/atomic"
@@ -841,7 +840,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			points = append(points, point)
 		}
 		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
+		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(conn.DefaultDBTimeout)
 		defer cancel()
 		_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
 		if err != nil {

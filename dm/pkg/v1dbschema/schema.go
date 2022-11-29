@@ -106,7 +106,7 @@ func updateSyncerCheckpoint(tctx *tcontext.Context, dbConn *conn.BaseConn, taskN
 			if err != nil {
 				return terror.Annotatef(err, "get GTID sets for position %s", pos)
 			}
-			gs, err = utils.AddGSetWithPurged(tctx.Context(), gs, dbConn.DBConn)
+			gs, err = conn.AddGSetWithPurged(tctx.Context(), gs, dbConn)
 			if err != nil {
 				return terror.Annotatef(err, "get GTID sets for position %s", pos)
 			}

@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testDBSuite{})
@@ -89,20 +88,20 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 }
 
 func (s *testDBSuite) TestGetServerUUID(c *C) {
-	u, err := utils.GetServerUUID(context.Background(), s.db, "mysql")
+	u, err := conn.GetServerUUID(context.Background(), s.db, "mysql")
 	c.Assert(err, IsNil)
 	_, err = uuid.Parse(u)
 	c.Assert(err, IsNil)
 }
 
 func (s *testDBSuite) TestGetServerID(c *C) {
-	id, err := utils.GetServerID(context.Background(), s.db)
+	id, err := conn.GetServerID(context.Background(), s.db)
 	c.Assert(err, IsNil)
 	c.Assert(id, Greater, uint32(0))
 }
 
 func (s *testDBSuite) TestGetServerUnixTS(c *C) {
-	id, err := utils.GetServerUnixTS(context.Background(), s.db)
+	id, err := conn.GetServerUnixTS(context.Background(), s.db)
 	c.Assert(err, IsNil)
 	c.Assert(id, Greater, int64(0))
 }

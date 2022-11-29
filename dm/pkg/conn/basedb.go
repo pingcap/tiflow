@@ -38,7 +38,7 @@ import (
 
 var customID int64
 
-var netTimeout = utils.DefaultDBTimeout
+var netTimeout = DefaultDBTimeout
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
@@ -206,7 +206,7 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	if err != nil {
 		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), d.scope)
 	}
-	baseConn := NewBaseConn(conn, d.Retry)
+	baseConn := NewBaseConn(conn, d.scope, d.Retry)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.conns[baseConn] = struct{}{}

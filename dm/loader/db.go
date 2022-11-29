@@ -227,13 +227,13 @@ func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig,
 }
 
 func isErrDBExists(err error) bool {
-	return utils.IsMySQLError(err, tmysql.ErrDBCreateExists)
+	return conn.IsMySQLError(err, tmysql.ErrDBCreateExists)
 }
 
 func isErrTableExists(err error) bool {
-	return utils.IsMySQLError(err, tmysql.ErrTableExists)
+	return conn.IsMySQLError(err, tmysql.ErrTableExists)
 }
 
 func isErrDupEntry(err error) bool {
-	return utils.IsMySQLError(err, tmysql.ErrDupEntry)
+	return conn.IsMySQLError(err, tmysql.ErrDupEntry)
 }

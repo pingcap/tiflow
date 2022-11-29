@@ -77,7 +77,7 @@ func (s *testDDLSuite) TestAnsiQuotes(c *C) {
 			AddRow("sql_mode", "ANSI_QUOTES"))
 	c.Assert(err, IsNil)
 
-	parser, err := utils.GetParser(context.Background(), db)
+	parser, err := conn.GetParser(context.Background(), db)
 	c.Assert(err, IsNil)
 
 	for _, sql := range ansiQuotesCases {

@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -442,7 +441,7 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 				i2 := i
 				eg.Go(func() error {
 					if err2 := conn2.execDDLs(t.ctx, query); err2 != nil {
-						if utils.IsMySQLError(err2, mysql.ErrDupFieldName) {
+						if conn.IsMySQLError(err2, mysql.ErrDupFieldName) {
 							t.logger.Warn("ignore duplicate field name for ddl", log.ShortError(err))
 							return nil
 						}
@@ -502,7 +501,7 @@ func (t *task) diffIncrData(ctx context.Context) (err error) {
 }
 
 func (t *task) updateSchema() error {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	for i, db := range t.sourceDBs {

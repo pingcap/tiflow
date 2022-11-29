@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -173,8 +174,8 @@ func TestIsContextCanceledError(t *testing.T) {
 
 func TestIgnoreErrorCheckpoint(t *testing.T) {
 	t.Parallel()
-	require.True(t, IgnoreErrorCheckpoint(newMysqlErr(errno.ErrDupFieldName, "Duplicate column name c1")))
-	require.False(t, IgnoreErrorCheckpoint(newMysqlErr(errno.ErrTableExists, "Table tbl already exists")))
+	require.True(t, IgnoreErrorCheckpoint(conn.newMysqlErr(errno.ErrDupFieldName, "Duplicate column name c1")))
+	require.False(t, IgnoreErrorCheckpoint(conn.newMysqlErr(errno.ErrTableExists, "Table tbl already exists")))
 	require.False(t, IgnoreErrorCheckpoint(errors.New("another error")))
 }
 

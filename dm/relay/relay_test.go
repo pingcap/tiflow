@@ -547,7 +547,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 }
 
 func (t *testRelaySuite) TestReSetupMeta(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	var (
@@ -571,7 +571,7 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 		r.db = nil
 	}()
 	mockGetServerUUID(mockDB)
-	uuid, err := utils.GetServerUUID(ctx, r.db.DB, r.cfg.Flavor)
+	uuid, err := conn.GetServerUUID(ctx, r.db.DB, r.cfg.Flavor)
 	c.Assert(err, IsNil)
 
 	// re-setup meta with start pos adjusted

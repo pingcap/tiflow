@@ -27,7 +27,7 @@ import (
 )
 
 func TestBaseConn(t *testing.T) {
-	baseConn := NewBaseConn(nil, nil)
+	baseConn := NewBaseConnForTest(nil, nil)
 
 	tctx := tcontext.Background()
 	err := baseConn.SetRetryStrategy(nil)

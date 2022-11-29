@@ -23,7 +23,6 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testUtilSuite{})
@@ -31,7 +30,7 @@ var _ = Suite(&testUtilSuite{})
 type testUtilSuite struct{}
 
 func (t *testUtilSuite) TestIsNewServer(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	mockDB := conn.InitMockDB(c)
@@ -53,7 +52,7 @@ func (t *testUtilSuite) TestIsNewServer(c *C) {
 
 	// the same server
 	mockGetServerUUID(mockDB)
-	currUUID, err := utils.GetServerUUID(ctx, db, flavor)
+	currUUID, err := conn.GetServerUUID(ctx, db, flavor)
 	c.Assert(err, IsNil)
 
 	mockGetServerUUID(mockDB)

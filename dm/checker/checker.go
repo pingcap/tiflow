@@ -16,7 +16,6 @@ package checker
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -234,7 +233,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		))
 	}
 	// sourceID -> DB
-	upstreamDBs := make(map[string]*sql.DB)
+	upstreamDBs := make(map[string]*conn.BaseDB)
 	for i, instance := range c.instances {
 		sourceID := instance.cfg.SourceID
 		// init online ddl for checker
@@ -249,7 +248,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		upstreamDBs[sourceID] = instance.sourceDB.DB
+		upstreamDBs[sourceID] = instance.sourceDB
 		if instance.cfg.Mode != config.ModeIncrement {
 			// increment mode needn't check dump privilege
 			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
@@ -297,7 +296,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(
 			upstreamDBs,
-			c.instances[0].targetDB.DB,
+			c.instances[0].targetDB,
 			tableMapPerUpstreamWithSourceID,
 			extendedColumnPerTable,
 			dumpThreads,
@@ -628,7 +627,7 @@ func (c *Checker) IsFreshTask() (bool, error) {
 		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
 		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
 		if err != nil {
-			if utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+			if conn.IsMySQLError(err, mysql.ErrNoSuchTable) {
 				continue
 			}
 			return false, err
