@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/pdutil"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +34,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -508,7 +508,7 @@ LOOP:
 	}
 	c.state.Info.Config.Sink.TiDBSourceID = sourceID
 	log.Info("set source id",
-		zap.Uint64("source-id", sourceID),
+		zap.Uint64("sourceID", sourceID),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 	)

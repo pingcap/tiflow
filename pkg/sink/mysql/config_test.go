@@ -177,6 +177,7 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
 	expected.EnableOldValue = true
+	expected.SourceID = 1
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
 		"&tidb-txn-mode=pessimistic"

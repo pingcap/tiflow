@@ -15,6 +15,8 @@ package sink
 
 import (
 	"context"
+	"net/url"
+
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
@@ -23,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/util"
-	"net/url"
 )
 
 // Validate sink if given valid parameters.
@@ -107,14 +108,14 @@ func preCheckSinkURI(sinkURIStr string) (*url.URL, error) {
 }
 
 func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
-	maskSinkUri, err := util.MaskSinkURI(sinkURI.String())
+	maskSinkURI, err := util.MaskSinkURI(sinkURI.String())
 	if err != nil {
 		return err
 	}
 
 	if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
 		return cerror.ErrSinkURIInvalid.
-			GenWithStack("sink uri scheme is not supported in BDR mode, sink uri: %s", maskSinkUri)
+			GenWithStack("sink uri scheme is not supported in BDR mode, sink uri: %s", maskSinkURI)
 	}
 	cfg := pmysql.NewConfig()
 	id := model.DefaultChangeFeedID("sink-verify")
@@ -138,7 +139,7 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 	if !supported {
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack("downstream database does not support BDR mode, "+
-				"please check your config, sink uri: %s", maskSinkUri)
+				"please check your config, sink uri: %s", maskSinkURI)
 	}
 	return nil
 }

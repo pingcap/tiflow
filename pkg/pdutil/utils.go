@@ -10,7 +10,12 @@ import (
 
 const sourceIDName = "source_id"
 
+// GetSourceID returns the source ID of the TiDB cluster that PD is belonged to.
 func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
+	// only nil in test case
+	if pdClient == nil {
+		return 1, nil
+	}
 	// The default value of sourceID is 1,
 	// which means the sourceID is not changed by user.
 	sourceID := uint64(1)

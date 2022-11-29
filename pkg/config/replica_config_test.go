@@ -80,6 +80,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf2 := new(ReplicaConfig)
 	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
 	require.Nil(t, err)
+	conf2.Sink.TiDBSourceID = 1
 
 	conf := GetDefaultReplicaConfig()
 	conf.CaseSensitive = false

@@ -222,6 +222,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: false,
 		},
+		TiDBSourceID: 1,
 	}, cfg.Sink)
 }
 

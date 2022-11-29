@@ -234,7 +234,9 @@ type CDCClient struct {
 	}
 	ingressCommitTs   model.Ts
 	ingressResolvedTs model.Ts
-	filterLoop        bool
+	// filterLoop is used in BDR mode, when it is true, tikv cdc component
+	// will filter data that are written by another TiCDC.
+	filterLoop bool
 }
 
 // NewCDCClient creates a CDCClient instance
