@@ -311,8 +311,6 @@ func SplitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 			deleteEvent.Row.PreColumns[i] = nil
 		}
 	}
-	// Align with the old format if old value disabled.
-	deleteEvent.Row.TableInfoVersion = 0
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row
