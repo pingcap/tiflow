@@ -8975,7 +8975,7 @@
               "exemplar": true,
               "expr": "sum(rate(ticdc_sinkv2_cloud_storage_write_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed, instance)\n",
               "interval": "",
-              "legendFormat": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -9070,7 +9070,7 @@
               "exemplar": true,
               "expr": "sum(ticdc_sinkv2_cloud_storage_file_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed, instance)",
               "interval": "",
-              "legendFormat": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
