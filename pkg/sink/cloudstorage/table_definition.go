@@ -164,7 +164,7 @@ type TableDetail struct {
 func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
-	t.Version = info.TableInfoVersion
+	t.Version = info.Version
 	t.TotalColumns = len(info.Columns)
 	for _, col := range info.Columns {
 		var tableCol TableCol

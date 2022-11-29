@@ -763,6 +763,12 @@ func TestAvroEncode(t *testing.T) {
 			Schema: "testdb",
 			Table:  "avroencode",
 		},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "testdb",
+				Table:  "avroencode",
+			},
+		},
 		Columns:  cols,
 		ColInfos: colInfos,
 	}
@@ -910,8 +916,9 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "a", Table: "b"},
+		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
 		Columns: []*model.Column{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
