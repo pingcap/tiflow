@@ -542,7 +542,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
-		baseDB, err2 := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&l.cfg.To))
+		baseDB, err2 := conn.GetDownstreamDB(&l.cfg.To)
 		if err2 != nil {
 			return err2
 		}

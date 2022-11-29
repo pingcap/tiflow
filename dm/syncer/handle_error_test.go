@@ -89,7 +89,7 @@ func TestHandleError(t *testing.T) {
 	)
 	mockDB, err := conn.MockDefaultDBProvider()
 	require.NoError(t, err)
-	upstreamDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&cfg.From)) // used to get parser
+	upstreamDB, err := conn.GetUpstreamDB(&cfg.From) // used to get parser
 	require.NoError(t, err)
 	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: upstreamDB}
 	syncer.streamerController = binlogstream.NewStreamerController4Test(nil, nil)

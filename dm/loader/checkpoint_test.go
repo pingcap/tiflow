@@ -274,7 +274,7 @@ type lightningCpListSuite struct {
 func (s *lightningCpListSuite) SetUpTest(c *C) {
 	s.mock = conn.InitMockDB(c)
 
-	baseDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbconfig.DBConfig{}))
+	baseDB, err := conn.GetDownstreamDB(&dbconfig.DBConfig{})
 	c.Assert(err, IsNil)
 
 	metaSchema := "dm_meta"

@@ -34,7 +34,7 @@ func (t *testUtilSuite) TestIsNewServer(c *C) {
 	defer cancel()
 
 	mockDB := conn.InitMockDB(c)
-	baseDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(getDBConfigForTest()))
+	baseDB, err := conn.GetUpstreamDB(getDBConfigForTest())
 	c.Assert(err, IsNil)
 	db := baseDB.DB
 

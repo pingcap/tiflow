@@ -275,7 +275,7 @@ func (v *DataValidator) initialize() error {
 
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
-	v.fromDB, err = conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&dbCfg))
+	v.fromDB, err = conn.GetUpstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func (v *DataValidator) initialize() error {
 	dbCfg = v.cfg.To
 	// worker count + checkpoint connection, others concurrent access can create it on the fly
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
-	v.toDB, err = conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
+	v.toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -1257,7 +1257,7 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb
 	})
 	dbCfg = v.cfg.To
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
-	toDB, err = conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
+	toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
 		return nil, err
@@ -1286,7 +1286,7 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	})
 	dbCfg = v.cfg.To
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
-	toDB, err = conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
+	toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -1303,7 +1303,7 @@ func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateType
 	dbCfg := v.cfg.To
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
 	countMap := map[pb.ValidateErrorState]int64{}
-	toDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
+	toDB, err := conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
 	} else {

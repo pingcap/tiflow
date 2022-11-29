@@ -135,7 +135,7 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(l.downstreamMeta.dbConfig))
+	db, err := conn.GetDownstreamDB(l.downstreamMeta.dbConfig)
 	if err != nil {
 		return nil, err
 	}

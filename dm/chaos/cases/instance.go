@@ -27,7 +27,7 @@ var mustExecSQLs = []string{
 
 // setInstancesState sets the state (like global sql_mode) for upstream and downstream DB instances.
 func setInstancesState(ctx context.Context, targetCfg *dbconfig.DBConfig, sourcesCfg ...*dbconfig.DBConfig) error {
-	targetDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(targetCfg))
+	targetDB, err := conn.GetDownstreamDB(targetCfg)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func setInstancesState(ctx context.Context, targetCfg *dbconfig.DBConfig, source
 	}
 
 	for _, cfg := range sourcesCfg {
-		sourceDB, err2 := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
+		sourceDB, err2 := conn.GetUpstreamDB(cfg)
 		if err2 != nil {
 			return err2
 		}

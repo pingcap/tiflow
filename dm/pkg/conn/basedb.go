@@ -74,6 +74,14 @@ func DownstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
 	}
 }
 
+func GetUpstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
+	return DefaultDBProvider.Apply(UpstreamDBConfig(cfg))
+}
+
+func GetDownstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
+	return DefaultDBProvider.Apply(DownstreamDBConfig(cfg))
+}
+
 // Apply will build BaseDB with DBConfig.
 func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.

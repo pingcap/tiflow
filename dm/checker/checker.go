@@ -406,7 +406,7 @@ func (c *Checker) fetchSourceTargetDB(
 	}
 	dbCfg := instance.cfg.From
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.sourceDB, err = conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&dbCfg))
+	instance.sourceDB, err = conn.GetUpstreamDB(&dbCfg)
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
 	}
@@ -418,7 +418,7 @@ func (c *Checker) fetchSourceTargetDB(
 	}
 	dbCfg = instance.cfg.To
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.targetDB, err = conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
+	instance.targetDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}

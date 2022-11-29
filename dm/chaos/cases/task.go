@@ -86,7 +86,7 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		}
 
 		cfg := sourcesCfg[i]
-		db, err2 := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&cfg))
+		db, err2 := conn.GetUpstreamDB(&cfg)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -106,11 +106,11 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 			}
 		}
 		sourceDBs = append(sourceDBs, db)
-		sourceConns = append(sourceConns, conn)
+		sourceConns = append(sourceConns, dbConnection)
 		res = append(res, singleResult{})
 	}
 
-	targetDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&targetCfg))
+	targetDB, err := conn.GetDownstreamDB(&targetCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -436,8 +436,8 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 			// NOTE: no re-order inject even for optimistic shard DDL now.
 
 			var eg errgroup.Group
-			for i, conn := range t.sourceConns {
-				conn2 := conn
+			for i, c := range t.sourceConns {
+				conn2 := c
 				i2 := i
 				eg.Go(func() error {
 					if err2 := conn2.execDDLs(t.ctx, query); err2 != nil {

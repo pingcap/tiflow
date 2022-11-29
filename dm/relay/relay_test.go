@@ -162,7 +162,7 @@ func (t *testRelaySuite) TestTryRecoverLatestFile(c *C) {
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -254,7 +254,7 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *C) {
 	)
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -422,7 +422,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -556,7 +556,7 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 	)
 	cfg := getDBConfigForTest()
 	mockDB := conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)

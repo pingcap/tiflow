@@ -98,7 +98,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	defer u.processMu.Unlock()
 
 	var err error
-	u.upstreamDB, err = conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&u.cfg.From))
+	u.upstreamDB, err = conn.GetUpstreamDB(&u.cfg.From)
 	if err != nil {
 		return err
 	}

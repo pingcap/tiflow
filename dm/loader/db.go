@@ -208,7 +208,7 @@ func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig,
 	name, sourceID string,
 	workerCount int,
 ) (*conn.BaseDB, []*DBConn, error) {
-	baseDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&cfg.To))
+	baseDB, err := conn.GetDownstreamDB(&cfg.To)
 	if err != nil {
 		return nil, nil, terror.WithScope(err, terror.ScopeDownstream)
 	}

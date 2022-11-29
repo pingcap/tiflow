@@ -1346,7 +1346,7 @@ func innerCheckAndAdjustSourceConfig(
 	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *conn.BaseDB) error,
 ) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(dbConfig))
+	fromDB, err := conn.GetUpstreamDB(dbConfig)
 	if err != nil {
 		return err
 	}
@@ -1392,7 +1392,7 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConf
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
 	}
 
-	fromDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&cfg))
+	fromDB, err := conn.GetUpstreamDB(&cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -1420,7 +1420,7 @@ func AdjustTargetDB(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&cfg))
+	toDB, err := conn.GetDownstreamDB(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1726,7 +1726,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(toDBCfg))
+	baseDB, err := conn.GetDownstreamDB(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
