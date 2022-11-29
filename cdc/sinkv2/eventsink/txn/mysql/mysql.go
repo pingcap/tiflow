@@ -46,6 +46,9 @@ const (
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = 10 * time.Millisecond
 
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
+
 	defaultDMLMaxRetry uint64 = 8
 )
 
@@ -482,7 +485,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
-func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
+func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
@@ -490,13 +493,27 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 	}
 
 	start := time.Now()
-	return retry.Do(ctx, func() error {
+	return retry.Do(pctx, func() error {
+		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
+		writeTimeout += networkDriftDuration
+		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+		defer cancelFunc()
+
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
+			fmt.Printf("start to random error")
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			time.Sleep(time.Hour)
+			timer := time.NewTimer(time.Hour)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				failpoint.Return(context.Canceled)
+			}
 		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {

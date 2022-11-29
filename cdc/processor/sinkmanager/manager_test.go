@@ -50,9 +50,7 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
-		Config: &config.ReplicaConfig{
-			MemoryQuota: 1024 * 1024 * 1024,
-		},
+		Config:  config.GetDefaultReplicaConfig(),
 	}
 }
 
@@ -229,7 +227,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(4)
+		return checkpointTS.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -258,7 +256,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(3)
+		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
