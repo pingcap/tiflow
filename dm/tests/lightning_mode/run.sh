@@ -42,6 +42,8 @@ function run() {
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
+	read -p 123
+
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 

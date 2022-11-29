@@ -318,6 +318,12 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+	switch subtaskCfg.OnDuplicatePhysical {
+	case config.OnDuplicateManual:
+		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove
+	case config.OnDuplicateNone:
+		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
+	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
 	if subtaskCfg.To.Session != nil {
