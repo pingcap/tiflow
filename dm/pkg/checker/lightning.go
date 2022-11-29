@@ -15,7 +15,9 @@ package checker
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 )
 
@@ -138,12 +140,16 @@ func (c *LightningClusterVersionChecker) Check(ctx context.Context) *Result {
 
 // LightningFreeSpaceChecker checks whether the cluster has enough free space.
 type LightningFreeSpaceChecker struct {
-	inner restore.PrecheckItem
+	sourceDataSize int64
+	infoGetter     restore.TargetInfoGetter
 }
 
 // NewLightningFreeSpaceChecker creates a new LightningFreeSpaceChecker.
-func NewLightningFreeSpaceChecker(lightningChecker restore.PrecheckItem) RealChecker {
-	return &LightningFreeSpaceChecker{inner: lightningChecker}
+func NewLightningFreeSpaceChecker(sourceDataSize int64, getter restore.TargetInfoGetter) RealChecker {
+	return &LightningFreeSpaceChecker{
+		sourceDataSize: sourceDataSize,
+		infoGetter:     getter,
+	}
 }
 
 // Name implements the RealChecker interface.
@@ -158,12 +164,76 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		Desc:  "check whether the downstream has enough free space to store the data to be migrated",
 		State: StateFailure,
 	}
+	storeInfo, err := c.infoGetter.GetStorageInfo(ctx)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	clusterAvail := uint64(0)
+	for _, store := range storeInfo.Stores {
+		clusterAvail += uint64(store.Status.Available)
+	}
+	if clusterAvail < uint64(c.sourceDataSize) {
+		result.State = StateFailure
+		result.Errors = append(result.Errors, &Error{
+			Severity: StateFailure,
+			ShortErr: fmt.Sprintf("Cluster doesn't have enough space, available is %s, but we need %s",
+				units.BytesSize(float64(clusterAvail)), units.BytesSize(float64(c.sourceDataSize))),
+		})
+		result.Instruction = "you can try to scale-out more TiKV to gain more storage space"
+		return result
+	}
+
+	replConfig, err := c.infoGetter.GetReplicationConfig(ctx)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	safeSize := uint64(c.sourceDataSize) * replConfig.MaxReplicas * 2
+	if clusterAvail < safeSize {
+		result.State = StateWarning
+		result.Errors = append(result.Errors, &Error{
+			Severity: StateWarning,
+			ShortErr: fmt.Sprintf("Cluster may not have enough space, available is %s, but we need %s",
+				units.BytesSize(float64(clusterAvail)), units.BytesSize(float64(safeSize))),
+		})
+		result.Instruction = "you can try to scale-out more TiKV to gain more storage space"
+		return result
+	}
+	result.State = StateSuccess
+	return result
+}
+
+// LightningSortingSpaceChecker checks the local disk has enough space for physical
+// import mode sorting data.
+type LightningSortingSpaceChecker struct {
+	inner restore.PrecheckItem
+}
+
+// NewLightningSortingSpaceChecker creates a new LightningSortingSpaceChecker.
+func NewLightningSortingSpaceChecker(lightningChecker restore.PrecheckItem) RealChecker {
+	return &LightningSortingSpaceChecker{inner: lightningChecker}
+}
+
+// Name implements the RealChecker interface.
+func (c *LightningSortingSpaceChecker) Name() string {
+	return "lightning_enough_sorting_space"
+}
+
+// Check implements the RealChecker interface.
+func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether the free space of sorting-dir-physical is enough for Physical import mode",
+		State: StateFailure,
+	}
+	// TODO: don't expose lightning's config name in message?
 	convertLightningPrecheck(
 		ctx,
 		result,
 		c.inner,
 		StateWarning,
-		`You can try to scale-out more TiKV to gain more storage space`,
+		`you can change sorting-dir-physical to another mounting disk or set disk-quota-physical`,
 	)
 	return result
 }

@@ -450,11 +450,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		)
 
 		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterSize)
-			if err != nil {
-				return err
-			}
-			c.checkList = append(c.checkList, checker.NewLightningFreeSpaceChecker(lChecker))
+			c.checkList = append(c.checkList, checker.NewLightningFreeSpaceChecker(
+				info.totalDataSize.Load(), targetInfoGetter))
 		}
 
 		if instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
@@ -478,6 +475,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					return err
 				}
 				c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+			}
+			if _, ok := c.checkingItems[config.LightningSortingSpaceChecking]; ok {
+				lChecker, err := builder.BuildPrecheckItem(restore.CheckLocalTempKVDir)
+				if err != nil {
+					return err
+				}
+				c.checkList = append(c.checkList, checker.NewLightningSortingSpaceChecker(lChecker))
 			}
 		}
 	}
