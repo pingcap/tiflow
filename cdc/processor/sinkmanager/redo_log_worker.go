@@ -154,7 +154,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[0:]
+			rows = rows[:0]
 			if cap(rows) > 1024 {
 				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}

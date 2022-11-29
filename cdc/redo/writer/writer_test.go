@@ -42,7 +42,6 @@ import (
 func TestLogWriterWriteLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
-		tableID int64
 		rows    []*model.RedoRowChangedEvent
 	}
 	tests := []struct {
@@ -57,7 +56,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "happy",
 			args: arg{
 				ctx:     context.Background(),
-				tableID: 1,
 				rows: []*model.RedoRowChangedEvent{
 					{
 						Row: &model.RowChangedEvent{
@@ -73,7 +71,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "writer err",
 			args: arg{
 				ctx:     context.Background(),
-				tableID: 1,
 				rows: []*model.RedoRowChangedEvent{
 					{Row: nil},
 					{
@@ -91,7 +88,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "len(rows)==0",
 			args: arg{
 				ctx:     context.Background(),
-				tableID: 1,
 				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: errors.New("err"),
@@ -101,7 +97,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "isStopped",
 			args: arg{
 				ctx:     context.Background(),
-				tableID: 1,
 				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
@@ -112,7 +107,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "context cancel",
 			args: arg{
 				ctx:     context.Background(),
-				tableID: 1,
 				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: nil,
@@ -144,7 +138,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 
-		err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
+		err := writer.WriteLog(tt.args.ctx, tt.args.rows)
 		if tt.wantErr != nil {
 			log.Info("want error", zap.Error(tt.wantErr))
 			log.Info("got error", zap.Error(err))
