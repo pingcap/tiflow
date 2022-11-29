@@ -125,6 +125,8 @@ func New(
 		sinkFactory:  tableSinkFactory,
 		sortEngine:   sortEngine,
 
+		engineGCChan: make(chan *gcEvent, defaultEngineGCChanSize),
+
 		sinkProgressHeap: newTableProgresses(),
 		sinkWorkers:      make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:     make(chan *sinkTask),
