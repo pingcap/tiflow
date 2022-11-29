@@ -1,6 +1,6 @@
 ---
 name: test
-task-mode: full
+task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
 # enable-heartbeat: true
@@ -15,20 +15,14 @@ target-database:
 
 mysql-instances:
   - source-id: "mysql-replica-01"
-    block-allow-list:  "instance"
+    black-white-list:  "instance" # compatible with deprecated config
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
 
-  - source-id: "mysql-replica-02"
-    block-allow-list:  "instance"
-    mydumper-config-name: "global"
-    loader-config-name: "global"
-    syncer-config-name: "global"
-
-block-allow-list:
+black-white-list: # compatible with deprecated config
   instance:
-    do-dbs: ["full_mode"]
+    do-dbs: ["foreign_key"]
 
 mydumpers:
   global:
@@ -41,10 +35,9 @@ loaders:
   global:
     pool-size: 16
     dir: "./dumped_data"
-    import-mode: "logical"
-    on-duplicate-logical: "ignore"
 
 syncers:
   global:
     worker-count: 16
     batch: 100
+    enable-ansi-quotes: true

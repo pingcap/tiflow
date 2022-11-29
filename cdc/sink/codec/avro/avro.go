@@ -194,7 +194,7 @@ func (a *BatchEncoder) avroEncode(
 	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
-		e.TableInfoVersion,
+		e.TableInfo.Version,
 		schemaGen,
 	)
 	if err != nil {

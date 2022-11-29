@@ -250,34 +250,48 @@ const (
 	LoadModePhysical = "physical"
 )
 
-// DuplicateResolveType defines the duplication resolution when meet duplicate rows.
-type DuplicateResolveType string
+// LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
+type LogicalDuplicateResolveType string
 
 const (
 	// OnDuplicateReplace represents replace the old row with new data.
-	OnDuplicateReplace DuplicateResolveType = "replace"
+	OnDuplicateReplace LogicalDuplicateResolveType = "replace"
 	// OnDuplicateError represents return an error when meet duplicate row.
-	OnDuplicateError = "error"
+	OnDuplicateError LogicalDuplicateResolveType = "error"
 	// OnDuplicateIgnore represents ignore the new data when meet duplicate row.
-	OnDuplicateIgnore = "ignore"
+	OnDuplicateIgnore LogicalDuplicateResolveType = "ignore"
+)
+
+// PhysicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for physical import.
+type PhysicalDuplicateResolveType string
+
+const (
+	// OnDuplicateNone represents do nothing when meet duplicate row and the task will continue.
+	OnDuplicateNone PhysicalDuplicateResolveType = "none"
+	// OnDuplicateManual represents that task should be paused when meet duplicate row to let user handle it manually.
+	OnDuplicateManual PhysicalDuplicateResolveType = "manual"
 )
 
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
-	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
-	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
+	PoolSize   int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir        string   `yaml:"dir" toml:"dir" json:"dir"`
+	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
+	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	// deprecated, use OnDuplicateLogical instead.
+	OnDuplicate        LogicalDuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
+	OnDuplicateLogical LogicalDuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
+	// TODO: no effects now
+	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize:    defaultPoolSize,
-		Dir:         defaultDir,
-		ImportMode:  LoadModeLogical,
-		OnDuplicate: OnDuplicateReplace,
+		PoolSize:           defaultPoolSize,
+		Dir:                defaultDir,
+		ImportMode:         LoadModeLogical,
+		OnDuplicateLogical: OnDuplicateReplace,
 	}
 }
 
@@ -308,12 +322,31 @@ func (m *LoaderConfig) adjust() error {
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
 
-	if m.OnDuplicate == "" {
-		m.OnDuplicate = OnDuplicateReplace
+	if m.PoolSize == 0 {
+		m.PoolSize = defaultPoolSize
 	}
-	m.OnDuplicate = DuplicateResolveType(strings.ToLower(string(m.OnDuplicate)))
-	if m.OnDuplicate != OnDuplicateReplace && m.OnDuplicate != OnDuplicateError && m.OnDuplicate != OnDuplicateIgnore {
-		return terror.ErrConfigInvalidDuplicateResolution.Generate(m.OnDuplicate)
+
+	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
+		m.OnDuplicateLogical = m.OnDuplicate
+	}
+	if m.OnDuplicateLogical == "" {
+		m.OnDuplicateLogical = OnDuplicateReplace
+	}
+	m.OnDuplicateLogical = LogicalDuplicateResolveType(strings.ToLower(string(m.OnDuplicateLogical)))
+	switch m.OnDuplicateLogical {
+	case OnDuplicateReplace, OnDuplicateError, OnDuplicateIgnore:
+	default:
+		return terror.ErrConfigInvalidDuplicateResolution.Generate(m.OnDuplicateLogical)
+	}
+
+	if m.OnDuplicatePhysical == "" {
+		m.OnDuplicatePhysical = OnDuplicateNone
+	}
+	m.OnDuplicatePhysical = PhysicalDuplicateResolveType(strings.ToLower(string(m.OnDuplicatePhysical)))
+	switch m.OnDuplicatePhysical {
+	case OnDuplicateNone, OnDuplicateManual:
+	default:
+		return terror.ErrConfigInvalidPhysicalDuplicateResolution.Generate(m.OnDuplicatePhysical)
 	}
 
 	return nil
