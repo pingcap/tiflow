@@ -2256,6 +2256,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var originSQL string // show origin sql when error, only ddl now
 		var err2 error
 		var sourceTable *filter.Table
+		var needContinue bool
 
 		funCommit := func() (needContinue bool, err error) {
 			// reset eventIndex and force safeMode flag here.
@@ -2285,7 +2286,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			job := newXIDJob(endLocation, startLocation, endLocation)
 			_, err = s.handleJobFunc(job)
-			return needContinue, err
+			return false, err
 		}
 
 		switch ev := e.Event.(type) {
@@ -2304,20 +2305,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			if originSQL == "COMMIT" {
-				needContinue, _ := funCommit()
+				needContinue, err2 = funCommit()
 				if needContinue {
 					continue
 				}
-				_, err2 = funCommit()
 			} else {
 				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 			}
 		case *replication.XIDEvent:
-			needContinue, _ := funCommit()
+			needContinue, err2 = funCommit()
 			if needContinue {
 				continue
 			}
-			_, err2 = funCommit()
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
