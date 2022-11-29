@@ -24,6 +24,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -67,7 +68,7 @@ func (t *testSchema) setUpDBConn(c *C) {
 	}
 	t.password = os.Getenv("MYSQL_PSWD")
 
-	cfg := &config.DBConfig{
+	cfg := &dbconfig.DBConfig{
 		Host:     t.host,
 		Port:     t.port,
 		User:     t.user,
@@ -78,7 +79,7 @@ func (t *testSchema) setUpDBConn(c *C) {
 
 	var err error
 	t.mockDB = conn.InitMockDB(c)
-	t.db, err = conn.DefaultDBProvider.Apply(cfg)
+	t.db, err = conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(cfg))
 	c.Assert(err, IsNil)
 }
 
@@ -90,7 +91,7 @@ func (t *testSchema) TestSchemaV106ToV20x(c *C) {
 			SourceID:   "mysql-replica-01",
 			ServerID:   429523137,
 			MetaSchema: "dm_meta_v106_test",
-			From: config.DBConfig{
+			From: dbconfig.DBConfig{
 				Host:     t.host,
 				Port:     t.port,
 				User:     t.user,

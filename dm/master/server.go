@@ -36,6 +36,8 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
@@ -1345,7 +1347,7 @@ func innerCheckAndAdjustSourceConfig(
 	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
 ) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
+	fromDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(dbConfig))
 	if err != nil {
 		return err
 	}
@@ -1385,13 +1387,13 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 }
 
 // GetLatestMeta gets newest meta(binlog name, pos, gtid) from upstream.
-func GetLatestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
+func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConfig) (*config.Meta, error) {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
 	}
 
-	fromDB, err := conn.DefaultDBProvider.Apply(&cfg)
+	fromDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -1409,7 +1411,7 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig
 	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gSet}, nil
 }
 
-func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
+func AdjustTargetDB(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1419,7 +1421,7 @@ func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
+	toDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&cfg))
 	if err != nil {
 		return err
 	}
@@ -1645,7 +1647,7 @@ func (s *Server) generateSubTask(
 	}
 
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
-	dbConfigs := make(map[string]config.DBConfig, len(sourceCfgs))
+	dbConfigs := make(map[string]dbconfig.DBConfig, len(sourceCfgs))
 	for _, sourceCfg := range sourceCfgs {
 		dbConfigs[sourceCfg.SourceID] = sourceCfg.From
 	}
@@ -1671,7 +1673,7 @@ func (s *Server) generateSubTask(
 	return cfg, stCfgs, nil
 }
 
-func setUseTLS(tlsCfg *config.Security) {
+func setUseTLS(tlsCfg *security.Security) {
 	if enableTLS(tlsCfg) {
 		useTLS.Store(true)
 	} else {
@@ -1679,7 +1681,7 @@ func setUseTLS(tlsCfg *config.Security) {
 	}
 }
 
-func enableTLS(tlsCfg *config.Security) bool {
+func enableTLS(tlsCfg *security.Security) bool {
 	if tlsCfg == nil {
 		return false
 	}
@@ -1704,7 +1706,7 @@ func withHost(addr string) string {
 	return addr
 }
 
-func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
+func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *dbconfig.DBConfig) error {
 	failpoint.Inject("MockSkipRemoveMetaData", func() {
 		failpoint.Return(nil)
 	})
@@ -1725,7 +1727,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
+	baseDB, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(toDBCfg))
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}

@@ -29,6 +29,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -83,8 +85,8 @@ type SourceConfig struct {
 	// only use when worker bound source, do not marsh it
 	UUIDSuffix int `yaml:"-" toml:"-" json:"-"`
 
-	SourceID string   `yaml:"source-id" toml:"source-id" json:"source-id"`
-	From     DBConfig `yaml:"from" toml:"from" json:"from"`
+	SourceID string            `yaml:"source-id" toml:"source-id" json:"source-id"`
+	From     dbconfig.DBConfig `yaml:"from" toml:"from" json:"from"`
 
 	// config items for purger
 	Purge PurgeConfig `yaml:"purge" toml:"purge" json:"purge"`
@@ -265,11 +267,11 @@ func (c *SourceConfig) DecryptPassword() *SourceConfig {
 }
 
 // GenerateDBConfig creates DBConfig for DB.
-func (c *SourceConfig) GenerateDBConfig() *DBConfig {
+func (c *SourceConfig) GenerateDBConfig() *dbconfig.DBConfig {
 	// decrypt password
 	clone := c.DecryptPassword()
 	from := &clone.From
-	from.RawDBCfg = DefaultRawDBConfig().SetReadTimeout(utils.DefaultDBTimeout.String())
+	from.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(utils.DefaultDBTimeout.String())
 	return from
 }
 
@@ -316,7 +318,7 @@ func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
 
 // AdjustCaseSensitive adjust CaseSensitive from DB.
 func (c *SourceConfig) AdjustCaseSensitive(ctx context.Context, db *sql.DB) (err error) {
-	caseSensitive, err2 := utils.GetDBCaseSensitive(ctx, db)
+	caseSensitive, err2 := conn.GetDBCaseSensitive(ctx, conn.NewBaseDB(db, terror.ScopeUpstream))
 	if err2 != nil {
 		return err2
 	}
@@ -425,7 +427,7 @@ type SourceConfigForDowngrade struct {
 	RelayBinlogGTID string                 `yaml:"relay-binlog-gtid"`
 	UUIDSuffix      int                    `yaml:"-"`
 	SourceID        string                 `yaml:"source-id"`
-	From            DBConfig               `yaml:"from"`
+	From            dbconfig.DBConfig      `yaml:"from"`
 	Purge           PurgeConfig            `yaml:"purge"`
 	Checker         CheckerConfig          `yaml:"checker"`
 	ServerID        uint32                 `yaml:"server-id"`

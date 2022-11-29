@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
@@ -42,7 +42,7 @@ var netTimeout = utils.DefaultDBTimeout
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
-	Apply(config *config.DBConfig) (*BaseDB, error)
+	Apply(config ScopedDBConfig) (*BaseDB, error)
 }
 
 // DefaultDBProviderImpl is default DBProvider implement.
@@ -55,8 +55,27 @@ func init() {
 	DefaultDBProvider = &DefaultDBProviderImpl{}
 }
 
+type ScopedDBConfig struct {
+	*dbconfig.DBConfig
+	Scope terror.ErrScope
+}
+
+func UpstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
+	return ScopedDBConfig{
+		DBConfig: cfg,
+		Scope:    terror.ScopeUpstream,
+	}
+}
+
+func DownstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
+	return ScopedDBConfig{
+		DBConfig: cfg,
+		Scope:    terror.ScopeDownstream,
+	}
+}
+
 // Apply will build BaseDB with DBConfig.
-func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
+func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
@@ -116,7 +135,7 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), config.Scope)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
@@ -128,12 +147,12 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		db.Close()
 		doFuncInClose()
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), config.Scope)
 	}
 
 	db.SetMaxIdleConns(maxIdleConns)
 
-	return NewBaseDB(db, doFuncInClose), nil
+	return NewBaseDB(db, config.Scope, doFuncInClose), nil
 }
 
 // BaseDB wraps *sql.DB, control the BaseConn.
@@ -146,14 +165,33 @@ type BaseDB struct {
 
 	Retry retry.Strategy
 
+	scope terror.ErrScope
 	// this function will do when close the BaseDB
 	doFuncInClose []func()
 }
 
-// NewBaseDB returns *BaseDB object.
-func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+// NewBaseDB returns *BaseDB object for test.
+func NewBaseDB(db *sql.DB, scope terror.ErrScope, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
-	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
+	return &BaseDB{
+		DB:            db,
+		conns:         conns,
+		Retry:         &retry.FiniteRetryStrategy{},
+		scope:         scope,
+		doFuncInClose: doFuncInClose,
+	}
+}
+
+// NewBaseDBForTest returns *BaseDB object for test.
+func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+	conns := make(map[*BaseConn]struct{})
+	return &BaseDB{
+		DB:            db,
+		conns:         conns,
+		Retry:         &retry.FiniteRetryStrategy{},
+		scope:         terror.ScopeNotSet,
+		doFuncInClose: doFuncInClose,
+	}
 }
 
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
@@ -162,11 +200,11 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), d.scope)
 	}
 	err = conn.PingContext(ctx)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), d.scope)
 	}
 	baseConn := NewBaseConn(conn, d.Retry)
 	d.mu.Lock()

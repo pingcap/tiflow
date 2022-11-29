@@ -77,6 +77,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -453,8 +454,8 @@ func (k *ShardingGroupKeeper) Init() (err error) {
 
 	k.clear()
 	sgkDB := k.cfg.To
-	sgkDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err = dbconn.CreateConns(k.tctx, k.cfg, &sgkDB, 1)
+	sgkDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
+	db, dbConns, err = dbconn.CreateConns(k.tctx, k.cfg, conn.DownstreamDBConfig(&sgkDB), 1)
 	if err != nil {
 		return
 	}

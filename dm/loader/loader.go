@@ -33,6 +33,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -526,7 +527,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 
 	dbCfg := l.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
 		SetMaxIdleConns(l.cfg.PoolSize)
 
 	// used to change loader's specified DB settings, currently SQL Mode
@@ -541,7 +542,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
-		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		baseDB, err2 := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&l.cfg.To))
 		if err2 != nil {
 			return err2
 		}

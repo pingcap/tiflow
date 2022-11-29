@@ -42,6 +42,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -221,7 +222,7 @@ type Syncer struct {
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
-	SourceTableNamesFlavor utils.LowerCaseTableNamesFlavor
+	SourceTableNamesFlavor conn.LowerCaseTableNamesFlavor
 
 	tsOffset                  atomic.Int64    // time offset between upstream and syncer, DM's timestamp - MySQL's timestamp
 	secondsBehindMaster       atomic.Int64    // current task delay second behind upstream
@@ -355,11 +356,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
 	if err != nil {
 		return
 	}
-	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
+	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 	if err != nil {
 		return
 	}
@@ -432,7 +433,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 
 	var schemaMap map[string]string
 	var tableMap map[string]map[string]string
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// TODO: we should avoid call this function multi times
 		allTables, err1 := utils.FetchAllDoTables(ctx, s.fromDB.BaseDB.DB, s.baList)
 		if err1 != nil {
@@ -469,7 +470,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		if err = s.checkpoint.CheckAndUpdate(ctx, schemaMap, tableMap); err != nil {
 			return err
 		}
@@ -580,7 +581,7 @@ func (s *Syncer) initShardingGroups(ctx context.Context, needCheck bool) error {
 	if err2 != nil {
 		return err2
 	}
-	if needCheck && s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if needCheck && s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// try fix persistent data before init
 		schemaMap, tableMap := buildLowerCaseTableNamesMap(s.tctx.L(), sourceTables)
 		if err2 = s.sgk.CheckAndFix(loadMeta, schemaMap, tableMap); err2 != nil {
@@ -2950,18 +2951,18 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1)
 	if err != nil {
 		return err
 	}
 	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
 	s.fromConn = fromConns[0]
-	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
+	baseConn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
 	}
-	lcFlavor, err := utils.FetchLowerCaseTableNamesSetting(ctx, conn.DBConn)
+	lcFlavor, err := conn.FetchLowerCaseTableNamesSetting(ctx, baseConn)
 	if err != nil {
 		return err
 	}
@@ -2992,21 +2993,21 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	}
 
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
 	}
 	// baseConn for ddl
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3305,7 +3306,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update timezone
 	if s.timezone == nil {
-		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
+		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 		return err
 	}
 	// update syncer config

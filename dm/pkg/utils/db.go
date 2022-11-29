@@ -132,13 +132,13 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	var rowsResult []string
 	rowsResult, err = export.GetSpecifiedColumnValueAndClose(rows, "Server_id")
 	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream
+		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
 	for _, serverID := range rowsResult {
 		// serverID will not be null
 		serverIDUInt, err := strconv.ParseUint(serverID, 10, 32)
 		if err != nil {
-			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream
+			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 		}
 		serverIDs[uint32(serverIDUInt)] = struct{}{}
 	}

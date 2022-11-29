@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -37,15 +36,6 @@ import (
 // maybe change to one connection some day.
 type UpStreamConn struct {
 	BaseDB *conn.BaseDB
-}
-
-// NewUpStreamConn creates an UpStreamConn from config.
-func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
-	baseDB, err := CreateBaseDB(dbCfg)
-	if err != nil {
-		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
-	}
-	return &UpStreamConn{BaseDB: baseDB}, nil
 }
 
 // GetMasterStatus returns binlog location that extracted from SHOW MASTER STATUS.

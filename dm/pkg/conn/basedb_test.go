@@ -23,7 +23,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
@@ -33,7 +33,7 @@ func TestGetBaseConn(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	baseDB := NewBaseDB(db)
+	baseDB := NewBaseDBForTest(db)
 
 	tctx := tcontext.Background()
 
@@ -75,10 +75,10 @@ func TestFailDBPing(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 
-	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: port}
+	cfg := &dbconfig.DBConfig{User: "root", Host: "127.0.0.1", Port: port}
 	cfg.Adjust()
 	impl := &DefaultDBProviderImpl{}
-	db, err := impl.Apply(cfg)
+	db, err := impl.Apply(UpstreamDBConfig(cfg))
 	require.Error(t, err)
 	require.Nil(t, db)
 }
@@ -101,7 +101,7 @@ func TestGetBaseConnWontBlock(t *testing.T) {
 	db, err := sql.Open("mysql", "root:@tcp("+addr+")/test")
 	require.NoError(t, err)
 
-	baseDB := NewBaseDB(db)
+	baseDB := NewBaseDBForTest(db)
 
 	_, err = baseDB.GetBaseConn(ctx)
 	require.Error(t, err)

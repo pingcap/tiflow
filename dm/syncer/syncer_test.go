@@ -777,7 +777,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.cfg.CheckpointFlushInterval = 30 // defaultCheckpointFlushInterval
 	syncer.cfg.SafeModeDuration = "60s"     // defaultCheckpointFlushInterval * 2
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDBForTest(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),
@@ -1112,7 +1112,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDBForTest(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),
@@ -1847,7 +1847,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, err)
 	mockGetServerUnixTS(mock)
 
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDBForTest(db)}
 	syncer.reset()
 	require.NoError(t, syncer.genRouter())
 

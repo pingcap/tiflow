@@ -335,7 +335,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	tz := m.cfg.Timezone
 	if len(tz) == 0 {
 		// use target db time_zone as default
-		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+		baseDB, err2 := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&m.cfg.To))
 		if err2 != nil {
 			return nil, err2
 		}
@@ -414,7 +414,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 // detectSQLMode tries to detect SQL mode from upstream. If success, write it to LoaderConfig.
 // Because loader will use this SQL mode, we need to treat disable `EscapeBackslash` when NO_BACKSLASH_ESCAPES.
 func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
-	baseDB, err := conn.DefaultDBProvider.Apply(&m.cfg.From)
+	baseDB, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&m.cfg.From))
 	if err != nil {
 		log.L().Warn("set up db connect failed", zap.Any("db", m.cfg.From),
 			zap.Error(err))

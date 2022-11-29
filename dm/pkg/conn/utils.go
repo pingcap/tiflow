@@ -14,6 +14,7 @@
 package conn
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -246,4 +247,47 @@ func GetBinlogDB(ctx *tcontext.Context, db *BaseDB, flavor string) (string, stri
 	// nolint:dogsled
 	_, _, binlogDoDB, binlogIgnoreDB, _, err := GetMasterStatus(ctx, db, flavor)
 	return binlogDoDB, binlogIgnoreDB, err
+}
+
+// LowerCaseTableNamesFlavor represents the type of db `lower_case_table_names` settings.
+type LowerCaseTableNamesFlavor uint8
+
+const (
+	// LCTableNamesSensitive represent lower_case_table_names = 0, case sensitive.
+	LCTableNamesSensitive LowerCaseTableNamesFlavor = 0
+	// LCTableNamesInsensitive represent lower_case_table_names = 1, case insensitive.
+	LCTableNamesInsensitive = 1
+	// LCTableNamesMixed represent lower_case_table_names = 2, table names are case-sensitive, but case-insensitive in usage.
+	LCTableNamesMixed = 2
+)
+
+// GetDBCaseSensitive returns the case-sensitive setting of target db.
+func GetDBCaseSensitive(ctx context.Context, db *BaseDB) (bool, error) {
+	conn, err := db.GetBaseConn(ctx)
+	if err != nil {
+		return true, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), db.scope)
+	}
+	defer CloseBaseConnWithoutErr(db, conn)
+	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
+	if err != nil {
+		return true, err
+	}
+	return lcFlavor == LCTableNamesSensitive, nil
+}
+
+// FetchLowerCaseTableNamesSetting return the `lower_case_table_names` setting of target db.
+func FetchLowerCaseTableNamesSetting(ctx context.Context, conn *BaseConn) (LowerCaseTableNamesFlavor, error) {
+	query := "SELECT @@lower_case_table_names;"
+	row := conn.DBConn.QueryRowContext(ctx, query)
+	if row.Err() != nil {
+		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(row.Err(), query)
+	}
+	var res uint8
+	if err := row.Scan(&res); err != nil {
+		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(err, query)
+	}
+	if res > LCTableNamesMixed {
+		return LCTableNamesSensitive, terror.ErrDBUnExpect.Generate(fmt.Sprintf("invalid `lower_case_table_names` value '%d'", res))
+	}
+	return LowerCaseTableNamesFlavor(res), nil
 }

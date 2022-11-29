@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -469,8 +470,8 @@ func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) (err error) {
 	}()
 
 	checkPointDB := cp.cfg.To
-	checkPointDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
+	checkPointDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
+	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, conn.DownstreamDBConfig(&checkPointDB), 1)
 	if err != nil {
 		return
 	}

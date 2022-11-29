@@ -168,49 +168,6 @@ func FetchTargetDoTables(
 	return tableMapper, extendedColumnPerTable, nil
 }
 
-// LowerCaseTableNamesFlavor represents the type of db `lower_case_table_names` settings.
-type LowerCaseTableNamesFlavor uint8
-
-const (
-	// LCTableNamesSensitive represent lower_case_table_names = 0, case sensitive.
-	LCTableNamesSensitive LowerCaseTableNamesFlavor = 0
-	// LCTableNamesInsensitive represent lower_case_table_names = 1, case insensitive.
-	LCTableNamesInsensitive = 1
-	// LCTableNamesMixed represent lower_case_table_names = 2, table names are case-sensitive, but case-insensitive in usage.
-	LCTableNamesMixed = 2
-)
-
-// FetchLowerCaseTableNamesSetting return the `lower_case_table_names` setting of target db.
-func FetchLowerCaseTableNamesSetting(ctx context.Context, conn *sql.Conn) (LowerCaseTableNamesFlavor, error) {
-	query := "SELECT @@lower_case_table_names;"
-	row := conn.QueryRowContext(ctx, query)
-	if row.Err() != nil {
-		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(row.Err(), query)
-	}
-	var res uint8
-	if err := row.Scan(&res); err != nil {
-		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(err, query)
-	}
-	if res > LCTableNamesMixed {
-		return LCTableNamesSensitive, terror.ErrDBUnExpect.Generate(fmt.Sprintf("invalid `lower_case_table_names` value '%d'", res))
-	}
-	return LowerCaseTableNamesFlavor(res), nil
-}
-
-// GetDBCaseSensitive returns the case-sensitive setting of target db.
-func GetDBCaseSensitive(ctx context.Context, db *sql.DB) (bool, error) {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return true, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
-	if err != nil {
-		return true, err
-	}
-	return lcFlavor == LCTableNamesSensitive, nil
-}
-
 // CompareShardingDDLs compares s and t ddls
 // only concern in content, ignore order of ddl.
 func CompareShardingDDLs(s, t []string) bool {

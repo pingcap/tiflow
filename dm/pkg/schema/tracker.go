@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/sqlexec"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -160,7 +161,7 @@ func NewTestTracker(
 	logger log.Logger,
 ) (*Tracker, error) {
 	tr := NewTracker()
-	err := tr.Init(ctx, task, int(utils.LCTableNamesSensitive), downstreamConn, logger)
+	err := tr.Init(ctx, task, int(conn.LCTableNamesSensitive), downstreamConn, logger)
 	if err != nil {
 		return nil, err
 	}

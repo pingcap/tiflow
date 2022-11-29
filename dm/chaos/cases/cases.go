@@ -17,7 +17,7 @@ import (
 	"context"
 	"path/filepath"
 
-	config2 "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"golang.org/x/sync/errgroup"
@@ -33,7 +33,7 @@ var (
 
 // runCases runs test cases.
 func runCases(ctx context.Context, cli pb.MasterClient, confDir string,
-	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig,
+	targetCfg dbconfig.DBConfig, sourcesCfg ...dbconfig.DBConfig,
 ) error {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	for i := range filenames {

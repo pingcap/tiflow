@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -406,8 +407,8 @@ func (c *Checker) fetchSourceTargetDB(
 		Password: instance.cfg.From.Password,
 	}
 	dbCfg := instance.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.sourceDB, err = conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&dbCfg))
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
 	}
@@ -418,8 +419,8 @@ func (c *Checker) fetchSourceTargetDB(
 		Password: instance.cfg.To.Password,
 	}
 	dbCfg = instance.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.targetDB, err = conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(&dbCfg))
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
@@ -181,7 +182,7 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(&r.cfg.From)
+	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&r.cfg.From))
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeUpstream)
 	}
@@ -1085,10 +1086,10 @@ func (r *Relay) Reload(newCfg *Config) error {
 
 	r.closeDB()
 	if r.cfg.From.RawDBCfg == nil {
-		r.cfg.From.RawDBCfg = config.DefaultRawDBConfig()
+		r.cfg.From.RawDBCfg = dbconfig.DefaultRawDBConfig()
 	}
 	r.cfg.From.RawDBCfg.ReadTimeout = showStatusConnectionTimeout
-	db, err := conn.DefaultDBProvider.Apply(&r.cfg.From)
+	db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(&r.cfg.From))
 	if err != nil {
 		return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
