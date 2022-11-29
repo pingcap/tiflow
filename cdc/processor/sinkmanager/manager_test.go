@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
-	mock_engine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
+	mockengine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,9 +56,9 @@ func createManagerWithMockEngine(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	errChan chan error,
-) (*SinkManager, *mock_engine.MockSortEngine) {
+) (*SinkManager, *mockengine.MockSortEngine) {
 	ctrl := gomock.NewController(t)
-	sortEngine := mock_engine.NewMockSortEngine(ctrl)
+	sortEngine := mockengine.NewMockSortEngine(ctrl)
 	manager, err := New(
 		ctx, changefeedID, changefeedInfo,
 		nil, sortEngine, &entry.MockMountGroup{},
