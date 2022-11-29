@@ -41,7 +41,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
 	ctx cdcContext.Context, startTs uint64,
@@ -52,15 +52,9 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableSchedulerV3 {
-		ret, err = scheduler.NewSchedulerV3(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	} else {
-		ret, err = scheduler.NewScheduler(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	}
+	ret, err = scheduler.NewScheduler(
+		ctx, captureID, changeFeedID, startTs,
+		messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	return ret, errors.Trace(err)
 }
 
@@ -498,6 +492,12 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// we must clean cached ddl and tables in changefeed initialization
+	// otherwise, the changefeed will loss tables that are needed to be replicated
+	// ref: https://github.com/pingcap/tiflow/issues/7682
+	c.ddlEventCache = nil
+	c.currentTables = nil
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -615,7 +615,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
+		zap.Any("status", c.state.Status),
+		zap.Stringer("info", c.state.Info),
+		zap.Bool("isRemoved", c.isRemoved))
 }
 
 func (c *changefeed) cleanupMetrics() {

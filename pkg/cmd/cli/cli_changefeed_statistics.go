@@ -30,8 +30,6 @@ import (
 
 // status specifies the current status of the changefeed.
 type status struct {
-	OPS            uint64 `json:"ops"`
-	Count          uint64 `json:"count"`
 	SinkGap        string `json:"sink_gap"`
 	ReplicationGap string `json:"replication_gap"`
 }
@@ -76,18 +74,6 @@ func (o *statisticsChangefeedOptions) complete(f factory.Factory) error {
 func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command, lastCount *uint64, lastTime *time.Time) error {
 	now := time.Now()
 	var count uint64
-	captures, err := o.apiV1Client.Captures().List(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, capture := range *captures {
-		processor, err := o.apiV1Client.Processors().Get(ctx, o.changefeedID, capture.ID)
-		if err != nil {
-			return err
-		}
-		count += processor.Count
-	}
 
 	changefeed, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
@@ -102,10 +88,8 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 	sinkGap := oracle.ExtractPhysical(changefeed.ResolvedTs) - oracle.ExtractPhysical(changefeed.CheckpointTSO)
 	replicationGap := ts.Timestamp - oracle.ExtractPhysical(changefeed.CheckpointTSO)
 	statistics := status{
-		OPS:            (count - (*lastCount)) / uint64(now.Unix()-lastTime.Unix()),
 		SinkGap:        fmt.Sprintf("%dms", sinkGap),
 		ReplicationGap: fmt.Sprintf("%dms", replicationGap),
-		Count:          count,
 	}
 
 	*lastCount = count

@@ -41,8 +41,12 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
-	// csv only
-	CSVConfig *config.CSVConfig
+	// for sinking to cloud storage
+	Delimiter       string
+	Quote           string
+	NullString      string
+	IncludeCommitTs bool
+	Terminator      string
 }
 
 // NewConfig return a Config for codec
@@ -119,8 +123,14 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		c.AvroSchemaRegistry = config.Sink.SchemaRegistry
 	}
 
-	if config.Sink != nil && config.Sink.CSVConfig != nil {
-		c.CSVConfig = config.Sink.CSVConfig
+	if config.Sink != nil {
+		c.Terminator = config.Sink.Terminator
+		if config.Sink.CSVConfig != nil {
+			c.Delimiter = config.Sink.CSVConfig.Delimiter
+			c.Quote = config.Sink.CSVConfig.Quote
+			c.NullString = config.Sink.CSVConfig.NullString
+			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
+		}
 	}
 
 	return nil

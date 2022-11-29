@@ -15,19 +15,19 @@ package sinkmanager
 
 import (
 	"context"
+	"sync"
 	"testing"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
 type mockSink struct {
+	mu         sync.Mutex
 	events     []*eventsink.CallbackableEvent[*model.RowChangedEvent]
 	writeTimes int
 }
@@ -39,9 +39,23 @@ func newMockSink() *mockSink {
 }
 
 func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeTimes++
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockSink) GetEvents() []*eventsink.CallbackableEvent[*model.RowChangedEvent] {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.events
+}
+
+func (m *mockSink) GetWriteTimes() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeTimes
 }
 
 func (m *mockSink) Close() error {
@@ -50,7 +64,7 @@ func (m *mockSink) Close() error {
 
 //nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
-	tableState := tablepb.TableStateReplicating
+	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
@@ -59,6 +73,7 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 		tableID,
 		innerTableSink,
 		tableState,
+		0,
 		100,
 	)
 	return wrapper, sink
@@ -68,8 +83,8 @@ func TestTableSinkWrapperClose(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
-	require.Equal(t, tablepb.TableStateReplicating, wrapper.getState())
-	require.ErrorIs(t, cerror.ErrTableProcessorStoppedSafely, errors.Cause(wrapper.close(context.Background())))
+	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
+	require.Nil(t, wrapper.close(context.Background()))
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
@@ -79,6 +94,7 @@ func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	wrapper.updateReceivedSorterResolvedTs(100)
 	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
 }
 
 func TestConvertNilRowChangedEvents(t *testing.T) {

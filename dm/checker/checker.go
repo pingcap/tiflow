@@ -25,12 +25,14 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	"github.com/pingcap/tidb/br/pkg/lightning/restore"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/checker"
@@ -131,14 +133,23 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	// upstream instance index -> targetTable -> sourceTables
 	tableMapPerUpstream := make([]map[filter.Table][]filter.Table, len(c.instances))
+	extendedColumnPerTable := map[filter.Table][]string{}
+	extendedColumnPerTableMu := sync.Mutex{}
 	for idx := range c.instances {
 		i := idx
 		eg.Go(func() error {
-			mapping, fetchErr := c.fetchSourceTargetDB(ctx2, c.instances[i])
+			tableMapping, extendedColumnM, fetchErr := c.fetchSourceTargetDB(ctx2, c.instances[i])
 			if fetchErr != nil {
 				return fetchErr
 			}
-			tableMapPerUpstream[i] = mapping
+			tableMapPerUpstream[i] = tableMapping
+			for table, cols := range extendedColumnM {
+				// same target table may come from different upstream instances
+				// though they are duplicated they should be the same
+				extendedColumnPerTableMu.Lock()
+				extendedColumnPerTable[table] = cols
+				extendedColumnPerTableMu.Unlock()
+			}
 			return nil
 		})
 	}
@@ -214,7 +225,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 	}
-
+	// check target DB's privilege
+	if _, ok := c.checkingItems[config.TargetDBPrivilegeChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
+			c.instances[0].targetDB.DB,
+			c.instances[0].targetDBInfo,
+		))
+	}
 	// sourceID -> DB
 	upstreamDBs := make(map[string]*sql.DB)
 	for i, instance := range c.instances {
@@ -281,6 +298,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			upstreamDBs,
 			c.instances[0].targetDB.DB,
 			tableMapPerUpstreamWithSourceID,
+			extendedColumnPerTable,
 			dumpThreads,
 		))
 	}
@@ -320,23 +338,65 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
+	if instance.cfg.Mode != config.ModeIncrement && instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
+		if err != nil {
+			return err
+		}
+		// Adjust will raise error when this field is empty, so we set any non empty value here.
+		lCfg.Mydumper.SourceDir = "noop://"
+		err = lCfg.Adjust(ctx)
+		if err != nil {
+			return err
+		}
+
+		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
+		if err != nil {
+			return err
+		}
+		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
+		}
+		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
+		}
+	}
+
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
 }
 
-func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstance) (map[filter.Table][]filter.Table, error) {
+func (c *Checker) fetchSourceTargetDB(
+	ctx context.Context,
+	instance *mysqlInstance,
+) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
 	bAList, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
 	if err != nil {
-		return nil, terror.ErrTaskCheckGenBAList.Delegate(err)
+		return nil, nil, terror.ErrTaskCheckGenBAList.Delegate(err)
 	}
 	instance.baList = bAList
 	r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 	if err != nil {
-		return nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
+		return nil, nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
 	}
 
 	if err != nil {
-		return nil, terror.ErrTaskCheckGenColumnMapping.Delegate(err)
+		return nil, nil, terror.ErrTaskCheckGenColumnMapping.Delegate(err)
 	}
 
 	instance.sourceDBinfo = &dbutil.DBConfig{
@@ -349,7 +409,7 @@ func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstan
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
 	instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
 	if err != nil {
-		return nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
+		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
 	}
 	instance.targetDBInfo = &dbutil.DBConfig{
 		Host:     instance.cfg.To.Host,
@@ -361,9 +421,9 @@ func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstan
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
 	instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
 	if err != nil {
-		return nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
+		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, instance.baList, r)
+	return utils.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB.DB, instance.baList, r)
 }
 
 func (c *Checker) displayCheckingItems() string {

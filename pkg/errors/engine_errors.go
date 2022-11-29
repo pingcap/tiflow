@@ -351,13 +351,13 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+	ErrNoQualifiedExecutor = errors.Normalize(
+		"no executor is available for scheduling",
+		errors.RFCCodeText("DFLOW:ErrNoQualifiedExecutor"),
+	)
 	ErrFilterNoResult = errors.Normalize(
 		"filter % returns no result",
 		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),
-	)
-	ErrCapacityNotEnough = errors.Normalize(
-		"capacity not enough",
-		errors.RFCCodeText("DFLOW:ErrCapacityNotEnough"),
 	)
 	ErrSelectorUnsatisfied = errors.Normalize(
 		"selector %v is not satisfied",
@@ -417,5 +417,9 @@ var (
 	ErrElectionRecordConflict = errors.Normalize(
 		"election record conflict",
 		errors.RFCCodeText("DFLOW:ErrElectionRecordConflict"),
+	)
+	ErrDeserializeConfig = errors.Normalize(
+		"deserialize config failed",
+		errors.RFCCodeText("DFLOW:ErrDeserializeConfig"),
 	)
 )

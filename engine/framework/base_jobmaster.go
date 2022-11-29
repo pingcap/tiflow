@@ -23,10 +23,8 @@ import (
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -55,13 +53,9 @@ type BaseJobMaster interface {
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 
 	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
-	// a more flexible way of passing options.
-	CreateWorkerV2(
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -126,8 +120,6 @@ type DefaultBaseJobMaster struct {
 type JobMasterImpl interface {
 	MasterImpl
 
-	// Workload return the resource unit of the job master itself
-	Workload() model.RescUnit
 	// OnCancel is triggered when a cancel message is received. It can be
 	// triggered multiple times.
 	// TODO: when it returns error, framework should close this jobmaster.
@@ -305,21 +297,11 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 
 // CreateWorker implements BaseJobMaster.CreateWorker
 func (d *DefaultBaseJobMaster) CreateWorker(
-	workerType WorkerType,
-	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return d.master.CreateWorker(workerType, config, cost, resources...)
-}
-
-// CreateWorkerV2 implements BaseJobMaster.CreateWorkerV2
-func (d *DefaultBaseJobMaster) CreateWorkerV2(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
 	opts ...CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
-	return d.master.CreateWorkerV2(workerType, config, opts...)
+	return d.master.CreateWorker(workerType, config, opts...)
 }
 
 // UpdateStatus delegates the UpdateStatus of inner worker
@@ -328,11 +310,6 @@ func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status frameMod
 	defer cancel()
 
 	return d.worker.UpdateStatus(ctx, status)
-}
-
-// Workload delegates the Workload of inner worker
-func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
-	return d.worker.Workload()
 }
 
 // ID delegates the ID of inner worker
@@ -412,10 +389,6 @@ func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
 func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 	log.Panic("unexpected Poll call")
 	return nil
-}
-
-func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
-	return j.inner.Workload()
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(

@@ -25,9 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
@@ -498,7 +496,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				workerManager.Tick(ctx)
+				workerManager.DoTick(ctx)
 			}
 		}
 	}()
@@ -617,7 +615,10 @@ type MockWorkerAgent struct {
 	mock.Mock
 }
 
-func (mockAgent *MockWorkerAgent) CreateWorker(workerType framework.WorkerType, taskCfg interface{}, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error) {
+func (mockAgent *MockWorkerAgent) CreateWorker(
+	workerType framework.WorkerType, taskCfg interface{},
+	opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	args := mockAgent.Called()

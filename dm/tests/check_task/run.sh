@@ -39,10 +39,82 @@ function test_check_task_fail_no_block_forsharding() {
 		"\"state\": \"fail\"" 1
 }
 
+# this test case ensures that the privileges we require fully meet the demands of both syncer and loader,
+# and dm can still make progress if the downstream user lacks `super` privilege.
+function test_privileges_can_migrate() {
+	# cleanup data if last test failed
+	echo "--> start test_privileges_can_migrate..."
+	run_sql_source1 "drop database if exists \`checktask1\`"
+	run_sql_source1 "create database if not exists \`checktask1\`"
+	run_sql_tidb "drop user if exists 'test1'@'%';"
+	run_sql_tidb "drop database if exists \`checktask1\`"
+	run_sql_source1 "create table checktask1.test_privilege(id int primary key, b varchar(10))"
+	run_sql_source1 "insert into checktask1.test_privilege values (1, 'a'),(2, 'b');"
+	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
+	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index on *.* to 'test1'@'%';"
+	run_sql_tidb "flush privileges;"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/task-priv.yaml --remove-meta" \
+		"\"state\": \"fail\"" 0
+	sleep 1 # wait full migration finish
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_source1 "insert into checktask1.test_privilege values (3, 'c'),(4, 'd');"      # simple dml
+	run_sql_source1 "alter table checktask1.test_privilege add column c int default 0;"    # ddl
+	run_sql_source1 "create table checktask1.test_ddl(id int primary key, b varchar(10));" # create table
+	run_sql_source1 "create table checktask1.test_ddl2(id int primary key, b varchar(10));"
+	run_sql_source1 "drop table checktask1.test_ddl2;"                                      # drop table
+	run_sql_source1 "create index idx on checktask1.test_privilege(b);"                     # create index
+	run_sql_source1 "insert into checktask1.test_privilege values (5, 'e', 5),(6, 'f', 6);" # dml with ddl
+	run_sql_source1 "insert into checktask1.test_ddl values (1, 'a'),(2, 'b');"             # simple dml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"Running\"" 2
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+	# cleanup
+	run_sql_tidb "drop user 'test1'@'%';"
+	run_sql_tidb "drop database if exists \`checktask1\`;"
+	echo "pass test_privileges_can_migrate"
+}
+
+function test_privilege_precheck() {
+	echo "--> start test_privilege_precheck..."
+	# fail: missing privilege
+	run_sql_tidb "drop user if exists 'test1'@'%';"
+	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
+	run_sql_tidb "grant select, create, insert, delete, alter, drop, index on *.* to 'test1'@'%';"
+	run_sql_tidb "flush privileges;"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $cur/conf/task-priv.yaml" \
+		"\"warning\": 1" 1 \
+		"lack of Update global (*.*) privilege" 1
+	run_sql_tidb "grant update on *.* to 'test1'@'%';"
+	run_sql_tidb "flush privileges;"
+	# success: fulfill privileges
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $cur/conf/task-priv.yaml" \
+		"\"msg\": \"pre-check is passed. \"" 1
+	run_sql_tidb "drop user 'test1'@'%';"
+
+	# success: all privileges
+	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
+	run_sql_tidb "grant all privileges on *.* to 'test1'@'%';"
+	run_sql_tidb "flush privileges;"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $cur/conf/task-priv.yaml" \
+		"\"msg\": \"pre-check is passed. \"" 1
+	run_sql_tidb "drop user 'test1'@'%';"
+	echo "pass test_privilege_precheck"
+}
+
 function run() {
 	prepare
 	test_check_task_warn_no_block
 	test_check_task_fail_no_block_forsharding
+	test_privileges_can_migrate
+	test_privilege_precheck
 }
 
 cleanup_data check-task

@@ -35,7 +35,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
+	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -132,7 +136,7 @@ type dmlPathKey struct {
 	date         string
 }
 
-func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
+func (d *dmlPathKey) generateDMLFilePath(idx uint64, extension string) string {
 	var elems []string
 
 	elems = append(elems, d.schema)
@@ -145,7 +149,7 @@ func (d *dmlPathKey) generateDMLFilePath(idx uint64) string {
 	if len(d.date) != 0 {
 		elems = append(elems, d.date)
 	}
-	elems = append(elems, fmt.Sprintf("CDC%06d.csv", idx))
+	elems = append(elems, fmt.Sprintf("CDC%06d%s", idx, extension))
 
 	return strings.Join(elems, "/")
 }
@@ -216,11 +220,13 @@ type fileIndexRange struct {
 type consumer struct {
 	sink            sink.Sink
 	replicationCfg  *config.ReplicaConfig
+	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
+	fileExtension   string
 	// tableIdxMap maintains a map of <dmlPathKey, max file index>
 	tableIdxMap map[dmlPathKey]uint64
-	// tableTsMap maintains a map of <dmlPathKey, max commit ts>
-	tableTsMap       map[dmlPathKey]uint64
+	// tableTsMap maintains a map of <TableID, max commit ts>
+	tableTsMap       map[model.TableID]uint64
 	tableIDGenerator *fakeTableIDGenerator
 }
 
@@ -238,11 +244,26 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	if replicaConfig.Sink.Protocol != config.ProtocolCsv.String() {
+	switch replicaConfig.Sink.Protocol {
+	case config.ProtocolCsv.String():
+	case config.ProtocolCanalJSON.String():
+	default:
 		return nil, fmt.Errorf("data encoded in protocol %s is not supported yet",
 			replicaConfig.Sink.Protocol)
 	}
 
+	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
+	if err != nil {
+		return nil, err
+	}
+
+	codecConfig := common.NewConfig(protocol)
+	err = codecConfig.Apply(upstreamURI, replicaConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	extension := sinkutil.GetFileExtension(protocol)
 	bs, err := storage.ParseBackend(upstreamURIStr, nil)
 	if err != nil {
 		log.Error("failed to parse storage backend", zap.Error(err))
@@ -269,9 +290,11 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	return &consumer{
 		sink:            s,
 		replicationCfg:  replicaConfig,
+		codecCfg:        codecConfig,
 		externalStorage: storage,
+		fileExtension:   extension,
 		tableIdxMap:     make(map[dmlPathKey]uint64),
-		tableTsMap:      make(map[dmlPathKey]uint64),
+		tableTsMap:      make(map[model.TableID]uint64),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
@@ -279,7 +302,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func (c *consumer) diffTwoMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -328,7 +351,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			return nil
 		}
 
-		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.CSVConfig.DateSeparator, path)
+		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
 		if err != nil {
 			log.Error("failed to parse dml file path", zap.Error(err))
 			// skip handling this file
@@ -356,14 +379,18 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		}
 	}
 
-	m = c.diffTwoMaps(c.tableIdxMap, origTableMap)
+	m = c.difference(c.tableIdxMap, origTableMap)
 	return m, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
 func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
-	var events []*model.RowChangedEvent
-	var tableDetail cloudstorage.TableDetail
+	var (
+		events      []*model.RowChangedEvent
+		tableDetail cloudstorage.TableDetail
+		decoder     codec.EventBatchDecoder
+		err         error
+	)
 
 	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
 	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
@@ -380,9 +407,14 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 		return errors.Trace(err)
 	}
 
-	decoder, err := csv.NewBatchDecoder(ctx, c.replicationCfg.Sink.CSVConfig, tableInfo, content)
-	if err != nil {
-		return errors.Trace(err)
+	switch c.codecCfg.Protocol {
+	case config.ProtocolCsv:
+		decoder, err = csv.NewBatchDecoder(ctx, c.codecCfg, tableInfo, content)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case config.ProtocolCanalJSON:
+		decoder = canal.NewBatchDecoder(content, false, c.codecCfg.Terminator)
 	}
 
 	cnt := 0
@@ -404,12 +436,12 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 				return errors.Trace(err)
 			}
 
-			if _, ok := c.tableTsMap[pathKey]; !ok || row.CommitTs >= c.tableTsMap[pathKey] {
-				c.tableTsMap[pathKey] = row.CommitTs
+			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID] {
+				c.tableTsMap[tableID] = row.CommitTs
 			} else {
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("tableMaxCommitTs", c.tableTsMap[pathKey]),
+					zap.Uint64("tableMaxCommitTs", c.tableTsMap[tableID]),
 					zap.Any("row", row),
 				)
 				continue
@@ -418,7 +450,10 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 			events = append(events, row)
 		}
 	}
-	log.Info("decode success", zap.Int("decodeRowsCnt", cnt),
+	log.Info("decode success", zap.String("schema", pathKey.schema),
+		zap.String("table", pathKey.table),
+		zap.Int64("version", pathKey.version),
+		zap.Int("decodeRowsCnt", cnt),
 		zap.Int("filteredRowsCnt", len(events)))
 
 	err = c.sink.EmitRowChangedEvents(ctx, events...)
@@ -466,7 +501,8 @@ func (c *consumer) run(ctx context.Context) error {
 		for _, k := range keys {
 			fileRange := fileMap[k]
 			for i := fileRange.start; i <= fileRange.end; i++ {
-				filePath := k.generateDMLFilePath(i)
+				filePath := k.generateDMLFilePath(i, c.fileExtension)
+				log.Debug("read from dml file path", zap.String("path", filePath))
 				content, err := c.externalStorage.ReadFile(ctx, filePath)
 				if err != nil {
 					return errors.Trace(err)
@@ -478,7 +514,7 @@ func (c *consumer) run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 
-				resolvedTs := model.NewResolvedTs(c.tableTsMap[k])
+				resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
 				_, err = c.sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 				if err != nil {
 					return errors.Trace(err)

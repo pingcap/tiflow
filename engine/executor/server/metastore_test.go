@@ -53,7 +53,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			gomock.Any(),
 			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore})).
 		Return(&pb.QueryMetaStoreResponse{
-			Address: string(frameParamBytes),
+			Config: frameParamBytes,
 		}, nil).Times(1)
 
 	var businessStoreParams metaModel.StoreConfig
@@ -66,7 +66,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			gomock.Any(),
 			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore})).
 		Return(&pb.QueryMetaStoreResponse{
-			Address: string(businessParamBytes),
+			Config: businessParamBytes,
 		}, nil).Times(1)
 
 	fakeFrameworkClientConn := metaMock.NewMockClientConn()

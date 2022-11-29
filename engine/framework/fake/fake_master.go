@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -182,11 +181,6 @@ func (m *Master) ID() worker.RunnableID {
 	return m.workerID
 }
 
-// Workload implements BaseJobMaster.Workload
-func (m *Master) Workload() model.RescUnit {
-	return 0
-}
-
 // InitImpl implements BaseJobMaster.InitImpl
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.Info("FakeMaster: Init", zap.Any("config", m.config))
@@ -196,7 +190,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 
 // This function is not thread safe, it must be called with m.workerListMu locked
 func (m *Master) createWorker(wcfg *WorkerConfig) error {
-	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg, 1)
+	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -27,7 +27,7 @@ FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
-export PATH := $(CURDIR)/bin:$(path_to_add):$(PATH)
+export PATH := $(CURDIR)/bin:$(CURDIR)/tools/bin:$(path_to_add):$(PATH)
 
 SHELL := /usr/bin/env bash
 
@@ -77,7 +77,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.4.0-master
+	RELEASE_VERSION := v6.5.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
@@ -147,7 +147,7 @@ storage_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
+unit_test: check_failpoint_ctl generate_mock go-generate generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -233,7 +233,7 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 integration_test_storage: check_third_party_binary
 	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock generate-msgp-code
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
@@ -272,9 +272,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@./scripts/check-diff-line-width.sh
 endif
 
-generate-msgp-code: tools/bin/msgp
-	@echo "generate-msgp-code"
-	./scripts/generate-msgp-code.sh
+go-generate: ## Run go generate on all packages.
+go-generate: tools/bin/msgp tools/bin/stringer tools/bin/mockery
+	@echo "go generate"
+	@go generate ./...
 
 generate-protobuf: ## Generate code from protobuf files.
 generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster \
@@ -294,13 +295,13 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
+	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
 	swagger-spec check-makefiles check_engine_integration_test
-	@git --no-pager diff --exit-code || echo "Please add changed files!"
+	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"

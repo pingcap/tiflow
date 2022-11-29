@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -105,7 +104,7 @@ type MasterImpl interface {
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
-	// Only after OnWorkerOnline, OnWorkerOffline of the same worker may be called.
+	// NOTE: OnWorkerOffline can appear without OnWorkerOnline
 	// Return:
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:
@@ -165,11 +164,6 @@ const (
 // CreateWorkerOpt specifies an option for creating a worker.
 type CreateWorkerOpt = master.CreateWorkerOpt
 
-// CreateWorkerWithCost specifies the cost of a worker.
-func CreateWorkerWithCost(cost model.RescUnit) CreateWorkerOpt {
-	return master.CreateWorkerWithCost(cost)
-}
-
 // CreateWorkerWithResourceRequirements specifies the resource requirement of a worker.
 func CreateWorkerWithResourceRequirements(resources ...resModel.ResourceID) CreateWorkerOpt {
 	return master.CreateWorkerWithResourceRequirements(resources...)
@@ -211,19 +205,11 @@ type BaseMaster interface {
 	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 	Exit(ctx context.Context, exitReason ExitReason, err error, detail []byte) error
 
-	// CreateWorker requires the framework to dispatch a new worker.
-	// If the worker needs to access certain file system resources,
-	// their ID's must be passed by `resources`.
-	CreateWorker(
-		workerType WorkerType,
-		config WorkerConfig,
-		cost model.RescUnit,
-		resources ...resModel.ResourceID,
-	) (frameModel.WorkerID, error)
-
-	// CreateWorkerV2 is the latest version of CreateWorker, but with
+	// CreateWorker is the latest version of CreateWorker, but with
 	// a more flexible way of passing options.
-	CreateWorkerV2(
+	// If the worker needs to access certain file system resources, it must pass
+	// resource ID via CreateWorkerOpt
+	CreateWorker(
 		workerType frameModel.WorkerType,
 		config WorkerConfig,
 		opts ...CreateWorkerOpt,
@@ -698,24 +684,6 @@ func (m *DefaultBaseMaster) PrepareWorkerConfig(
 
 // CreateWorker implements BaseMaster.CreateWorker
 func (m *DefaultBaseMaster) CreateWorker(
-	workerType frameModel.WorkerType,
-	config WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	m.Logger().Info("CreateWorker",
-		zap.Stringer("worker-type", workerType),
-		zap.Any("worker-config", config),
-		zap.Int("cost", int(cost)),
-		zap.Any("resources", resources),
-		zap.String("master-id", m.id))
-
-	return m.CreateWorkerV2(workerType, config,
-		CreateWorkerWithCost(cost), CreateWorkerWithResourceRequirements(resources...))
-}
-
-// CreateWorkerV2 implements BaseMaster.CreateWorkerV2
-func (m *DefaultBaseMaster) CreateWorkerV2(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
 	opts ...CreateWorkerOpt,

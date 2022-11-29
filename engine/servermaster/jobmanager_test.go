@@ -15,6 +15,8 @@ package servermaster
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -23,17 +25,16 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	jobMock "github.com/pingcap/tiflow/engine/pkg/httputil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	jobopMock "github.com/pingcap/tiflow/engine/servermaster/jobop/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/mock"
@@ -125,15 +126,6 @@ type mockBaseMasterCreateWorkerFailed struct {
 }
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
-	workerType framework.WorkerType,
-	config framework.WorkerConfig,
-	cost model.RescUnit,
-	resources ...resModel.ResourceID,
-) (frameModel.WorkerID, error) {
-	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
-}
-
-func (m *mockBaseMasterCreateWorkerFailed) CreateWorkerV2(
 	workerType framework.WorkerType,
 	config framework.WorkerConfig,
 	opts ...framework.CreateWorkerOpt,
@@ -486,14 +478,23 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	mockJobClient := jobMock.NewMockJobHTTPClient(mockCtrl)
 	mgr.jobHTTPClient = mockJobClient
 
-	// normal case, return job detail
-	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
+	masterMeta := &frameModel.MasterMeta{
 		ID:   "new-job",
 		Type: frameModel.FakeJobMaster,
 		// set state to running
 		State:    frameModel.MasterStateInit,
 		Addr:     "1.1.1.1:1",
 		ErrorMsg: "error_message",
+	}
+
+	// normal case, return job detail
+	err := mgr.frameMetaClient.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	mgr.JobFsm.JobDispatched(masterMeta, false)
+	err = mgr.JobFsm.JobOnline(&framework.MockHandle{
+		WorkerID:   "new-job",
+		ExecutorID: "executor-1",
 	})
 	require.NoError(t, err)
 
@@ -557,59 +558,144 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	}, job))
 }
 
-func TestSetDetailToMasterMeta(t *testing.T) {
-	cases := []struct {
-		name             string
-		detail           []byte
-		err              error
-		expectMasterMeta *frameModel.MasterMeta
-	}{
-		{
-			name:   "NoDetailNoError",
-			detail: nil,
-			err:    nil,
-			expectMasterMeta: &frameModel.MasterMeta{
-				ErrorMsg: "original error",
-				Detail:   []byte("original job detail"),
-			},
-		},
-		{
-			name:   "DetailWithNoError",
-			detail: []byte("job detail for jobmaster"),
-			err:    nil,
-			expectMasterMeta: &frameModel.MasterMeta{
-				ErrorMsg: "original error",
-				Detail:   []byte("job detail for jobmaster"),
-			},
-		},
-		{
-			name:   "404Error",
-			detail: nil,
-			err:    errors.ErrJobManagerRespStatusCode404.GenWithStackByArgs(),
-			expectMasterMeta: &frameModel.MasterMeta{
-				ErrorMsg: "original error",
-				Detail:   []byte("original job detail"),
-			},
-		},
-		{
-			name:   "NO404Error",
-			detail: nil,
-			err:    errors.New("some error"),
-			expectMasterMeta: &frameModel.MasterMeta{
-				ErrorMsg: "some error",
-				Detail:   []byte("original job detail"),
-			},
-		},
+func TestListJobsPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-list-jobs-test")
+	masterMeta := mockMaster.DefaultBaseMaster.MasterMeta()
+	masterMeta.Type = frameModel.JobManager
+	err := mockMaster.GetFrameMetaClient().UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	const totalJobCount = 2000
+
+	jobIDs := make([]string, 0, totalJobCount)
+	for i := 0; i < totalJobCount; i++ {
+		jobID := fmt.Sprintf("job-%04d", i)
+		jobIDs = append(jobIDs, jobID)
+		cli := metadata.NewMasterMetadataClient(jobID, mockMaster.GetFrameMetaClient())
+		require.NoError(t, cli.Store(ctx, &frameModel.MasterMeta{
+			ID:    jobID,
+			Type:  frameModel.FakeJobMaster,
+			State: frameModel.MasterStateStopped,
+		}))
 	}
 
-	for _, cs := range cases {
-		masterMeta := &frameModel.MasterMeta{
-			ErrorMsg: "original error",
-			Detail:   []byte("original job detail"),
-		}
-		setDetailToMasterMeta(masterMeta, cs.detail, cs.err)
-		require.Equal(t, cs.expectMasterMeta, masterMeta)
+	mgr := &JobManagerImpl{
+		BaseMaster:       mockMaster.DefaultBaseMaster,
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		frameMetaClient:  mockMaster.GetFrameMetaClient(),
+		jobHTTPClient:    jobMock.NewMockNilReturnJobHTTPClient(),
 	}
+
+	// List jobs without specifying page size.
+	resp, err := mgr.ListJobs(ctx, &pb.ListJobsRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.Jobs, defaultListPageSize)
+	for i := 0; i < defaultListPageSize; i++ {
+		require.Equal(t, jobIDs[i], resp.Jobs[i].Id)
+	}
+	require.Equal(t, jobIDs[defaultListPageSize-1], resp.NextPageToken)
+
+	// List jobs with huge page size.
+	resp, err = mgr.ListJobs(ctx, &pb.ListJobsRequest{PageSize: 10000})
+	require.NoError(t, err)
+	require.Len(t, resp.Jobs, maxListPageSize)
+
+	// List all jobs with pagination.
+	var (
+		respJobIDs    []string
+		nextPageToken string
+	)
+	pageSize := 123
+	for {
+		resp, err = mgr.ListJobs(ctx, &pb.ListJobsRequest{PageSize: int32(pageSize), PageToken: nextPageToken})
+		require.NoError(t, err)
+		for _, job := range resp.Jobs {
+			respJobIDs = append(respJobIDs, job.Id)
+		}
+		if resp.NextPageToken == "" {
+			break
+		}
+		nextPageToken = resp.NextPageToken
+	}
+	require.Equal(t, jobIDs, respJobIDs)
+}
+
+func TestListJobWithFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-list-jobs-test")
+	masterMeta := mockMaster.DefaultBaseMaster.MasterMeta()
+	masterMeta.Type = frameModel.JobManager
+	err := mockMaster.GetFrameMetaClient().UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
+
+	allTypes := []frameModel.WorkerType{
+		frameModel.CvsJobMaster, frameModel.FakeJobMaster,
+		frameModel.DMJobMaster, frameModel.CdcJobMaster,
+	}
+	allStates := []frameModel.MasterState{
+		frameModel.MasterStateUninit, frameModel.MasterStateInit,
+		frameModel.MasterStateFinished, frameModel.MasterStateStopped, frameModel.MasterStateFailed,
+	}
+	rnd := rand.New(rand.NewSource(0))
+	randType := func() frameModel.WorkerType {
+		return allTypes[rnd.Intn(len(allTypes))]
+	}
+	randState := func() frameModel.MasterState {
+		return allStates[rnd.Intn(len(allStates))]
+	}
+
+	const totalJobCount = maxListPageSize
+	countByType := make(map[frameModel.WorkerType]int)
+	countByState := make(map[frameModel.MasterState]int)
+	for i := 0; i < totalJobCount; i++ {
+		jobID := fmt.Sprintf("job-%04d", i)
+		cli := metadata.NewMasterMetadataClient("job-1", mockMaster.GetFrameMetaClient())
+		masterMeta := &frameModel.MasterMeta{
+			ID:    jobID,
+			Type:  randType(),
+			State: randState(),
+		}
+		require.NoError(t, cli.Store(ctx, masterMeta))
+		countByType[masterMeta.Type]++
+		countByState[masterMeta.State]++
+	}
+
+	mgr := &JobManagerImpl{
+		BaseMaster:       mockMaster.DefaultBaseMaster,
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		frameMetaClient:  mockMaster.GetFrameMetaClient(),
+		jobHTTPClient:    jobMock.NewMockNilReturnJobHTTPClient(),
+	}
+
+	// List jobs with filter.
+	// TODO: we should test all combinations of filters, but there's no convenient way
+	//  to mapping worker type to job type and master state to job state.
+	resp, err := mgr.ListJobs(ctx, &pb.ListJobsRequest{
+		PageSize: totalJobCount,
+		Type:     pb.Job_FakeJob,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Jobs, countByType[frameModel.FakeJobMaster])
+
+	resp, err = mgr.ListJobs(ctx, &pb.ListJobsRequest{
+		PageSize: totalJobCount,
+		State:    pb.Job_Running,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Jobs, countByState[frameModel.MasterStateInit])
 }
 
 func TestOnWorkerDispatchedFastFail(t *testing.T) {
@@ -677,6 +763,20 @@ func TestJobOperatorBgLoop(t *testing.T) {
 	require.NoError(t, mgr.wg.Wait())
 }
 
+// TODO: refine the interface of JobManager and use mock JobManager in test
+func dispatchJobAndMeetError(
+	ctx context.Context, t *testing.T, mgr *JobManagerImpl, meta *frameModel.MasterMeta,
+) {
+	err := mgr.frameMetaClient.UpsertJob(ctx, meta)
+	require.NoError(t, err)
+
+	// dispatch job, meet error and move it to pending job list
+	mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: meta.ID}, false)
+	require.NotNil(t, mgr.QueryJob(meta.ID))
+	mockHandle := &framework.MockHandle{WorkerID: meta.ID}
+	mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
+}
+
 func TestJobManagerIterPendingJobs(t *testing.T) {
 	t.Parallel()
 
@@ -704,20 +804,11 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.NoError(t, err)
 
-	dispatchJobAndMeetError := func(jobID string) {
-		// save job master meta
-		meta := &frameModel.MasterMeta{
+	newMasterMeta := func(jobID string) *frameModel.MasterMeta {
+		return &frameModel.MasterMeta{
 			ID:    jobID,
 			State: frameModel.MasterStateInit,
 		}
-		err = mgr.frameMetaClient.UpsertJob(ctx, meta)
-		require.NoError(t, err)
-
-		// dispatch job, meet error and move it to pending job list
-		mgr.JobFsm.JobDispatched(&frameModel.MasterMeta{ID: jobID}, false)
-		require.NotNil(t, mgr.QueryJob(jobID))
-		mockHandle := &framework.MockHandle{WorkerID: jobID}
-		mgr.JobFsm.JobOffline(mockHandle, true /* needFailover */)
 	}
 
 	jobMgrTickAndCheckJobState := func(jobID string, state frameModel.MasterState) {
@@ -730,7 +821,7 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 
 	{
 		jobID := "job-backoff-test-1"
-		dispatchJobAndMeetError(jobID)
+		dispatchJobAndMeetError(ctx, t, mgr, newMasterMeta(jobID))
 
 		// job is being backoff
 		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(false)
@@ -747,12 +838,79 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 
 	{
 		jobID := "job-backoff-test-2"
-		dispatchJobAndMeetError(jobID)
+		dispatchJobAndMeetError(ctx, t, mgr, newMasterMeta(jobID))
 
 		// job will be terminated because it is canceled
 		mockJobOperator.EXPECT().IsJobCanceling(ctx, jobID).Times(1).Return(true)
 		jobMgrTickAndCheckJobState(jobID, frameModel.MasterStateStopped)
 	}
+}
+
+func TestFailoverWithCreateWorkerOpt(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	selectors := []*label.Selector{
+		{Key: "name", Target: "executor.*", Op: label.OpRegex},
+		{Key: "region", Target: "us-west-2", Op: label.OpEq},
+	}
+	checkOptsFn := func(opts ...framework.CreateWorkerOpt) {
+		// CreateWorkerOpt: 1 for label selectors
+		require.Len(t, opts, 1)
+	}
+
+	masterImpl := framework.NewMockMasterImpl(t, "", "iter-pending-jobs-test")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
+	mockMaster := &mockBaseMasterCheckCreateOpts{
+		MockMasterImpl: masterImpl,
+		checkOptsFn:    checkOptsFn,
+	}
+	ctrl := gomock.NewController(t)
+	mockBackoffMgr := jobopMock.NewMockBackoffManager(ctrl)
+	mockJobOperator := jobopMock.NewMockJobOperator(ctrl)
+	mgr := &JobManagerImpl{
+		BaseMaster:      mockMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		jobHTTPClient:   jobMock.NewMockNilReturnJobHTTPClient(),
+		JobBackoffMgr:   mockBackoffMgr,
+		jobOperator:     mockJobOperator,
+	}
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.NoError(t, err)
+
+	{
+		job := &frameModel.MasterMeta{
+			ID:    "failover-job-with-label",
+			State: frameModel.MasterStateInit,
+			Ext:   frameModel.MasterMetaExt{Selectors: selectors},
+		}
+		dispatchJobAndMeetError(ctx, t, mgr, job)
+
+		mockJobOperator.EXPECT().IsJobCanceling(ctx, job.ID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Terminate(job.ID).Times(1).Return(false)
+		mockBackoffMgr.EXPECT().Allow(job.ID).Times(1).Return(true)
+		err := mgr.Tick(ctx)
+		require.NoError(t, err)
+	}
+}
+
+type mockBaseMasterCheckCreateOpts struct {
+	*framework.MockMasterImpl
+	checkOptsFn func(opts ...framework.CreateWorkerOpt)
+}
+
+func (m *mockBaseMasterCheckCreateOpts) CreateWorker(
+	workerType framework.WorkerType,
+	config framework.WorkerConfig,
+	opts ...framework.CreateWorkerOpt,
+) (frameModel.WorkerID, error) {
+	m.checkOptsFn(opts...)
+	return uuid.NewGenerator().NewString(), nil
 }
 
 func TestIsJobTerminated(t *testing.T) {

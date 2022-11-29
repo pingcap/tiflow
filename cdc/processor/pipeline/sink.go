@@ -208,7 +208,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 
 	emitRows := func(rows ...*model.RowChangedEvent) error {
 		if n.redoManager != nil && n.redoManager.Enabled() {
-			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, rows...)
+			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, nil, rows...)
 			if err != nil {
 				return err
 			}
@@ -311,8 +311,6 @@ func SplitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 			deleteEvent.Row.PreColumns[i] = nil
 		}
 	}
-	// Align with the old format if old value disabled.
-	deleteEvent.Row.TableInfoVersion = 0
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row

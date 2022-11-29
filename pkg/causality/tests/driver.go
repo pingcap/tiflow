@@ -32,6 +32,7 @@ type conflictTestDriver struct {
 	pendingCount atomic.Int64
 }
 
+//nolint:unparam
 func newConflictTestDriver(
 	numWorkers int, numSlots int, workload workloadGenerator,
 ) *conflictTestDriver {
