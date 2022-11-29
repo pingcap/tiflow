@@ -90,7 +90,9 @@ loaders:
     pool-size: 16
     dir: ./dumped_data
     import-mode: logical
-    on-duplicate: replace
+    on-duplicate: ""
+    on-duplicate-logical: replace
+    on-duplicate-physical: none
 syncers:
   sync-01:
     meta-file: ""

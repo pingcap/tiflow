@@ -193,9 +193,13 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
+	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
+	if err != nil {
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+	}
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
-		concurrency.WithTTL(c.config.CaptureSessionTTL))
+		concurrency.WithLease(lease.ID))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
@@ -555,6 +559,14 @@ func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
+	// TODO: `Campaign` will get stuck when send SIGSTOP to pd leader.
+	// For `Campaign`, when send SIGSTOP to pd leader, cdc maybe call `cancel`
+	// (cause by `processor routine` exit). And inside `Campaign`, the routine
+	// return from `waitDeletes`(https://github.com/etcd-io/etcd/blob/main/client/v3/concurrency/election.go#L93),
+	// then call `Resign`(note: use `client.Ctx`) to etcd server. But the etcd server
+	// (the client connects to) has entered the STOP state, which means that
+	// the server cannot process the request, but will still maintain the GRPC
+	// connection. So `routine` will block 'Resign'.
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.campaign(ctx, c.info.ID))
 }
 
