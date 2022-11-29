@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -289,8 +290,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 	if hasDup {
 		// TODO: use unique TaskInfoSchemaName
-		// TODO: expose the constant "conflict_error_v1"
-		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, "conflict_error_v1")
+		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, errormanager.ConflictErrorTableName)
 	}
 	return nil
 }

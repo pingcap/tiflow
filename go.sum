@@ -994,8 +994,8 @@ github.com/labstack/echo/v4 v4.2.1 h1:LF5Iq7t/jrtUuSutNuiEWtB5eiHfZ5gSe2pcu5exjQ
 github.com/labstack/echo/v4 v4.2.1/go.mod h1:AA49e0DZ8kk5jTOOCKNuPR6oTnBS0dYiM4FW1e6jwpg=
 github.com/labstack/gommon v0.3.0 h1:JEeO0bvc78PKdyHxloTKiF8BD5iGrH8T6MSeGvSgob0=
 github.com/labstack/gommon v0.3.0/go.mod h1:MULnywXg0yavhxWKc+lOruYdAhDwPK9wf0OL7NoOu+k=
-github.com/lance6716/tidb v1.1.0-beta.0.20221129112034-a35ac9b4622e h1:SSrNzk57Lzuqn7KMez112SPxFVmRUyf5KSUK+JHCYk8=
-github.com/lance6716/tidb v1.1.0-beta.0.20221129112034-a35ac9b4622e/go.mod h1:WmtXPEsSb/u7YSuEmxcPOlrsBI6SIC1e0l7cjNaxNNw=
+github.com/lance6716/tidb v1.1.0-beta.0.20221129124937-d29e6518424f h1:8RxVa+zaFtKMOplifUL0/HtjTRqVn2Y59t2He01QG1o=
+github.com/lance6716/tidb v1.1.0-beta.0.20221129124937-d29e6518424f/go.mod h1:WmtXPEsSb/u7YSuEmxcPOlrsBI6SIC1e0l7cjNaxNNw=
 github.com/ldez/gomoddirectives v0.2.3/go.mod h1:cpgBogWITnCfRq2qGoDkKMEVSaarhdBr6g8G04uz6d0=
 github.com/ldez/tagliatelle v0.3.1/go.mod h1:8s6WJQwEYHbKZDsp/LjArytKOG8qaMrKQQ3mFukHs88=
 github.com/leodido/go-urn v1.2.0/go.mod h1:+8+nEpDfqqsY+g338gtMEUOtuK+4dEMhiQEgxpxOKII=
@@ -1294,8 +1294,6 @@ github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible 
 github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
 github.com/pingcap/tidb/parser v0.0.0-20211011031125-9b13dc409c5e/go.mod h1:e1MGCA9Sg3T8jid8PKAEq5eYVuMMCq4n8gJ+Kqp4Plg=
 github.com/pingcap/tidb/parser v0.0.0-20220511160835-98c31070d958/go.mod h1:ElJiub4lRy6UZDb+0JHDkGEdr6aOli+ykhyej7VCLoI=
-github.com/pingcap/tidb/parser v0.0.0-20221125083958-05d616c2d3c1 h1:q5REHZhOlxQBmQFdXjlLwAWbvGgx6LniI9WW6vQfT1I=
-github.com/pingcap/tidb/parser v0.0.0-20221125083958-05d616c2d3c1/go.mod h1:wjvp+T3/T9XYt0nKqGX3Kc1AKuyUcfno6LTc6b2A6ew=
 github.com/pingcap/tidb/parser v0.0.0-20221129110759-1b15732d118f h1:jALSBZsXNAs9UhbGu4GkguTIxzm6waXGZ6DMoATfdW4=
 github.com/pingcap/tidb/parser v0.0.0-20221129110759-1b15732d118f/go.mod h1:wjvp+T3/T9XYt0nKqGX3Kc1AKuyUcfno6LTc6b2A6ew=
 github.com/pingcap/tipb v0.0.0-20221123081521-2fb828910813 h1:DbmCfCbcavo0JG+gSp0ySvv1ub/c/j3hsnYzyYPzONo=
