@@ -171,7 +171,9 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 	}
 
 	info.totalDataSize = atomic.NewInt64(0)
-	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok && c.stCfgs[0].Mode != config.ModeIncrement {
+	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok &&
+		c.stCfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical &&
+		c.stCfgs[0].Mode != config.ModeIncrement {
 		// TODO: concurrently read it intra-source later
 		for idx := range c.instances {
 			i := idx
