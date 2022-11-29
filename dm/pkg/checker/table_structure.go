@@ -165,6 +165,15 @@ func (c *TablesChecker) Name() string {
 }
 
 func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
+	// extract same instruction from Errors to Result.Instruction
+	resultInstructions := map[string]interface{}{}
+	defer func() {
+		c.reMu.Lock()
+		for k := range resultInstructions {
+			r.Instruction += k + "; "
+		}
+		c.reMu.Unlock()
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -182,12 +191,16 @@ func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
 				}
 				e := NewError(tableMsg + opt.errMessage)
 				e.Severity = StateWarning
-				e.Instruction = opt.instruction
+				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+					resultInstructions[opt.instruction] = ""
+				}
 				r.Errors = append(r.Errors, e)
 			case StateFailure:
 				r.State = StateFailure
 				e := NewError(tableMsg + opt.errMessage)
-				e.Instruction = opt.instruction
+				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+					resultInstructions[opt.instruction] = ""
+				}
 				r.Errors = append(r.Errors, e)
 			}
 			c.reMu.Unlock()
@@ -323,7 +336,7 @@ func (c *TablesChecker) checkAST(
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
 			state:       StateWarning,
-			instruction: "please set primary/unique key for the table, or replication efficiency may get very slow and exactly-once replication can't be promised",
+			instruction: "You need to set primary/unique keys for the table. Otherwise replication efficiency might become very low and exactly-once replication cannot be guaranteed.",
 			errMessage:  "primary/unique key does not exist",
 		})
 	}
@@ -332,7 +345,7 @@ func (c *TablesChecker) checkAST(
 		if len(extendedCols) > 0 {
 			options = append(options, &incompatibilityOption{
 				state:       StateFailure,
-				instruction: "extended column feature needs the table to be created with extended columns before replication",
+				instruction: "You need to create a table with extended columns before replication.",
 				errMessage:  fmt.Sprintf("upstream table %s who has extended columns %v does not exist in downstream table", upstreamStmt.Table.Name, extendedCols),
 			})
 		}
@@ -351,7 +364,7 @@ func (c *TablesChecker) checkConstraint(cst *ast.Constraint) *incompatibilityOpt
 	if cst.Tp == ast.ConstraintForeignKey {
 		return &incompatibilityOption{
 			state:       StateWarning,
-			instruction: "please ref document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
+			instruction: "TiDB does not support foreign key constraints. See the document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features",
 			errMessage:  fmt.Sprintf("Foreign Key %s is parsed but ignored by TiDB.", cst.Name),
 		}
 	}
@@ -382,7 +395,8 @@ func (c *TablesChecker) checkTableStructurePair(
 		!strings.EqualFold(upstreamCharset, downstreamCharset) &&
 		!strings.EqualFold(downstreamCharset, mysql.UTF8MB4Charset) {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that you use the same charsets for both upstream and downstream databases. Different charsets might cause data inconsistency.",
 			errMessage: fmt.Sprintf("charset is not same, upstream: (%s %s), downstream: (%s %s)",
 				upstream.Table.Name.O, upstreamCharset,
 				downstream.Table.Name.O, downstreamCharset),
@@ -395,7 +409,8 @@ func (c *TablesChecker) checkTableStructurePair(
 	if upstreamCollation != "" && downstreamCollation != "" &&
 		!strings.EqualFold(upstreamCollation, downstreamCollation) {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that you use the same collations for both upstream and downstream databases. Otherwise the query results from the two databases might be inconsistent.",
 			errMessage: fmt.Sprintf("collation is not same, upstream: (%s %s), downstream: (%s %s)",
 				upstream.Table.Name.O, upstreamCollation,
 				downstream.Table.Name.O, downstreamCollation),
@@ -417,14 +432,16 @@ func (c *TablesChecker) checkTableStructurePair(
 	}
 	for idxName, cols := range upstreamPKUK {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that you use the same index columns for both upstream and downstream databases. Otherwise the migration job might fail or data inconsistency might occur.",
 			errMessage: fmt.Sprintf("upstream has more PK or NOT NULL UK than downstream, index name: %s, columns: %v",
 				idxName, utils.SetToSlice(cols)),
 		})
 	}
 	for idxName, cols := range downstreamPKUK {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that you use the same index columns for both upstream and downstream databases. Otherwise the migration job might fail or data inconsistency might occur.",
 			errMessage: fmt.Sprintf("downstream has more PK or NOT NULL UK than upstream, table name: %s, index name: %s, columns: %v",
 				downstream.Table.Name.O, idxName, utils.SetToSlice(cols)),
 		})
@@ -454,14 +471,14 @@ func (c *TablesChecker) checkTableStructurePair(
 	if len(upstreamDupCols) > 0 {
 		options = append(options, &incompatibilityOption{
 			state:       StateFailure,
-			instruction: "values of extended columns will be automatically filled by DM, please remove these columns or change configuration",
+			instruction: "DM automatically fills the values of extended columns. You need to remove these columns or change configuration.",
 			errMessage:  fmt.Sprintf("upstream table must not contain extended column %v", upstreamDupCols),
 		})
 	}
 	if len(downstreamMissingCols) > 0 {
 		options = append(options, &incompatibilityOption{
 			state:       StateFailure,
-			instruction: "please manually add extended column to downstream table",
+			instruction: "You need to manually add extended columns to the downstream table.",
 			errMessage:  fmt.Sprintf("downstream table must contain extended columns %v", downstreamMissingCols),
 		})
 	}
@@ -471,7 +488,8 @@ func (c *TablesChecker) checkTableStructurePair(
 
 	if len(upstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that the column numbers are the same between upstream and downstream databases. Otherwise the migration job may fail.",
 			errMessage: fmt.Sprintf("upstream has more columns than downstream, columns: %v",
 				maps.Keys(upstreamCols)),
 		})
@@ -483,7 +501,8 @@ func (c *TablesChecker) checkTableStructurePair(
 	}
 	if len(downstreamCols) > 0 {
 		options = append(options, &incompatibilityOption{
-			state: StateWarning,
+			state:       StateWarning,
+			instruction: "Ensure that the column numbers are the same between upstream and downstream databases. Otherwise the migration job may fail.",
 			errMessage: fmt.Sprintf("downstream has more columns than upstream that require values to insert records, table name: %s, columns: %v",
 				downstream.Table.Name.O, maps.Keys(downstreamCols)),
 		})
