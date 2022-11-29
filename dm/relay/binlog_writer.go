@@ -14,30 +14,41 @@
 package relay
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
-// BinlogWriter is a binlog event writer which writes binlog events to a file.
-type BinlogWriter struct {
-	mu sync.RWMutex
+const (
+	bufferSize = 1 * 1024 * 1024 // 1MB
+	chanSize   = 1024
+)
 
+var nilErr error
+
+// BinlogWriter is a binlog event writer which writes binlog events to a file.
+// Open/Write/Close cannot be called concurrently.
+type BinlogWriter struct {
 	offset   atomic.Int64
 	file     *os.File
 	relayDir string
-	uuid     string
-	filename string
+	uuid     atomic.String
+	filename atomic.String
+	err      atomic.Error
 
 	logger log.Logger
+
+	input   chan []byte
+	flushWg sync.WaitGroup
+	wg      sync.WaitGroup
 }
 
 // BinlogWriterStatus represents the status of a BinlogWriter.
@@ -64,6 +75,53 @@ func NewBinlogWriter(logger log.Logger, relayDir string) *BinlogWriter {
 	}
 }
 
+// run starts the binlog writer.
+func (w *BinlogWriter) run() {
+	var (
+		buf       = &bytes.Buffer{}
+		errOccurs bool
+	)
+
+	// writeToFile writes buffer to file
+	writeToFile := func() {
+		if buf.Len() == 0 {
+			return
+		}
+
+		if w.file == nil {
+			w.err.CompareAndSwap(nilErr, terror.ErrRelayWriterNotOpened.Generate())
+			errOccurs = true
+			return
+		}
+		n, err := w.file.Write(buf.Bytes())
+		if err != nil {
+			w.err.CompareAndSwap(nilErr, terror.ErrBinlogWriterWriteDataLen.Delegate(err, n))
+			errOccurs = true
+			return
+		}
+		buf.Reset()
+	}
+
+	for bs := range w.input {
+		if errOccurs {
+			continue
+		}
+		if bs != nil {
+			buf.Write(bs)
+		}
+		// we use bs = nil to mean flush
+		if bs == nil || buf.Len() > bufferSize || len(w.input) == 0 {
+			writeToFile()
+		}
+		if bs == nil {
+			w.flushWg.Done()
+		}
+	}
+	if !errOccurs {
+		writeToFile()
+	}
+}
+
 func (w *BinlogWriter) Open(uuid, filename string) error {
 	fullName := filepath.Join(w.relayDir, uuid, filename)
 	f, err := os.OpenFile(fullName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
@@ -79,58 +137,66 @@ func (w *BinlogWriter) Open(uuid, filename string) error {
 		return terror.ErrBinlogWriterGetFileStat.Delegate(err, f.Name())
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	w.offset.Store(fs.Size())
 	w.file = f
-	w.uuid = uuid
-	w.filename = filename
+	w.uuid.Store(uuid)
+	w.filename.Store(filename)
+	w.err.Store(nilErr)
+
+	w.input = make(chan []byte, chanSize)
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		w.run()
+	}()
 
 	return nil
 }
 
 func (w *BinlogWriter) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	if w.input != nil {
+		close(w.input)
+	}
+	w.wg.Wait()
 
-	var err error
 	if w.file != nil {
-		err2 := w.file.Sync() // try sync manually before close.
-		if err2 != nil {
-			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err2))
+		if err := w.file.Sync(); err != nil {
+			w.logger.Error("fail to flush buffered data", zap.String("component", "file writer"), zap.Error(err))
 		}
-		err = w.file.Close()
+		if err := w.file.Close(); err != nil {
+			w.err.CompareAndSwap(nilErr, err)
+		}
 	}
 
 	w.file = nil
 	w.offset.Store(0)
-	w.uuid = ""
-	w.filename = ""
-
-	return err
+	w.uuid.Store("")
+	w.filename.Store("")
+	w.input = nil
+	return w.err.Swap(nilErr)
 }
 
 func (w *BinlogWriter) Write(rawData []byte) error {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
 	if w.file == nil {
-		return terror.ErrRelayWriterNotOpened.Delegate(errors.New("file not opened"))
+		return terror.ErrRelayWriterNotOpened.Generate()
 	}
+	w.input <- rawData
+	w.offset.Add(int64(len(rawData)))
+	return w.err.Load()
+}
 
-	n, err := w.file.Write(rawData)
-	w.offset.Add(int64(n))
-
-	return terror.ErrBinlogWriterWriteDataLen.Delegate(err, len(rawData))
+func (w *BinlogWriter) Flush() error {
+	w.flushWg.Add(1)
+	if err := w.Write(nil); err != nil {
+		return err
+	}
+	w.flushWg.Wait()
+	return w.err.Load()
 }
 
 func (w *BinlogWriter) Status() *BinlogWriterStatus {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
 	return &BinlogWriterStatus{
-		Filename: w.filename,
+		Filename: w.filename.Load(),
 		Offset:   w.offset.Load(),
 	}
 }
@@ -140,7 +206,5 @@ func (w *BinlogWriter) Offset() int64 {
 }
 
 func (w *BinlogWriter) isActive(uuid, filename string) (bool, int64) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return uuid == w.uuid && filename == w.filename, w.offset.Load()
+	return uuid == w.uuid.Load() && filename == w.filename.Load(), w.offset.Load()
 }
