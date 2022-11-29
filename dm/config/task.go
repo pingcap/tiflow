@@ -250,16 +250,16 @@ const (
 	LoadModePhysical = "physical"
 )
 
-// DuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
-type DuplicateResolveType string
+// LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
+type LogicalDuplicateResolveType string
 
 const (
 	// OnDuplicateReplace represents replace the old row with new data.
-	OnDuplicateReplace DuplicateResolveType = "replace"
+	OnDuplicateReplace LogicalDuplicateResolveType = "replace"
 	// OnDuplicateError represents return an error when meet duplicate row.
-	OnDuplicateError DuplicateResolveType = "error"
+	OnDuplicateError LogicalDuplicateResolveType = "error"
 	// OnDuplicateIgnore represents ignore the new data when meet duplicate row.
-	OnDuplicateIgnore DuplicateResolveType = "ignore"
+	OnDuplicateIgnore LogicalDuplicateResolveType = "ignore"
 )
 
 // PhysicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for physical import.
@@ -279,8 +279,8 @@ type LoaderConfig struct {
 	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	// deprecated, use OnDuplicateLogical instead.
-	OnDuplicate        DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
-	OnDuplicateLogical DuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
+	OnDuplicate        LogicalDuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
+	OnDuplicateLogical LogicalDuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	// TODO: no effects now
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 }
@@ -332,7 +332,7 @@ func (m *LoaderConfig) adjust() error {
 	if m.OnDuplicateLogical == "" {
 		m.OnDuplicateLogical = OnDuplicateReplace
 	}
-	m.OnDuplicateLogical = DuplicateResolveType(strings.ToLower(string(m.OnDuplicateLogical)))
+	m.OnDuplicateLogical = LogicalDuplicateResolveType(strings.ToLower(string(m.OnDuplicateLogical)))
 	switch m.OnDuplicateLogical {
 	case OnDuplicateReplace, OnDuplicateError, OnDuplicateIgnore:
 	default:
