@@ -535,6 +535,10 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 		if !ok {
 			continue
 		}
+		lag := currentTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
+		if lag < logSlowTablesLagThreshold {
+			continue
+		}
 		heap.Push(&r.slowTableHeap, table)
 		if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
 			heap.Pop(&r.slowTableHeap)
@@ -544,11 +548,6 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 	num := r.slowTableHeap.Len()
 	for i := 0; i < num; i++ {
 		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
-		lag := currentTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
-		if lag < logSlowTablesLagThreshold {
-			continue
-		}
-
 		log.Info("schedulerv3: slow table",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
@@ -556,7 +555,8 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 			zap.String("tableStatus", table.Stats.String()),
 			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
-			zap.Duration("checkpointLag", lag))
+			zap.Duration("checkpointLag", currentTime.
+				Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
 	}
 }
 
