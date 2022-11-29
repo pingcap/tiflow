@@ -109,6 +109,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 	err2 := verifyPrivilegesWithResult(result, grants, dumpRequiredPrivs)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
+		result.Instruction = "Please grant the required privileges to the account."
 	} else {
 		result.State = StateSuccess
 	}
@@ -156,6 +157,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
+		result.Instruction = "Grant the required privileges to the account."
 	}
 	return result
 }
@@ -163,6 +165,51 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 // Name implements the RealChecker interface.
 func (pc *SourceReplicatePrivilegeChecker) Name() string {
 	return "source db replication privilege checker"
+}
+
+type TargetPrivilegeChecker struct {
+	db     *sql.DB
+	dbinfo *dbutil.DBConfig
+}
+
+func NewTargetPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
+	return &TargetPrivilegeChecker{db: db, dbinfo: dbinfo}
+}
+
+func (t *TargetPrivilegeChecker) Name() string {
+	return "target db privilege checker"
+}
+
+func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  t.Name(),
+		Desc:  "check privileges of target DB",
+		State: StateSuccess,
+		Extra: fmt.Sprintf("address of db instance - %s:%d", t.dbinfo.Host, t.dbinfo.Port),
+	}
+	grants, err := dbutil.ShowGrants(ctx, t.db, "", "")
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	replRequiredPrivs := map[mysql.PrivilegeType]priv{
+		mysql.CreatePriv: {needGlobal: true},
+		mysql.SelectPriv: {needGlobal: true},
+		mysql.InsertPriv: {needGlobal: true},
+		mysql.UpdatePriv: {needGlobal: true},
+		mysql.DeletePriv: {needGlobal: true},
+		mysql.AlterPriv:  {needGlobal: true},
+		mysql.DropPriv:   {needGlobal: true},
+		mysql.IndexPriv:  {needGlobal: true},
+	}
+	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+		// because we cannot be very precisely sure about which table
+		// the binlog will write, so we only throw a warning here.
+		result.State = StateWarning
+	}
+	return result
 }
 
 func verifyPrivilegesWithResult(

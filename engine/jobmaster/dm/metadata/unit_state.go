@@ -85,10 +85,11 @@ func NewUnitStateStore(kvClient metaModel.KVClient) *UnitStateStore {
 
 // TaskStatus defines the running task status.
 type TaskStatus struct {
-	Unit           frameModel.WorkerType
-	Task           string
-	Stage          TaskStage
-	CfgModRevision uint64
+	Unit             frameModel.WorkerType
+	Task             string
+	Stage            TaskStage
+	CfgModRevision   uint64
+	StageUpdatedTime time.Time
 }
 
 // FinishedTaskStatus wraps the TaskStatus with FinishedStatus.

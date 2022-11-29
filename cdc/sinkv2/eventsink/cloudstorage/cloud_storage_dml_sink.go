@@ -16,7 +16,7 @@ import (
 	"context"
 	"math"
 	"net/url"
-	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -28,13 +28,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 )
 
-const defaultEncodingConcurrency = 8
+const (
+	defaultEncodingConcurrency = 8
+	defaultChannelSize         = 1024
+)
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -60,23 +62,20 @@ type eventFragment struct {
 	encodedMsgs []*common.Message
 }
 
-func eventFragmentLess(e1, e2 eventFragment) bool {
-	return e1.seqNumber < e2.seqNumber
-}
-
 // sink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type sink struct {
-	// msgChan is a unbounded channel to hold eventFragment.
-	msgChan *chann.Chann[eventFragment]
+	// msgCh is a channel to hold eventFragment.
+	msgCh chan eventFragment
 	// encodingWorkers defines a group of workers for encoding events.
 	encodingWorkers []*encodingWorker
+	// defragmenter is used to defragment the out-of-order encoded messages.
+	defragmenter *defragmenter
 	// writer is a dmlWriter which manages a group of dmlWorkers and
 	// sends encoded messages to individual dmlWorkers.
 	writer *dmlWriter
-	// tableSeqMap maintains a <versionedTable, sequenceNumber> mapping.
-	tableSeqMap map[versionedTable]uint64
-	mu          sync.Mutex
+	// last sequence number
+	lastSeqNum uint64
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -128,15 +127,16 @@ func NewCloudStorageSink(ctx context.Context,
 	}
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, errCh)
-	s.msgChan = chann.New[eventFragment]()
-	s.tableSeqMap = make(map[versionedTable]uint64)
+	s.msgCh = make(chan eventFragment, defaultChannelSize)
+	s.defragmenter = newDefragmenter(ctx)
+	orderedCh := s.defragmenter.orderedOut()
+	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, orderedCh, errCh)
 
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		w := newEncodingWorker(i+1, changefeedID, encoder, s.writer, errCh)
-		w.run(ctx, s.msgChan)
+		w := newEncodingWorker(i+1, changefeedID, encoder, s.msgCh, s.defragmenter, errCh)
+		w.run(ctx)
 		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
 
@@ -146,7 +146,6 @@ func NewCloudStorageSink(ctx context.Context,
 // WriteEvents write events to cloud storage sink.
 func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
-	var seq uint64
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -157,15 +156,12 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 		}
 
 		tbl = versionedTable{
-			TableName: *txn.Event.Table,
-			version:   txn.Event.TableVersion,
+			TableName: txn.Event.TableInfo.TableName,
+			version:   txn.Event.TableInfo.Version,
 		}
-		s.mu.Lock()
-		s.tableSeqMap[tbl]++
-		seq = s.tableSeqMap[tbl]
-		s.mu.Unlock()
+		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.msgChan.In() <- eventFragment{
+		s.msgCh <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,
@@ -177,10 +173,7 @@ func (s *sink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTab
 
 // Close closes the cloud storage sink.
 func (s *sink) Close() error {
-	s.msgChan.Close()
-	for range s.msgChan.Out() {
-		// drain the msgChan
-	}
+	s.defragmenter.close()
 	for _, w := range s.encodingWorkers {
 		w.close()
 	}

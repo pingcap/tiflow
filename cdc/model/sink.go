@@ -255,10 +255,9 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table    *TableName         `json:"table" msg:"table"`
-	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
-
-	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
+	Table     *TableName         `json:"table" msg:"table"`
+	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	TableInfo *TableInfo         `json:"-" msg:"-"`
 
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
@@ -512,6 +511,7 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		firstCol := columns[colOffsets[0]]
 		if firstCol.Flag.IsPrimaryKey() {
 			indexInfo.Primary = true
+			indexInfo.Unique = true
 		}
 		if firstCol.Flag.IsUniqueKey() {
 			indexInfo.Unique = true
@@ -652,11 +652,11 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table        *TableName
-	TableVersion uint64
-	StartTs      uint64
-	CommitTs     uint64
-	Rows         []*RowChangedEvent
+	Table     *TableName
+	TableInfo *TableInfo
+	StartTs   uint64
+	CommitTs  uint64
+	Rows      []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

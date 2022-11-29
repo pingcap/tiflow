@@ -47,12 +47,16 @@ type unitHolder interface {
 	Status(ctx context.Context) interface{}
 	// CheckAndUpdateStatus checks if the last update of source status is outdated,
 	// if so, it will call Status.
-	CheckAndUpdateStatus(ctx context.Context)
+	// this should be an async func.
+	CheckAndUpdateStatus()
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
 }
 
-var sourceStatusRefreshInterval = 30 * time.Second
+var (
+	sourceStatusRefreshInterval = 30 * time.Second
+	sourceStatusCtxTimeOut      = 20 * time.Second
+)
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
@@ -60,9 +64,10 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
-	upstreamDB     *conn.BaseDB
-	sourceStatus   *binlog.SourceStatus
-	sourceStatusMu sync.RWMutex
+	upstreamDB            *conn.BaseDB
+	sourceStatus          *binlog.SourceStatus
+	sourceStatusMu        sync.RWMutex
+	sourceStatusCheckTime time.Time
 
 	logger log.Logger
 	// use to access process(init/close/pause/resume)
@@ -73,6 +78,9 @@ type unitHolderImpl struct {
 	runCtx    context.Context
 	runCancel context.CancelFunc
 	result    *pb.ProcessResult // TODO: check if framework can persist result
+
+	// used to run background task
+	bgWg sync.WaitGroup
 }
 
 var _ unitHolder = &unitHolderImpl{}
@@ -151,6 +159,7 @@ func (u *unitHolderImpl) Pause(ctx context.Context) error {
 	u.fieldMu.Lock()
 	u.runCancel()
 	u.fieldMu.Unlock()
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	// TODO: refactor unit.Syncer
 	// unit needs to manage its own life cycle
@@ -196,6 +205,7 @@ func (u *unitHolderImpl) Close(ctx context.Context) error {
 	}
 	u.fieldMu.Unlock()
 
+	u.bgWg.Wait()
 	u.processWg.Wait()
 	if u.unit != nil {
 		u.unit.Close()
@@ -265,11 +275,18 @@ func (u *unitHolderImpl) setSourceStatus(in *binlog.SourceStatus) {
 }
 
 // CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
-func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
-	sourceStatus := u.getSourceStatus()
-
-	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
-		u.updateSourceStatus(ctx)
+func (u *unitHolderImpl) CheckAndUpdateStatus() {
+	u.fieldMu.Lock()
+	defer u.fieldMu.Unlock()
+	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
+		u.sourceStatusCheckTime = time.Now()
+		u.bgWg.Add(1)
+		go func() {
+			defer u.bgWg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), sourceStatusCtxTimeOut)
+			u.updateSourceStatus(ctx)
+			cancel()
+		}()
 	}
 }
 
