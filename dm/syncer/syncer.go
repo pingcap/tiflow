@@ -2281,7 +2281,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 
-			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
+			s.tctx.L().Debug("", zap.String("event", "XID or COMMIT query event"), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
 
 			job := newXIDJob(endLocation, startLocation, endLocation)
 			_, err = s.handleJobFunc(job)
