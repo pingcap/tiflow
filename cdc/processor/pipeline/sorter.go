@@ -400,7 +400,6 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("oldResolvedTs", oldResolvedTs),
 				zap.Any("rawKV", rawKV))
-
 		}
 		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
