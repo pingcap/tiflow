@@ -151,11 +151,11 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 		}
 	}
 
-	if maxCommitTs > state.maxIngressCommitTs.Load() {
-		state.maxIngressCommitTs.Store(maxCommitTs)
+	if maxCommitTs > state.maxReceivedCommitTs.Load() {
+		state.maxReceivedCommitTs.Store(maxCommitTs)
 	}
-	if maxResolvedTs > state.maxIngressResolvedTs.Load() {
-		state.maxIngressResolvedTs.Store(maxResolvedTs)
+	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
+		state.maxReceivedResolvedTs.Store(maxResolvedTs)
 	}
 
 	return nil
@@ -260,8 +260,8 @@ func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
 			zap.Int64("tableID", tableID))
 	}
 
-	maxCommitTs := state.maxIngressCommitTs.Load()
-	maxResolvedTs := state.maxIngressResolvedTs.Load()
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	if maxCommitTs < maxResolvedTs {
 		// In case, there is no write for the table,
 		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
@@ -344,8 +344,8 @@ type tableState struct {
 	sortedResolved  atomic.Uint64 // indicates events are ready for fetching.
 	pendingResolved atomic.Uint64 // events are resolved but not sorted.
 	// For statistics.
-	maxIngressCommitTs   atomic.Uint64
-	maxIngressResolvedTs atomic.Uint64
+	maxReceivedCommitTs   atomic.Uint64
+	maxReceivedResolvedTs atomic.Uint64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
@@ -418,7 +418,7 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				s.mu.RUnlock()
 				continue
 			}
-			ts.pendingResolved.Store(resolved)
+			ts.sortedResolved.Store(resolved)
 			for _, onResolve := range s.onResolves {
 				onResolve(table, resolved)
 			}
