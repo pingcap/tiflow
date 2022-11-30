@@ -29,7 +29,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -52,6 +55,9 @@ type SinkManager struct {
 	ctx context.Context
 	// cancel is used to cancel the background goroutines.
 	cancel context.CancelFunc
+
+	// up is the upstream and used to get the current pd time.
+	up *upstream.Upstream
 
 	// sinkProgressHeap is the heap of the table progress for sink.
 	sinkProgressHeap *tableProgresses
@@ -100,6 +106,7 @@ func New(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
+	up *upstream.Upstream,
 	redoManager redo.LogManager,
 	sortEngine engine.SortEngine,
 	mg entry.MounterGroup,
@@ -121,6 +128,7 @@ func New(
 		changefeedID: changefeedID,
 		ctx:          ctx,
 		cancel:       cancel,
+		up:           up,
 		memQuota:     newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
 		sinkFactory:  tableSinkFactory,
 		sortEngine:   sortEngine,
@@ -318,16 +326,15 @@ func (m *SinkManager) generateSinkTasks() error {
 				continue
 			}
 			tableState := tableSink.(*tableSinkWrapper).getState()
-			if tableState < tablepb.TableStateReplicating {
-				log.Panic("Tables that are not started should not appear in the progress heap",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID))
-			}
 			// It means table sink is stopping or stopped.
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
-			if tableState > tablepb.TableStateReplicating {
+			if tableState != tablepb.TableStateReplicating {
+				log.Info("Table sink is not replicating, skip it",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID),
+					zap.String("tableState", tableState.String()))
 				continue
 			}
 			// We use the barrier ts as the upper bound of the fetch tableSinkTask.
@@ -466,7 +473,9 @@ func (m *SinkManager) generateRedoTasks() error {
 			log.Debug("Generate redo task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", tableID),
+				zap.Any("lowerBound", slowestTableProgress.nextLowerBoundPos),
+				zap.Any("currentUpperBound", getUpperBound()))
 		}
 	}
 }
@@ -509,11 +518,13 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 }
 
 // StartTable sets the table(TableSink) state to replicating.
-func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
+func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error {
 	log.Info("Start table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID))
+		zap.Int64("tableID", tableID),
+		zap.Uint64("startTs", startTs),
+	)
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
@@ -521,7 +532,29 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	tableSink.(*tableSinkWrapper).start()
+	backoffBaseDelayInMs := int64(100)
+	totalRetryDuration := 10 * time.Second
+	var replicateTs model.Ts
+	err := retry.Do(m.ctx, func() error {
+		phy, logic, err := m.up.PDClient.GetTS(m.ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		replicateTs = oracle.ComposeTS(phy, logic)
+		log.Debug("Set replicate ts",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("replicateTs", replicateTs),
+		)
+		return nil
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithTotalRetryDuratoin(totalRetryDuration),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableSink.(*tableSinkWrapper).start(replicateTs)
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
@@ -532,6 +565,7 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) {
 			nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
 		})
 	}
+	return nil
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
@@ -546,22 +580,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
 		}
-		err := tableSink.(*tableSinkWrapper).close(m.ctx)
-		if err != nil && !cerrors.Is(err, context.Canceled) {
-			log.Warn("Failed to close table sink",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			select {
-			case m.errChan <- err:
-			default:
-				log.Error("Failed to send error to error channel, error channel is full",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
-			}
-		}
+		tableSink.(*tableSinkWrapper).close(m.ctx)
 		cleanedBytes := m.memQuota.clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -661,14 +680,7 @@ func (m *SinkManager) Close() error {
 		return errors.Trace(err)
 	}
 	m.tableSinks.Range(func(key, value interface{}) bool {
-		err := value.(*tableSinkWrapper).close(m.ctx)
-		if err != nil {
-			log.Error("Close table sink failed",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", key.(model.TableID)),
-				zap.Error(err))
-		}
+		value.(*tableSinkWrapper).close(m.ctx)
 		return true
 	})
 	m.wg.Wait()

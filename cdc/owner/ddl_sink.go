@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
@@ -224,11 +227,21 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				}
 
 			case ddl := <-s.ddlCh:
+				var err error
+				ddl.Query, err = addSpecialComment(ddl.Query)
+				if err != nil {
+					log.Error("Add special comment failed",
+						zap.String("namespace", s.changefeedID.Namespace),
+						zap.String("changefeed", s.changefeedID.ID),
+						zap.Error(err),
+						zap.Any("ddl", ddl))
+					s.reportErr(err)
+					return
+				}
 				log.Info("begin emit ddl event",
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
-				var err error
 				if s.sinkV1 != nil {
 					err = s.sinkV1.EmitDDLEvent(ctx, ddl)
 				} else {
@@ -368,4 +381,30 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 
 func (s *ddlSinkImpl) isInitialized() bool {
 	return s.initialized.Load().(bool)
+}
+
+// addSpecialComment translate tidb feature to comment
+func addSpecialComment(ddlQuery string) (string, error) {
+	stms, _, err := parser.New().ParseSQL(ddlQuery)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(stms) != 1 {
+		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
+	}
+	var sb strings.Builder
+	// translate TiDB feature to special comment
+	restoreFlags := format.RestoreTiDBSpecialComment
+	// escape the keyword
+	restoreFlags |= format.RestoreNameBackQuotes
+	// upper case keyword
+	restoreFlags |= format.RestoreKeyWordUppercase
+	// wrap string with single quote
+	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
+	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
+		return "", errors.Trace(err)
+	}
+	return sb.String(), nil
 }
