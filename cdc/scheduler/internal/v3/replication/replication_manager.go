@@ -99,7 +99,7 @@ type Manager struct { //nolint:revive
 
 	changefeedID           model.ChangeFeedID
 	slowestTableID         model.TableID
-	slowTableHeap          ReplicationSetHeap
+	slowTableHeap          SetHeap
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
 	acceptMoveTableTask    int
@@ -112,7 +112,7 @@ type Manager struct { //nolint:revive
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
-	slowTableHeap := make(ReplicationSetHeap, 0, defaultSlowTableHeapSize)
+	slowTableHeap := make(SetHeap, 0, defaultSlowTableHeapSize)
 	heap.Init(&slowTableHeap)
 
 	return &Manager{
