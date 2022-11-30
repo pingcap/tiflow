@@ -364,6 +364,7 @@ func VerifyPrivileges(
 				}
 			}
 		case ast.GrantLevelTable:
+			dbName := grantStmt.Level.DBName
 			for _, privElem := range grantStmt.Privs {
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
@@ -372,15 +373,11 @@ func VerifyPrivileges(
 						if privs.needGlobal {
 							continue
 						}
-						for dbName, dbPrivs := range privs.dbs {
-							if dbPrivs.wholeDB {
-								continue
-							}
-							if !stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
-								continue
-							}
-							delete(dbPrivs.tables, tableName)
+						dbPrivs, ok := privs.dbs[dbName]
+						if !ok || dbPrivs.wholeDB {
+							continue
 						}
+						delete(dbPrivs.tables, tableName)
 					}
 					continue
 				}
@@ -388,20 +385,16 @@ func VerifyPrivileges(
 				if !ok || privs.needGlobal {
 					continue
 				}
+				dbPrivs, ok := privs.dbs[dbName]
+				if !ok || dbPrivs.wholeDB {
+					continue
+				}
 				// dumpling could report error if an allow-list table is lack of privilege.
 				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
 					continue
 				}
-				for dbName, dbPrivs := range privs.dbs {
-					if dbPrivs.wholeDB {
-						continue
-					}
-					if !stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
-						continue
-					}
-					delete(dbPrivs.tables, tableName)
-				}
+				delete(dbPrivs.tables, tableName)
 			}
 		}
 	}

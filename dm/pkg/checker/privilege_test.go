@@ -382,6 +382,17 @@ func TestVerifyPrivilegesWildcard(t *testing.T) {
 			replicationState: StateFailure,
 			errStr:           "lack of Select privilege: {`block_db`.`t1`}; ",
 		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo_db`.`t1` TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo_db", Name: "t1"},
+				{Schema: "demo2db", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`demo2db`.`t1`}; ",
+		},
 	}
 
 	for i, cs := range cases {
