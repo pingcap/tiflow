@@ -170,7 +170,9 @@ func (p *processor) AddTable(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
-					p.sinkManager.StartTable(tableID, startTs)
+					if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+						return false, errors.Trace(err)
+					}
 				} else {
 					p.tables[tableID].Start(startTs)
 				}
@@ -218,7 +220,9 @@ func (p *processor) AddTable(
 		}
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if !isPrepare {
-			p.sinkManager.StartTable(tableID, startTs)
+			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+				return false, errors.Trace(err)
+			}
 		}
 	} else {
 		table, err := p.createTablePipeline(
@@ -449,6 +453,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", stats.CheckpointTs))
+
 		return stats.CheckpointTs, true
 	}
 	table := p.tables[tableID]
@@ -886,7 +891,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
-		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.redoManager,
+		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
 		// Bind them so that sourceManager can notify sinkManager.
 		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
@@ -1319,12 +1324,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
-		if err := p.sourceManager.Close(); err != nil {
-			log.Error("Failed to close source manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
+		if p.sourceManager != nil {
+			if err := p.sourceManager.Close(); err != nil {
+				log.Error("Failed to close source manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			p.sourceManager = nil
 		}
 		if p.sinkManager != nil {
 			if err := p.sinkManager.Close(); err != nil {

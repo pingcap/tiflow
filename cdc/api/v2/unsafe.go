@@ -35,7 +35,12 @@ import (
 
 // CDCMetaData returns all etcd key values used by cdc
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
-	kvs, err := h.capture.GetEtcdClient().GetAllCDCInfo(c)
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	kvs, err := etcdClient.GetAllCDCInfo(c)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -106,8 +111,12 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	}
 	err := h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client,
-				h.capture.GetEtcdClient().GetGCServiceID())
+			etcdClient, err := h.capture.GetEtcdClient()
+			if err != nil {
+				return cerror.WrapError(cerror.ErrInternalServerError, err)
+			}
+			err = gc.RemoveServiceGCSafepoint(c, client,
+				etcdClient.GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
