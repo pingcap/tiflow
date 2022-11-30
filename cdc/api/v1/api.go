@@ -324,7 +324,12 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = etcdClient.CreateChangefeedInfo(
 		ctx, upstreamInfo,
 		info, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
@@ -459,8 +464,12 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = etcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -754,6 +763,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	}
 	ownerID := info.ID
 
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	captures := make([]*model.Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
@@ -762,7 +777,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 				ID:            c.ID,
 				IsOwner:       isOwner,
 				AdvertiseAddr: c.AdvertiseAddr,
-				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
+				ClusterID:     etcdClient.GetClusterID(),
 			})
 	}
 
@@ -853,12 +868,17 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 	status := model.ServerStatus{
 		Version:   version.ReleaseVersion,
 		GitHash:   version.GitHash,
 		Pid:       os.Getpid(),
 		ID:        info.ID,
-		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
+		ClusterID: etcdClient.GetClusterID(),
 		IsOwner:   h.capture.IsOwner(),
 		Liveness:  h.capture.Liveness(),
 	}

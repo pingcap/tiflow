@@ -76,7 +76,8 @@ func newBinlogReaderForTest(logger log.Logger, cfg *BinlogReaderConfig, notify b
 func (t *testReaderSuite) setActiveRelayLog(r Process, uuid, filename string, offset int64) {
 	relay := r.(*Relay)
 	writer := relay.writer.(*FileWriter)
-	writer.out.uuid, writer.out.filename = uuid, filename
+	writer.out.uuid.Store(uuid)
+	writer.out.filename.Store(filename)
 	writer.out.offset.Store(offset)
 }
 
@@ -1231,6 +1232,10 @@ func (m *mockFileWriterForActiveTest) Init(uuid, filename string) {
 }
 
 func (m *mockFileWriterForActiveTest) Close() error {
+	panic("should be used")
+}
+
+func (m *mockFileWriterForActiveTest) Flush() error {
 	panic("should be used")
 }
 

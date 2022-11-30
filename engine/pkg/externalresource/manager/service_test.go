@@ -22,13 +22,10 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	rpcutilMock "github.com/pingcap/tiflow/engine/pkg/rpcutil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"golang.org/x/time/rate"
 )
 
 type serviceTestSuite struct {
@@ -81,16 +78,8 @@ func newServiceTestSuite(t *testing.T) (
 	execPro := NewMockExecutorInfoProvider()
 	meta, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
-	id := "leader"
-	leaderVal := &atomic.Value{}
-	leaderVal.Store(&rpcutil.Member{Name: id})
 	mockFeatureChecker := rpcutilMock.NewMockFeatureChecker(gomock.NewController(t))
-	srvc := NewService(meta, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
-		id,
-		leaderVal,
-		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		mockFeatureChecker,
-		&rate.Limiter{}, nil))
+	srvc := NewService(meta)
 	return &serviceTestSuite{
 		service:              srvc,
 		executorInfoProvider: execPro,

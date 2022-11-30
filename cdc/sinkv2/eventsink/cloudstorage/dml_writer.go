@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
@@ -31,8 +32,9 @@ type dmlWriter struct {
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
 	config         *cloudstorage.Config
-	mu             sync.Mutex
 	extension      string
+	wg             sync.WaitGroup
+	inputCh        <-chan eventFragment
 	errCh          chan<- error
 }
 
@@ -41,6 +43,8 @@ func newDMLWriter(ctx context.Context,
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	statistics *metrics.Statistics,
+	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
 	w := &dmlWriter{
@@ -49,11 +53,18 @@ func newDMLWriter(ctx context.Context,
 		hasher:         hash.NewPositionInertia(),
 		config:         config,
 		extension:      extension,
+		inputCh:        inputCh,
 		errCh:          errCh,
 	}
 
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		w.dispatchFragToDMLWorker(ctx)
+	}()
+
 	for i := 0; i < config.WorkerCount; i++ {
-		d := newDMLWorker(i, changefeedID, storage, w.config, extension, errCh)
+		d := newDMLWorker(i, changefeedID, storage, w.config, extension, statistics, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)
@@ -62,22 +73,29 @@ func newDMLWriter(ctx context.Context,
 	return w
 }
 
-func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
-	d.mu.Lock()
-	tableName := frag.TableName
-	d.hasher.Reset()
-	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
-	workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
-	d.mu.Unlock()
-
-	d.workerChannels[workerID].In() <- frag
+func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case frag, ok := <-d.inputCh:
+			if !ok {
+				return
+			}
+			tableName := frag.TableName
+			d.hasher.Reset()
+			d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
+			workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
+			d.workerChannels[workerID].In() <- frag
+		}
+	}
 }
 
 func (d *dmlWriter) close() {
+	d.wg.Wait()
 	for _, w := range d.workers {
 		w.close()
 	}
-
 	for _, ch := range d.workerChannels {
 		ch.Close()
 		for range ch.Out() {

@@ -8,7 +8,7 @@ require (
 	github.com/daixiang0/gci v0.8.1
 	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.7.0-rc.1
 	github.com/golangci/golangci-lint v1.50.1
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
