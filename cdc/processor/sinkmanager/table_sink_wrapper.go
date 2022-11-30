@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -22,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -42,6 +42,8 @@ type tableSinkWrapper struct {
 	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
+	// replicateTs is the ts that the table sink has started to replicate.
+	replicateTs model.Ts
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
@@ -65,7 +67,14 @@ func newTableSinkWrapper(
 	}
 }
 
-func (t *tableSinkWrapper) start() {
+func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+	log.Info("Sink is started",
+		zap.String("namespace", t.changefeed.Namespace),
+		zap.String("changefeed", t.changefeed.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("replicateTs", replicateTs),
+	)
+	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
 
@@ -99,19 +108,15 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(ctx context.Context) error {
+func (t *tableSinkWrapper) close(ctx context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	err := t.tableSink.Close(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Info("sink is closed",
+	t.tableSink.Close(ctx)
+	log.Info("Sink is closed",
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
-	return nil
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
