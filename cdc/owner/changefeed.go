@@ -500,6 +500,17 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
+	sourceID, err := pdutil.GetSourceID(ctx, c.upstream.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.state.Info.Config.Sink.TiDBSourceID = sourceID
+	log.Info("set source id",
+		zap.Uint64("sourceID", sourceID),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+	)
+
 	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.sink.run(cancelCtx)
 
@@ -895,6 +906,15 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
 	}
+
+	// check whether in bdr mode, if so, we need to skip all DDLs
+	if c.state.Info.Config.BDRMode {
+		log.Info("ignore the DDL event in BDR mode",
+			zap.String("changefeed", c.id.ID),
+			zap.Any("ddl", ddlEvent.Query))
+		return true, nil
+	}
+
 	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)
 	if err != nil {
 		return false, err
