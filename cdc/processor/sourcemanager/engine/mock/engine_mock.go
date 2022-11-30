@@ -150,6 +150,20 @@ func (mr *MockSortEngineMockRecorder) GetResolvedTs(tableID interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolvedTs", reflect.TypeOf((*MockSortEngine)(nil).GetResolvedTs), tableID)
 }
 
+// GetStatsByTable mocks base method.
+func (m *MockSortEngine) GetStatsByTable(tableID model.TableID) engine.TableStats {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStatsByTable", tableID)
+	ret0, _ := ret[0].(engine.TableStats)
+	return ret0
+}
+
+// GetStatsByTable indicates an expected call of GetStatsByTable.
+func (mr *MockSortEngineMockRecorder) GetStatsByTable(tableID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatsByTable", reflect.TypeOf((*MockSortEngine)(nil).GetStatsByTable), tableID)
+}
+
 // IsTableBased mocks base method.
 func (m *MockSortEngine) IsTableBased() bool {
 	m.ctrl.T.Helper()
