@@ -305,16 +305,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		if p.pullBasedSinking {
 			state, alreadyExist = p.sinkManager.GetTableState(tableID)
 			if alreadyExist {
-				stats, err := p.sinkManager.GetTableStats(tableID)
-				if err != nil {
-					log.Warn("Failed to get table stats",
-						zap.String("captureID", p.captureInfo.ID),
-						zap.String("namespace", p.changefeedID.Namespace),
-						zap.String("changefeed", p.changefeedID.ID),
-						zap.Int64("tableID", tableID),
-						zap.Error(err))
-					return false
-				}
+				stats := p.sinkManager.GetTableStats(tableID)
 				tableResolvedTs = stats.ResolvedTs
 				tableCheckpointTs = stats.CheckpointTs
 			}
@@ -389,16 +380,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	if p.pullBasedSinking {
 		state, alreadyExist = p.sinkManager.GetTableState(tableID)
 		if alreadyExist {
-			stats, err := p.sinkManager.GetTableStats(tableID)
-			if err != nil {
-				log.Warn("Failed to get table stats",
-					zap.String("captureID", p.captureInfo.ID),
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Int64("tableID", tableID),
-					zap.Error(err))
-				return 0, false
-			}
+			stats := p.sinkManager.GetTableStats(tableID)
 			tableCheckpointTs = stats.CheckpointTs
 		}
 	} else {
@@ -431,17 +413,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
-		stats, err := p.sinkManager.GetTableStats(tableID)
-		// TODO: handle error
-		if err != nil {
-			log.Warn("Failed to get table stats",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			return 0, false
-		}
+		stats := p.sinkManager.GetTableStats(tableID)
 		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
@@ -499,20 +471,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 				State:   tablepb.TableStateAbsent,
 			}
 		}
-		sinkStats, err := p.sinkManager.GetTableStats(tableID)
-		// TODO: handle the error
-		if err != nil {
-			log.Warn("Failed to get table sinkStats",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Error(err))
-			return tablepb.TableStatus{
-				TableID: tableID,
-				State:   tablepb.TableStateAbsent,
-			}
-		}
+		sinkStats := p.sinkManager.GetTableStats(tableID)
 		return tablepb.TableStatus{
 			TableID: tableID,
 			Checkpoint: tablepb.Checkpoint{
@@ -754,9 +713,7 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upstream.PDClock.CurrentTime()
-	if err := p.handlePosition(oracle.GetPhysical(pdTime)); err != nil {
-		return errors.Trace(err)
-	}
+	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
 
@@ -1091,7 +1048,7 @@ func (p *processor) sendError(err error) {
 // resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
 // table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
 // checkpointTs = min(resolvedTs, all table's checkpointTs).
-func (p *processor) handlePosition(currentTs int64) error {
+func (p *processor) handlePosition(currentTs int64) {
 	minResolvedTs := uint64(math.MaxUint64)
 	minResolvedTableID := int64(0)
 	if p.schemaStorage != nil {
@@ -1102,10 +1059,7 @@ func (p *processor) handlePosition(currentTs int64) error {
 	if p.pullBasedSinking {
 		tableIDs := p.sinkManager.GetAllCurrentTableIDs()
 		for _, tableID := range tableIDs {
-			stats, err := p.sinkManager.GetTableStats(tableID)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			stats := p.sinkManager.GetTableStats(tableID)
 			log.Debug("sink manager gets table stats",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
@@ -1150,8 +1104,6 @@ func (p *processor) handlePosition(currentTs int64) error {
 
 	p.checkpointTs = minCheckpointTs
 	p.resolvedTs = minResolvedTs
-
-	return nil
 }
 
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
@@ -1458,10 +1410,7 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 		tables := p.sinkManager.GetAllCurrentTableIDs()
 		for _, tableID := range tables {
 			state, _ := p.sinkManager.GetTableState(tableID)
-			stats, err := p.sinkManager.GetTableStats(tableID)
-			if err != nil {
-				return err
-			}
+			stats := p.sinkManager.GetTableStats(tableID)
 			// TODO: add table name.
 			fmt.Fprintf(w, "tableID: %d, resolvedTs: %d, checkpointTs: %d, state: %s\n",
 				tableID, stats.ResolvedTs, stats.CheckpointTs, state)
