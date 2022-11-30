@@ -202,6 +202,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		Terminator:    "\r\n",
 		DateSeparator: config.DateSeparatorNone.String(),
 		Protocol:      "open-protocol",
+		TiDBSourceID:  1,
 	}, cfg.Sink)
 }
 
