@@ -57,6 +57,7 @@ type EventSorter struct {
 // EventIter implements sorter.EventIterator.
 type EventIter struct {
 	tableID  model.TableID
+	state    *tableState
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
@@ -145,6 +146,7 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 				maxResolvedTs = event.CRTs
 			}
 		} else {
+			state.remainEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
 			}
@@ -212,7 +214,7 @@ func (s *EventSorter) FetchByTable(
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
-	return &EventIter{tableID: tableID, iter: iter, serde: s.serde}
+	return &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -273,6 +275,17 @@ func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
 	}
 }
 
+// RemainEvents implements engine.SortEngine.
+func (s *EventSorter) RemainEvents() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	totalRemainEvents := int64(0)
+	for _, state := range s.tables {
+		totalRemainEvents += state.remainEvents.Load()
+	}
+	return totalRemainEvents
+}
+
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
@@ -323,6 +336,9 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 		}
 		event, s.headItem = s.headItem, event
 	}
+	if event != nil {
+		s.state.remainEvents.Add(-1)
+	}
 	return
 }
 
@@ -346,6 +362,7 @@ type tableState struct {
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
+	remainEvents          atomic.Int64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex

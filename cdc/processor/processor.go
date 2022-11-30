@@ -1251,12 +1251,14 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
-	var totalConsumed uint64
-	var totalEvents int64
 	if p.pullBasedSinking {
 		tables := p.sinkManager.GetAllCurrentTableIDs()
 		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		totalEvents := p.sourceManager.RemainEvents()
+		p.metricRemainKVEventGauge.Set(float64(totalEvents))
 	} else {
+		var totalConsumed uint64
+		var totalEvents int64
 		for _, table := range p.tables {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))

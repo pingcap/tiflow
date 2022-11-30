@@ -73,6 +73,9 @@ type SortEngine interface {
 	// GetStatsByTable gets the statistics of the given table.
 	GetStatsByTable(tableID model.TableID) TableStats
 
+	// RemainEvents returns the number of events that are not sent to sink yet.
+	RemainEvents() int64
+
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.

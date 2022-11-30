@@ -106,6 +106,11 @@ func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableS
 	return m.engine.GetStatsByTable(tableID)
 }
 
+// RemainEvents returns the number of events in the engine that have not been sent to the sink.
+func (m *SourceManager) RemainEvents() int64 {
+	return m.engine.RemainEvents()
+}
+
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
 	m.pullers.Range(func(key, value interface{}) bool {
