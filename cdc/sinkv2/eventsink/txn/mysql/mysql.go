@@ -550,6 +550,17 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			// we set write source for each txn,
 			// so we can use it to trace the data source
 			if err = s.setWriteSource(ctx, tx); err != nil {
+				err := logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeed,
+					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
+						s.cfg.SourceID),
+					dmls.rowCount, dmls.startTs)
+				if rbErr := tx.Rollback(); rbErr != nil {
+					if errors.Cause(rbErr) != context.Canceled {
+						log.Warn("failed to rollback txn", zap.Error(rbErr))
+					}
+				}
 				return 0, err
 			}
 
