@@ -104,6 +104,9 @@ func newMqSink(
 		role:           role,
 		id:             changefeedID,
 	}
+	s.lastResolvedTs.Store(model.ResolvedTs{
+		Ts: 0,
+	})
 
 	go func() {
 		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -182,7 +185,6 @@ func (k *mqSink) FlushRowChangedEvents(
 	if checkpoint.EqualOrGreater(resolved) {
 		return checkpoint, nil
 	}
-
 	select {
 	case <-ctx.Done():
 		return model.NewResolvedTs(0), ctx.Err()
@@ -191,7 +193,6 @@ func (k *mqSink) FlushRowChangedEvents(
 		resolved: resolved,
 	}:
 	}
-
 	k.statistics.PrintStatus(ctx)
 	return checkpoint, nil
 }
