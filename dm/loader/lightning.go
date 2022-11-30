@@ -269,7 +269,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 
 	var hasDup bool
-	if l.cfg.Mode == config.LoadModePhysical {
+	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lightning.WithDupIndicator(&hasDup))
 	}
 
