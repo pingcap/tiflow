@@ -84,7 +84,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	require.Nil(t, wrapper.close(context.Background()))
+	wrapper.close(context.Background())
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
