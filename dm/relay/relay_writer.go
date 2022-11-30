@@ -57,6 +57,8 @@ type Writer interface {
 	WriteEvent(ev *replication.BinlogEvent) (WResult, error)
 	// IsActive check whether given uuid+filename is active binlog file, if true return current file offset
 	IsActive(uuid, filename string) (bool, int64)
+	// Flush flushes the binlog writer.
+	Flush() error
 }
 
 // FileWriter implements Writer interface.
@@ -104,6 +106,11 @@ func (w *FileWriter) WriteEvent(ev *replication.BinlogEvent) (WResult, error) {
 	}
 }
 
+// Flush implements Writer.Flush.
+func (w *FileWriter) Flush() error {
+	return w.out.Flush()
+}
+
 // offset returns the current offset of the binlog file.
 // it is only used for testing now.
 func (w *FileWriter) offset() int64 {
@@ -144,6 +151,10 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 		err = w.out.Write(replication.BinLogFileHeader)
 		if err != nil {
 			return WResult{}, terror.Annotatef(err, "write binlog file header for %s", fullName)
+		}
+		err = w.Flush()
+		if err != nil {
+			return WResult{}, terror.Annotatef(err, "flush binlog file for %s", fullName)
 		}
 	}
 
@@ -277,6 +288,9 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 	}
 
 	if mayDuplicate {
+		if err := w.Flush(); err != nil {
+			return WResult{}, terror.Annotatef(err, "flush before handle duplicate event %v in %s", ev.Header, w.filename.Load())
+		}
 		// handle any duplicate events if exist
 		result, err2 := w.handleDuplicateEventsExist(ev)
 		if err2 != nil {

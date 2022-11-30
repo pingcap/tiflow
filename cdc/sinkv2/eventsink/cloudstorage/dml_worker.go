@@ -25,9 +25,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	mcloudstorage "github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -45,11 +48,14 @@ type dmlWorker struct {
 	// fileIndex maintains a mapping of <table, index number>.
 	fileIndex map[versionedTable]uint64
 	// fileSize maintains a mapping of <table, file size>.
-	fileSize  map[versionedTable]uint64
-	wg        sync.WaitGroup
-	isClosed  uint64
-	errCh     chan<- error
-	extension string
+	fileSize         map[versionedTable]uint64
+	wg               sync.WaitGroup
+	isClosed         uint64
+	errCh            chan<- error
+	extension        string
+	statistics       *metrics.Statistics
+	metricWriteBytes prometheus.Gauge
+	metricFileCount  prometheus.Gauge
 }
 
 type tableEventsMap struct {
@@ -74,19 +80,23 @@ func newDMLWorker(
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	statistics *metrics.Statistics,
 	errCh chan<- error,
 ) *dmlWorker {
 	d := &dmlWorker{
-		id:            id,
-		changeFeedID:  changefeedID,
-		storage:       storage,
-		config:        config,
-		flushNotifyCh: make(chan flushTask, 1),
-		tableEvents:   newTableEventsMap(),
-		fileIndex:     make(map[versionedTable]uint64),
-		fileSize:      make(map[versionedTable]uint64),
-		extension:     extension,
-		errCh:         errCh,
+		id:               id,
+		changeFeedID:     changefeedID,
+		storage:          storage,
+		config:           config,
+		tableEvents:      newTableEventsMap(),
+		flushNotifyCh:    make(chan flushTask, 1),
+		fileIndex:        make(map[versionedTable]uint64),
+		fileSize:         make(map[versionedTable]uint64),
+		extension:        extension,
+		errCh:            errCh,
+		statistics:       statistics,
+		metricWriteBytes: mcloudstorage.CloudStorageWriteBytesGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricFileCount:  mcloudstorage.CloudStorageFileCountGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
 	return d
@@ -129,9 +139,13 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 						continue
 					}
 
+					rowsCnt := 0
 					for _, frag := range events {
 						msgs := frag.encodedMsgs
+						d.statistics.ObserveRows(frag.event.Event.Rows...)
 						for _, msg := range msgs {
+							d.metricWriteBytes.Add(float64(len(msg.Value)))
+							rowsCnt += msg.GetRowsCount()
 							buf.Write(msg.Value)
 							callbacks = append(callbacks, msg.Callback)
 						}
@@ -156,11 +170,17 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					}
 
 					path := d.generateDataFilePath(table)
-					err := d.storage.WriteFile(ctx, path, buf.Bytes())
-					if err != nil {
+					if err := d.statistics.RecordBatchExecution(func() (int, error) {
+						err := d.storage.WriteFile(ctx, path, buf.Bytes())
+						if err != nil {
+							return 0, err
+						}
+						return rowsCnt, nil
+					}); err != nil {
 						d.errCh <- err
 						return
 					}
+					d.metricFileCount.Add(1)
 
 					for _, cb := range callbacks {
 						if cb != nil {

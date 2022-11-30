@@ -276,8 +276,7 @@ func TestClose(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := tb.Close(context.Background())
-		require.NoError(t, err, "close should not return error")
+		tb.Close(context.Background())
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
@@ -307,14 +306,13 @@ func TestCloseCancellable(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := tb.Close(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		tb.Close(ctx)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopped == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
 func TestCloseReentrant(t *testing.T) {
@@ -333,16 +331,14 @@ func TestCloseReentrant(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err := tb.Close(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		tb.Close(ctx)
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
-	err = tb.Close(ctx)
-	require.Nil(t, err, "table should not be stopping again")
+	require.Eventually(t, func() bool {
+		return state.TableSinkStopped == tb.state.Load()
+	}, 5*time.Second, time.Millisecond*10, "table should be stopped")
+	tb.Close(ctx)
 }
 
 // TestCheckpointTsFrozenWhenStopping make sure wo do not update checkpoint
@@ -364,8 +360,7 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := tb.Close(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		tb.Close(ctx)
 	}()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopping == tb.state.Load()
@@ -378,6 +373,4 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 		require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
 	}()
 	wg.Wait()
-	err = tb.Close(ctx)
-	require.Nil(t, err, "table should not be stopping again")
 }
