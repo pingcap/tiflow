@@ -268,8 +268,8 @@ func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
 		maxCommitTs = maxResolvedTs
 	}
 	return engine.TableStats{
-		CheckpointTsIngress: maxCommitTs,
-		ResolvedTsIngress:   maxResolvedTs,
+		ReceivedMaxCommitTs:   maxCommitTs,
+		ReceivedMaxResolvedTs: maxResolvedTs,
 	}
 }
 

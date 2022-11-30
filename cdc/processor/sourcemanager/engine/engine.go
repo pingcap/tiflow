@@ -135,6 +135,6 @@ func (p Position) Compare(q Position) int {
 
 // TableStats of a sort engine.
 type TableStats struct {
-	CheckpointTsIngress model.Ts
-	ResolvedTsIngress   model.Ts
+	ReceivedMaxCommitTs   model.Ts
+	ReceivedMaxResolvedTs model.Ts
 }

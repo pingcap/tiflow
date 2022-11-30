@@ -41,11 +41,12 @@ const (
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 )
 
-// Stats of a table sink.
-type Stats struct {
-	CheckpointTs          model.Ts
-	ResolvedTs            model.Ts
-	BarrierTs             model.Ts
+// TableStats of a table sink.
+type TableStats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
+	// From sorter.
 	ReceivedMaxCommitTs   model.Ts
 	ReceivedMaxResolvedTs model.Ts
 }
@@ -589,7 +590,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) (Stats, error) {
+func (m *SinkManager) GetTableStats(tableID model.TableID) (TableStats, error) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -606,7 +607,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (Stats, error) {
 	}
 	err := m.sortEngine.CleanByTable(tableID, cleanPos)
 	if err != nil {
-		return Stats{}, errors.Trace(err)
+		return TableStats{}, errors.Trace(err)
 	}
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
@@ -615,7 +616,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (Stats, error) {
 	} else {
 		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
 	}
-	return Stats{
+	return TableStats{
 		CheckpointTs:          resolvedMark,
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
