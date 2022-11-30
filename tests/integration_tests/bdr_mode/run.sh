@@ -25,8 +25,8 @@ function run() {
 	# cdc server 2
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8400" --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}"
 
-	SINK_URI_1="mysql://normal:123456@127.0.0.1:3306"
-	SINK_URI_2="mysql://normal:123456@127.0.0.1:4000"
+	SINK_URI_1="mysql://root@127.0.0.1:3306"
+	SINK_URI_2="mysql://root@127.0.0.1:4000"
 
 	# down -> up
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI_1" -c "test-1" --config="$CUR/conf/cf.toml"
