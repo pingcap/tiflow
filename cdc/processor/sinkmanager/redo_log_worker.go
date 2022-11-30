@@ -128,9 +128,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 		}
 
-		shouldUpdateResolvedTs := lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0
-		if rowsSize >= maxUpdateIntervalSize || shouldUpdateResolvedTs {
-			releaseMem := func() { w.memQuota.refund(rowsSize - cachedSize) }
+		if rowsSize >= maxUpdateIntervalSize || allFinished {
+			refundMem := rowsSize - cachedSize
+			releaseMem := func() { w.memQuota.refund(refundMem) }
 			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
 			if err != nil {
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
@@ -140,7 +140,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 					zap.Uint64("memory", rowsSize))
 				return errors.Trace(err)
 			}
-			if shouldUpdateResolvedTs {
+			if lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0 {
 				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
 				if err != nil {
 					return errors.Trace(err)
@@ -154,7 +154,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[0:]
+			rows = rows[:0]
 			if cap(rows) > 1024 {
 				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}
@@ -201,13 +201,17 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			return nil
 		}
+		if pos.Valid() {
+			lastPos = pos
+		}
+
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
-		if pos.Valid() {
-			lastPos = pos
-		}
+		// For all rows, we add table replicate ts, so mysql sink can
+		// determine when to turn off safe-mode.
+		e.Row.ReplicatingTs = task.tableSink.replicateTs
 
 		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 		if err != nil {
