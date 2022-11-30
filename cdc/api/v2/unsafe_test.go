@@ -47,7 +47,7 @@ func TestCDCMetaData(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 
 	// case 1: failed
 	etcdClient.EXPECT().GetAllCDCInfo(gomock.Any()).Return(nil, cerror.ErrPDEtcdAPIError).Times(1)
