@@ -499,13 +499,10 @@ func (s *Server) doClose() {
 func (s *Server) Close() {
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
-<<<<<<< HEAD:dm/dm/worker/server.go
-=======
 
 	s.cancel()
 	s.wg.Wait()
 
->>>>>>> 30225db1b6 (dm-worker: use run ctx instead global ctx to fix double write (#7661)):dm/worker/server.go
 	if s.etcdClient != nil {
 		s.etcdClient.Close()
 	}
