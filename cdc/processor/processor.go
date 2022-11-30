@@ -540,7 +540,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	}
 }
 
-func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats pipeline.Stats) tablepb.Stats {
+func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.Stats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
 	now, _ := p.upstream.PDClock.CurrentTime()
 
@@ -569,10 +569,10 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		CheckpointTs: sortStats.CheckpointTsIngress,
 		ResolvedTs:   sortStats.ResolvedTsIngress,
 	}
-	//stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-	//	CheckpointTs: sortStats.CheckpointTsEgress,
-	//	ResolvedTs:   sortStats.ResolvedTsEgress,
-	//}
+	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
+		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+	}
 
 	return stats
 }

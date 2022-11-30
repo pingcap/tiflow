@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -41,6 +40,15 @@ const (
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 )
+
+// Stats of a table sink.
+type Stats struct {
+	CheckpointTs          model.Ts
+	ResolvedTs            model.Ts
+	BarrierTs             model.Ts
+	ReceivedMaxCommitTs   model.Ts
+	ReceivedMaxResolvedTs model.Ts
+}
 
 // SinkManager is the implementation of SinkManager.
 type SinkManager struct {
@@ -581,7 +589,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, error) {
+func (m *SinkManager) GetTableStats(tableID model.TableID) (Stats, error) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -598,7 +606,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	}
 	err := m.sortEngine.CleanByTable(tableID, cleanPos)
 	if err != nil {
-		return pipeline.Stats{}, errors.Trace(err)
+		return Stats{}, errors.Trace(err)
 	}
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
@@ -607,10 +615,12 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) (pipeline.Stats, erro
 	} else {
 		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
 	}
-	return pipeline.Stats{
-		CheckpointTs: resolvedMark,
-		ResolvedTs:   resolvedTs,
-		BarrierTs:    m.lastBarrierTs.Load(),
+	return Stats{
+		CheckpointTs:          resolvedMark,
+		ResolvedTs:            resolvedTs,
+		BarrierTs:             m.lastBarrierTs.Load(),
+		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
 	}, nil
 }
 
