@@ -648,7 +648,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
 	select {
 	case m.engineGCChan <- gcEvent:
 	default:
-		log.Debug("Failed to send GC event to engine GC channel, engine GC channel is full",
+		log.Warn("Failed to send GC event to engine GC channel, engine GC channel is full",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID),
