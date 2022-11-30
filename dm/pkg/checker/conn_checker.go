@@ -126,13 +126,13 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 				neededConn,
 			),
 		)
-		result.Instruction = "set larger max_connections or adjust the configuration of dm"
+		result.Instruction = "You need to set a larger max_connection, or adjust the configuration of DM such as reducing the worker count of sycner and reducing the pool size of the dumper and loader."
 		result.State = StateFailure
 	} else if maxConn-usedConn < neededConn {
 		// if we don't have enough privilege to check the user's connection number,
 		// usedConn is 0
 		result.State = StateWarning
-		result.Instruction = "set larger max_connections or adjust the configuration of dm"
+		result.Instruction = "You need to set a larger max_connection, or adjust the configuration of DM such as reducing the worker count of sycner and reducing the pool size of the dumper and loader."
 		result.Errors = append(
 			result.Errors,
 			NewError(
@@ -182,9 +182,10 @@ func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
 				// because lightning doesn't need to keep connections while restoring.
 				result.Errors = append(
 					result.Errors,
-					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
+					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning."),
 				)
 				result.State = StateWarning
+				result.Instruction = "You need to set a larger connection for TiDB."
 				break
 			}
 		}

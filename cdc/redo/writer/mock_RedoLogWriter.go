@@ -105,13 +105,13 @@ func (_m *MockRedoLogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEven
 	return r0
 }
 
-// WriteLog provides a mock function with given fields: ctx, tableID, rows
-func (_m *MockRedoLogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error {
-	ret := _m.Called(ctx, tableID, rows)
+// WriteLog provides a mock function with given fields: ctx, rows
+func (_m *MockRedoLogWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error {
+	ret := _m.Called(ctx, rows)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, []*model.RedoRowChangedEvent) error); ok {
-		r0 = rf(ctx, tableID, rows)
+	if rf, ok := ret.Get(0).(func(context.Context, []*model.RedoRowChangedEvent) error); ok {
+		r0 = rf(ctx, rows)
 	} else {
 		r0 = ret.Error(0)
 	}

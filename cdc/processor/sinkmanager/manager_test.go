@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -24,9 +25,23 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
 )
+
+type mockPD struct {
+	pd.Client
+	ts int64
+}
+
+func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	if p.ts != 0 {
+		return p.ts, p.ts, nil
+	}
+	return math.MaxInt64, math.MaxInt64, nil
+}
 
 // nolint:revive
 // In test it is ok move the ctx to the second parameter.
@@ -39,7 +54,7 @@ func createManager(
 ) *SinkManager {
 	sortEngine := memory.New(context.Background())
 	manager, err := New(
-		ctx, changefeedID, changefeedInfo,
+		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
 		nil, sortEngine, &entry.MockMountGroup{},
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
@@ -135,7 +150,9 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	manager.StartTable(tableID, 1)
+	err := manager.StartTable(tableID, 1)
+	require.NoError(t, err)
+	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
@@ -162,7 +179,8 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -221,7 +239,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -250,7 +269,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
@@ -278,7 +298,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		s, err := manager.GetTableStats(tableID)

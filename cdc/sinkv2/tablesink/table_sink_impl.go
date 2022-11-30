@@ -123,7 +123,7 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *EventTableSink[E]) Close(ctx context.Context) error {
+func (e *EventTableSink[E]) Close(ctx context.Context) {
 	currentState := e.state.Load()
 	if currentState == state.TableSinkStopping ||
 		currentState == state.TableSinkStopped {
@@ -131,7 +131,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
 			zap.Uint64("tableID", uint64(e.tableID)))
-		return nil
+		return
 	}
 
 	// Notice: We have to set the state to stopping first,
@@ -148,17 +148,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
-	err := e.progressTracker.close(ctx)
-	if err != nil {
-		failedCheckpointTs := e.GetCheckpointTs()
-		log.Error("Failed to stop table sink",
-			zap.String("namespace", e.changefeedID.Namespace),
-			zap.String("changefeed", e.changefeedID.ID),
-			zap.Int64("tableID", e.tableID),
-			zap.Uint64("checkpointTs", failedCheckpointTs.Ts),
-			zap.Duration("duration", time.Since(start)), zap.Error(err))
-		return err
-	}
+	e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
 	log.Info("Table sink stopped",
@@ -167,5 +157,4 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 		zap.Int64("tableID", e.tableID),
 		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
 		zap.Duration("duration", time.Since(start)))
-	return nil
 }

@@ -15,15 +15,12 @@ package owner
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -902,10 +899,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	ddlEvent *model.DDLEvent,
 ) (done bool, err error) {
-	ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
-	if err != nil {
-		return false, err
-	}
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableName.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
@@ -1007,30 +1000,4 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 		return true, nil
 	}
 	return
-}
-
-// addSpecialComment translate tidb feature to comment
-func addSpecialComment(ddlQuery string) (string, error) {
-	stms, _, err := parser.New().ParseSQL(ddlQuery)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
-	}
-	var sb strings.Builder
-	// translate TiDB feature to special comment
-	restoreFlags := format.RestoreTiDBSpecialComment
-	// escape the keyword
-	restoreFlags |= format.RestoreNameBackQuotes
-	// upper case keyword
-	restoreFlags |= format.RestoreKeyWordUppercase
-	// wrap string with single quote
-	restoreFlags |= format.RestoreStringSingleQuotes
-	// remove placement rule
-	restoreFlags |= format.SkipPlacementRuleForRestore
-	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
-		return "", errors.Trace(err)
-	}
-	return sb.String(), nil
 }
