@@ -398,7 +398,9 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			log.Panic("resolved ts regression",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Uint64("oldResolvedTs", oldResolvedTs))
+				zap.Uint64("oldResolvedTs", oldResolvedTs),
+				zap.Any("rawKV", rawKV))
+
 		}
 		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
