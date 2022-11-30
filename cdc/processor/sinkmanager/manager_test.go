@@ -75,7 +75,7 @@ func createManagerWithMockEngine(
 	ctrl := gomock.NewController(t)
 	sortEngine := mockengine.NewMockSortEngine(ctrl)
 	manager, err := New(
-		ctx, changefeedID, changefeedInfo,
+		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
 		nil, sortEngine, &entry.MockMountGroup{},
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
