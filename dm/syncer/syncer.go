@@ -2258,7 +2258,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var sourceTable *filter.Table
 		var needContinue bool
 
-		funCommit := func() (needContinue bool, err error) {
+		funcCommit := func() (bool, error) {
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
 			for schemaName, tableMap := range affectedSourceTables {
