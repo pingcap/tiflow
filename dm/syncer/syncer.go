@@ -2258,7 +2258,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var sourceTable *filter.Table
 		var needContinue bool
 
-		funcCommit := func() (needContinue bool, err error) {
+		funcCommit := func() (bool, error) {
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
 			for schemaName, tableMap := range affectedSourceTables {
@@ -2304,7 +2304,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			if originSQL == "COMMIT" {
-				needContinue, err2 = funCommit()
+				needContinue, err2 = funcCommit()
 				if needContinue {
 					continue
 				}
@@ -2312,7 +2312,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 			}
 		case *replication.XIDEvent:
-			needContinue, err2 = funCommit()
+			needContinue, err2 = funcCommit()
 			if needContinue {
 				continue
 			}
