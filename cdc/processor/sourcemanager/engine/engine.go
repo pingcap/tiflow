@@ -70,6 +70,9 @@ type SortEngine interface {
 	// NOTE: It's only available if IsTableBased returns false.
 	CleanAllTables(upperBound Position) error
 
+	// GetStatsByTable gets the statistics of the given table.
+	GetStatsByTable(tableID model.TableID) TableStats
+
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.
@@ -128,4 +131,10 @@ func (p Position) Compare(q Position) int {
 	} else {
 		return 1
 	}
+}
+
+// TableStats of a sort engine.
+type TableStats struct {
+	CheckpointTsIngress model.Ts
+	ResolvedTsIngress   model.Ts
 }
