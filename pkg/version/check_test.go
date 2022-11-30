@@ -24,7 +24,14 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+=======
+	"github.com/pingcap/tidb/util/engine"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+>>>>>>> e7e2894c18 (version(ticdc): skip checking TiFlash version (#7746))
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
 )
@@ -135,7 +142,29 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
+<<<<<<< HEAD
 	// Check maximum compatible TiKV.
+=======
+	// Skip checking TiFlash.
+	{
+		mock.getPDVersion = func() string {
+			return minPDVersion.String()
+		}
+
+		tiflashStore := &metapb.Store{
+			Version: maxTiKVVersion.String(),
+			Labels:  []*metapb.StoreLabel{{Key: "engine", Value: "tiflash"}},
+		}
+		require.True(t, engine.IsTiFlash(tiflashStore))
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{tiflashStore}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
+	// Check maximum supported TiKV version
+>>>>>>> e7e2894c18 (version(ticdc): skip checking TiFlash version (#7746))
 	{
 		mock.getVersion = func() string {
 			return minPDVersion.String()
