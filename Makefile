@@ -233,7 +233,7 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 integration_test_storage: check_third_party_binary
 	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci #generate_mock go-generate
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
