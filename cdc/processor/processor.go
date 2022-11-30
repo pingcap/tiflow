@@ -44,6 +44,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -815,6 +816,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		defer p.wg.Done()
 		p.sendError(p.mg.Run(ctx))
 	}()
+
+	sourceID, err := pdutil.GetSourceID(ctx, p.upstream.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()

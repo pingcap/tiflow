@@ -31,6 +31,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,7 +42,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, startTs uint64,
+	ctx cdcContext.Context, pdClock pdutil.Clock,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -50,15 +51,16 @@ func newSchedulerFromCtx(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
-		ctx, captureID, changeFeedID, startTs,
-		messageServer, messageRouter, ownerRev, cfg.Scheduler)
+		ctx, captureID, changeFeedID,
+		messageServer, messageRouter, ownerRev, cfg.Scheduler, pdClock)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, startTs uint64,
+	ctx cdcContext.Context,
+	pdClock pdutil.Clock,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, startTs)
+	return newSchedulerFromCtx(ctx, pdClock)
 }
 
 type changefeed struct {
@@ -125,7 +127,7 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -163,7 +165,7 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
+	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
@@ -498,6 +500,17 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
+	sourceID, err := pdutil.GetSourceID(ctx, c.upstream.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.state.Info.Config.Sink.TiDBSourceID = sourceID
+	log.Info("set source id",
+		zap.Uint64("sourceID", sourceID),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+	)
+
 	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.sink.run(cancelCtx)
 
@@ -527,7 +540,7 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -893,6 +906,15 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
 	}
+
+	// check whether in bdr mode, if so, we need to skip all DDLs
+	if c.state.Info.Config.BDRMode {
+		log.Info("ignore the DDL event in BDR mode",
+			zap.String("changefeed", c.id.ID),
+			zap.Any("ddl", ddlEvent.Query))
+		return true, nil
+	}
+
 	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)
 	if err != nil {
 		return false, err
