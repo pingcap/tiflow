@@ -29,9 +29,9 @@ function run() {
 	SINK_URI_2="mysql://normal:123456@127.0.0.1:4000"
 
 	# down -> up
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI_1" -c "test-1" --config="$CUR/conf/cf.toml"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI_1" -c "test-1" --config="$CUR/conf/cf.toml"
 	# up -> down
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI_2" -c "test-2" --server "http://127.0.0.1:8400" --config="$CUR/conf/cf.toml"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI_2" -c "test-2" --server "http://127.0.0.1:8400" --config="$CUR/conf/cf.toml"
 
 	run_sql_file $CUR/data/start.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/start.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
