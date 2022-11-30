@@ -564,12 +564,11 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		},
 	}
 
-	// FIXME: add the stats of the sort engine.
-	//sortStats := p.sourceManager.GetTableSortStats(tableID)
-	//stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
-	//	CheckpointTs: sortStats.CheckpointTsIngress,
-	//	ResolvedTs:   sortStats.ResolvedTsIngress,
-	//}
+	sortStats := p.sourceManager.GetTableSorterStats(tableID)
+	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+		CheckpointTs: sortStats.CheckpointTsIngress,
+		ResolvedTs:   sortStats.ResolvedTsIngress,
+	}
 	//stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
 	//	CheckpointTs: sortStats.CheckpointTsEgress,
 	//	ResolvedTs:   sortStats.ResolvedTsEgress,
