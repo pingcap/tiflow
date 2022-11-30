@@ -137,7 +137,7 @@ type tablePairInfo struct {
 	// downstream table -> extended columns
 	extendedColumnPerTable map[filter.Table][]string
 	// byte size of all upstream tables, counting both data and index
-	totalDataSize *atomic.Int64
+	totalDataSize atomic.Int64
 }
 
 func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, err error) {
@@ -170,7 +170,6 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		return nil, egErr
 	}
 
-	info.totalDataSize = atomic.NewInt64(0)
 	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok &&
 		c.stCfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical &&
 		c.stCfgs[0].Mode != config.ModeIncrement {

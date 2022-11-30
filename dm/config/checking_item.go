@@ -45,15 +45,6 @@ const (
 	LightningSortingSpaceChecking       = "enough_sorting_space"
 )
 
-// LightningPrechecks returns all checking items for lightning.
-var LightningPrechecks = []string{
-	LightningEmptyRegionChecking,
-	LightningRegionDistributionChecking,
-	LightningDownstreamVersionChecking,
-	LightningFreeSpaceChecking,
-	LightningSortingSpaceChecking,
-}
-
 // AllCheckingItems contains all checking items.
 var AllCheckingItems = map[string]string{
 	AllChecking:                  "all checking items",
@@ -77,6 +68,15 @@ var AllCheckingItems = map[string]string{
 	LightningDownstreamVersionChecking:  "physical import mode downstream TiDB/PD/TiKV version checking item",
 	LightningFreeSpaceChecking:          "downstream free space checking item",
 	LightningSortingSpaceChecking:       "enough disk space for physical import mode sorting data checking item",
+}
+
+// LightningPrechecks returns all checking items for lightning.
+var LightningPrechecks = []string{
+	LightningEmptyRegionChecking,
+	LightningRegionDistributionChecking,
+	LightningDownstreamVersionChecking,
+	LightningFreeSpaceChecking,
+	LightningSortingSpaceChecking,
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

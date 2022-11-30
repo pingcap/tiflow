@@ -181,7 +181,7 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 			ShortErr: fmt.Sprintf("Cluster doesn't have enough space, available is %s, but we need %s",
 				units.BytesSize(float64(clusterAvail)), units.BytesSize(float64(c.sourceDataSize))),
 		})
-		result.Instruction = "you can try to scale-out more TiKV to gain more storage space"
+		result.Instruction = "you can try to scale-out TiKV storage or TiKV instance to gain more storage space"
 		return result
 	}
 
@@ -198,7 +198,7 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 			ShortErr: fmt.Sprintf("Cluster may not have enough space, available is %s, but we need %s",
 				units.BytesSize(float64(clusterAvail)), units.BytesSize(float64(safeSize))),
 		})
-		result.Instruction = "you can try to scale-out more TiKV to gain more storage space"
+		result.Instruction = "you can try to scale-out TiKV storage or TiKV instance to gain more storage space"
 		return result
 	}
 	result.State = StateSuccess
