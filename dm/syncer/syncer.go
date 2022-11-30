@@ -2257,6 +2257,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var err2 error
 		var sourceTable *filter.Table
 		var needContinue bool
+		var eventType string
 
 		funcCommit := func() (bool, error) {
 			// reset eventIndex and force safeMode flag here.
@@ -2272,7 +2273,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				shardingReSync.currLocation = endLocation
 
 				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
-					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "XID"), zap.Stringer("re-shard", shardingReSync))
+					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", eventType), zap.Stringer("re-shard", shardingReSync))
 					err = closeShardingResync()
 					if err != nil {
 						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
@@ -2281,7 +2282,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 
-			s.tctx.L().Debug("", zap.String("event", "XID or COMMIT query event"), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
+			s.tctx.L().Debug("", zap.String("event", eventType), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
 
 			job := newXIDJob(endLocation, startLocation, endLocation)
 			_, err = s.handleJobFunc(job)
@@ -2304,6 +2305,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			if originSQL == "COMMIT" {
+				eventType = "COMMIT query event"
 				needContinue, err2 = funcCommit()
 				if needContinue {
 					continue
@@ -2312,6 +2314,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 			}
 		case *replication.XIDEvent:
+			eventType = "XID"
 			needContinue, err2 = funcCommit()
 			if needContinue {
 				continue
