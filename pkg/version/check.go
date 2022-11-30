@@ -25,6 +25,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/engine"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -156,6 +157,10 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	}
 
 	for _, s := range stores {
+		if engine.IsTiFlash(s) {
+			continue
+		}
+
 		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
