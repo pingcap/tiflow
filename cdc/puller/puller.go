@@ -164,13 +164,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		metricsTicker := time.NewTicker(15 * time.Second)
 		defer metricsTicker.Stop()
-		output := func(raw *model.RawKVEntry) error {
+		// return true means this raw kv entry is sent to output channel, otherwise false.
+		output := func(raw *model.RawKVEntry) (bool, error) {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
 			// ts update missing in puller, however resolved ts fallback here can
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
-			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
+			if raw.CRTs <= p.resolvedTs {
 				log.Warn("The CRTs is fallen back in puller",
 					zap.String("namespace", p.changefeed.Namespace),
 					zap.String("changefeed", p.changefeed.ID),
@@ -179,18 +180,18 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Any("row", raw))
-				return nil
+				return false, nil
 			}
 			commitTs := raw.CRTs
 			select {
 			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
+				return false, errors.Trace(ctx.Err())
 			case p.outputCh <- raw:
 				if atomic.LoadUint64(&p.checkpointTs) < commitTs {
 					atomic.StoreUint64(&p.checkpointTs, commitTs)
 				}
 			}
-			return nil
+			return true, nil
 		}
 
 		start := time.Now()
@@ -210,7 +211,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
-				if err := output(e.Val); err != nil {
+				if _, err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
 				continue
@@ -253,11 +254,15 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					continue
 				}
 				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+				ok, err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
 				}
-				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+				// If the resolved ts is not sent to output channel, it means the resolved ts is
+				// not advanced, so we should not update the p.resolvedTs.
+				if ok {
+					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+				}
 			}
 		}
 	})
