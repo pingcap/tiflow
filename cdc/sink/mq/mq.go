@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -55,6 +56,7 @@ type mqSink struct {
 	topicManager         manager.TopicManager
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
+	lastResolvedTs       atomic.Value
 	resolvedBuffer       *chann.Chann[resolvedTsEvent]
 
 	statistics *metrics.Statistics
@@ -175,10 +177,12 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 func (k *mqSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (model.ResolvedTs, error) {
-	checkpoint := k.getTableCheckpointTs(tableID)
+	// FixME: consider the tableID.
+	checkpoint := k.lastResolvedTs.Load().(model.ResolvedTs)
 	if checkpoint.EqualOrGreater(resolved) {
 		return checkpoint, nil
 	}
+
 	select {
 	case <-ctx.Done():
 		return model.NewResolvedTs(0), ctx.Err()
@@ -187,6 +191,7 @@ func (k *mqSink) FlushRowChangedEvents(
 		resolved: resolved,
 	}:
 	}
+
 	k.statistics.PrintStatus(ctx)
 	return checkpoint, nil
 }
@@ -213,7 +218,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.tableCheckpointTsMap.Store(msg.tableID, resolved)
+			k.lastResolvedTs.Store(resolved)
 		}
 	}
 }
