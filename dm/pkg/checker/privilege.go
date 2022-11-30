@@ -25,6 +25,12 @@ import (
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tidb/util/stringutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/container/sortmap"
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -172,7 +178,7 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 			return NewError("grant has no user %s", grant)
 		}
 
-		dbName := grantStmt.Level.DBName
+		dbPatChar, dbPatType := stringutil.CompilePattern(grantStmt.Level.DBName, '\\')
 		tableName := grantStmt.Level.TableName
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
@@ -203,6 +209,7 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if priv == mysql.GrantPriv {
 							continue
 						}
+<<<<<<< HEAD
 						if _, ok := lackPriv[priv][dbName]; !ok {
 							continue
 						}
@@ -210,26 +217,44 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if len(lackPriv[priv]) == 0 {
 							delete(lackPriv, priv)
 						}
+=======
+						for dbName := range privs.dbs {
+							if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
+								delete(privs.dbs, dbName)
+							}
+						}
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 					}
 					continue
 				}
 				if _, ok := lackPriv[privElem.Priv]; !ok {
 					continue
 				}
+<<<<<<< HEAD
 				if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
 					continue
 				}
+=======
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 				// dumpling could report error if an allow-list table is lack of privilege.
 				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
 					continue
 				}
+<<<<<<< HEAD
 				delete(lackPriv[privElem.Priv], dbName)
 				if len(lackPriv[privElem.Priv]) == 0 {
 					delete(lackPriv, privElem.Priv)
+=======
+				for dbName := range privs.dbs {
+					if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
+						delete(privs.dbs, dbName)
+					}
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 				}
 			}
 		case ast.GrantLevelTable:
+			dbName := grantStmt.Level.DBName
 			for _, privElem := range grantStmt.Privs {
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
@@ -241,6 +266,7 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if _, ok := lackPriv[priv][dbName]; !ok {
 							continue
 						}
+<<<<<<< HEAD
 						if _, ok := lackPriv[priv][dbName][tableName]; !ok {
 							continue
 						}
@@ -251,6 +277,9 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if len(lackPriv[priv]) == 0 {
 							delete(lackPriv, priv)
 						}
+=======
+						delete(dbPrivs.tables, tableName)
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 					}
 					continue
 				}
@@ -260,9 +289,12 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 				if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
 					continue
 				}
+<<<<<<< HEAD
 				if _, ok := lackPriv[privElem.Priv][dbName][tableName]; !ok {
 					continue
 				}
+=======
+>>>>>>> a2d2a5213c (checker(dm): support wildcard in privilege checking (#7739))
 				// dumpling could report error if an allow-list table is lack of privilege.
 				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
