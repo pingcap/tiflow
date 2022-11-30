@@ -93,7 +93,7 @@ type SinkConfig struct {
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
-	TiDBSourceID uint64 `toml:"-" json:"tidb-source-id"`
+	TiDBSourceID uint64 `toml:"-" json:"-"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.

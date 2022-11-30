@@ -202,7 +202,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		Terminator:    "\r\n",
 		DateSeparator: config.DateSeparatorNone.String(),
 		Protocol:      "open-protocol",
-		TiDBSourceID:  1,
 	}, cfg.Sink)
 }
 
@@ -223,7 +222,6 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: false,
 		},
-		TiDBSourceID: 1,
 	}, cfg.Sink)
 }
 

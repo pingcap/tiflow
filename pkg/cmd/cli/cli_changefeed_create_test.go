@@ -90,7 +90,6 @@ func TestTomlFileToApiModel(t *testing.T) {
 	require.Nil(t, err)
 	apiModel := v2.ToAPIReplicaConfig(cfg)
 	cfg2 := apiModel.ToInternalReplicaConfig()
-	cfg2.Sink.TiDBSourceID = 1
 	require.Equal(t, cfg, cfg2)
 }
 

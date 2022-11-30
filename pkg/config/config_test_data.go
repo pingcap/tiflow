@@ -188,8 +188,7 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true,
-	"tidb-source-id": 1
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",
@@ -241,8 +240,7 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true,
-	"tidb-source-id": 1
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",
