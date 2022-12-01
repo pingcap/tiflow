@@ -2276,7 +2276,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var originSQL string // show origin sql when error, only ddl now
 		var err2 error
 		var sourceTable *filter.Table
+		var needContinue bool
+		var eventType string
 
+<<<<<<< HEAD
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
@@ -2294,6 +2297,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
+=======
+		funcCommit := func() (bool, error) {
+>>>>>>> bc176c35e4 (syncer(dm): fix log error caused by "COMMIT" in QueryEvent (#7726))
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
 			currentLocation.Position.Pos = e.Header.LogPos
@@ -2314,15 +2320,16 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				// only need compare binlog position?
 				lastLocation = shardingReSync.currLocation
 				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
-					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "XID"), zap.Stringer("re-shard", shardingReSync))
+					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", eventType), zap.Stringer("re-shard", shardingReSync))
 					err = closeShardingResync()
 					if err != nil {
-						return terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
+						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
 					}
-					continue
+					return true, nil
 				}
 			}
 
+<<<<<<< HEAD
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			err = lastLocation.SetGTID(ev.GSet)
@@ -2332,6 +2339,45 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
 			_, err2 = s.handleJobFunc(job)
+=======
+			s.tctx.L().Debug("", zap.String("event", eventType), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
+
+			job := newXIDJob(endLocation, startLocation, endLocation)
+			_, err = s.handleJobFunc(job)
+			return false, err
+		}
+
+		switch ev := e.Event.(type) {
+		case *replication.RotateEvent:
+			err2 = s.handleRotateEvent(ev, ec)
+		case *replication.RowsEvent:
+			eventIndex++
+			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
+			sourceTable, err2 = s.handleRowsEvent(ev, ec)
+			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
+				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+				}
+				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+			}
+		case *replication.QueryEvent:
+			originSQL = strings.TrimSpace(string(ev.Query))
+			if originSQL == "COMMIT" {
+				eventType = "COMMIT query event"
+				needContinue, err2 = funcCommit()
+				if needContinue {
+					continue
+				}
+			} else {
+				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
+			}
+		case *replication.XIDEvent:
+			eventType = "XID"
+			needContinue, err2 = funcCommit()
+			if needContinue {
+				continue
+			}
+>>>>>>> bc176c35e4 (syncer(dm): fix log error caused by "COMMIT" in QueryEvent (#7726))
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
@@ -3388,7 +3434,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
 	originSQL := strings.TrimSpace(string(ev.Query))
-	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+	if originSQL == "BEGIN" || originSQL == "COMMIT" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
 		return nil, nil
 	}
 	var err error
