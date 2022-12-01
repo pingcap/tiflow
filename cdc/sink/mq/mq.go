@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -180,48 +181,68 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 func (k *mqSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (model.ResolvedTs, error) {
-	// FixME: consider the tableID.
-	checkpoint := k.lastResolvedTs.Load().(model.ResolvedTs)
-	if checkpoint.EqualOrGreater(resolved) {
-		return checkpoint, nil
+	
+	stateTs := k.getTableStatefulTs(tableID)
+	checkpointTs := stateTs.GetFlushed()
+	if checkpointTs >= resolved.Ts {
+		return model.NewResolvedTs(checkpointTs), nil
 	}
+
 	select {
 	case <-ctx.Done():
 		return model.NewResolvedTs(0), ctx.Err()
-	case k.resolvedBuffer.In() <- resolvedTsEvent{
-		tableID:  tableID,
-		resolved: resolved,
-	}:
+	default:
 	}
+
+	stateTs.CheckAndSetUnflushed(resolved.Ts)
 	k.statistics.PrintStatus(ctx)
-	return checkpoint, nil
+	return model.NewResolvedTs(checkpointTs), nil
 }
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
 func (k *mqSink) bgFlushTs(ctx context.Context) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case msg, ok := <-k.resolvedBuffer.Out():
-			if !ok {
-				log.Warn("resolved ts buffer is closed",
-					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID),
-					zap.Any("role", k.role))
-				return nil
-			}
-			resolved := msg.resolved
-			err := k.flushTsToWorker(ctx, resolved)
+		case <-ticker.C:
+			maxResolvedTs := k.getMaxResolvedTs()
+			err := k.flushTsToWorker(ctx, model.NewResolvedTs(maxResolvedTs))
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.lastResolvedTs.Store(resolved)
+			k.postFlush()
 		}
 	}
+}
+
+func (k *mqSink) getMaxResolvedTs() model.Ts {
+	var maxResolvedTs model.Ts
+	k.tableCheckpointTsMap.Range(func(key, value interface{}) bool {
+		stateTs := value.(*model.StatefulRts)
+		if stateTs.GetUnflushed() > maxResolvedTs {
+			maxResolvedTs = stateTs.GetUnflushed()
+		}
+		return true
+	})
+	return maxResolvedTs
+}
+
+func (k *mqSink) postFlush() {
+	k.tableCheckpointTsMap.Range(func(key, value interface{}) bool {
+		stateTs := value.(*model.StatefulRts)
+		unFlushedTs := stateTs.GetUnflushed()
+		flushedTs := stateTs.GetFlushed()
+		if unFlushedTs > flushedTs {
+			stateTs.SetFlushed(unFlushedTs)
+		}
+		return true
+	})
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedTs) error {
@@ -369,12 +390,15 @@ func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
 	return nil
 }
 
-func (k *mqSink) getTableCheckpointTs(tableID model.TableID) model.ResolvedTs {
+func (k *mqSink) getTableStatefulTs(tableID model.TableID) *model.StatefulRts {
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
 	if ok {
-		return v.(model.ResolvedTs)
+		return v.(*model.StatefulRts)
 	}
-	return model.NewResolvedTs(0)
+
+	res := &model.StatefulRts{}
+	k.tableCheckpointTsMap.Store(tableID, res)
+	return res
 }
 
 func (k *mqSink) run(ctx context.Context) error {

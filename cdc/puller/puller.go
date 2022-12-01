@@ -162,8 +162,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// ts update missing in puller, however resolved ts fallback here can
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
-			if raw.CRTs <= p.resolvedTs {
-				log.Warn("The CRTs is fallen back in puller",
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
+				log.Panic("The CRTs is fallen back in puller",
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID),
 					zap.Reflect("row", raw),
