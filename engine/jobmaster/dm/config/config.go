@@ -26,6 +26,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 	"gopkg.in/yaml.v2"
 )
 
@@ -321,6 +322,7 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.MydumperConfig = *c.Upstreams[0].Mydumper
 	cfg.LoaderConfig = *c.Upstreams[0].Loader
 	cfg.SyncerConfig = *c.Upstreams[0].Syncer
+	cfg.IOTotalBytes = atomic.NewUint64(0)
 
 	return cfg
 }
