@@ -61,7 +61,7 @@ func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 // pop some events from the cache.
 func (r *redoEventCache) pop(
 	tableID model.TableID,
-    pushCount *int, // poped events come from how many `pushBatch` calls
+	pushCount *int, // poped events come from how many `pushBatch` calls
 	upperBound ...engine.Position,
 ) ([]*model.RowChangedEvent, uint64, engine.Position) {
 	r.mu.Lock()
@@ -97,11 +97,11 @@ func (r *redoEventCache) pop(
 	for _, x := range item.sizes[0:fetchCount] {
 		size += x
 	}
-    if pushCount != nil {
-        for _, x := range item.pushCounts[0:fetchCount] {
-            *pushCount += int(x)
-        }
-    }
+	if pushCount != nil {
+		for _, x := range item.pushCounts[0:fetchCount] {
+			*pushCount += int(x)
+		}
+	}
 	pos := engine.Position{
 		CommitTs: item.events[fetchCount-1].CommitTs,
 		StartTs:  item.events[fetchCount-1].StartTs,
@@ -109,7 +109,7 @@ func (r *redoEventCache) pop(
 
 	item.events = item.events[fetchCount:]
 	item.sizes = item.sizes[fetchCount:]
-    item.pushCounts = item.pushCounts[fetchCount:]
+	item.pushCounts = item.pushCounts[fetchCount:]
 	if len(item.events) == 0 {
 		r.mu.Lock()
 		delete(r.tables, tableID)
@@ -132,8 +132,8 @@ func (r *redoEventCache) removeTable(tableID model.TableID) {
 		defer item.mu.Unlock()
 		delete(r.tables, tableID)
 		item.events = nil
-        item.sizes = nil
-        item.pushCounts = nil
+		item.sizes = nil
+		item.pushCounts = nil
 	}
 }
 
@@ -148,13 +148,13 @@ type eventAppender struct {
 	sizes      []uint64
 	readyCount int // Count of ready events
 
-    // Several RowChangedEvent can come from one PolymorphicEvent.
-    pushCounts []byte 
+	// Several RowChangedEvent can come from one PolymorphicEvent.
+	pushCounts []byte
 }
 
 func (e *eventAppender) push(
 	event *model.RowChangedEvent, size uint64,
-    txnFinished bool,
+	txnFinished bool,
 	eventsInSameBatch ...*model.RowChangedEvent,
 ) bool {
 	// At most only one client can call push on a given eventAppender instance,
@@ -179,11 +179,11 @@ func (e *eventAppender) push(
 	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	e.sizes = append(e.sizes, size)
-    e.pushCounts = append(e.pushCounts, 1)
+	e.pushCounts = append(e.pushCounts, 1)
 	for _, event := range eventsInSameBatch {
 		e.events = append(e.events, event)
 		e.sizes = append(e.sizes, 0)
-        e.pushCounts = append(e.pushCounts, 0)
+		e.pushCounts = append(e.pushCounts, 0)
 	}
 	if txnFinished {
 		e.readyCount = len(e.events)
@@ -210,7 +210,7 @@ func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
 
 	e.events = e.events[0:e.readyCount]
 	e.sizes = e.sizes[0:e.readyCount]
-    e.pushCounts = e.pushCounts[0:e.readyCount]
+	e.pushCounts = e.pushCounts[0:e.readyCount]
 
 	e.broken = false
 	atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
