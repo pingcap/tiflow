@@ -39,10 +39,16 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# start DM task only
-	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
-
+	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 1
 	read -p 123
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+
+	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

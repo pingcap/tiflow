@@ -55,11 +55,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20220729040631-518f63d66278
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
-	github.com/pingcap/kvproto v0.0.0-20221123043343-cdc67325f05f
+	github.com/pingcap/kvproto v0.0.0-20221130022225-6c56ac56fe5f
 	github.com/pingcap/log v1.1.1-0.20221116035753-734d527bc87c
-	github.com/pingcap/tidb v1.1.0-beta.0.20221125090958-5775995ea17c
+	github.com/pingcap/tidb v1.1.0-beta.0.20221201072001-78011c52868e
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20221129110759-1b15732d118f
+	github.com/pingcap/tidb/parser v0.0.0-20221201072001-78011c52868e
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -73,7 +73,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.3-0.20221128025602-81939ec8b2bb
+	github.com/tikv/client-go/v2 v2.0.3-0.20221129032117-857772dd0907
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20221031025758-80f0d8ca4d07
 	github.com/tinylib/msgp v1.1.6
@@ -295,5 +295,3 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
-
-replace github.com/pingcap/tidb => github.com/lance6716/tidb v1.1.0-beta.0.20221129124937-d29e6518424f

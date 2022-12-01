@@ -37,6 +37,7 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/master/shardddl"
@@ -1763,6 +1764,9 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		dbutil.TableName(metaSchema, cputil.ValidatorErrorChange(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.ValidatorTableStatus(taskName))))
+	// clear lightning error manager table
+	sqls = append(sqls, fmt.Sprintf("DROP DATABASE IF EXISTS %s",
+		loader.GetTaskInfoSchemaName(metaSchema, taskName)))
 
 	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
 	if err == nil {
