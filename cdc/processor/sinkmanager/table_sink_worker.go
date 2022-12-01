@@ -19,19 +19,18 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type sinkWorker struct {
-	changefeedID model.ChangeFeedID
-	mg           entry.MounterGroup
-	sortEngine   engine.SortEngine
-	memQuota     *memQuota
-	eventCache   *redoEventCache
+	changefeedID  model.ChangeFeedID
+	sourceManager *sourcemanager.SourceManager
+	memQuota      *memQuota
+	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -45,8 +44,7 @@ type sinkWorker struct {
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
-	sortEngine engine.SortEngine,
+	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -54,8 +52,7 @@ func newSinkWorker(
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
-		sortEngine:     sortEngine,
+		sourceManager:  sourceManager,
 		memQuota:       quota,
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
@@ -145,9 +142,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := 0
-	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-		w.mg, 256)
+	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		if err := iter.Close(); err != nil {
