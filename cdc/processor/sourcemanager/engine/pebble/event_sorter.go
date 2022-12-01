@@ -141,7 +141,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	for _, event := range events {
 		state.ch.In() <- eventWithTableID{tableID, event}
 		if event.IsResolved() {
-			state.pendingResolved.Store(event.CRTs)
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
 			}
@@ -176,7 +175,7 @@ func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 			zap.Int64("tableID", tableID))
 	}
 
-	return state.pendingResolved.Load()
+	return state.maxReceivedResolvedTs.Load()
 }
 
 // OnResolve implements engine.SortEngine.
@@ -356,9 +355,8 @@ type eventWithTableID struct {
 }
 
 type tableState struct {
-	ch              *chann.Chann[eventWithTableID]
-	sortedResolved  atomic.Uint64 // indicates events are ready for fetching.
-	pendingResolved atomic.Uint64 // events are resolved but not sorted.
+	ch             *chann.Chann[eventWithTableID]
+	sortedResolved atomic.Uint64 // indicates events are ready for fetching.
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
