@@ -210,7 +210,7 @@ func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
 
 	e.events = e.events[0:e.readyCount]
 	e.sizes = e.sizes[0:e.readyCount]
-    e.pushCounts = .pushCounts[0:e.readyCount]
+    e.pushCounts = e.pushCounts[0:e.readyCount]
 
 	e.broken = false
 	atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
