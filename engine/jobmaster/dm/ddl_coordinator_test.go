@@ -14,13 +14,13 @@
 package dm
 
 import (
-	//"context"
 	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/pingcap/log"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -32,8 +32,9 @@ import (
 func TestDDLCoordinator(t *testing.T) {
 	var (
 		checkpointAgent = &MockCheckpointAgent{}
-		jobStore        = metadata.NewJobStore(mock.NewMetaMock(), log.L())
-		ddlCoordinator  = NewDDLCoordinator("", mock.NewMetaMock(), checkpointAgent, jobStore, log.L())
+		metaClient      = mock.NewMetaMock()
+		jobStore        = metadata.NewJobStore(metaClient, log.L())
+		ddlCoordinator  = NewDDLCoordinator("", metaClient, checkpointAgent, jobStore, log.L())
 
 		tb1         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
@@ -44,9 +45,22 @@ func TestDDLCoordinator(t *testing.T) {
 		}
 	)
 
-	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobStore.Put(context.Background(), metadata.NewJob(jobCfg)))
+	require.EqualError(t, ddlCoordinator.Reset(context.Background()), "state not found")
+	ddls, conflictStage, err := ddlCoordinator.Coordinate(context.Background(), nil)
+	require.EqualError(t, err, "state not found")
+	require.Len(t, ddls, 0)
+	require.Equal(t, optimism.ConflictError, conflictStage)
 
+	jobCfg := &config.JobCfg{Upstreams: []*config.UpstreamCfg{{MySQLInstance: dmconfig.MySQLInstance{SourceID: "source"}}}}
+	require.NoError(t, jobStore.Put(context.Background(), metadata.NewJob(jobCfg)))
+	require.NoError(t, ddlCoordinator.Reset(context.Background()))
+	ddls, conflictStage, err = ddlCoordinator.Coordinate(context.Background(), nil)
+	require.EqualError(t, err, "coordinate error with non-shard-mode")
+	require.Len(t, ddls, 0)
+	require.Equal(t, optimism.ConflictError, conflictStage)
+
+	jobCfg.ShardMode = dmconfig.ShardOptimistic
+	require.NoError(t, jobStore.UpdateConfig(context.Background(), jobCfg))
 	checkpointAgent.On("FetchAllDoTables").Return(nil, context.DeadlineExceeded).Once()
 	require.Error(t, ddlCoordinator.Reset(context.Background()))
 
@@ -63,7 +77,7 @@ func TestDDLCoordinator(t *testing.T) {
 		Type:        metadata.CreateTable,
 	}
 	checkpointAgent.On("FetchTableStmt").Return("", context.DeadlineExceeded).Once()
-	ddls, conflictStage, err := ddlCoordinator.Coordinate(context.Background(), item)
+	ddls, conflictStage, err = ddlCoordinator.Coordinate(context.Background(), item)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 	require.Len(t, ddls, 0)
 	require.Equal(t, optimism.ConflictError, conflictStage)
@@ -190,11 +204,11 @@ func TestShowDDLLocks(t *testing.T) {
 			"ShardTables": {
 				"{\"Source\":\"source1\",\"Schema\":\"database1\",\"Table\":\"table1\"}": {
 					"Current": "CREATE TABLE tbl(col1 int, col2 int, col3 int)",
-					"Pending": "CREATE TABLE tbl(col1 int, col2 varchar(255), col3 int)"
+					"Next": "CREATE TABLE tbl(col1 int, col2 varchar(255), col3 int)"
 				},
 				"{\"Source\":\"source1\",\"Schema\":\"database2\",\"Table\":\"table2\"}": {
 					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
-					"Pending": ""
+					"Next": ""
 				}
 			}
 		},
@@ -202,11 +216,11 @@ func TestShowDDLLocks(t *testing.T) {
 			"ShardTables": {
 				"{\"Source\":\"source1\",\"Schema\":\"db\",\"Table\":\"tb\"}": {
 					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
-					"Pending": ""
+					"Next": ""
 				},
 				"{\"Source\":\"source2\",\"Schema\":\"db\",\"Table\":\"tb\"}": {
 					"Current": "CREATE TABLE tbl(col1 int, col2 int)",
-					"Pending": "CREATE TABLE tbl(col1 int, col2 varchar(255))"
+					"Next": "CREATE TABLE tbl(col1 int, col2 varchar(255))"
 				}
 			}
 		}

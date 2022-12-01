@@ -186,6 +186,12 @@ func (c *DDLCoordinator) Reset(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if jobCfg.ShardMode == "" {
+		c.logger.Info("non-shard-mode, skip reset")
+		return nil
+	}
+	c.logger.Info("reset shard group")
+
 	// fetch all tables which need to be coordinated.
 	tables, err := c.tableAgent.FetchAllDoTables(ctx, jobCfg)
 	if err != nil {
@@ -208,8 +214,15 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 	defer c.pendings.Done()
 	c.mu.Unlock()
 
+	jobCfg, err := c.jobStore.GetJobCfg(ctx)
+	if err != nil {
+		return nil, optimism.ConflictError, err
+	} else if jobCfg.ShardMode == "" {
+		return nil, optimism.ConflictError, errors.New("coordinate error with non-shard-mode")
+	}
+
 	// create shard group if not exists.
-	g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable)
+	g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable, jobCfg)
 	if err != nil {
 		return nil, optimism.ConflictError, err
 	}
@@ -258,7 +271,7 @@ func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse 
 	return ShowDDLLocksResponse{Locks: ddlLocks}
 }
 
-func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable metadata.TargetTable) (*shardGroup, error) {
+func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable metadata.TargetTable, jobCfg *config.JobCfg) (*shardGroup, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -266,10 +279,6 @@ func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable
 		return g, nil
 	}
 
-	jobCfg, err := c.jobStore.GetJobCfg(ctx)
-	if err != nil {
-		return nil, err
-	}
 	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent)
 	if err != nil {
 		return nil, err
@@ -290,7 +299,7 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 }
 
 type shardGroup struct {
-	mu                  sync.Mutex
+	mu                  sync.RWMutex
 	normalTables        map[metadata.SourceTable]string
 	conflictTables      map[metadata.SourceTable]string
 	tableAgent          TableAgent
@@ -788,13 +797,13 @@ func (g *shardGroup) clear(ctx context.Context) error {
 }
 
 func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	tables := make(map[metadata.SourceTable]ShardTable, 0)
 	for sourceTable, stmt := range g.normalTables {
 		tables[sourceTable] = ShardTable{
 			Current: stmt,
-			Pending: g.conflictTables[sourceTable],
+			Next:    g.conflictTables[sourceTable],
 		}
 	}
 	// show dropped columns if needed.

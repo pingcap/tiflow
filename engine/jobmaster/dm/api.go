@@ -49,7 +49,7 @@ type JobStatus struct {
 // ShardTable represents create table statements of a source table.
 type ShardTable struct {
 	Current string
-	Pending string
+	Next    string
 }
 
 // DDLLock represents ddl lock of a target table.
