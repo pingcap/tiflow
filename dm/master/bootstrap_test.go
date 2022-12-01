@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -96,12 +95,6 @@ func (t *testMaster) TearDownTest(c *C) {
 
 func (t *testMaster) clearEtcdEnv(c *C) {
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), IsNil)
-}
-
-func (t testMaster) clearSchedulerEnv(c *C, cancel context.CancelFunc, wg *sync.WaitGroup) {
-	cancel()
-	wg.Wait()
-	t.clearEtcdEnv(c)
 }
 
 func testDefaultMasterServerWithC(c *C) *Server {

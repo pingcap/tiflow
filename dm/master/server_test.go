@@ -296,6 +296,8 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 }
 
 func createTableInfo(t *testing.T, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+	t.Helper()
+
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	require.NoError(t, err)
 	createStmtNode, ok := node.(*ast.CreateTableStmt)
@@ -341,6 +343,8 @@ func makeWorkerClientsForHandle(ctrl *gomock.Controller, taskName string, source
 }
 
 func testDefaultMasterServer(t *testing.T) *Server {
+	t.Helper()
+
 	cfg := NewConfig()
 	err := cfg.FromContent(SampleConfig)
 	require.NoError(t, err)
@@ -439,6 +443,8 @@ func (t *testMasterSuite) testMockSchedulerForRelay(
 }
 
 func generateServerConfig(t *testing.T, name string) *Config {
+	t.Helper()
+
 	// create a new cluster
 	cfg1 := NewConfig()
 	err := cfg1.FromContent(SampleConfig)
@@ -1024,7 +1030,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 		verMock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", "5.7.25-TiDB-v4.0.2"))
 		resp1, err1 := server.StartTask(context.Background(), req)
-		require.Error(t.T(), err1)
+		require.NoError(t.T(), err1)
 		require.False(t.T(), resp1.Result)
 		require.Equal(t.T(), terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 			"while remove-meta is true").Error(), resp1.Msg)
@@ -2536,6 +2542,7 @@ func (t *testMasterSuite) TestStartStopValidation() {
 	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 }
 
+//nolint:unparam
 func (t *testMasterSuite) validatorStageMatch(taskName, source string, expectStage pb.Stage) {
 	stage := ha.NewValidatorStage(expectStage, source, taskName)
 
@@ -2550,6 +2557,7 @@ func (t *testMasterSuite) validatorStageMatch(taskName, source string, expectSta
 	}
 }
 
+//nolint:unparam
 func (t *testMasterSuite) validatorModeMatch(s *scheduler.Scheduler, task, source string,
 	expectMode, expectedStartTime string,
 ) {
