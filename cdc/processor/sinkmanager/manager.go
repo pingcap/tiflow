@@ -679,6 +679,16 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 }
 
+// ReceivedEvents returns the number of events received by all table sinks.
+func (m *SinkManager) ReceivedEvents() int64 {
+	totalReceivedEvents := int64(0)
+	m.tableSinks.Range(func(_, value interface{}) bool {
+		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
+		return true
+	})
+	return totalReceivedEvents
+}
+
 // Close closes all workers.
 func (m *SinkManager) Close() error {
 	if m.cancel != nil {

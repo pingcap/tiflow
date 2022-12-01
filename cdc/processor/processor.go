@@ -1254,8 +1254,9 @@ func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
 		tables := p.sinkManager.GetAllCurrentTableIDs()
 		p.metricSyncTableNumGauge.Set(float64(len(tables)))
-		sortEngineReceivedEvents := p.sourceManager.RemainEvents()
-		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents))
+		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
+		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
+		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64

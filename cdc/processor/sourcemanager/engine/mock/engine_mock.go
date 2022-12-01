@@ -190,7 +190,7 @@ func (mr *MockSortEngineMockRecorder) OnResolve(action interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnResolve", reflect.TypeOf((*MockSortEngine)(nil).OnResolve), action)
 }
 
-// RemainEvents mocks base method.
+// ReceivedEvents mocks base method.
 func (m *MockSortEngine) ReceivedEvents() int64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReceivedEvents")
@@ -198,8 +198,8 @@ func (m *MockSortEngine) ReceivedEvents() int64 {
 	return ret0
 }
 
-// RemainEvents indicates an expected call of RemainEvents.
-func (mr *MockSortEngineMockRecorder) RemainEvents() *gomock.Call {
+// ReceivedEvents indicates an expected call of ReceivedEvents.
+func (mr *MockSortEngineMockRecorder) ReceivedEvents() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedEvents", reflect.TypeOf((*MockSortEngine)(nil).ReceivedEvents))
 }

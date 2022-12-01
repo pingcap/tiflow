@@ -106,8 +106,8 @@ func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableS
 	return m.engine.GetStatsByTable(tableID)
 }
 
-// RemainEvents returns the number of events in the engine that have not been sent to the sink.
-func (m *SourceManager) RemainEvents() int64 {
+// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
+func (m *SourceManager) ReceivedEvents() int64 {
 	return m.engine.ReceivedEvents()
 }
 
