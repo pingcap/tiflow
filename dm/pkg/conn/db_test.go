@@ -353,7 +353,7 @@ func TestAddGSetWithPurged(t *testing.T) {
 	baseDB := NewBaseDBForTest(db)
 	conn, err := baseDB.GetBaseConn(ctx)
 	require.NoError(t, err)
-	defer ForceCloseConnWithoutErr(baseDB, conn)
+	defer baseDB.ForceCloseConnWithoutErr(conn)
 
 	testCases := []struct {
 		originGSet  gmysql.GTIDSet

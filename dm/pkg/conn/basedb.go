@@ -305,7 +305,7 @@ func (d *BaseDB) ForceCloseConn(conn *BaseConn) error {
 
 // ForceCloseConnWithoutErr close the connection completely(not return to the conn pool),
 // and output a warning log if meets an error.
-func ForceCloseConnWithoutErr(d *BaseDB, conn *BaseConn) {
+func (d *BaseDB) ForceCloseConnWithoutErr(conn *BaseConn) {
 	if err1 := d.ForceCloseConn(conn); err1 != nil {
 		log.L().Warn("close db connection failed", zap.Error(err1))
 	}

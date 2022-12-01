@@ -76,8 +76,7 @@ func TestFailDBPing(t *testing.T) {
 
 	cfg := &dbconfig.DBConfig{User: "root", Host: "127.0.0.1", Port: port}
 	cfg.Adjust()
-	impl := &DefaultDBProviderImpl{}
-	db, err := impl.Apply(UpstreamDBConfig(cfg))
+	db, err := GetUpstreamDB(cfg)
 	require.Error(t, err)
 	require.Nil(t, db)
 }
