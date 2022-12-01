@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,33 +18,34 @@ import (
 )
 
 var (
-    MemoryQuota = prometheus.NewGaugeVec(
-        prometheus.GaugeOpts{
+	MemoryQuota = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkmanager",
 			Name:      "memory_quota",
 			Help:      "memory quota of the changefeed",
-        },
-        // type includes total, used.
-        []string{"namespace", "changefeed", "type"})
+		},
+		// type includes total, used.
+		[]string{"namespace", "changefeed", "type"})
 
-    RedoEventCache = prometheus.NewGaugeVec(
-        prometheus.GaugeOpts{
+	RedoEventCache = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkmanager",
 			Name:      "redo_event_cache",
 			Help:      "redo event cache of the changefeed",
-        },
-        []string{"namespace", "changefeed"})
+		},
+		[]string{"namespace", "changefeed"})
 
-    RedoEventCacheAccess =  prometheus.NewCounterVec(
-        prometheus.CounterOpts{
+	RedoEventCacheAccess = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkmanager",
 			Name:      "redo_event_cache_access",
 			Help:      "redo event cache access, including hit and miss",
-        },
-        []string{"namespace", "changefeed", "type"})
+		},
+		// type includes hit and miss.
+		[]string{"namespace", "changefeed", "type"})
 )
 
 // InitMetrics registers all metrics in this file.

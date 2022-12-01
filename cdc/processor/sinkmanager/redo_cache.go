@@ -191,7 +191,7 @@ func (e *eventAppender) push(
 	return true
 }
 
-// All events should comes from one PolymorphicEvent.
+// All events should come from one PolymorphicEvent.
 func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished bool) bool {
 	if len(events) == 0 {
 		return true
