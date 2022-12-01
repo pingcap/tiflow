@@ -163,7 +163,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
 			if raw.CRTs <= p.resolvedTs {
-				log.Warn("The CRTs is fallen back in puller",
+				log.Panic("The CRTs is fallen back in puller",
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID),
 					zap.Reflect("row", raw),

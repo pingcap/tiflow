@@ -245,6 +245,7 @@ func (w *regionWorker) checkShouldExit() error {
 	return nil
 }
 
+// handleSingleRegionError is not thread-safe, it should be called before the state's lock is acquired.
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	if state.lastResolvedTs > state.sri.ts {
 		state.sri.ts = state.lastResolvedTs
@@ -661,6 +662,8 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	return retErr
 }
 
+// handleEventEntry is not thread-safe,
+// it should be called when holding the lock of state.
 func (w *regionWorker) handleEventEntry(
 	ctx context.Context,
 	x *cdcpb.Event_Entries_,
@@ -774,6 +777,8 @@ func (w *regionWorker) handleEventEntry(
 	return nil
 }
 
+// handleResolvedTs is thread-safe and we shuold not hold the lock when calling it.
+// otherwise, it will cause deadlock.
 func (w *regionWorker) handleResolvedTs(
 	ctx context.Context,
 	revents *resolvedTsEvent,
@@ -788,13 +793,14 @@ func (w *regionWorker) handleResolvedTs(
 		}
 		regionID := state.sri.verID.GetID()
 		regions = append(regions, regionID)
-		if resolvedTs < state.lastResolvedTs {
+		lastResolvedTs := state.getLastResolvedTs()
+		if resolvedTs < lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID),
 				zap.String("EventType", "RESOLVED"),
 				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Uint64("lastResolvedTs", state.lastResolvedTs),
+				zap.Uint64("lastResolvedTs", lastResolvedTs),
 				zap.Uint64("regionID", regionID))
 			continue
 		}
