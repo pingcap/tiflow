@@ -178,6 +178,25 @@ func (mr *MockSortEngineMockRecorder) IsTableBased() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTableBased", reflect.TypeOf((*MockSortEngine)(nil).IsTableBased))
 }
 
+// MayHaveEvents mocks base method.
+func (m *MockSortEngine) MayHaveEvents(lowerBound, upperBound engine.Position, tableID ...model.TableID) bool {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{lowerBound, upperBound}
+	for _, a := range tableID {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MayHaveEvents", varargs...)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// MayHaveEvents indicates an expected call of MayHaveEvents.
+func (mr *MockSortEngineMockRecorder) MayHaveEvents(lowerBound, upperBound interface{}, tableID ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{lowerBound, upperBound}, tableID...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MayHaveEvents", reflect.TypeOf((*MockSortEngine)(nil).MayHaveEvents), varargs...)
+}
+
 // OnResolve mocks base method.
 func (m *MockSortEngine) OnResolve(action func(model.TableID, model.Ts)) {
 	m.ctrl.T.Helper()

@@ -17,6 +17,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"math"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -185,6 +186,46 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
+}
+
+// MayHaveEvents implements engine.SortEngine.
+func (s *EventSorter) MayHaveEvents(lowerBound, upperBound engine.Position, tableID ...model.TableID) bool {
+	if len(tableID) == 0 {
+		log.Panic("tableID must be specified",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID))
+	}
+
+	s.mu.RLock()
+	state, exists := s.tables[tableID[0]]
+	s.mu.RUnlock()
+	if !exists {
+		return false
+	}
+
+	state.timeSliceMu.RLock()
+	defer state.timeSliceMu.RUnlock()
+
+	bgnIdx := sort.Search(len(state.timeSlices), func(i int) bool {
+		return state.timeSlices[i].pos.Compare(lowerBound) >= 0
+	})
+	if bgnIdx >= len(state.timeSlices) {
+		// Don't know whether there are events in the range or not.
+		return true
+	}
+	endIdx := sort.Search(len(state.timeSlices), func(i int) bool {
+		return state.timeSlices[i].pos.Compare(upperBound) >= 0
+	})
+	if endIdx >= len(state.timeSlices) {
+		// Don't know whether there are events in the range or not.
+		return true
+	}
+	for _, slice := range state.timeSlices[bgnIdx : endIdx+1] {
+		if slice.events > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // FetchByTable implements engine.SortEngine.
@@ -364,18 +405,44 @@ type tableState struct {
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
 	cleaned engine.Position
+
+	// Following fields are protected by timeSliceMu.
+	// timeSlices is a buffer. If timeSlices[i].events is greater than 0,
+	// it means in the range (timeSlices[i-1].pos, timeSlices[i].pos] there must
+	// be some events.
+	timeSliceMu          sync.RWMutex
+	timeSlices           []timeSlice
+	eventsSinceLastSlice int
+}
+
+type timeSlice struct {
+	pos    engine.Position // included upperbound.
+	events int
 }
 
 func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
+	type progress struct {
+		resolved   model.Ts
+		eventCount int
+	}
+
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
-	newResolved := make(map[model.TableID]model.Ts)
+	progresses := make(map[model.TableID]*progress)
 
 	handleItem := func(item eventWithTableID) bool {
+		prog, exists := progresses[item.tableID]
+		if !exists {
+			prog = &progress{}
+			progresses[item.tableID] = prog
+		}
+
 		if item.event.IsResolved() {
-			newResolved[item.tableID] = item.event.CRTs
+			prog.resolved = item.event.CRTs
 			return false
 		}
+		prog.eventCount += 1
+
 		key := encoding.EncodeKey(s.uniqueID, uint64(item.tableID), item.event)
 		value, err := s.serde.Marshal(item.event, []byte{})
 		if err != nil {
@@ -420,7 +487,7 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 		}
 		batch = db.NewBatch()
 
-		for table, resolved := range newResolved {
+		for table, prog := range progresses {
 			s.mu.RLock()
 			ts, ok := s.tables[table]
 			if !ok {
@@ -428,17 +495,28 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Int64("table", table),
-					zap.Uint64("resolved", resolved))
+					zap.Uint64("resolved", prog.resolved))
 				s.mu.RUnlock()
 				continue
 			}
-			ts.sortedResolved.Store(resolved)
-			for _, onResolve := range s.onResolves {
-				onResolve(table, resolved)
+			ts.eventsSinceLastSlice += prog.eventCount
+			if prog.resolved > 0 {
+				ts.timeSliceMu.Lock()
+				ts.timeSlices = append(ts.timeSlices, timeSlice{
+					pos:    engine.Position{StartTs: prog.resolved - 1, CommitTs: prog.resolved},
+					events: ts.eventsSinceLastSlice,
+				})
+				ts.timeSliceMu.Unlock()
+				ts.eventsSinceLastSlice = 0
+
+				ts.sortedResolved.Store(prog.resolved)
+				for _, onResolve := range s.onResolves {
+					onResolve(table, prog.resolved)
+				}
 			}
 			s.mu.RUnlock()
 		}
-		newResolved = make(map[model.TableID]model.Ts)
+		progresses = make(map[model.TableID]*progress)
 	}
 }
 
@@ -453,9 +531,20 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 		toClean = engine.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}
 
+	// Clean time slice histories.
+	state.timeSliceMu.Lock()
+	idx := sort.Search(len(state.timeSlices), func(i int) bool {
+		return state.timeSlices[i].pos.Compare(toClean) > 0
+	})
+	if idx >= len(state.timeSlices) {
+		state.timeSlices = nil
+	} else {
+		state.timeSlices = state.timeSlices[idx:]
+	}
+	state.timeSliceMu.Unlock()
+
 	state.mu.RLock()
 	defer state.mu.RUnlock()
-
 	if state.cleaned.Compare(toClean) >= 0 {
 		return nil
 	}
@@ -469,13 +558,14 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	if err != nil {
 		return err
 	}
-
 	state.cleaned = toClean
+
 	return nil
 }
 
 // ----- Some internal variable and functions -----
 const batchCommitCount uint32 = 1024
+const timeSliceLimit int = 8 * 1024
 
 var uniqueIDGen uint32 = 0
 

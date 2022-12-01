@@ -40,6 +40,7 @@ const (
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
 	defaultEngineGCChanSize     = 128
+	cleanTableInterval          = 5 * time.Second
 )
 
 type gcEvent struct {
@@ -89,9 +90,6 @@ type SinkManager struct {
 	// lastBarrierTs is the last barrier ts.
 	lastBarrierTs atomic.Uint64
 
-	// engineGCChan is used to GC engine when the table is advanced.
-	engineGCChan chan *gcEvent
-
 	// sinkWorkers used to pull data from source manager.
 	sinkWorkers []*sinkWorker
 	// sinkTaskChan is used to send tasks to sinkWorkers.
@@ -140,8 +138,6 @@ func New(
 		memQuota:      newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
-
-		engineGCChan: make(chan *gcEvent, defaultEngineGCChanSize),
 
 		sinkProgressHeap: newTableProgresses(),
 		sinkWorkers:      make([]*sinkWorker, 0, sinkWorkerNum),
@@ -277,6 +273,7 @@ func (m *SinkManager) startGenerateTasks() {
 
 // backgroundGC is used to clean up the old data in the sorter.
 func (m *SinkManager) backgroundGC() {
+	ticker := time.NewTicker(time.Second)
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
@@ -287,21 +284,38 @@ func (m *SinkManager) backgroundGC() {
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID))
 				return
-			case gcEvent := <-m.engineGCChan:
-				if err := m.sourceManager.CleanByTable(gcEvent.tableID, gcEvent.cleanPos); err != nil {
-					log.Error("Failed to clean table in sort engine",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Int64("tableID", gcEvent.tableID),
-						zap.Error(err))
-					select {
-					case m.errChan <- err:
-					default:
-						log.Error("Failed to send error to error channel, error channel is full",
+			case <-ticker.C:
+				tableSinks := make(map[model.TableID]*tableSinkWrapper)
+				m.tableSinks.Range(func(key, value any) bool {
+					tableID := key.(model.TableID)
+					wrapper := value.(*tableSinkWrapper)
+					tableSinks[tableID] = wrapper
+					return true
+				})
+
+				for tableID, sink := range tableSinks {
+					if time.Since(sink.lastCleanTime) < cleanTableInterval {
+						continue
+					}
+					checkpointTs := sink.getCheckpointTs()
+					resolvedMark := checkpointTs.ResolvedMark()
+					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
+					if err := m.sourceManager.CleanByTable(tableID, cleanPos); err != nil {
+						log.Error("Failed to clean table in sort engine",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
+							zap.Int64("tableID", tableID),
 							zap.Error(err))
+						select {
+						case m.errChan <- err:
+						default:
+							log.Error("Failed to send error to error channel, error channel is full",
+								zap.String("namespace", m.changefeedID.Namespace),
+								zap.String("changefeed", m.changefeedID.ID),
+								zap.Error(err))
+						}
 					}
+					sink.lastCleanTime = time.Now()
 				}
 			}
 		}
@@ -403,7 +417,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
-			log.Debug("Generate sink task",
+			log.Info("Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
@@ -478,7 +492,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			case m.redoTaskChan <- t:
 			}
 
-			log.Debug("Generate redo task",
+			log.Info("Generate redo task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
@@ -644,24 +658,6 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
-	resolvedMark := checkpointTs.ResolvedMark()
-	cleanPos := engine.Position{
-		StartTs:  resolvedMark - 1,
-		CommitTs: resolvedMark,
-	}
-	gcEvent := &gcEvent{
-		tableID:  tableID,
-		cleanPos: cleanPos,
-	}
-	select {
-	case m.engineGCChan <- gcEvent:
-	default:
-		log.Warn("Failed to send GC event to engine GC channel, engine GC channel is full",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
-			zap.Any("cleanPos", cleanPos))
-	}
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
@@ -670,7 +666,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
 	}
 	return TableStats{
-		CheckpointTs:          resolvedMark,
+		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),

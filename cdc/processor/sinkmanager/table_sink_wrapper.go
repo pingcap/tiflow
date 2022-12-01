@@ -16,6 +16,7 @@ package sinkmanager
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -52,6 +53,8 @@ type tableSinkWrapper struct {
 	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
+	// lastCleanTime indicates the last time the table has been cleaned.
+	lastCleanTime time.Time
 }
 
 func newTableSinkWrapper(
