@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -186,21 +185,8 @@ func TestPullerResolvedForward(t *testing.T) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(10), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	require.Nil(t, err)
 
-	// make sure p.resolvedTs does not fall back
-	plr.cli.Returns(model.RegionFeedEvent{
-		Resolved: &model.ResolvedSpans{
-			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
-			}}, ResolvedTs: uint64(999),
-		},
-	})
-	checkTime := 10
-	for i := 0; i < checkTime; i++ {
-		require.Equal(t, uint64(1000), plr.GetResolvedTs())
-		time.Sleep(10 * time.Millisecond)
-	}
+	require.Nil(t, err)
 
 	store.Close()
 	cancel()

@@ -155,29 +155,28 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		metricsTicker := time.NewTicker(15 * time.Second)
 		defer metricsTicker.Stop()
-		// return true means this raw kv entry is sent to output channel, otherwise false.
-		output := func(raw *model.RawKVEntry) (bool, error) {
+		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
 			// ts update missing in puller, however resolved ts fallback here can
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Panic("The CRTs is fallen back in puller",
+				log.Warn("The CRTs is fallen back in puller",
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))
-				return false, nil
+				return nil
 			}
 			select {
 			case <-ctx.Done():
-				return false, errors.Trace(ctx.Err())
+				return errors.Trace(ctx.Err())
 			case p.outputCh <- raw:
 			}
-			return true, nil
+			return nil
 		}
 
 		start := time.Now()
@@ -197,7 +196,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
-				if _, err := output(e.Val); err != nil {
+				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
 				continue
@@ -241,15 +240,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					continue
 				}
 				lastResolvedTs = resolvedTs
-				ok, err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
 				}
-				// If the resolved ts is not sent to output channel, it means the resolved ts is
-				// not advanced, so we should not update the p.resolvedTs.
-				if ok {
-					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
-				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})
