@@ -48,9 +48,7 @@ type testMaster struct {
 	etcdTestCli     *clientv3.Client
 }
 
-var (
-	testSuite = SerialSuites(&testMaster{})
-)
+var testSuite = SerialSuites(&testMaster{})
 
 func TestMaster(t *testing.T) {
 	err := log.InitLogger(&log.Config{})

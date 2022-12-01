@@ -14,6 +14,7 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -179,9 +180,7 @@ func TestMasterSuite(t *testing.T) {
 	suite.Run(t, new(testMasterSuite))
 }
 
-var (
-	pwd string
-)
+var pwd string
 
 func (t *testMasterSuite) SetupSuite() {
 	require.NoError(t.T(), log.InitLogger(&log.Config{}))
@@ -1133,7 +1132,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 		require.NoError(t.T(), err2)
 		require.Contains(t.T(), tcm, taskName)
 		require.Equal(t.T(), taskName, tcm[taskName].Name)
-		require.Equal(t.T(), sources, tcm[taskName].SourceID)
+		require.Equal(t.T(), source, tcm[taskName].SourceID)
 	}
 
 	require.Len(t.T(), server.optimist.Locks(), 0)
@@ -1662,7 +1661,7 @@ func (t *testMasterSuite) testHTTPInterface(url string, contain []byte) {
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t.T(), err)
-	require.Contains(t.T(), body, contain)
+	require.True(t.T(), bytes.Contains(body, contain))
 }
 
 func (t *testMasterSuite) TestJoinMember() {
@@ -1741,7 +1740,7 @@ func (t *testMasterSuite) TestJoinMember() {
 	// avoid join a unhealthy cluster
 	require.Eventually(t.T(), func() bool {
 		return s3.Start(ctx) == nil
-	}, 3*time.Second, 100*time.Millisecond)
+	}, 30*time.Second, time.Second)
 	defer s3.Close()
 
 	// verify members
