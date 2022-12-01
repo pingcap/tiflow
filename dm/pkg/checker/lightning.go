@@ -178,7 +178,7 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 		result.State = StateFailure
 		result.Errors = append(result.Errors, &Error{
 			Severity: StateFailure,
-			ShortErr: fmt.Sprintf("Cluster doesn't have enough space, available is %s, but we need %s",
+			ShortErr: fmt.Sprintf("Downstream doesn't have enough space, available is %s, but we need %s",
 				units.BytesSize(float64(clusterAvail)), units.BytesSize(float64(c.sourceDataSize))),
 		})
 		result.Instruction = "you can try to scale-out TiKV storage or TiKV instance to gain more storage space"
