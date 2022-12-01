@@ -205,6 +205,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			lastPos = pos
 		}
 
+		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
