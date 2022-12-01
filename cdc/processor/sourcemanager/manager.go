@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
@@ -27,6 +28,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultMaxBatchSize = 256
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	// changefeedID is the changefeed ID.
@@ -34,6 +37,8 @@ type SourceManager struct {
 	changefeedID model.ChangeFeedID
 	// up is the upstream of the puller.
 	up *upstream.Upstream
+	// mg is the mounter group for mount the raw kv entry.
+	mg entry.MounterGroup
 	// engine is the source engine.
 	engine engine.SortEngine
 	// pullers is the puller wrapper map.
@@ -46,12 +51,14 @@ type SourceManager struct {
 func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
+	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
 ) *SourceManager {
 	return &SourceManager{
 		changefeedID: changefeedID,
 		up:           up,
+		mg:           mg,
 		engine:       engine,
 		errChan:      errChan,
 	}
@@ -80,13 +87,19 @@ func (m *SourceManager) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable just wrap the engine's FetchByTable method.
-func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
-	return m.engine.FetchByTable(tableID, lowerBound, upperBound)
+func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) *engine.MountedEventIter {
+	iter := m.engine.FetchByTable(tableID, lowerBound, upperBound)
+	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.
 func (m *SourceManager) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	return m.engine.CleanByTable(tableID, upperBound)
+}
+
+// GetTableResolvedTs returns the resolved ts of the table.
+func (m *SourceManager) GetTableResolvedTs(tableID model.TableID) model.Ts {
+	return m.engine.GetResolvedTs(tableID)
 }
 
 // GetTablePullerStats returns the puller stats of the table.
