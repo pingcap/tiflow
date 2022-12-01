@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -46,6 +45,16 @@ const (
 type gcEvent struct {
 	tableID  model.TableID
 	cleanPos engine.Position
+}
+
+// TableStats of a table sink.
+type TableStats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
+	// From sorter.
+	ReceivedMaxCommitTs   model.Ts
+	ReceivedMaxResolvedTs model.Ts
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -626,7 +635,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
+func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -661,11 +670,23 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
 	} else {
 		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
 	}
-	return pipeline.Stats{
-		CheckpointTs: resolvedMark,
-		ResolvedTs:   resolvedTs,
-		BarrierTs:    m.lastBarrierTs.Load(),
+	return TableStats{
+		CheckpointTs:          resolvedMark,
+		ResolvedTs:            resolvedTs,
+		BarrierTs:             m.lastBarrierTs.Load(),
+		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
 	}
+}
+
+// ReceivedEvents returns the number of events received by all table sinks.
+func (m *SinkManager) ReceivedEvents() int64 {
+	totalReceivedEvents := int64(0)
+	m.tableSinks.Range(func(_, value interface{}) bool {
+		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
+		return true
+	})
+	return totalReceivedEvents
 }
 
 // Close closes all workers.

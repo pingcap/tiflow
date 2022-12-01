@@ -57,11 +57,6 @@ func New(
 	}
 }
 
-// IsTableBased just wrap the engine's IsTableBased method.
-func (m *SourceManager) IsTableBased() bool {
-	return m.engine.IsTableBased()
-}
-
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
 	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
@@ -89,19 +84,9 @@ func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBou
 	return m.engine.FetchByTable(tableID, lowerBound, upperBound)
 }
 
-// FetchAllTables just wrap the engine's FetchAllTables method.
-func (m *SourceManager) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
-	return m.engine.FetchAllTables(lowerBound)
-}
-
 // CleanByTable just wrap the engine's CleanByTable method.
 func (m *SourceManager) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	return m.engine.CleanByTable(tableID, upperBound)
-}
-
-// CleanAllTables just wrap the engine's CleanAllTables method.
-func (m *SourceManager) CleanAllTables(upperBound engine.Position) error {
-	return m.engine.CleanAllTables(upperBound)
 }
 
 // GetTablePullerStats returns the puller stats of the table.
@@ -114,6 +99,16 @@ func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats 
 			zap.Int64("tableID", tableID))
 	}
 	return p.(*pullerwrapper.Wrapper).GetStats()
+}
+
+// GetTableSorterStats returns the sorter stats of the table.
+func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableStats {
+	return m.engine.GetStatsByTable(tableID)
+}
+
+// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
+func (m *SourceManager) ReceivedEvents() int64 {
+	return m.engine.ReceivedEvents()
 }
 
 // Close closes the source manager. Stop all pullers and close the engine.
