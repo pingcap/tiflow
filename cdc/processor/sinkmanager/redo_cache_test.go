@@ -22,7 +22,7 @@ import (
 )
 
 func TestRedoEventCache(t *testing.T) {
-	cache := newRedoEventCache(1000)
+	cache := newRedoEventCache(model.ChangeFeedID{}, 1000)
 
 	appender := cache.getAppender(3)
 	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 100, false))
@@ -33,10 +33,10 @@ func TestRedoEventCache(t *testing.T) {
 	// Append beyond capacity, can't success.
 	require.False(t, appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 100, false))
 
-	events, _, _ := cache.pop(1)
+	events, _, _ := cache.pop(1, nil)
 	require.Nil(t, events)
 
-	events, size, pos := cache.pop(3)
+	events, size, pos := cache.pop(3, nil)
 	require.Equal(t, 3, len(events))
 	require.Equal(t, uint64(600), size)
 	require.Equal(t, 0, pos.Compare(engine.Position{StartTs: 3, CommitTs: 4}))

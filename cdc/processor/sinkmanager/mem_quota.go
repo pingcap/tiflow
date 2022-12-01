@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -44,6 +45,9 @@ type memQuota struct {
 	isClosed atomic.Bool
 	// blockAcquireCond is used to notify the blocked acquire.
 	blockAcquireCond *sync.Cond
+
+	metricTotal prometheus.Gauge
+	metricUsed  prometheus.Gauge
 }
 
 func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
@@ -52,8 +56,11 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 		totalBytes:   totalBytes,
 		usedBytes:    0,
 		tableMemory:  make(map[model.TableID][]*memConsumeRecord),
+		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total"),
+		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used"),
 	}
 	m.blockAcquireCond = sync.NewCond(&m.mu)
+	m.metricTotal.Set(float64(totalBytes))
 
 	return m
 }
@@ -66,6 +73,7 @@ func (m *memQuota) tryAcquire(nBytes uint64) bool {
 		return false
 	}
 	m.usedBytes += nBytes
+	m.metricUsed.Set(float64(m.usedBytes))
 	return true
 }
 
@@ -75,6 +83,7 @@ func (m *memQuota) forceAcquire(nBytes uint64) {
 	defer m.mu.Unlock()
 
 	m.usedBytes += nBytes
+	m.metricUsed.Set(float64(m.usedBytes))
 }
 
 // blockAcquire is used to block the request when the memory quota is not available.
@@ -88,6 +97,7 @@ func (m *memQuota) blockAcquire(nBytes uint64) error {
 
 		if m.usedBytes+nBytes <= m.totalBytes {
 			m.usedBytes += nBytes
+			m.metricUsed.Set(float64(m.usedBytes))
 			return nil
 		}
 		m.blockAcquireCond.Wait()
@@ -102,6 +112,7 @@ func (m *memQuota) refund(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usedBytes -= nBytes
+	m.metricUsed.Set(float64(m.usedBytes))
 	m.blockAcquireCond.Signal()
 }
 
@@ -149,6 +160,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	for j := 0; j < i; j++ {
 		m.usedBytes -= records[j].size
 	}
+	m.metricUsed.Set(float64(m.usedBytes))
 	m.tableMemory[tableID] = append(make([]*memConsumeRecord, 0, len(records[i:])), records[i:]...)
 
 	if m.usedBytes < m.totalBytes {
@@ -176,6 +188,7 @@ func (m *memQuota) clean(tableID model.TableID) uint64 {
 		cleaned += record.size
 	}
 	m.usedBytes -= cleaned
+	m.metricUsed.Set(float64(m.usedBytes))
 	delete(m.tableMemory, tableID)
 	if m.usedBytes < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
@@ -185,6 +198,7 @@ func (m *memQuota) clean(tableID model.TableID) uint64 {
 
 // close the mem quota and notify the blocked acquire.
 func (m *memQuota) close() {
+	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
 }
