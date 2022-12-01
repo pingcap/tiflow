@@ -100,10 +100,11 @@ func (s *EventSorter) AddTable(tableID model.TableID) {
 	s.mu.Lock()
 	if _, exists := s.tables[tableID]; exists {
 		s.mu.Unlock()
-		log.Panic("add an exist table",
+		log.Warn("add an exist table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+		return
 	}
 	s.tables[tableID] = &tableState{ch: s.channs[getDB(tableID, len(s.dbs))]}
 	s.mu.Unlock()
@@ -114,10 +115,11 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 	s.mu.Lock()
 	if _, exists := s.tables[tableID]; !exists {
 		s.mu.Unlock()
-		log.Panic("remove an unexist table",
+		log.Warn("remove an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+		return
 	}
 	delete(s.tables, tableID)
 	s.mu.Unlock()

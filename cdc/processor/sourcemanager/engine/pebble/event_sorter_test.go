@@ -39,12 +39,12 @@ func TestTableOperations(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	s.AddTable(1)
-	require.Panics(t, func() { s.AddTable(1) })
+	s.AddTable(1)
 
 	require.Equal(t, model.Ts(0), s.GetResolvedTs(1))
 
 	s.RemoveTable(1)
-	require.Panics(t, func() { s.RemoveTable(1) })
+	s.RemoveTable(1)
 }
 
 // TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
