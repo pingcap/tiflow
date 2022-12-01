@@ -187,6 +187,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			)
 			break
 		}
+		// If redo log is enabled, we do not need to update this value.
+		// Because it already has been updated in the redo log worker.
+		if w.eventCache == nil {
+			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
+		}
+		task.tableSink.receivedEventCount.Add(1)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			// Maybe we just ignore the last event. So we need to record the last position.
@@ -428,7 +434,7 @@ func (w *sinkWorker) fetchFromCache(
 	// time is ok.
 	rawEventCount := 0
 	rows, size, pos := w.eventCache.pop(task.tableID, &rawEventCount, upperBound)
-	// TODO: record rawEventCount.
+	task.tableSink.receivedEventCount.Add(int64(rawEventCount))
 	if size > 0 {
 		w.metricRedoEventCacheHit.Add(float64(size))
 	}
