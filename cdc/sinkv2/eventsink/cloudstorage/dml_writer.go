@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
@@ -42,6 +43,7 @@ func newDMLWriter(ctx context.Context,
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	statistics *metrics.Statistics,
 	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
@@ -62,7 +64,7 @@ func newDMLWriter(ctx context.Context,
 	}()
 
 	for i := 0; i < config.WorkerCount; i++ {
-		d := newDMLWorker(i, changefeedID, storage, w.config, extension, errCh)
+		d := newDMLWorker(i, changefeedID, storage, w.config, extension, statistics, errCh)
 		w.workerChannels[i] = chann.New[eventFragment]()
 		d.run(ctx, w.workerChannels[i])
 		w.workers = append(w.workers, d)

@@ -106,7 +106,7 @@ const (
     "table-actor": {
       "event-batch-size": 32
     },
-    "enable-pull-based-sink": false,
+    "enable-pull-based-sink": true,
     "enable-db-sorter": true,
     "db": {
       "count": 8,
@@ -150,6 +150,7 @@ const (
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -204,6 +205,7 @@ const (
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
