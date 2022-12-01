@@ -13,6 +13,7 @@ function run() {
 
 	run_downstream_cluster $WORK_DIR
 
+	cleanup_data lightning_mode
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -42,11 +43,13 @@ function run() {
 	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 1
-	read -p 123
+		"\"stage\": \"Paused\"" 1 \
+		'"progress": "100.00 %"' 1 \
+		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
+	run_sql_tidb "drop table lightning_mode.dup;"
 
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
