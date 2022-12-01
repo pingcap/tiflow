@@ -1766,7 +1766,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		dbutil.TableName(metaSchema, cputil.ValidatorTableStatus(taskName))))
 	// clear lightning error manager table
 	sqls = append(sqls, fmt.Sprintf("DROP DATABASE IF EXISTS %s",
-		loader.GetTaskInfoSchemaName(metaSchema, taskName)))
+		dbutil.ColumnName(loader.GetTaskInfoSchemaName(metaSchema, taskName))))
 
 	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
 	if err == nil {

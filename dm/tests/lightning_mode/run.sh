@@ -13,7 +13,7 @@ function run() {
 
 	run_downstream_cluster $WORK_DIR
 
-	cleanup_data lightning_mode
+	run_sql_tidb "drop database if exists lightning_mode;"
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -49,7 +49,7 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
-	run_sql_tidb "drop table lightning_mode.dup;"
+	run_sql_tidb "drop database if exists lightning_mode;"
 
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 

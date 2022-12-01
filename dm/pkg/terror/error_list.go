@@ -1076,7 +1076,7 @@ var (
 	ErrLoadTaskWorkerNotMatch      = New(codeLoadTaskWorkerNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "different worker in load stage, previous worker: %s, current worker: %s", "Please check if the previous worker is online.")
 	ErrLoadTaskCheckPointNotMatch  = New(codeLoadCheckPointNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "inconsistent checkpoints between loader and target database", "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command.")
 	ErrLoadLightningRuntime        = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeInternal, LevelHigh, "", "")
-	ErrLoadLightningHasDup         = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeInternal, LevelMedium, "physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication.", "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task.")
+	ErrLoadLightningHasDup         = New(codeLoadLightningHasDup, ClassLoadUnit, ScopeInternal, LevelMedium, "physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication.", "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task.")
 
 	// Sync unit error.
 	ErrSyncerUnitPanic                   = New(codeSyncerUnitPanic, ClassSyncUnit, ScopeInternal, LevelHigh, "panic error: %v", "")
