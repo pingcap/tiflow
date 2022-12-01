@@ -22,7 +22,7 @@ import (
 )
 
 func TestRedoEventCache(t *testing.T) {
-	cache := newRedoEventCache(1000)
+	cache := newRedoEventCache(model.ChangeFeedID{}, 1000)
 
 	appender := cache.getAppender(3)
 	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 100, false))

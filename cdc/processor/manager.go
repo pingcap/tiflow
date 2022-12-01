@@ -148,7 +148,13 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 }
 
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID, ctx cdcContext.Context) {
-	if processor, exist := m.processors[changefeedID]; exist {
+	processor, exist := m.processors[changefeedID]
+	log.Info("to close processor",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Bool("exist", exist))
+
+	if exist {
 		startTime := time.Now()
 		err := processor.Close(ctx)
 		costTime := time.Since(startTime)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // redoEventCache caches events fetched from EventSortEngine.
@@ -29,14 +30,18 @@ type redoEventCache struct {
 
 	mu     sync.Mutex
 	tables map[model.TableID]*eventAppender
+
+	metricRedoEventCache prometheus.Gauge
 }
 
 // newRedoEventCache creates a redoEventCache instance.
-func newRedoEventCache(capacity uint64) *redoEventCache {
+func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEventCache {
 	return &redoEventCache{
 		capacity:  capacity,
 		allocated: 0,
 		tables:    make(map[model.TableID]*eventAppender),
+
+		metricRedoEventCache: RedoEventCache.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -47,7 +52,7 @@ func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 	defer r.mu.Unlock()
 	item, exists := r.tables[tableID]
 	if !exists {
-		item = &eventAppender{capacity: r.capacity, allocated: &r.allocated}
+		item = &eventAppender{capacity: r.capacity, cache: r}
 		r.tables[tableID] = item
 	}
 	return item
@@ -56,6 +61,7 @@ func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 // pop some events from the cache.
 func (r *redoEventCache) pop(
 	tableID model.TableID,
+    pushCount *int, // poped events come from how many `pushBatch` calls
 	upperBound ...engine.Position,
 ) ([]*model.RowChangedEvent, uint64, engine.Position) {
 	r.mu.Lock()
@@ -91,6 +97,11 @@ func (r *redoEventCache) pop(
 	for _, x := range item.sizes[0:fetchCount] {
 		size += x
 	}
+    if pushCount != nil {
+        for _, x := range item.pushCounts[0:fetchCount] {
+            *pushCount += int(x)
+        }
+    }
 	pos := engine.Position{
 		CommitTs: item.events[fetchCount-1].CommitTs,
 		StartTs:  item.events[fetchCount-1].StartTs,
@@ -98,6 +109,7 @@ func (r *redoEventCache) pop(
 
 	item.events = item.events[fetchCount:]
 	item.sizes = item.sizes[fetchCount:]
+    item.pushCounts = item.pushCounts[fetchCount:]
 	if len(item.events) == 0 {
 		r.mu.Lock()
 		delete(r.tables, tableID)
@@ -107,6 +119,7 @@ func (r *redoEventCache) pop(
 	}
 
 	atomic.AddUint64(&r.allocated, ^(size - 1))
+	r.metricRedoEventCache.Sub(float64(size))
 	return events, size, pos
 }
 
@@ -119,12 +132,14 @@ func (r *redoEventCache) removeTable(tableID model.TableID) {
 		defer item.mu.Unlock()
 		delete(r.tables, tableID)
 		item.events = nil
+        item.sizes = nil
+        item.pushCounts = nil
 	}
 }
 
 type eventAppender struct {
-	capacity  uint64
-	allocated *uint64
+	capacity uint64
+	cache    *redoEventCache
 
 	broken bool
 
@@ -132,10 +147,14 @@ type eventAppender struct {
 	events     []*model.RowChangedEvent
 	sizes      []uint64
 	readyCount int // Count of ready events
+
+    // Several RowChangedEvent can come from one PolymorphicEvent.
+    pushCounts []byte 
 }
 
 func (e *eventAppender) push(
-	event *model.RowChangedEvent, size uint64, txnFinished bool,
+	event *model.RowChangedEvent, size uint64,
+    txnFinished bool,
 	eventsInSameBatch ...*model.RowChangedEvent,
 ) bool {
 	// At most only one client can call push on a given eventAppender instance,
@@ -145,12 +164,13 @@ func (e *eventAppender) push(
 	}
 
 	for {
-		allocated := atomic.LoadUint64(e.allocated)
+		allocated := atomic.LoadUint64(&e.cache.allocated)
 		if allocated >= e.capacity {
 			e.broken = true
 			return false
 		}
-		if atomic.CompareAndSwapUint64(e.allocated, allocated, allocated+size) {
+		if atomic.CompareAndSwapUint64(&e.cache.allocated, allocated, allocated+size) {
+			e.cache.metricRedoEventCache.Add(float64(size))
 			break
 		}
 	}
@@ -159,9 +179,11 @@ func (e *eventAppender) push(
 	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	e.sizes = append(e.sizes, size)
+    e.pushCounts = append(e.pushCounts, 1)
 	for _, event := range eventsInSameBatch {
 		e.events = append(e.events, event)
 		e.sizes = append(e.sizes, 0)
+        e.pushCounts = append(e.pushCounts, 0)
 	}
 	if txnFinished {
 		e.readyCount = len(e.events)
@@ -169,6 +191,7 @@ func (e *eventAppender) push(
 	return true
 }
 
+// All events should comes from one PolymorphicEvent.
 func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished bool) bool {
 	if len(events) == 0 {
 		return true
@@ -187,8 +210,11 @@ func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
 
 	e.events = e.events[0:e.readyCount]
 	e.sizes = e.sizes[0:e.readyCount]
+    e.pushCounts = .pushCounts[0:e.readyCount]
 
 	e.broken = false
-	atomic.AddUint64(e.allocated, ^(pendingSize - 1))
+	atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
+	e.cache.metricRedoEventCache.Sub(float64(pendingSize))
+
 	return
 }
