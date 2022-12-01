@@ -362,6 +362,10 @@ func genTableName(schema string, table string) *filter.Table {
 
 // CheckIsDDL checks input SQL whether is a valid DDL statement.
 func CheckIsDDL(sql string, p *parser.Parser) bool {
+	// fast path for begin
+	if sql == "BEGIN" || sql == "COMMIT" {
+		return false
+	}
 	sql = utils.TrimCtrlChars(sql)
 
 	if utils.IsBuildInSkipDDL(sql) {
