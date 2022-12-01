@@ -39,7 +39,7 @@ const (
 	minFlushInterval = 2 * time.Second
 	// the upper limit of flush-interval.
 	maxFlushInterval = 10 * time.Minute
-	// defaultFileSize is the default value of file-sze.
+	// defaultFileSize is the default value of file-size.
 	defaultFileSize = 64 * 1024 * 1024
 	// the lower limit of file size
 	minFileSize = 1024 * 1024

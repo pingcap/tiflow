@@ -101,7 +101,8 @@ func (s *EventSorter) AddTable(tableID model.TableID) {
 		s.mu.Unlock()
 		log.Panic("add an exist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 	s.tables[tableID] = &tableState{ch: s.channs[getDB(tableID, len(s.dbs))]}
 	s.mu.Unlock()
@@ -114,7 +115,8 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 		s.mu.Unlock()
 		log.Panic("remove an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 	delete(s.tables, tableID)
 	s.mu.Unlock()
@@ -129,7 +131,8 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	if !exists {
 		log.Panic("add events into an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	for _, event := range events {
@@ -150,7 +153,8 @@ func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	if !exists {
 		log.Panic("get resolved ts from an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	return atomic.LoadUint64(&state.pendingResolved)
@@ -175,13 +179,18 @@ func (s *EventSorter) FetchByTable(
 	if !exists {
 		log.Panic("fetch events from an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
-	if upperBound.CommitTs > atomic.LoadUint64(&state.sortedResolved) {
+	sortedResolved := atomic.LoadUint64(&state.sortedResolved)
+	if upperBound.CommitTs > sortedResolved {
 		log.Panic("fetch unresolved events",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("upperBound", upperBound.CommitTs),
+			zap.Uint64("resolved", sortedResolved))
 	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
@@ -206,7 +215,8 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	if !exists {
 		log.Panic("clean an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	return s.cleanTable(state, tableID, upperBound)
@@ -352,9 +362,6 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 
 		for table, resolved := range newResolved {
 			s.mu.RLock()
-			for _, onResolve := range s.onResolves {
-				onResolve(table, resolved)
-			}
 			ts, ok := s.tables[table]
 			if !ok {
 				log.Debug("Table is removed, skip updating resolved",
@@ -366,6 +373,9 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				continue
 			}
 			atomic.StoreUint64(&ts.sortedResolved, resolved)
+			for _, onResolve := range s.onResolves {
+				onResolve(table, resolved)
+			}
 			s.mu.RUnlock()
 		}
 		newResolved = make(map[model.TableID]model.Ts)

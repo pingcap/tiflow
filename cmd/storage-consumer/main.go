@@ -225,8 +225,8 @@ type consumer struct {
 	fileExtension   string
 	// tableIdxMap maintains a map of <dmlPathKey, max file index>
 	tableIdxMap map[dmlPathKey]uint64
-	// tableTsMap maintains a map of <dmlPathKey, max commit ts>
-	tableTsMap       map[dmlPathKey]uint64
+	// tableTsMap maintains a map of <TableID, max commit ts>
+	tableTsMap       map[model.TableID]uint64
 	tableIDGenerator *fakeTableIDGenerator
 }
 
@@ -294,7 +294,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		externalStorage: storage,
 		fileExtension:   extension,
 		tableIdxMap:     make(map[dmlPathKey]uint64),
-		tableTsMap:      make(map[dmlPathKey]uint64),
+		tableTsMap:      make(map[model.TableID]uint64),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
@@ -436,12 +436,12 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 				return errors.Trace(err)
 			}
 
-			if _, ok := c.tableTsMap[pathKey]; !ok || row.CommitTs >= c.tableTsMap[pathKey] {
-				c.tableTsMap[pathKey] = row.CommitTs
+			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID] {
+				c.tableTsMap[tableID] = row.CommitTs
 			} else {
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("tableMaxCommitTs", c.tableTsMap[pathKey]),
+					zap.Uint64("tableMaxCommitTs", c.tableTsMap[tableID]),
 					zap.Any("row", row),
 				)
 				continue
@@ -450,7 +450,10 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 			events = append(events, row)
 		}
 	}
-	log.Info("decode success", zap.Int("decodeRowsCnt", cnt),
+	log.Info("decode success", zap.String("schema", pathKey.schema),
+		zap.String("table", pathKey.table),
+		zap.Int64("version", pathKey.version),
+		zap.Int("decodeRowsCnt", cnt),
 		zap.Int("filteredRowsCnt", len(events)))
 
 	err = c.sink.EmitRowChangedEvents(ctx, events...)
@@ -499,6 +502,7 @@ func (c *consumer) run(ctx context.Context) error {
 			fileRange := fileMap[k]
 			for i := fileRange.start; i <= fileRange.end; i++ {
 				filePath := k.generateDMLFilePath(i, c.fileExtension)
+				log.Debug("read from dml file path", zap.String("path", filePath))
 				content, err := c.externalStorage.ReadFile(ctx, filePath)
 				if err != nil {
 					return errors.Trace(err)
@@ -510,7 +514,7 @@ func (c *consumer) run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 
-				resolvedTs := model.NewResolvedTs(c.tableTsMap[k])
+				resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
 				_, err = c.sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 				if err != nil {
 					return errors.Trace(err)

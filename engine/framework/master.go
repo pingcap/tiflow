@@ -104,7 +104,7 @@ type MasterImpl interface {
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 
 	// OnWorkerOnline is called when the first heartbeat for a worker is received.
-	// Only after OnWorkerOnline, OnWorkerOffline of the same worker may be called.
+	// NOTE: OnWorkerOffline can appear without OnWorkerOnline
 	// Return:
 	// - error to let the framework call CloseImpl.
 	// Concurrent safety:

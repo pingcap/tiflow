@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
@@ -52,9 +55,20 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				CommitTs:     100,
-				Table:        &model.TableName{Schema: "test", Table: "table1"},
-				TableVersion: 33,
+				CommitTs: 100,
+				Table:    &model.TableName{Schema: "test", Table: "table1"},
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: "test", Table: "table1",
+					},
+					Version: 33,
+					TableInfo: &timodel.TableInfo{
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, Name: timodel.NewCIStr("c1"), FieldType: *types.NewFieldType(mysql.TypeLong)},
+							{ID: 2, Name: timodel.NewCIStr("c2"), FieldType: *types.NewFieldType(mysql.TypeVarchar)},
+						},
+					},
+				},
 			},
 			Callback: func() {
 				atomic.AddUint64(&cnt, uint64(batch))
@@ -63,9 +77,9 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 		}
 		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
-				CommitTs:         100,
-				Table:            &model.TableName{Schema: "test", Table: "table1"},
-				TableInfoVersion: 33,
+				CommitTs:  100,
+				Table:     &model.TableName{Schema: "test", Table: "table1"},
+				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, Version: 33},
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
@@ -83,8 +97,13 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
-	require.Len(t, files, 1)
-	content, err := os.ReadFile(path.Join(tableDir, files[0].Name()))
+	require.Len(t, files, 2)
+	var fileNames []string
+	for _, f := range files {
+		fileNames = append(fileNames, f.Name())
+	}
+	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 

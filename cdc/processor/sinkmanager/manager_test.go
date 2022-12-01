@@ -15,22 +15,39 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	mockengine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
 )
+
+type mockPD struct {
+	pd.Client
+	ts int64
+}
+
+func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	if p.ts != 0 {
+		return p.ts, p.ts, nil
+	}
+	return math.MaxInt64, math.MaxInt64, nil
+}
 
 // nolint:revive
 // In test it is ok move the ctx to the second parameter.
-func createManager(
+func createManagerWithMemEngine(
 	t *testing.T,
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
@@ -39,20 +56,37 @@ func createManager(
 ) *SinkManager {
 	sortEngine := memory.New(context.Background())
 	manager, err := New(
-		ctx, changefeedID, changefeedInfo,
+		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
 		nil, sortEngine, &entry.MockMountGroup{},
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
 	return manager
 }
 
+// nolint:revive
+// In test it is ok move the ctx to the second parameter.
+func createManagerWithMockEngine(
+	t *testing.T,
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	changefeedInfo *model.ChangeFeedInfo,
+	errChan chan error,
+) (*SinkManager, *mockengine.MockSortEngine) {
+	ctrl := gomock.NewController(t)
+	sortEngine := mockengine.NewMockSortEngine(ctrl)
+	manager, err := New(
+		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
+		nil, sortEngine, &entry.MockMountGroup{},
+		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+	require.NoError(t, err)
+	return manager, sortEngine
+}
+
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
-		Config: &config.ReplicaConfig{
-			MemoryQuota: 1024 * 1024 * 1024,
-		},
+		Config:  config.GetDefaultReplicaConfig(),
 	}
 }
 
@@ -126,7 +160,7 @@ func TestAddTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -137,7 +171,9 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	manager.StartTable(tableID, 1)
+	err := manager.StartTable(tableID, 1)
+	require.NoError(t, err)
+	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 	require.Equal(t, &progress{
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
@@ -154,7 +190,7 @@ func TestRemoveTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -164,7 +200,8 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -195,7 +232,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -213,7 +250,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -223,13 +260,14 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(4)
+		return checkpointTS.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -240,7 +278,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -252,13 +290,14 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS == model.NewResolvedTs(3)
+		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -269,7 +308,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -280,11 +319,11 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	manager.StartTable(tableID, 0)
+	err := manager.StartTable(tableID, 0)
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		s, err := manager.GetTableStats(tableID)
-		require.NoError(t, err)
+		s := manager.GetTableStats(tableID)
 		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -296,7 +335,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
@@ -317,8 +356,51 @@ func TestClose(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManager(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 
 	err := manager.Close()
 	require.NoError(t, err)
+}
+
+func TestGetTableStats(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changefeedInfo := getChangefeedInfo()
+	manager, mockEngine := createManagerWithMockEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
+	tableID := model.TableID(1)
+	mockEngine.EXPECT().AddTable(tableID)
+	mockEngine.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
+	mockEngine.EXPECT().FetchByTable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockEngine.EXPECT().GetResolvedTs(tableID).AnyTimes()
+
+	manager.AddTable(tableID, 1, 100)
+	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	// This would happen when the table just added to this node and redo log is enabled.
+	// So there is possibility that the resolved ts is smaller than the global barrier ts.
+	manager.UpdateBarrierTs(4)
+	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
+	manager.StartTable(tableID, 0)
+
+	require.Eventually(t, func() bool {
+		tableSink, ok := manager.tableSinks.Load(tableID)
+		require.True(t, ok)
+		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
+		return checkpointTS.ResolvedMark() == 3
+	}, 5*time.Second, 10*time.Millisecond)
+
+	cleanPos := engine.Position{
+		StartTs:  2,
+		CommitTs: 3,
+	}
+	mockEngine.EXPECT().CleanByTable(tableID, cleanPos).Times(1)
+	stats := manager.GetTableStats(tableID)
+	require.Equal(t, uint64(3), stats.CheckpointTs)
 }

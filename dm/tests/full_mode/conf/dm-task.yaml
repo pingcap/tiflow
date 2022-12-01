@@ -41,6 +41,8 @@ loaders:
   global:
     pool-size: 16
     dir: "./dumped_data"
+    import-mode: "logical"
+    on-duplicate-logical: "ignore"
 
 syncers:
   global:
