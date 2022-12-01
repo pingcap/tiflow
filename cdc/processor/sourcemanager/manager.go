@@ -102,11 +102,6 @@ func (m *SourceManager) GetTableResolvedTs(tableID model.TableID) model.Ts {
 	return m.engine.GetResolvedTs(tableID)
 }
 
-// CleanAllTables just wrap the engine's CleanAllTables method.
-func (m *SourceManager) CleanAllTables(upperBound engine.Position) error {
-	return m.engine.CleanAllTables(upperBound)
-}
-
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats {
 	p, ok := m.pullers.Load(tableID)
