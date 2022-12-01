@@ -143,9 +143,9 @@ func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
 	return engine.TableStats{}
 }
 
-// RemainEvents implements engine.SortEngine.
-func (s *EventSorter) RemainEvents() int64 {
-	log.Panic("RemainEvents should never be called")
+// ReceivedEvents implements engine.SortEngine.
+func (s *EventSorter) ReceivedEvents() int64 {
+	log.Panic("ReceivedEvents should never be called")
 	return 0
 }
 

@@ -191,9 +191,9 @@ func (mr *MockSortEngineMockRecorder) OnResolve(action interface{}) *gomock.Call
 }
 
 // RemainEvents mocks base method.
-func (m *MockSortEngine) RemainEvents() int64 {
+func (m *MockSortEngine) ReceivedEvents() int64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemainEvents")
+	ret := m.ctrl.Call(m, "ReceivedEvents")
 	ret0, _ := ret[0].(int64)
 	return ret0
 }
@@ -201,7 +201,7 @@ func (m *MockSortEngine) RemainEvents() int64 {
 // RemainEvents indicates an expected call of RemainEvents.
 func (mr *MockSortEngineMockRecorder) RemainEvents() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemainEvents", reflect.TypeOf((*MockSortEngine)(nil).RemainEvents))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedEvents", reflect.TypeOf((*MockSortEngine)(nil).ReceivedEvents))
 }
 
 // RemoveTable mocks base method.
