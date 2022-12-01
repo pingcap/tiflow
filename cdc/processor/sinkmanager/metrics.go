@@ -18,6 +18,7 @@ import (
 )
 
 var (
+	// MemoryQuota indicates memory usage of a changefeed.
 	MemoryQuota = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -28,6 +29,7 @@ var (
 		// type includes total, used.
 		[]string{"namespace", "changefeed", "type"})
 
+	// RedoEventCache indicates redo event memory usage of a changefeed.
 	RedoEventCache = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -37,6 +39,7 @@ var (
 		},
 		[]string{"namespace", "changefeed"})
 
+	// RedoEventCacheAccess indicates redo event cache hit ratio of a changefeed.
 	RedoEventCacheAccess = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
