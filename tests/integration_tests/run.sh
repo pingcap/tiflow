@@ -52,6 +52,20 @@ test_case=$2
 if [ -z "$test_case" ]; then
 	test_case="*"
 fi
+<<<<<<< HEAD
+=======
+
+start_at=$3
+run_test="no"
+if [ -z "$start_at" ]; then
+	run_test="yes"
+else
+	test_case="*"
+fi
+
+# Print environment variables.
+env
+>>>>>>> 1f6ae1fd8c (cdc: add delay for recreating changefeed (#7730))
 set -eu
 
 if [ "$test_case" == "*" ]; then
