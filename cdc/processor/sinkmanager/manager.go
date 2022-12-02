@@ -623,6 +623,11 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
+		log.Info("Async stop table sink",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+		)
 		tableSink, ok := m.tableSinks.Load(tableID)
 		if !ok {
 			log.Panic("Table sink not found when removing table",
@@ -637,6 +642,11 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("memory", cleanedBytes),
+		)
+		log.Info("Table sink closed asynchronously",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID),
 		)
 	}()
 }
@@ -714,6 +724,10 @@ func (m *SinkManager) ReceivedEvents() int64 {
 
 // Close closes all workers.
 func (m *SinkManager) Close() error {
+	log.Info("Closing sink manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID))
+	start := time.Now()
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -727,6 +741,14 @@ func (m *SinkManager) Close() error {
 		value.(*tableSinkWrapper).close(m.ctx)
 		return true
 	})
+	log.Info("All table sinks closed",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	m.wg.Wait()
+	log.Info("Closed sink manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	return nil
 }
