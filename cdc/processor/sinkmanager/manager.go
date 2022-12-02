@@ -39,7 +39,6 @@ const (
 	sinkWorkerNum               = 8
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
-	defaultEngineGCChanSize     = 128
 	cleanTableInterval          = 5 * time.Second
 )
 
@@ -99,7 +98,8 @@ type SinkManager struct {
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
-	redoTaskChan chan *redoTask
+	redoTaskChan        chan *redoTask
+	redoWorkerAvailable chan struct{}
 
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
@@ -153,6 +153,7 @@ func New(
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
+		m.redoWorkerAvailable = make(chan struct{}, 1)
 		// Use at most 1/3 memory quota for redo event cache.
 		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/3)
 	}
@@ -345,19 +346,17 @@ func (m *SinkManager) generateSinkTasks() error {
 	}
 
 	dispatchTasks := func() error {
-        log.Info("QP dispatchTasks is called",
-            zap.String("namespace", m.changefeedID.Namespace),
-            zap.String("changefeed", m.changefeedID.ID))
 		tables := make([]*tableSinkWrapper, 0, sinkWorkerNum)
 		progs := make([]*progress, 0, sinkWorkerNum)
 
+        // Collect some table progresses.
 		for len(tables) < sinkWorkerNum && m.sinkProgressHeap.len() > 0 {
 			slowestTableProgress := m.sinkProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
 
 			value, ok := m.tableSinks.Load(tableID)
 			if !ok {
-				log.Info("QP Table sink not found, probably already removed",
+				log.Info("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableID))
@@ -372,7 +371,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
 			if tableState != tablepb.TableStateReplicating {
-				log.Info("QP Table sink is not replicating, skip it",
+				log.Info("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableID),
@@ -382,11 +381,9 @@ func (m *SinkManager) generateSinkTasks() error {
 			tables = append(tables, tableSink)
 			progs = append(progs, slowestTableProgress)
 		}
-        log.Info("QP collect tables finish",
-            zap.String("namespace", m.changefeedID.Namespace),
-            zap.String("changefeed", m.changefeedID.ID))
 
 		i := 0
+    LOOP:
 		for ; i < len(tables); i++ {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
@@ -401,7 +398,7 @@ func (m *SinkManager) generateSinkTasks() error {
 
 			// No available memory, skip this round directly.
 			if !m.memQuota.tryAcquire(requestMemSize) {
-				break
+				break LOOP
 			}
 
 			log.Debug("MemoryQuotaTracing: Acquire memory for table sink task",
@@ -432,18 +429,18 @@ func (m *SinkManager) generateSinkTasks() error {
 			case <-m.ctx.Done():
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
-				log.Info("Generate sink task",
+				log.Debug("Generate sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableSink.tableID),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
-                continue
 			default:
+                break LOOP
 			}
-            break
 		}
-		for i < len(progs) {
+        // Some progresses are not handled, return them back.
+		for ; i < len(progs); i++ {
 			m.sinkProgressHeap.push(progs[i])
 		}
 		return nil
@@ -464,20 +461,21 @@ func (m *SinkManager) generateSinkTasks() error {
 }
 
 func (m *SinkManager) generateRedoTasks() error {
-	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
-	defer taskTicker.Stop()
-	for {
-		select {
-		case <-m.ctx.Done():
-			return m.ctx.Err()
-		case <-taskTicker.C:
-			// No more tables.
-			if m.redoProgressHeap.len() == 0 {
-				continue
-			}
-			slowestTableProgress := m.redoProgressHeap.pop()
+	// We use the table's resolved ts as the upper bound to fetch events.
+	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
+		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+	}
+
+	dispatchTasks := func() error {
+		tables := make([]*tableSinkWrapper, 0, redoWorkerNum)
+		progs := make([]*progress, 0, redoWorkerNum)
+
+		for len(tables) < redoWorkerNum && m.redoProgressHeap.len() > 0 {
+			slowestTableProgress := m.sinkProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
-			tableSink, ok := m.tableSinks.Load(tableID)
+
+			value, ok := m.tableSinks.Load(tableID)
 			if !ok {
 				log.Info("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
@@ -487,52 +485,94 @@ func (m *SinkManager) generateRedoTasks() error {
 				// So we do **not** need add it back to the heap.
 				continue
 			}
-			// We use the table's resolved ts as the upper bound to fetch events.
-			getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-				upperBoundTs := tableSink.getReceivedSorterResolvedTs()
-				return engine.Position{
-					StartTs:  upperBoundTs - 1,
-					CommitTs: upperBoundTs,
-				}
+			tableSink := value.(*tableSinkWrapper)
+
+			tableState := tableSink.getState()
+			// It means table sink is stopping or stopped.
+			// We should skip it and do not push it back.
+			// Because there is no case that stopping/stopped -> replicating.
+			if tableState != tablepb.TableStateReplicating {
+				log.Info("Table sink is not replicating, skip it",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableID),
+					zap.String("tableState", tableState.String()))
+				continue
 			}
-			checkAdvance := slowestTableProgress.nextLowerBoundPos.Compare(getUpperBound(tableSink.(*tableSinkWrapper)))
-			if !(checkAdvance == -1 || checkAdvance == 0) || !m.memQuota.tryAcquire(requestMemSize) {
+			tables = append(tables, tableSink)
+			progs = append(progs, slowestTableProgress)
+		}
+
+		i := 0
+    LOOP:
+		for ; i < len(tables); i++ {
+			tableSink := tables[i]
+			slowestTableProgress := progs[i]
+			lowerBound := slowestTableProgress.nextLowerBoundPos
+			upperBound := getUpperBound(tableSink)
+
+			// The table has no available progress.
+			if lowerBound.Compare(upperBound) >= 0 {
 				m.redoProgressHeap.push(slowestTableProgress)
-				// Next time.
 				continue
 			}
 
-			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
+			// No available memory, skip this round directly.
+			if !m.memQuota.tryAcquire(requestMemSize) {
+				break LOOP
+			}
+
+			log.Debug("MemoryQuotaTracing: Acquire memory for redo log task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", tableSink.tableID),
 				zap.Uint64("memory", requestMemSize))
 
 			t := &redoTask{
-				tableID:       tableID,
-				lowerBound:    slowestTableProgress.nextLowerBoundPos,
+				tableID:       tableSink.tableID,
+				lowerBound:    lowerBound,
 				getUpperBound: getUpperBound,
-				tableSink:     tableSink.(*tableSinkWrapper),
+				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
-					p := &progress{
-						tableID:           tableID,
-						nextLowerBoundPos: lastWrittenPos.Next(),
-					}
+					p := &progress{tableID: tableSink.tableID, nextLowerBoundPos: lastWrittenPos.Next()}
 					m.redoProgressHeap.push(p)
+					select {
+					case m.redoWorkerAvailable <- struct{}{}:
+					default:
+					}
 				},
+				skipIter: m.sourceManager.MayHaveEvents(lowerBound, upperBound, tableSink.tableID),
 			}
 			select {
 			case <-m.ctx.Done():
 				return m.ctx.Err()
 			case m.redoTaskChan <- t:
+				log.Debug("Generate redo task",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableSink.tableID),
+					zap.Any("lowerBound", lowerBound),
+					zap.Any("currentUpperBound", upperBound))
+			default:
+                break LOOP
 			}
+		}
+		for ; i < len(progs); i++ {
+			m.redoProgressHeap.push(progs[i])
+		}
+		return nil
+	}
 
-			log.Info("Generate redo task",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Any("lowerBound", slowestTableProgress.nextLowerBoundPos),
-				zap.Any("currentUpperBound", getUpperBound(tableSink.(*tableSinkWrapper))))
+	taskTicker := time.NewTicker(defaultGenerateTaskInterval)
+	defer taskTicker.Stop()
+	for {
+		select {
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		case <-taskTicker.C:
+			dispatchTasks()
+		case <-m.redoWorkerAvailable:
+			dispatchTasks()
 		}
 	}
 }

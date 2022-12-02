@@ -68,4 +68,5 @@ type redoTask struct {
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
+	skipIter      bool
 }
