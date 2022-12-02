@@ -44,8 +44,8 @@ update t5 set should_skip = 0, c = 3 where c = 1;
 insert into t6 (id, name, msg) values (1, 'Müller', 'Müller'), (2, 'X Æ A-12', 'X Æ A-12');
 alter table t6 add column name2 varchar(20) character set latin1 default 'Müller';
 
--- trigger a flush
-alter table t5 add column dummy int;
-
 -- test https://github.com/pingcap/tiflow/issues/7774
 UPDATE t7 SET s = s + 1 WHERE a = 1;
+
+-- trigger a flush
+alter table t5 add column dummy int;
