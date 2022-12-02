@@ -160,7 +160,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		return nil
 	}
 
-	upperBound := task.getUpperBound()
+	upperBound := task.getUpperBound(task.tableSink)
 	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
 	defer func() {
 		if err := iter.Close(); err != nil {

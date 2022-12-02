@@ -38,7 +38,7 @@ var (
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func() engine.Position
+type upperBoundGetter func(*tableSinkWrapper) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
@@ -57,6 +57,8 @@ type sinkTask struct {
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
 	isCanceled    isCanceled
+	// If skipIter is true it means we can ensure there are no events in the given range.
+	skipIter bool
 }
 
 // redoTask is a task for the redo log.

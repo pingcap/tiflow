@@ -82,7 +82,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	availableMem := int(requestMemSize)
 	events := make([]*model.PolymorphicEvent, 0, 1024)
 	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound()
+	upperBound := task.getUpperBound(task.tableSink)
 
 	if w.eventCache != nil {
 		lowerBound, err = w.fetchFromCache(task, lowerBound, upperBound)

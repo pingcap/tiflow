@@ -86,6 +86,11 @@ func (m *SourceManager) OnResolve(action func(model.TableID, model.Ts)) {
 	m.engine.OnResolve(action)
 }
 
+// MayHaveEvents just wrap the engine's MayHaveEvents method.
+func (m *SourceManager) MayHaveEvents(lowerBound, upperBound engine.Position, tableID ...model.TableID) bool {
+	return m.engine.MayHaveEvents(lowerBound, upperBound, tableID...)
+}
+
 // FetchByTable just wrap the engine's FetchByTable method.
 func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) *engine.MountedEventIter {
 	iter := m.engine.FetchByTable(tableID, lowerBound, upperBound)
