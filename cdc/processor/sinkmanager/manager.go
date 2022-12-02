@@ -21,9 +21,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -48,6 +47,16 @@ type gcEvent struct {
 	cleanPos engine.Position
 }
 
+// TableStats of a table sink.
+type TableStats struct {
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	BarrierTs    model.Ts
+	// From sorter.
+	ReceivedMaxCommitTs   model.Ts
+	ReceivedMaxResolvedTs model.Ts
+}
+
 // SinkManager is the implementation of SinkManager.
 type SinkManager struct {
 	changefeedID model.ChangeFeedID
@@ -70,8 +79,8 @@ type SinkManager struct {
 	eventCache *redoEventCache
 	// redoManager is used to report the resolved ts of the table if redo log is enabled.
 	redoManager redo.LogManager
-	// sortEngine is used by the sink manager to fetch data.
-	sortEngine engine.SortEngine
+	// sourceManager is used by the sink manager to fetch data.
+	sourceManager *sourcemanager.SourceManager
 
 	// sinkFactory used to create table sink.
 	sinkFactory *factory.SinkFactory
@@ -108,8 +117,7 @@ func New(
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
 	redoManager redo.LogManager,
-	sortEngine engine.SortEngine,
-	mg entry.MounterGroup,
+	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
 	metricsTableSinkTotalRows prometheus.Counter,
 ) (*SinkManager, error) {
@@ -125,13 +133,13 @@ func New(
 
 	ctx, cancel := context.WithCancel(ctx)
 	m := &SinkManager{
-		changefeedID: changefeedID,
-		ctx:          ctx,
-		cancel:       cancel,
-		up:           up,
-		memQuota:     newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
-		sinkFactory:  tableSinkFactory,
-		sortEngine:   sortEngine,
+		changefeedID:  changefeedID,
+		ctx:           ctx,
+		cancel:        cancel,
+		up:            up,
+		memQuota:      newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
+		sinkFactory:   tableSinkFactory,
+		sourceManager: sourceManager,
 
 		engineGCChan: make(chan *gcEvent, defaultEngineGCChanSize),
 
@@ -148,10 +156,10 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		// Use at most 1/3 memory quota for redo event cache.
-		m.eventCache = newRedoEventCache(changefeedInfo.Config.MemoryQuota / 3)
+		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/3)
 	}
 
-	m.startWorkers(mg, changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
+	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 	m.backgroundGC()
 
@@ -164,9 +172,9 @@ func New(
 }
 
 // start all workers and report the error to the error channel.
-func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableOldValue bool) {
+func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, mg, m.sortEngine, m.memQuota,
+		w := newSinkWorker(m.changefeedID, m.sourceManager, m.memQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
@@ -195,7 +203,7 @@ func (m *SinkManager) startWorkers(mg entry.MounterGroup, splitTxn bool, enableO
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, mg, m.sortEngine, m.memQuota,
+		w := newRedoWorker(m.changefeedID, m.sourceManager, m.memQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
@@ -280,7 +288,7 @@ func (m *SinkManager) backgroundGC() {
 					zap.String("changefeed", m.changefeedID.ID))
 				return
 			case gcEvent := <-m.engineGCChan:
-				if err := m.sortEngine.CleanByTable(gcEvent.tableID, gcEvent.cleanPos); err != nil {
+				if err := m.sourceManager.CleanByTable(gcEvent.tableID, gcEvent.cleanPos); err != nil {
 					log.Error("Failed to clean table in sort engine",
 						zap.String("namespace", m.changefeedID.Namespace),
 						zap.String("changefeed", m.changefeedID.ID),
@@ -626,7 +634,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
+func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
@@ -659,13 +667,25 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) pipeline.Stats {
 	if m.redoManager != nil {
 		resolvedTs = m.redoManager.GetResolvedTs(tableID)
 	} else {
-		resolvedTs = m.sortEngine.GetResolvedTs(tableID)
+		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
 	}
-	return pipeline.Stats{
-		CheckpointTs: resolvedMark,
-		ResolvedTs:   resolvedTs,
-		BarrierTs:    m.lastBarrierTs.Load(),
+	return TableStats{
+		CheckpointTs:          resolvedMark,
+		ResolvedTs:            resolvedTs,
+		BarrierTs:             m.lastBarrierTs.Load(),
+		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
 	}
+}
+
+// ReceivedEvents returns the number of events received by all table sinks.
+func (m *SinkManager) ReceivedEvents() int64 {
+	totalReceivedEvents := int64(0)
+	m.tableSinks.Range(func(_, value interface{}) bool {
+		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
+		return true
+	})
+	return totalReceivedEvents
 }
 
 // Close closes all workers.

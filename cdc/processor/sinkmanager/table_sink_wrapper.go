@@ -47,6 +47,11 @@ type tableSinkWrapper struct {
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
+	// receivedSorterCommitTs is the commit ts received from the sorter.
+	// We use this to statistics the latency of the table sorter.
+	receivedSorterCommitTs atomic.Uint64
+	// receivedEventCount is the number of events received from the sorter.
+	receivedEventCount atomic.Int64
 }
 
 func newTableSinkWrapper(
@@ -89,6 +94,12 @@ func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 	t.receivedSorterResolvedTs.Store(ts)
 }
 
+func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
+	if ts > t.receivedSorterCommitTs.Load() {
+		t.receivedSorterCommitTs.Store(ts)
+	}
+}
+
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 		return errors.Trace(err)
@@ -102,6 +113,14 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
+}
+
+func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
+	return t.receivedSorterCommitTs.Load()
+}
+
+func (t *tableSinkWrapper) getReceivedEventCount() int64 {
+	return t.receivedEventCount.Load()
 }
 
 func (t *tableSinkWrapper) getState() tablepb.TableState {

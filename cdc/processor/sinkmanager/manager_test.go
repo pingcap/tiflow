@@ -22,6 +22,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	mockengine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
@@ -53,14 +54,16 @@ func createManagerWithMemEngine(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	errChan chan error,
-) *SinkManager {
+) (*SinkManager, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
+	up := upstream.NewUpstream4Test(&mockPD{})
+	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
 	manager, err := New(
-		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
-		nil, sortEngine, &entry.MockMountGroup{},
+		ctx, changefeedID, changefeedInfo, up,
+		nil, sm,
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
-	return manager
+	return manager, sortEngine
 }
 
 // nolint:revive
@@ -74,9 +77,11 @@ func createManagerWithMockEngine(
 ) (*SinkManager, *mockengine.MockSortEngine) {
 	ctrl := gomock.NewController(t)
 	sortEngine := mockengine.NewMockSortEngine(ctrl)
+	up := upstream.NewUpstream4Test(&mockPD{})
+	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
 	manager, err := New(
-		ctx, changefeedID, changefeedInfo, upstream.NewUpstream4Test(&mockPD{}),
-		nil, sortEngine, &entry.MockMountGroup{},
+		ctx, changefeedID, changefeedInfo, up,
+		nil, sm,
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
 	return manager, sortEngine
@@ -160,7 +165,7 @@ func TestAddTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -190,7 +195,7 @@ func TestRemoveTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -202,7 +207,7 @@ func TestRemoveTable(t *testing.T) {
 	require.NotNil(t, tableSink)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
@@ -232,7 +237,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -250,14 +255,14 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	err := manager.StartTable(tableID, 0)
@@ -278,14 +283,14 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
@@ -308,14 +313,14 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
@@ -335,10 +340,10 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
@@ -356,7 +361,7 @@ func TestClose(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 
 	err := manager.Close()
 	require.NoError(t, err)
@@ -382,7 +387,7 @@ func TestGetTableStats(t *testing.T) {
 	mockEngine.EXPECT().GetResolvedTs(tableID).AnyTimes()
 
 	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, manager.sortEngine, tableID)
+	addTableAndAddEventsToSortEngine(t, mockEngine, tableID)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)

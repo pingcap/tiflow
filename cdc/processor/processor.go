@@ -500,7 +500,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 	}
 }
 
-func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats pipeline.Stats) tablepb.Stats {
+func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
 	now, _ := p.upstream.PDClock.CurrentTime()
 
@@ -524,16 +524,15 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		},
 	}
 
-	// FIXME: add the stats of the sort engine.
-	//sortStats := p.sourceManager.GetTableSortStats(tableID)
-	//stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
-	//	CheckpointTs: sortStats.CheckpointTsIngress,
-	//	ResolvedTs:   sortStats.ResolvedTsIngress,
-	//}
-	//stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-	//	CheckpointTs: sortStats.CheckpointTsEgress,
-	//	ResolvedTs:   sortStats.ResolvedTsEgress,
-	//}
+	sortStats := p.sourceManager.GetTableSorterStats(tableID)
+	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+		CheckpointTs: sortStats.ReceivedMaxCommitTs,
+		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
+	}
+	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
+		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+	}
 
 	return stats
 }
@@ -847,9 +846,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, sortEngine, p.errCh)
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh)
 		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
-			sortEngine, p.mg, p.errCh, p.metricsTableSinkTotalRows)
+			p.sourceManager, p.errCh, p.metricsTableSinkTotalRows)
 		// Bind them so that sourceManager can notify sinkManager.
 		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
@@ -1252,10 +1251,15 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
-	var totalConsumed uint64
-	var totalEvents int64
-	if !p.pullBasedSinking {
-
+	if p.pullBasedSinking {
+		tables := p.sinkManager.GetAllCurrentTableIDs()
+		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
+		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
+		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
+	} else {
+		var totalConsumed uint64
+		var totalEvents int64
 		for _, table := range p.tables {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))

@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"go.uber.org/zap"
@@ -27,8 +27,7 @@ import (
 
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
-	mg             entry.MounterGroup
-	sortEngine     engine.SortEngine
+	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
@@ -38,8 +37,7 @@ type redoWorker struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
-	sortEngine engine.SortEngine,
+	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
@@ -48,8 +46,7 @@ func newRedoWorker(
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
-		sortEngine:     sortEngine,
+		sourceManager:  sourceManager,
 		memQuota:       quota,
 		redoManager:    redoManager,
 		eventCache:     eventCache,
@@ -164,10 +161,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	}
 
 	upperBound := task.getUpperBound()
-	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound),
-		w.mg, 256)
-
+	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
 	defer func() {
 		if err := iter.Close(); err != nil {
 			log.Error("sink redo worker fails to close iterator",
@@ -205,6 +199,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			lastPos = pos
 		}
 
+		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
