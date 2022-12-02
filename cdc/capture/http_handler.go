@@ -242,7 +242,36 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		}
 	}()
 
+<<<<<<< HEAD:cdc/capture/http_handler.go
 	infoStr := info.String()
+=======
+	infoStr, err := info.Marshal()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	o, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = o.ValidateChangefeed(info)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            up.ID,
+		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
+		KeyPath:       up.SecurityConfig.KeyPath,
+		CertPath:      up.SecurityConfig.CertPath,
+		CAPath:        up.SecurityConfig.CAPath,
+		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
+	}
+	etcdClient, err := h.capture.GetEtcdClient()
+>>>>>>> 1f6ae1fd8c (cdc: add delay for recreating changefeed (#7730)):cdc/api/v1/api.go
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
