@@ -1335,9 +1335,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 	p.wg.Wait()
 
 	if p.agent != nil {
+		log.Info("Processor try to close agent",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		if err := p.agent.Close(); err != nil {
 			log.Warn("close agent meet error", zap.Error(err))
 		}
+		log.Info("Processor closed agent successfully",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		p.agent = nil
 	}
 
