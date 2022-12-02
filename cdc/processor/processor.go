@@ -1281,6 +1281,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeedID.ID))
 	if p.pullBasedSinking {
 		if p.sourceManager != nil {
+			log.Info("Processor try to close source manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			if err := p.sourceManager.Close(); err != nil {
 				log.Error("Failed to close source manager",
 					zap.String("namespace", p.changefeedID.Namespace),
@@ -1288,9 +1291,15 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 					zap.Error(err))
 				return errors.Trace(err)
 			}
+			log.Info("Processor closed source manager successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			p.sourceManager = nil
 		}
 		if p.sinkManager != nil {
+			log.Info("Processor try to close sink manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			if err := p.sinkManager.Close(); err != nil {
 				log.Error("Failed to close sink manager",
 					zap.String("namespace", p.changefeedID.Namespace),
@@ -1298,6 +1307,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 					zap.Error(err))
 				return errors.Trace(err)
 			}
+			log.Info("Processor closed sink manager successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			p.sinkManager = nil
 		}
 		engineFactory := ctx.GlobalVars().SortEngineFactory
