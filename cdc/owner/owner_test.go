@@ -18,6 +18,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+<<<<<<< HEAD
+=======
+	"net/url"
+	"testing"
+>>>>>>> 1f6ae1fd8c (cdc: add delay for recreating changefeed (#7730))
 	"time"
 
 	"github.com/pingcap/check"
@@ -400,3 +405,464 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	case <-ch:
 	}
 }
+<<<<<<< HEAD
+=======
+
+// make sure handleJobs works well even if there is two different
+// version of captures in the cluster
+func TestHandleJobsDontBlock(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+	owner, state, tester := createOwner4Test(ctx, t)
+
+	statusProvider := owner.StatusProvider()
+	// work well
+	cf1 := model.DefaultChangeFeedID("test-changefeed")
+	cfInfo1 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr, err := cfInfo1.Marshal()
+	require.Nil(t, err)
+	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf1,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+
+	require.Contains(t, owner.changefeeds, cf1)
+
+	// add an non-consistent version capture
+	captureInfo := &model.CaptureInfo{
+		ID:            "capture-higher-version",
+		AdvertiseAddr: "127.0.0.1:0000",
+		// owner version is `v6.3.0`, use `v6.4.0` to make version inconsistent
+		Version: "v6.4.0",
+	}
+	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err := captureInfo.Marshal()
+	require.Nil(t, err)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed
+	cf2 := model.DefaultChangeFeedID("test-changefeed1")
+	cfInfo2 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr1, err := cfInfo2.Marshal()
+	require.Nil(t, err)
+	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf2,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	// add changefeed success when the cluster have mixed version.
+	require.NotNil(t, owner.changefeeds[cf2])
+
+	// add third non-consistent version capture
+	captureInfo = &model.CaptureInfo{
+		ID:            "capture-higher-version-2",
+		AdvertiseAddr: "127.0.0.1:8302",
+		// only allow at most 2 different version instances in the cdc cluster.
+		Version: "v6.5.0",
+	}
+	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err = captureInfo.Marshal()
+	require.NoError(t, err)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed, this should not be handled
+	cf3 := model.DefaultChangeFeedID("test-changefeed2")
+	cfInfo3 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr2, err := cfInfo3.Marshal()
+	require.NoError(t, err)
+	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf3,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr2))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.NoError(t, err)
+	// add changefeed failed, since 3 different version instances in the cluster.
+	require.Nil(t, owner.changefeeds[cf3])
+
+	// make sure statusProvider works well
+	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	var errIn error
+	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
+	done := make(chan struct{})
+	go func() {
+		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
+		done <- struct{}{}
+	}()
+
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+WorkLoop:
+	for {
+		select {
+		case <-done:
+			break WorkLoop
+		case <-ctx1.Done():
+			t.Fatal(ctx1.Err())
+		case <-ticker.C:
+			_, err = owner.Tick(ctx, state)
+			require.Nil(t, err)
+		}
+	}
+	require.Nil(t, errIn)
+	require.NotNil(t, infos[cf1])
+	require.NotNil(t, infos[cf2])
+	require.Nil(t, infos[cf3])
+}
+
+func TestCalculateGCSafepointTs(t *testing.T) {
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	expectMinTsMap := make(map[uint64]uint64)
+	expectForceUpdateMap := make(map[uint64]interface{})
+	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+
+	for i := 0; i < 100; i++ {
+		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
+		upstreamID := uint64(i / 10)
+		cfInfo := &model.ChangeFeedInfo{UpstreamID: upstreamID, State: model.StateNormal}
+		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
+		changefeed := &orchestrator.ChangefeedReactorState{
+			ID:     cfID,
+			Info:   cfInfo,
+			Status: cfStatus,
+		}
+		state.Changefeeds[cfID] = changefeed
+
+		// expectMinTsMap will be like map[upstreamID]{0, 10, 20, ..., 90}
+		if i%10 == 0 {
+			expectMinTsMap[upstreamID] = uint64(i)
+		}
+
+		// If a changefeed does not exist in ownerImpl.changefeeds,
+		// forceUpdate should be true.
+		if upstreamID%2 == 0 {
+			expectForceUpdateMap[upstreamID] = nil
+		} else {
+			o.changefeeds[cfID] = nil
+		}
+	}
+
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
+	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
+	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+// AsyncStop should cleanup jobs and reject.
+func TestAsyncStop(t *testing.T) {
+	t.Parallel()
+
+	owner := ownerImpl{}
+	done := make(chan error, 1)
+	owner.EnqueueJob(model.AdminJob{
+		CfID: model.DefaultChangeFeedID("test-changefeed1"),
+		Type: model.AdminResume,
+	}, done)
+	owner.AsyncStop()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	default:
+		require.Fail(t, "unexpected")
+	}
+
+	done = make(chan error, 1)
+	owner.EnqueueJob(model.AdminJob{
+		CfID: model.DefaultChangeFeedID("test-changefeed1"),
+		Type: model.AdminResume,
+	}, done)
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	default:
+		require.Fail(t, "unexpected")
+	}
+}
+
+func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
+	t.Parallel()
+
+	cf := &changefeed{
+		scheduler: nil, // scheduler is not set.
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+	}
+
+	pdClient := &gc.MockPDClient{}
+	o := &ownerImpl{
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		upstreamManager: upstream.NewManager4Test(pdClient),
+	}
+	o.changefeeds[model.ChangeFeedID{}] = cf
+
+	ctx := context.Background()
+	query := &scheduler.Query{CaptureID: "test"}
+	done := make(chan error, 1)
+
+	// check store version failed.
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, errors.New("store version check failed")
+	}
+	o.handleDrainCaptures(ctx, query, done)
+	require.Equal(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Error(t, <-done)
+
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, nil
+	}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(ctx, query, done)
+	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
+
+	// Only count changefeed that is normal.
+	cf.state.Info.State = model.StateStopped
+	query = &scheduler.Query{CaptureID: "test"}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(ctx, query, done)
+	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
+}
+
+type healthScheduler struct {
+	scheduler.Scheduler
+	scheduler.InfoProvider
+	init bool
+}
+
+func (h *healthScheduler) IsInitialized() bool {
+	return h.init
+}
+
+func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
+	t.Parallel()
+
+	// There is at least one changefeed not in the normal state, the whole cluster should
+	// still be healthy, since abnormal changefeeds does not affect other normal changefeeds.
+	o := &ownerImpl{
+		changefeeds:      make(map[model.ChangeFeedID]*changefeed),
+		changefeedTicked: true,
+	}
+
+	query := &Query{Tp: QueryHealth}
+
+	// no changefeed at the first, should be healthy
+	err := o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// 1 changefeed, state is nil
+	cf := &changefeed{}
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// state is not normal
+	cf.state = &orchestrator.ChangefeedReactorState{
+		Info: &model.ChangeFeedInfo{State: model.StateStopped},
+	}
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// 2 changefeeds, another is normal, and scheduler initialized.
+	o.changefeeds[model.ChangeFeedID{ID: "2"}] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+		scheduler: &healthScheduler{init: true},
+	}
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+}
+
+func TestIsHealthy(t *testing.T) {
+	t.Parallel()
+
+	o := &ownerImpl{
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		logLimiter:  rate.NewLimiter(1, 1),
+	}
+	query := &Query{Tp: QueryHealth}
+
+	// Unhealthy, changefeeds are not ticked.
+	o.changefeedTicked = false
+	err := o.handleQueries(query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	o.changefeedTicked = true
+	// Unhealthy, cdc cluster version is inconsistent
+	o.captures = map[model.CaptureID]*model.CaptureInfo{
+		"1": {
+			Version: version.MinTiCDCVersion.String(),
+		},
+		"2": {
+			Version: version.MaxTiCDCVersion.String(),
+		},
+	}
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// make all captures version consistent.
+	o.captures["2"].Version = version.MinTiCDCVersion.String()
+	// Healthy, no changefeed.
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// changefeed in normal, but the scheduler is not set, Unhealthy.
+	cf := &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+		scheduler: nil, // scheduler is not set.
+	}
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// Healthy, scheduler is set and return true.
+	cf.scheduler = &healthScheduler{init: true}
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.True(t, query.Data.(bool))
+
+	// Unhealthy, changefeeds are not ticked.
+	o.changefeedTicked = false
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// Unhealthy, there is another changefeed is not initialized.
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+		scheduler: &healthScheduler{init: false},
+	}
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+}
+
+func TestValidateChangefeed(t *testing.T) {
+	t.Parallel()
+
+	// Test `ValidateChangefeed` by setting `hasCIEnv` to false.
+	//
+	// FIXME: We need a better way to enable following tests
+	//        Changing global variable in a unit test is BAD practice.
+	hasCIEnv = false
+
+	o := &ownerImpl{
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		// logLimiter:  rate.NewLimiter(1, 1),
+		removedChangefeed: make(map[model.ChangeFeedID]time.Time),
+		removedSinkURI:    make(map[url.URL]time.Time),
+	}
+
+	id := model.ChangeFeedID{Namespace: "a", ID: "b"}
+	sinkURI := "mysql://host:1234/"
+	o.changefeeds[id] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{SinkURI: sinkURI},
+		},
+		feedStateManager: &feedStateManager{},
+	}
+
+	o.pushOwnerJob(&ownerJob{
+		Tp:           ownerJobTypeAdminJob,
+		ChangefeedID: id,
+		AdminJob: &model.AdminJob{
+			CfID: id,
+			Type: model.AdminRemove,
+		},
+		done: make(chan<- error, 1),
+	})
+	o.handleJobs(context.Background())
+
+	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	}))
+	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	}))
+
+	// Test invalid sink URI
+	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		SinkURI: "wrong uri\n\t",
+	}))
+
+	// Test limit passed.
+	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
+	o.removedSinkURI[url.URL{
+		Scheme: "mysql",
+		Host:   "host:1234",
+	}] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
+
+	require.Nil(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	}))
+	require.Nil(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	}))
+
+	// Test GC.
+	o.handleJobs(context.Background())
+	require.Equal(t, 0, len(o.removedChangefeed))
+	require.Equal(t, 0, len(o.removedSinkURI))
+}
+>>>>>>> 1f6ae1fd8c (cdc: add delay for recreating changefeed (#7730))
