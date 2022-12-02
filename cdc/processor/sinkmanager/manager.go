@@ -345,6 +345,9 @@ func (m *SinkManager) generateSinkTasks() error {
 	}
 
 	dispatchTasks := func() error {
+        log.Info("QP dispatchTasks is called",
+            zap.String("namespace", m.changefeedID.Namespace),
+            zap.String("changefeed", m.changefeedID.ID))
 		tables := make([]*tableSinkWrapper, 0, sinkWorkerNum)
 		progs := make([]*progress, 0, sinkWorkerNum)
 
@@ -354,7 +357,7 @@ func (m *SinkManager) generateSinkTasks() error {
 
 			value, ok := m.tableSinks.Load(tableID)
 			if !ok {
-				log.Info("Table sink not found, probably already removed",
+				log.Info("QP Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableID))
@@ -369,7 +372,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
 			if tableState != tablepb.TableStateReplicating {
-				log.Info("Table sink is not replicating, skip it",
+				log.Info("QP Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableID),
@@ -379,16 +382,19 @@ func (m *SinkManager) generateSinkTasks() error {
 			tables = append(tables, tableSink)
 			progs = append(progs, slowestTableProgress)
 		}
+        log.Info("QP collect tables finish",
+            zap.String("namespace", m.changefeedID.Namespace),
+            zap.String("changefeed", m.changefeedID.ID))
 
 		i := 0
-		for i < len(tables) {
+		for ; i < len(tables); i++ {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
 			upperBound := getUpperBound(tableSink)
 
 			// The table has no available progress.
-			if lowerBound.Compare(upperBound) <= 0 {
+			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
@@ -432,9 +438,10 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Int64("tableID", tableSink.tableID),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
+                continue
 			default:
-				break
 			}
+            break
 		}
 		for i < len(progs) {
 			m.sinkProgressHeap.push(progs[i])
