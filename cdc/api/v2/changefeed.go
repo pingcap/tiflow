@@ -119,6 +119,18 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	o, err := h.capture.GetOwner()
+	if err != nil {
+		needRemoveGCSafePoint = true
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	err = o.ValidateChangefeed(info)
+	if err != nil {
+		needRemoveGCSafePoint = true
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
 
 	err = etcdClient.CreateChangefeedInfo(ctx,
 		upstreamInfo,
