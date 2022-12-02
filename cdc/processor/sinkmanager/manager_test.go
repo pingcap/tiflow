@@ -401,11 +401,6 @@ func TestGetTableStats(t *testing.T) {
 		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 
-	cleanPos := engine.Position{
-		StartTs:  2,
-		CommitTs: 3,
-	}
-	mockEngine.EXPECT().CleanByTable(tableID, cleanPos).Times(1)
 	stats := manager.GetTableStats(tableID)
 	require.Equal(t, uint64(3), stats.CheckpointTs)
 }

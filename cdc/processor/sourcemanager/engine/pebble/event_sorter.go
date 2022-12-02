@@ -188,7 +188,6 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.onResolves = append(s.onResolves, action)
 }
 
-
 // FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
@@ -215,9 +214,9 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("resolved", sortedResolved))
 	}
 
-    if !s.mayHaveEvents(tableID, lowerBound, upperBound) {
-        return &EventIter{tableID: tableID, state: state, iter: nil, serde: s.serde}
-    }
+	if !s.mayHaveEvents(tableID, lowerBound, upperBound) {
+		return &EventIter{tableID: tableID, state: state, iter: nil, serde: s.serde}
+	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
@@ -239,12 +238,8 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	s.mu.RUnlock()
 
 	if !exists {
-		log.Panic("clean an non-existent table",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+		return nil
 	}
-
 	return s.cleanTable(state, tableID, upperBound)
 }
 
@@ -563,7 +558,6 @@ func (s *EventSorter) mayHaveEvents(tableID model.TableID, lowerBound, upperBoun
 
 // ----- Some internal variable and functions -----
 const batchCommitCount uint32 = 1024
-const timeSliceLimit int = 8 * 1024
 
 var uniqueIDGen uint32 = 0
 

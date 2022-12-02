@@ -302,6 +302,9 @@ func (m *SinkManager) backgroundGC() {
 					}
 					checkpointTs := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
+					if resolvedMark == 0 {
+						continue
+					}
 					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
 					if err := m.sourceManager.CleanByTable(tableID, cleanPos); err != nil {
 						log.Error("Failed to clean table in sort engine",
@@ -317,6 +320,12 @@ func (m *SinkManager) backgroundGC() {
 								zap.String("changefeed", m.changefeedID.ID),
 								zap.Error(err))
 						}
+					} else {
+						log.Debug("table stale data has been cleaned",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Int64("tableID", tableID),
+							zap.Any("upperBound", cleanPos))
 					}
 					sink.lastCleanTime = time.Now()
 				}
@@ -349,7 +358,7 @@ func (m *SinkManager) generateSinkTasks() error {
 		tables := make([]*tableSinkWrapper, 0, sinkWorkerNum)
 		progs := make([]*progress, 0, sinkWorkerNum)
 
-        // Collect some table progresses.
+		// Collect some table progresses.
 		for len(tables) < sinkWorkerNum && m.sinkProgressHeap.len() > 0 {
 			slowestTableProgress := m.sinkProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
@@ -383,7 +392,7 @@ func (m *SinkManager) generateSinkTasks() error {
 		}
 
 		i := 0
-    LOOP:
+	LOOP:
 		for ; i < len(tables); i++ {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
@@ -435,10 +444,10 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-                break LOOP
+				break LOOP
 			}
 		}
-        // Some progresses are not handled, return them back.
+		// Some progresses are not handled, return them back.
 		for ; i < len(progs); i++ {
 			m.sinkProgressHeap.push(progs[i])
 		}
@@ -503,7 +512,7 @@ func (m *SinkManager) generateRedoTasks() error {
 		}
 
 		i := 0
-    LOOP:
+	LOOP:
 		for ; i < len(tables); i++ {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
@@ -552,7 +561,7 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-                break LOOP
+				break LOOP
 			}
 		}
 		for ; i < len(progs); i++ {
