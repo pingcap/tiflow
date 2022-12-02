@@ -90,21 +90,24 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = mar.MarshalToString(loadStatus)
 		syncStatusBytes, _ = mar.MarshalToString(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMDump,
-			Stage:  metadata.StageRunning,
-			Status: []byte(dumpStatusBytes),
+			Unit:         frameModel.WorkerDMDump,
+			Stage:        metadata.StageRunning,
+			Status:       []byte(dumpStatusBytes),
+			IoTotalBytes: 0,
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMLoad,
-			Stage:  metadata.StageFinished,
-			Result: &dmpkg.ProcessResult{IsCanceled: false},
-			Status: []byte(loadStatusBytes),
+			Unit:         frameModel.WorkerDMLoad,
+			Stage:        metadata.StageFinished,
+			Result:       &dmpkg.ProcessResult{IsCanceled: false},
+			Status:       []byte(loadStatusBytes),
+			IoTotalBytes: 0,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMSync,
-			Stage:  metadata.StagePaused,
-			Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
-			Status: []byte(syncStatusBytes),
+			Unit:         frameModel.WorkerDMSync,
+			Stage:        metadata.StagePaused,
+			Result:       &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
+			Status:       []byte(syncStatusBytes),
+			IoTotalBytes: 0,
 		}
 		taskCfg = &config.TaskCfg{
 			JobCfg: config.JobCfg{

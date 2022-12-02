@@ -22,6 +22,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -97,6 +98,7 @@ func TestTaskCfg(t *testing.T) {
 		expectCfg := &dmconfig.SubTaskConfig{}
 		_, err := toml.DecodeFile(fmt.Sprintf("%s/dm_subtask_%d.toml", subtaskTemplateDir, taskCfg.Upstreams[0].DBCfg.Port), expectCfg)
 		require.NoError(t, err)
+		expectCfg.IOTotalBytes = atomic.NewUint64(0)
 		require.EqualValues(t, expectCfg, subTaskCfg)
 	}
 }
