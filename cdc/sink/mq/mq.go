@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -53,10 +52,9 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       config.Protocol
 
-	topicManager   manager.TopicManager
-	flushWorker    *flushWorker
-	tableTsMap     sync.Map
-	resolvedBuffer *chann.Chann[resolvedTsEvent]
+	topicManager manager.TopicManager
+	flushWorker  *flushWorker
+	tableTsMap   sync.Map
 
 	statistics *metrics.Statistics
 
@@ -98,7 +96,6 @@ func newMqSink(
 		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
-		resolvedBuffer: chann.New[resolvedTsEvent](),
 		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
@@ -368,12 +365,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 // It is only called in the processor, and the processor destroys the
 // table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(_ context.Context) error {
-	k.resolvedBuffer.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range k.resolvedBuffer.Out() {
-		// Do nothing. We do not care about the data.
-	}
 	// NOTICE: We must close the resolved buffer before closing the flush worker.
 	// Otherwise, bgFlushTs method will panic.
 	k.flushWorker.close()
