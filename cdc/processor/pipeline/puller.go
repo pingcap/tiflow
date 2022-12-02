@@ -62,7 +62,7 @@ func (n *pullerNode) tableSpan() []regionspan.Span {
 
 func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 	up *upstream.Upstream, wg *errgroup.Group,
-	sorter *sorterNode,
+	sorter *sorterNode, filterLoop bool,
 ) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
@@ -84,6 +84,7 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		n.changefeed,
 		n.tableID,
 		n.tableName,
+		filterLoop,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))

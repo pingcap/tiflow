@@ -21,17 +21,21 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) *sinkWorker {
+func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
+	sm := sourcemanager.New(changefeedID, upstream.NewUpstream4Test(&mockPD{}),
+		&entry.MockMountGroup{}, sortEngine, make(chan error, 1))
 	quota := newMemQuota(changefeedID, memQuota)
-	return newSinkWorker(changefeedID, &entry.MockMountGroup{}, sortEngine, quota, nil, splitTxn, false)
+	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -155,8 +159,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		},
 	}
 
-	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -261,8 +265,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		},
 	}
 
-	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -386,8 +390,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 			},
 		},
 	}
-	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -516,8 +520,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
-	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -642,8 +646,8 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 			},
 		},
 	}
-	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, false)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -767,8 +771,8 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
-	w := createWorker(changefeedID, eventSize, false)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, false)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -885,8 +889,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			},
 		},
 	}
-	w := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, w.sortEngine, tableID)
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup

@@ -50,6 +50,10 @@ const (
 	ddlPullerStuckWarnDuration = 30 * time.Second
 	// DDLPullerTableName is the fake table name for ddl puller
 	DDLPullerTableName = "DDL_PULLER"
+	// ddl puller should never filter any DDL jobs even if
+	// the changefeed is in BDR mode, because the DDL jobs should
+	// be filtered before they are sent to the sink
+	ddLPullerFilterLoop = false
 )
 
 // DDLJobPuller is used to pull ddl job from TiKV.
@@ -481,7 +485,9 @@ func NewDDLJobPuller(
 			regionspan.GetAllDDLSpan(),
 			cfg,
 			changefeed,
-			-1, DDLPullerTableName),
+			-1, DDLPullerTableName,
+			ddLPullerFilterLoop,
+		),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 		metricDiscardedDDLCounter: discardedDDLCounter.
