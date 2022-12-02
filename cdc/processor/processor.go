@@ -1279,6 +1279,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
+	p.cancel()
 	if p.pullBasedSinking {
 		if p.sourceManager != nil {
 			log.Info("Processor try to close source manager",
@@ -1329,25 +1330,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		for _, tbl := range p.tables {
 			tbl.Wait()
 		}
-	}
-
-	p.cancel()
-	p.wg.Wait()
-
-	if p.agent != nil {
-		log.Info("Processor try to close agent",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		if err := p.agent.Close(); err != nil {
-			log.Warn("close agent meet error", zap.Error(err))
-		}
-		log.Info("Processor closed agent successfully",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-		p.agent = nil
-	}
-
-	if !p.pullBasedSinking {
 		// sink close might be time-consuming, do it the last.
 		if p.sinkV1 != nil {
 			// pass a canceled context is ok here, since we don't need to wait Close
@@ -1385,6 +1367,20 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
 		}
+	}
+	p.wg.Wait()
+
+	if p.agent != nil {
+		log.Info("Processor try to close agent",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		if err := p.agent.Close(); err != nil {
+			log.Warn("close agent meet error", zap.Error(err))
+		}
+		log.Info("Processor closed agent successfully",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		p.agent = nil
 	}
 
 	// mark tables share the same cdcContext with its original table, don't need to cancel
