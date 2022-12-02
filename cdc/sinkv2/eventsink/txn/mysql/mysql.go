@@ -93,6 +93,12 @@ func NewMySQLBackends(
 	if err != nil {
 		return nil, err
 	}
+
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
@@ -541,12 +547,28 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				}
 			}
 
+			// we set write source for each txn,
+			// so we can use it to trace the data source
+			if err = s.setWriteSource(ctx, tx); err != nil {
+				err := logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeed,
+					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
+						s.cfg.SourceID),
+					dmls.rowCount, dmls.startTs)
+				if rbErr := tx.Rollback(); rbErr != nil {
+					if errors.Cause(rbErr) != context.Canceled {
+						log.Warn("failed to rollback txn", zap.Error(rbErr))
+					}
+				}
+				return 0, err
+			}
+
 			if err = tx.Commit(); err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-
 			return dmls.rowCount, nil
 		})
 		if err != nil {
@@ -611,4 +633,25 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 // Only for testing.
 func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
+}
+
+// setWriteSource sets write source for the transaction.
+func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
+	// we only set write source when donwstream is TiDB
+	if !s.cfg.IsTiDB {
+		return nil
+	}
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
+	_, err := txn.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

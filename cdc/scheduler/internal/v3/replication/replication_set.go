@@ -917,3 +917,46 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	}
 	r.Stats = stats
 }
+
+// SetHeap is a max-heap, it implements heap.Interface.
+type SetHeap []*ReplicationSet
+
+// NewReplicationSetHeap creates a new SetHeap.
+func NewReplicationSetHeap(capacity int) SetHeap {
+	if capacity <= 0 {
+		panic("capacity must be positive")
+	}
+	return make(SetHeap, 0, capacity)
+}
+
+// Len returns the length of the heap.
+func (h SetHeap) Len() int { return len(h) }
+
+// Less returns true if the element at i is less than the element at j.
+func (h SetHeap) Less(i, j int) bool {
+	if h[i].Checkpoint.CheckpointTs > h[j].Checkpoint.CheckpointTs {
+		return true
+	}
+	if h[i].Checkpoint.CheckpointTs == h[j].Checkpoint.CheckpointTs {
+		return h[i].Checkpoint.ResolvedTs > h[j].Checkpoint.ResolvedTs
+	}
+	return false
+}
+
+// Swap swaps the elements with indexes i and j.
+func (h SetHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+// Push pushes an element to the heap.
+func (h *SetHeap) Push(x interface{}) {
+	*h = append(*h, x.(*ReplicationSet))
+}
+
+// Pop pops an element from the heap.
+func (h *SetHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	old[n-1] = nil
+	*h = old[0 : n-1]
+	return x
+}

@@ -132,7 +132,7 @@ func NewMySQLSink(
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
 
-	testDB, err := pmysql.CheckAndAdjustPassword(ctx, dsn, GetDBConnImpl)
+	testDB, err := pmysql.GetTestDB(ctx, dsn, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
