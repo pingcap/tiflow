@@ -304,7 +304,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
-	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicate)
+	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
 	if subtaskCfg.To.Session != nil {
@@ -315,6 +315,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.TiDB.Vars = map[string]string{
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
+		// always disable foreign key check when do full sync.
+		"foreign_key_checks": "0",
 	}
 	cfg.Mydumper.SourceID = subtaskCfg.SourceID
 	return cfg, nil

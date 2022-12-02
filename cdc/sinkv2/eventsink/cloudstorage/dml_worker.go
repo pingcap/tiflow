@@ -15,6 +15,7 @@ package cloudstorage
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -24,9 +25,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	mcloudstorage "github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -39,21 +43,35 @@ type dmlWorker struct {
 	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
-	// defragmenters maintains a mapping of <table, defragmenter>.
-	defragmenters sync.Map
+	// tableEvents maintains a mapping of <table, []eventFragment>.
+	tableEvents *tableEventsMap
 	// fileIndex maintains a mapping of <table, index number>.
 	fileIndex map[versionedTable]uint64
 	// fileSize maintains a mapping of <table, file size>.
-	fileSize  map[versionedTable]uint64
-	wg        sync.WaitGroup
-	isClosed  uint64
-	errCh     chan<- error
-	extension string
+	fileSize         map[versionedTable]uint64
+	wg               sync.WaitGroup
+	isClosed         uint64
+	errCh            chan<- error
+	extension        string
+	statistics       *metrics.Statistics
+	metricWriteBytes prometheus.Gauge
+	metricFileCount  prometheus.Gauge
+}
+
+type tableEventsMap struct {
+	mu        sync.Mutex
+	fragments map[versionedTable][]eventFragment
+}
+
+func newTableEventsMap() *tableEventsMap {
+	return &tableEventsMap{
+		fragments: make(map[versionedTable][]eventFragment),
+	}
 }
 
 // flushTask defines a task containing the tables to be flushed.
 type flushTask struct {
-	targetTables []versionedTable
+	targetTables []*model.TableInfo
 }
 
 func newDMLWorker(
@@ -62,18 +80,23 @@ func newDMLWorker(
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	statistics *metrics.Statistics,
 	errCh chan<- error,
 ) *dmlWorker {
 	d := &dmlWorker{
-		id:            id,
-		changeFeedID:  changefeedID,
-		storage:       storage,
-		config:        config,
-		flushNotifyCh: make(chan flushTask, 1),
-		fileIndex:     make(map[versionedTable]uint64),
-		fileSize:      make(map[versionedTable]uint64),
-		extension:     extension,
-		errCh:         errCh,
+		id:               id,
+		changeFeedID:     changefeedID,
+		storage:          storage,
+		config:           config,
+		tableEvents:      newTableEventsMap(),
+		flushNotifyCh:    make(chan flushTask, 1),
+		fileIndex:        make(map[versionedTable]uint64),
+		fileSize:         make(map[versionedTable]uint64),
+		extension:        extension,
+		errCh:            errCh,
+		statistics:       statistics,
+		metricWriteBytes: mcloudstorage.CloudStorageWriteBytesGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricFileCount:  mcloudstorage.CloudStorageFileCountGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
 	return d
@@ -82,7 +105,7 @@ func newDMLWorker(
 // run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
 	d.backgroundFlushMsgs(ctx)
-	d.backgroundDispatchMsgs(ctx, ch)
+	d.backgroundDispatchTasks(ctx, ch)
 }
 
 // backgroundFlushMsgs flush messages from active tables to cloud storage.
@@ -101,36 +124,64 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				for _, table := range task.targetTables {
+				for _, tableInfo := range task.targetTables {
 					buf.Reset()
 					var callbacks []func()
-					v, ok := d.defragmenters.Load(table)
-					if !ok {
-						log.Panic("failed to load defragmenter for table",
-							zap.Int("workerID", d.id),
-							zap.String("namespace", d.changeFeedID.ID),
-							zap.String("changefeed", d.changeFeedID.ID),
-							zap.String("schema", table.Schema),
-							zap.String("table", table.Table),
-						)
+					table := versionedTable{
+						TableName: tableInfo.TableName,
+						version:   tableInfo.Version,
 					}
-					defrag := v.(*defragmenter)
-					msgs := defrag.reassmebleFrag()
-					if len(msgs) == 0 {
+					d.tableEvents.mu.Lock()
+					events := make([]eventFragment, len(d.tableEvents.fragments[table]))
+					copy(events, d.tableEvents.fragments[table])
+					d.tableEvents.fragments[table] = d.tableEvents.fragments[table][:0]
+					d.tableEvents.mu.Unlock()
+					if len(events) == 0 {
 						continue
 					}
 
-					for _, msg := range msgs {
-						buf.Write(msg.Value)
-						callbacks = append(callbacks, msg.Callback)
+					rowsCnt := 0
+					for _, frag := range events {
+						msgs := frag.encodedMsgs
+						d.statistics.ObserveRows(frag.event.Event.Rows...)
+						for _, msg := range msgs {
+							d.metricWriteBytes.Add(float64(len(msg.Value)))
+							rowsCnt += msg.GetRowsCount()
+							buf.Write(msg.Value)
+							callbacks = append(callbacks, msg.Callback)
+						}
 					}
 
-					path := d.generateCloudStoragePath(table)
-					err := d.storage.WriteFile(ctx, path, buf.Bytes())
-					if err != nil {
+					// mandatorily generate scheme.json file before generating the first data file
+					if d.fileIndex[table] == 0 {
+						var tableDetail cloudstorage.TableDetail
+						tableDetail.FromTableInfo(tableInfo)
+						path := d.generateSchemaFilePath(tableDetail)
+						encodedDetail, err := json.MarshalIndent(tableDetail, "", "    ")
+						if err != nil {
+							d.errCh <- err
+							return
+						}
+
+						err = d.storage.WriteFile(ctx, path, encodedDetail)
+						if err != nil {
+							d.errCh <- err
+							return
+						}
+					}
+
+					path := d.generateDataFilePath(table)
+					if err := d.statistics.RecordBatchExecution(func() (int, error) {
+						err := d.storage.WriteFile(ctx, path, buf.Bytes())
+						if err != nil {
+							return 0, err
+						}
+						return rowsCnt, nil
+					}); err != nil {
 						d.errCh <- err
 						return
 					}
+					d.metricFileCount.Add(1)
 
 					for _, cb := range callbacks {
 						if cb != nil {
@@ -150,10 +201,11 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 	}()
 }
 
-// backgroundDispatchMsgs dispatch eventFragment to each table's defragmenter,
-// and it periodically emits flush tasks.
-func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[eventFragment]) {
-	tableSet := make(map[versionedTable]struct{})
+// backgroundDispatchTasks dispatches flush tasks in two conditions:
+// 1. the flush interval exceeds the upper limit.
+// 2. the file size exceeds the upper limit.
+func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) {
+	tableSet := make(map[*model.TableInfo]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
 	d.wg.Add(1)
@@ -170,7 +222,7 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				if atomic.LoadUint64(&d.isClosed) == 1 {
 					return
 				}
-				var readyTables []versionedTable
+				var readyTables []*model.TableInfo
 				for tbl := range tableSet {
 					readyTables = append(readyTables, tbl)
 				}
@@ -186,10 +238,14 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				case d.flushNotifyCh <- task:
 					log.Debug("flush task is emitted successfully when flush interval exceeds",
 						zap.Any("tables", task.targetTables))
-					for tbl := range tableSet {
+					for tableInfo := range tableSet {
+						tbl := versionedTable{
+							TableName: tableInfo.TableName,
+							version:   tableInfo.Version,
+						}
 						d.fileSize[tbl] = 0
 					}
-					tableSet = make(map[versionedTable]struct{})
+					tableSet = make(map[*model.TableInfo]struct{})
 				default:
 				}
 			case frag, ok := <-ch.Out():
@@ -197,13 +253,11 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 					return
 				}
 				table := frag.versionedTable
-				if _, ok := d.defragmenters.Load(table); !ok {
-					d.defragmenters.Store(table, newDefragmenter())
-				}
-				v, _ := d.defragmenters.Load(table)
-				defrag := v.(*defragmenter)
-				tableSet[table] = struct{}{}
-				defrag.registerFrag(frag)
+				d.tableEvents.mu.Lock()
+				d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
+				d.tableEvents.mu.Unlock()
+
+				tableSet[frag.event.Event.TableInfo] = struct{}{}
 				for _, msg := range frag.encodedMsgs {
 					if msg.Value != nil {
 						d.fileSize[table] += uint64(len(msg.Value))
@@ -213,7 +267,7 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 				// as soon as possible.
 				if d.fileSize[table] > uint64(d.config.FileSize) {
 					task := flushTask{
-						targetTables: []versionedTable{table},
+						targetTables: []*model.TableInfo{frag.event.Event.TableInfo},
 					}
 					select {
 					case <-ctx.Done():
@@ -230,7 +284,11 @@ func (d *dmlWorker) backgroundDispatchMsgs(ctx context.Context, ch *chann.Chann[
 	}()
 }
 
-func (d *dmlWorker) generateCloudStoragePath(tbl versionedTable) string {
+func (d *dmlWorker) generateSchemaFilePath(def cloudstorage.TableDetail) string {
+	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.Version)
+}
+
+func (d *dmlWorker) generateDataFilePath(tbl versionedTable) string {
 	var elems []string
 
 	d.fileIndex[tbl]++

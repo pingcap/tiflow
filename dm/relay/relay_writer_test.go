@@ -237,7 +237,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	defer w1.Close()
 	w1.Init(uuid, filename)
 	_, err = w1.WriteEvent(rotateEv)
-	c.Assert(err, check.ErrorMatches, ".*file not opened.*")
+	c.Assert(err, check.ErrorMatches, ".*no underlying writer opened")
 
 	// 2. fake RotateEvent before FormatDescriptionEvent
 	relayDir = c.MkDir() // use a new relay directory
@@ -262,6 +262,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	filename2 := filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename1)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
+	c.Assert(w2.Flush(), check.IsNil)
 	data, err := os.ReadFile(filename2)
 	c.Assert(err, check.IsNil)
 	fileHeaderLen := len(replication.BinLogFileHeader)
@@ -292,6 +293,7 @@ func (t *testFileWriterSuite) TestRotateEventWithFormatDescriptionEvent(c *check
 	filename2 = filepath.Join(relayDir, uuid, nextFilename)
 	_, err = os.Stat(filename2)
 	c.Assert(os.IsNotExist(err), check.IsTrue)
+	c.Assert(w3.Flush(), check.IsNil)
 	data, err = os.ReadFile(filename1)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(data), check.Equals, fileHeaderLen+len(formatDescEv.RawData))
@@ -399,6 +401,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 		c.Assert(result.Ignore, check.IsFalse) // no event is ignored
 	}
 
+	c.Assert(w.Flush(), check.IsNil)
 	t.verifyFilenameOffset(c, w, filename, int64(allData.Len()))
 
 	// read the data back from the file
@@ -448,6 +451,7 @@ func (t *testFileWriterSuite) TestHandleFileHoleExist(c *check.C) {
 	result, err = w.WriteEvent(queryEv)
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Ignore, check.IsFalse)
+	c.Assert(w.Flush(), check.IsNil)
 	fileSize := int64(queryEv.Header.LogPos)
 	t.verifyFilenameOffset(c, w, filename, fileSize)
 

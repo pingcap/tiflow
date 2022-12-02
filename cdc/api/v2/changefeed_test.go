@@ -55,16 +55,19 @@ func TestCreateChangefeed(t *testing.T) {
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
+	o := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(o, nil).AnyTimes()
+	o.EXPECT().ValidateChangefeed(gomock.Any()).Return(nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -283,7 +286,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -300,7 +303,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -564,7 +567,7 @@ func TestResumeChangefeed(t *testing.T) {
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()

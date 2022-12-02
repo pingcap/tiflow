@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"go.uber.org/zap"
@@ -27,8 +27,7 @@ import (
 
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
-	mg             entry.MounterGroup
-	sortEngine     engine.SortEngine
+	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
@@ -38,8 +37,7 @@ type redoWorker struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
-	sortEngine engine.SortEngine,
+	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
@@ -48,8 +46,7 @@ func newRedoWorker(
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
-		sortEngine:     sortEngine,
+		sourceManager:  sourceManager,
 		memQuota:       quota,
 		redoManager:    redoManager,
 		eventCache:     eventCache,
@@ -128,9 +125,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 		}
 
-		shouldUpdateResolvedTs := lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0
-		if rowsSize >= maxUpdateIntervalSize || shouldUpdateResolvedTs {
-			releaseMem := func() { w.memQuota.refund(rowsSize - cachedSize) }
+		if rowsSize >= maxUpdateIntervalSize || allFinished {
+			refundMem := rowsSize - cachedSize
+			releaseMem := func() { w.memQuota.refund(refundMem) }
 			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
 			if err != nil {
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
@@ -140,7 +137,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 					zap.Uint64("memory", rowsSize))
 				return errors.Trace(err)
 			}
-			if shouldUpdateResolvedTs {
+			if lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0 {
 				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
 				if err != nil {
 					return errors.Trace(err)
@@ -154,7 +151,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[0:]
+			rows = rows[:0]
 			if cap(rows) > 1024 {
 				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}
@@ -164,10 +161,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	}
 
 	upperBound := task.getUpperBound()
-	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound),
-		w.mg, 256)
-
+	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
 	defer func() {
 		if err := iter.Close(); err != nil {
 			log.Error("sink redo worker fails to close iterator",
@@ -201,13 +195,18 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			return nil
 		}
+		if pos.Valid() {
+			lastPos = pos
+		}
+
+		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
-		if pos.Valid() {
-			lastPos = pos
-		}
+		// For all rows, we add table replicate ts, so mysql sink can
+		// determine when to turn off safe-mode.
+		e.Row.ReplicatingTs = task.tableSink.replicateTs
 
 		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 		if err != nil {
