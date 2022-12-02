@@ -243,7 +243,7 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 	case commandTpQueryTableCount:
 		count := 0
 		for _, p := range m.processors {
-			count += len(p.GetAllCurrentTables())
+			count += p.GetAllCurrentTables()
 		}
 		select {
 		case cmd.payload.(chan int) <- count:

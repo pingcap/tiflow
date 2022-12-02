@@ -22,10 +22,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -60,10 +64,14 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 func newAgent4Test() *agent {
 	a := &agent{
 		ownerInfo: ownerInfo{
-			Version:   "owner-version-1",
-			CaptureID: "owner-1",
-			Revision:  schedulepb.OwnerRevision{Revision: 1},
+			CaptureInfo: model.CaptureInfo{
+				Version: "owner-version-1",
+				ID:      "owner-1",
+			},
+			Revision: schedulepb.OwnerRevision{Revision: 1},
 		},
+		compat: compat.New(
+			config.GetDefaultServerConfig().Debug.Scheduler, map[string]*model.CaptureInfo{}),
 	}
 
 	a.Version = "agent-version-1"
@@ -82,12 +90,15 @@ func TestNewAgent(t *testing.T) {
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
 	tableExector := newMockTableExecutor()
+	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
 
 	// owner and revision found successfully
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).Return(int64(2333), nil).Times(1)
 	a, err := newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
@@ -95,31 +106,35 @@ func TestNewAgent(t *testing.T) {
 	me.EXPECT().GetOwnerID(gomock.Any()).
 		Return("", concurrency.ErrElectionNoLeader).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
 	// owner not found since pd is unstable
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("", cerror.ErrPDEtcdAPIError).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
 	require.Error(t, err)
 	require.Nil(t, a)
 
 	// owner found, get revision failed.
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrPDEtcdAPIError).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
 	require.Error(t, err)
 	require.Nil(t, a)
 
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrOwnerNotFound).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 }
@@ -134,7 +149,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	removeTableRequest := &schedulepb.DispatchTableRequest{
 		Request: &schedulepb.DispatchTableRequest_RemoveTable{
 			RemoveTable: &schedulepb.RemoveTableRequest{
-				TableID: 1,
+				Span: spanz.TableIDToComparableSpan(1),
 			},
 		},
 	}
@@ -150,7 +165,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableRequest := &schedulepb.DispatchTableRequest{
 		Request: &schedulepb.DispatchTableRequest_AddTable{
 			AddTable: &schedulepb.AddTableRequest{
-				TableID:     1,
+				Span:        spanz.TableIDToComparableSpan(1),
 				IsSecondary: true,
 			},
 		},
@@ -169,9 +184,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableResponse, ok := responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
-	require.NotContains(t, a.tableM.tables, model.TableID(1))
+	require.False(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	// Force set liveness to alive.
 	*a.liveness = model.LivenessCaptureAlive
@@ -196,9 +211,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableResponse, ok = responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tableM.tables, model.TableID(1))
+	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	// let the prepared table become replicating, by set `IsSecondary` to false.
 	addTableRequest.Request.(*schedulepb.DispatchTableRequest_AddTable).
@@ -217,9 +232,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableResponse, ok = responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tableM.tables, model.TableID(1))
+	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
@@ -232,9 +247,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableResponse, ok = responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tableM.tables, model.TableID(1))
+	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
 		Return(false)
@@ -246,9 +261,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
-	require.Contains(t, a.tableM.tables, model.TableID(1))
+	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
@@ -263,7 +278,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
@@ -277,10 +292,10 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 	require.True(t, ok)
-	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.Span.TableID)
 	require.Equal(t, tablepb.TableStateStopped, removeTableResponse.RemoveTable.Status.State)
 	require.Equal(t, model.Ts(3), removeTableResponse.RemoveTable.Checkpoint.CheckpointTs)
-	require.NotContains(t, a.tableM.tables, model.TableID(1))
+	require.False(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 }
 
 func TestAgentHandleMessageHeartbeat(t *testing.T) {
@@ -291,20 +306,25 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	for i := 0; i < 5; i++ {
-		a.tableM.addTable(model.TableID(i))
+		a.tableM.addTable(spanz.TableIDToComparableSpan(int64(i)))
 	}
 
-	a.tableM.tables[model.TableID(0)].state = tablepb.TableStatePreparing
-	a.tableM.tables[model.TableID(1)].state = tablepb.TableStatePrepared
-	a.tableM.tables[model.TableID(2)].state = tablepb.TableStateReplicating
-	a.tableM.tables[model.TableID(3)].state = tablepb.TableStateStopping
-	a.tableM.tables[model.TableID(4)].state = tablepb.TableStateStopped
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(0)).state = tablepb.TableStatePreparing
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(1)).state = tablepb.TableStatePrepared
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(2)).state = tablepb.TableStateReplicating
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(3)).state = tablepb.TableStateStopping
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(4)).state = tablepb.TableStateStopped
 
-	mockTableExecutor.tables[model.TableID(0)] = tablepb.TableStatePreparing
-	mockTableExecutor.tables[model.TableID(1)] = tablepb.TableStatePrepared
-	mockTableExecutor.tables[model.TableID(2)] = tablepb.TableStateReplicating
-	mockTableExecutor.tables[model.TableID(3)] = tablepb.TableStateStopping
-	mockTableExecutor.tables[model.TableID(4)] = tablepb.TableStateStopped
+	mockTableExecutor.tables.ReplaceOrInsert(
+		spanz.TableIDToComparableSpan(0), tablepb.TableStatePreparing)
+	mockTableExecutor.tables.ReplaceOrInsert(
+		spanz.TableIDToComparableSpan(1), tablepb.TableStatePrepared)
+	mockTableExecutor.tables.ReplaceOrInsert(
+		spanz.TableIDToComparableSpan(2), tablepb.TableStateReplicating)
+	mockTableExecutor.tables.ReplaceOrInsert(
+		spanz.TableIDToComparableSpan(3), tablepb.TableStateStopping)
+	mockTableExecutor.tables.ReplaceOrInsert(
+		spanz.TableIDToComparableSpan(4), tablepb.TableStateStopped)
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -314,7 +334,18 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		MsgType: schedulepb.MsgHeartbeat,
 		From:    "owner-1",
 		Heartbeat: &schedulepb.Heartbeat{
-			TableIDs: []model.TableID{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+			Spans: []tablepb.Span{
+				spanz.TableIDToComparableSpan(0),
+				spanz.TableIDToComparableSpan(1),
+				spanz.TableIDToComparableSpan(2),
+				spanz.TableIDToComparableSpan(3),
+				spanz.TableIDToComparableSpan(4),
+				spanz.TableIDToComparableSpan(5),
+				spanz.TableIDToComparableSpan(6),
+				spanz.TableIDToComparableSpan(7),
+				spanz.TableIDToComparableSpan(8),
+				spanz.TableIDToComparableSpan(9),
+			},
 		},
 	}
 
@@ -325,7 +356,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	result := response[0].GetHeartbeatResponse().Tables
 	require.Len(t, result, 10)
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].TableID < result[j].TableID
+		return result[i].Span.Less(&result[j].Span)
 	})
 
 	require.Equal(t, tablepb.TableStatePreparing, result[0].State)
@@ -337,11 +368,11 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		require.Equal(t, tablepb.TableStateAbsent, result[i].State)
 	}
 
-	a.tableM.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(1)).task = &dispatchTableTask{IsRemove: true}
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	result = response[0].GetHeartbeatResponse().Tables
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].TableID < result[j].TableID
+		return result[i].Span.TableID < result[j].Span.TableID
 	})
 	require.Equal(t, tablepb.TableStateStopping, result[1].State)
 
@@ -376,12 +407,12 @@ func TestAgentPermuteMessages(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 		To:      a.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableRequest{
-					TableID: 1,
+					Span: spanz.TableIDToComparableSpan(1),
 				},
 			},
 		},
@@ -394,12 +425,12 @@ func TestAgentPermuteMessages(t *testing.T) {
 				ProcessorEpoch: a.Epoch,
 			},
 			MsgType: schedulepb.MsgDispatchTableRequest,
-			From:    a.ownerInfo.CaptureID,
+			From:    a.ownerInfo.ID,
 			To:      a.CaptureID,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
 				Request: &schedulepb.DispatchTableRequest_AddTable{
 					AddTable: &schedulepb.AddTableRequest{
-						TableID:     1,
+						Span:        spanz.TableIDToComparableSpan(1),
 						IsSecondary: isSecondary,
 					},
 				},
@@ -416,7 +447,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 		MsgType: schedulepb.MsgHeartbeat,
 		From:    "owner-1",
 		Heartbeat: &schedulepb.Heartbeat{
-			TableIDs: []model.TableID{1},
+			Spans: []tablepb.Span{{TableID: 1}},
 		},
 	})
 
@@ -435,15 +466,20 @@ func TestAgentPermuteMessages(t *testing.T) {
 			t.Logf("test %v, %v", state, sequence)
 			switch state {
 			case tablepb.TableStatePreparing:
-				mockTableExecutor.tables[tableID] = tablepb.TableStatePreparing
+				mockTableExecutor.tables.ReplaceOrInsert(
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableStatePreparing)
 			case tablepb.TableStatePrepared:
-				mockTableExecutor.tables[tableID] = tablepb.TableStatePrepared
+				mockTableExecutor.tables.ReplaceOrInsert(
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableStatePrepared)
 			case tablepb.TableStateReplicating:
-				mockTableExecutor.tables[tableID] = tablepb.TableStateReplicating
+				mockTableExecutor.tables.ReplaceOrInsert(
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableStateReplicating)
 			case tablepb.TableStateStopping:
-				mockTableExecutor.tables[tableID] = tablepb.TableStateStopping
+				mockTableExecutor.tables.ReplaceOrInsert(
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableStateStopping)
 			case tablepb.TableStateStopped:
-				mockTableExecutor.tables[tableID] = tablepb.TableStateStopped
+				mockTableExecutor.tables.ReplaceOrInsert(
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableStateStopped)
 			case tablepb.TableStateAbsent:
 			default:
 			}
@@ -529,7 +565,7 @@ func TestAgentHandleMessage(t *testing.T) {
 			OwnerRevision: a.ownerInfo.Revision,
 		},
 		MsgType:   schedulepb.MsgHeartbeat,
-		From:      a.ownerInfo.CaptureID,
+		From:      a.ownerInfo.ID,
 		Heartbeat: &schedulepb.Heartbeat{},
 	}
 
@@ -545,11 +581,11 @@ func TestAgentHandleMessage(t *testing.T) {
 			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
+					Span:        spanz.TableIDToComparableSpan(1),
 					IsSecondary: true,
 					Checkpoint:  tablepb.Checkpoint{},
 				},
@@ -558,13 +594,13 @@ func TestAgentHandleMessage(t *testing.T) {
 	}
 	// wrong epoch, ignored
 	responses := a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.NotContains(t, tableM.tables, model.TableID(1))
+	require.False(t, tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 	require.Len(t, responses, 0)
 
 	// correct epoch, processing.
 	addTableRequest.Header.ProcessorEpoch = a.Epoch
 	_ = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Contains(t, tableM.tables, model.TableID(1))
+	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	heartbeat.Header.OwnerRevision.Revision = 2
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
@@ -578,7 +614,7 @@ func TestAgentHandleMessage(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgUnknown,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 	}
 
 	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
@@ -623,8 +659,8 @@ func TestAgentTick(t *testing.T) {
 			ProcessorEpoch: schedulepb.ProcessorEpoch{},
 		},
 		MsgType:   schedulepb.MsgHeartbeat,
-		From:      a.ownerInfo.CaptureID,
-		Heartbeat: &schedulepb.Heartbeat{TableIDs: nil},
+		From:      a.ownerInfo.ID,
+		Heartbeat: &schedulepb.Heartbeat{Spans: nil},
 	}
 
 	// receive first heartbeat from the owner
@@ -637,7 +673,7 @@ func TestAgentTick(t *testing.T) {
 	trans.SendBuffer = trans.SendBuffer[:0]
 
 	require.Equal(t, schedulepb.MsgHeartbeatResponse, heartbeatResponse.MsgType)
-	require.Equal(t, a.ownerInfo.CaptureID, heartbeatResponse.To)
+	require.Equal(t, a.ownerInfo.ID, heartbeatResponse.To)
 	require.Equal(t, a.CaptureID, heartbeatResponse.From)
 
 	addTableRequest := &schedulepb.Message{
@@ -647,11 +683,11 @@ func TestAgentTick(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
+					Span:        spanz.TableIDToComparableSpan(1),
 					IsSecondary: true,
 					Checkpoint:  tablepb.Checkpoint{},
 				},
@@ -666,11 +702,11 @@ func TestAgentTick(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableRequest{
-					TableID: 2,
+					Span: tablepb.Span{TableID: 2},
 				},
 			},
 		},
@@ -721,7 +757,7 @@ func TestAgentHandleLivenessUpdate(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgHeartbeat,
-		From:    a.ownerInfo.CaptureID,
+		From:    a.ownerInfo.ID,
 		Heartbeat: &schedulepb.Heartbeat{
 			IsStopping: true,
 		},
@@ -753,7 +789,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
+					Span:        spanz.TableIDToComparableSpan(1),
 					IsSecondary: true,
 				},
 			},
@@ -796,7 +832,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
+					Span:        spanz.TableIDToComparableSpan(1),
 					IsSecondary: false,
 				},
 			},
@@ -829,84 +865,173 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	require.Equal(t, tablepb.TableStateReplicating, addTableResp.Status.State)
 }
 
+func TestAgentTransportCompat(t *testing.T) {
+	t.Parallel()
+
+	a := newAgent4Test()
+	mockTableExecutor := newMockTableExecutor()
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	trans := transport.NewMockTrans()
+	a.trans = trans
+	a.compat = compat.New(&config.SchedulerConfig{
+		RegionPerSpan: 1,
+	}, map[model.CaptureID]*model.CaptureInfo{})
+	ctx := context.Background()
+
+	// Disable span replication.
+	a.handleOwnerInfo("a", a.ownerInfo.Revision.Revision+1, "4.0.0")
+	require.False(t, a.compat.CheckSpanReplicationEnabled())
+
+	// Test compat.BeforeTransportSend.
+	a.sendMsgs(
+		ctx, []*schedulepb.Message{{
+			Header: &schedulepb.Message_Header{
+				Version:        a.Version,
+				ProcessorEpoch: a.Epoch,
+			},
+			From: a.CaptureID, To: "a", MsgType: schedulepb.MsgDispatchTableResponse,
+			DispatchTableResponse: &schedulepb.DispatchTableResponse{
+				Response: &schedulepb.DispatchTableResponse_AddTable{
+					AddTable: &schedulepb.AddTableResponse{
+						Status: &tablepb.TableStatus{
+							Span: spanz.TableIDToComparableSpan(1),
+						},
+					},
+				},
+			},
+		}})
+	require.EqualValues(t, []*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{
+			Version:        a.Version,
+			ProcessorEpoch: a.Epoch,
+			OwnerRevision:  a.ownerInfo.Revision,
+		},
+		From: a.CaptureID, To: "a", MsgType: schedulepb.MsgDispatchTableResponse,
+		DispatchTableResponse: &schedulepb.DispatchTableResponse{
+			Response: &schedulepb.DispatchTableResponse_AddTable{
+				AddTable: &schedulepb.AddTableResponse{
+					Status: &tablepb.TableStatus{
+						TableID: 1,
+						Span:    spanz.TableIDToComparableSpan(1),
+					},
+				},
+			},
+		},
+	}}, trans.SendBuffer)
+	// Test compat.AfterTransportReceive.
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:       a.Version,
+			OwnerRevision: a.ownerInfo.Revision,
+		},
+		From: "a", To: a.CaptureID, MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID: 1,
+				},
+			},
+		},
+	})
+	msgs, err := a.recvMsgs(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, []*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{
+			Version:       a.Version,
+			OwnerRevision: a.ownerInfo.Revision,
+		},
+		From: "a", To: a.CaptureID, MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID: 1,
+					Span:    spanz.TableIDToComparableSpan(1),
+				},
+			},
+		},
+	}}, msgs)
+}
+
 // MockTableExecutor is a mock implementation of TableExecutor.
 type MockTableExecutor struct {
 	mock.Mock
 
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables map[model.TableID]tablepb.TableState
+	tables *spanz.Map[tablepb.TableState]
 }
+
+var _ internal.TableExecutor = (*MockTableExecutor)(nil)
 
 // newMockTableExecutor creates a new mock table executor.
 func newMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: map[model.TableID]tablepb.TableState{},
+		tables: spanz.NewMap[tablepb.TableState](),
 	}
 }
 
 // AddTable adds a table to the executor.
 func (e *MockTableExecutor) AddTable(
-	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+	ctx context.Context, tableID tablepb.Span, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
 	log.Info("AddTable",
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &tableID),
 		zap.Any("startTs", startTs),
 		zap.Bool("isPrepare", isPrepare))
 
-	state, ok := e.tables[tableID]
+	state, ok := e.tables.Get(tableID)
 	if ok {
 		switch state {
 		case tablepb.TableStatePreparing:
 			return true, nil
 		case tablepb.TableStatePrepared:
 			if !isPrepare {
-				e.tables[tableID] = tablepb.TableStateReplicating
+				e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
 			}
 			return true, nil
 		case tablepb.TableStateReplicating:
 			return true, nil
 		case tablepb.TableStateStopped:
-			delete(e.tables, tableID)
+			e.tables.Delete(tableID)
 		}
 	}
 	args := e.Called(ctx, tableID, startTs, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = tablepb.TableStatePreparing
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
 	}
 	return args.Bool(0), args.Error(1)
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
-	_, ok := e.tables[tableID]
+func (e *MockTableExecutor) IsAddTableFinished(tableID tablepb.Span, isPrepare bool) bool {
+	_, ok := e.tables.Get(tableID)
 	if !ok {
 		log.Panic("table which was added is not found",
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &tableID),
 			zap.Bool("isPrepare", isPrepare))
 	}
 
 	args := e.Called(tableID, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = tablepb.TableStatePrepared
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
 		if !isPrepare {
-			e.tables[tableID] = tablepb.TableStateReplicating
+			e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
 		}
 		return true
 	}
 
-	e.tables[tableID] = tablepb.TableStatePreparing
+	e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
 	if !isPrepare {
-		e.tables[tableID] = tablepb.TableStatePrepared
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
 	}
 
 	return false
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
-	state, ok := e.tables[tableID]
+func (e *MockTableExecutor) RemoveTable(tableID tablepb.Span) bool {
+	state, ok := e.tables.Get(tableID)
 	if !ok {
-		log.Warn("table to be remove is not found", zap.Int64("tableID", tableID))
+		log.Warn("table to be remove is not found", zap.Stringer("span", &tableID))
 		return true
 	}
 	switch state {
@@ -916,44 +1041,45 @@ func (e *MockTableExecutor) RemoveTable(tableID model.TableID) bool {
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
-	log.Info("RemoveTable", zap.Int64("tableID", tableID), zap.Any("state", state))
+	log.Info("RemoveTable", zap.Stringer("span", &tableID), zap.Any("state", state))
 
 	args := e.Called(tableID)
 	if args.Bool(0) {
-		e.tables[tableID] = tablepb.TableStateStopped
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableStateStopped)
 	}
 	return args.Bool(0)
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
-	state, ok := e.tables[tableID]
+func (e *MockTableExecutor) IsRemoveTableFinished(tableID tablepb.Span) (model.Ts, bool) {
+	state, ok := e.tables.Get(tableID)
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
 		log.Warn("table to be removed is not found",
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &tableID))
 		return 0, true
 	}
 	args := e.Called(tableID)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
-			zap.Int64("tableID", tableID), zap.Any("state", state))
-		delete(e.tables, tableID)
+			zap.Stringer("span", &tableID), zap.Any("state", state))
+		e.tables.Delete(tableID)
 	} else {
 		// revert the state back to old state, assume it's `replicating`,
 		// but `preparing` / `prepared` can also be removed.
-		e.tables[tableID] = tablepb.TableStateReplicating
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
 	}
 
 	return model.Ts(args.Int(0)), args.Bool(1)
 }
 
 // GetAllCurrentTables returns all tables that are currently being adding, running, or removing.
-func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
-	var result []model.TableID
-	for tableID := range e.tables {
-		result = append(result, tableID)
-	}
+func (e *MockTableExecutor) GetAllCurrentTables() int {
+	var result int
+	e.tables.Ascend(func(span tablepb.Span, value tablepb.TableState) bool {
+		result++
+		return true
+	})
 	return result
 }
 
@@ -964,13 +1090,13 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 }
 
 // GetTableStatus implements TableExecutor interface
-func (e *MockTableExecutor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
-	state, ok := e.tables[tableID]
+func (e *MockTableExecutor) GetTableStatus(span tablepb.Span) tablepb.TableStatus {
+	state, ok := e.tables.Get(span)
 	if !ok {
 		state = tablepb.TableStateAbsent
 	}
 	return tablepb.TableStatus{
-		TableID: tableID,
-		State:   state,
+		Span:  span,
+		State: state,
 	}
 }
