@@ -218,7 +218,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 
 func (k *mqSink) prepareForFlush() (map[model.TableID]model.ResolvedTs, model.ResolvedTs) {
 	maxResolvedTs := model.NewResolvedTs(0)
-	tableTsMap := make(map[model.TableID]model.ResolvedTs)
+	unFlushedMap := make(map[model.TableID]model.ResolvedTs)
 
 	k.tableTsMap.Range(func(key, value interface{}) bool {
 		tableID := key.(model.TableID)
@@ -227,11 +227,11 @@ func (k *mqSink) prepareForFlush() (map[model.TableID]model.ResolvedTs, model.Re
 		if unflushed.EqualOrGreater(maxResolvedTs) {
 			maxResolvedTs = unflushed
 		}
-		tableTsMap[tableID] = unflushed
+		unFlushedMap[tableID] = unflushed
 		return true
 	})
 
-	return tableTsMap, maxResolvedTs
+	return unFlushedMap, maxResolvedTs
 }
 
 func (k *mqSink) postFlush(unFlushedMap map[model.TableID]model.ResolvedTs) {
