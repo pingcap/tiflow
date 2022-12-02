@@ -23,7 +23,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "description": "Uptime of TiCDC and TiKV",
+        "description": "Uptime of Tiflow Engine",
         "fieldConfig": {
           "defaults": {
             "links": []
@@ -122,7 +122,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "description": "Goroutine count of TiCDC",
+        "description": "Goroutine count of Tiflow Engine",
         "fieldConfig": {
           "defaults": {
             "links": []
@@ -326,7 +326,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "CPU usage of TiCDC",
+      "description": "CPU usage of Tiflow Engine",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -434,7 +434,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Memory usage of TiCDC",
+      "description": "Memory usage of Tiflow Engine",
       "fieldConfig": {
         "defaults": {
           "links": []
@@ -1000,7 +1000,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "TiCDC process Go garbage collection STW pause duration",
+      "description": "Tiflow Engine process Go garbage collection STW pause duration",
       "fieldConfig": {
         "defaults": {
           "color": {
