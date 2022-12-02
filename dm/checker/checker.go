@@ -174,6 +174,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		c.stCfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical &&
 		c.stCfgs[0].Mode != config.ModeIncrement {
 		// TODO: concurrently read it intra-source later
+
 		for idx := range c.instances {
 			i := idx
 			eg.Go(func() error {
