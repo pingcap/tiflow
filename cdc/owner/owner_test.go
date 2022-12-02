@@ -909,6 +909,12 @@ func TestIsHealthy(t *testing.T) {
 func TestValidateChangefeed(t *testing.T) {
 	t.Parallel()
 
+	// Test `ValidateChangefeed` by setting `hasCIEnv` to false.
+	//
+	// FIXME: We need a better way to enable following tests
+	//        Changing global variable in a unit test is BAD practice.
+	hasCIEnv = false
+
 	o := &ownerImpl{
 		changefeeds: make(map[model.ChangeFeedID]*changefeed),
 		// logLimiter:  rate.NewLimiter(1, 1),
