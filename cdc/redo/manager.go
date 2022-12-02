@@ -552,6 +552,11 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
 		metaCheckpoint, metaResolved := m.prepareForFlushMeta()
+		log.Debug("Flush redo log",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.Any("tableRtsMap", tableRtsMap),
+			zap.Uint64("minResolvedTs", minResolvedTs))
 		err := m.withLock(func(m *ManagerImpl) error {
 			return m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
 		})
@@ -607,34 +612,106 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	}()
 
 	var err error
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case err = <-logErrCh:
-		case <-ticker.C:
-			// interpolate tick message to flush writer if needed
-			m.flushLog(ctx, handleErr)
-		case cache, ok := <-m.logBuffer.Out():
-			if !ok {
-				return // channel closed
+	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+	rtsMap := make(map[model.TableID]model.Ts)
+	releaseMemoryCbs := make([]func(), 0, 1024)
+
+	emitBatch := func() {
+		if len(logs) > 0 {
+			start := time.Now()
+			err = m.writer.WriteLog(ctx, logs)
+			writeLogElapse := time.Since(start)
+			log.Debug("redo manager writes rows",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Int("rows", len(logs)),
+				zap.Error(err),
+				zap.Duration("writeLogElapse", writeLogElapse))
+			m.metricWriteLogDuration.Observe(writeLogElapse.Seconds())
+
+			for _, releaseMemory := range releaseMemoryCbs {
+				releaseMemory()
 			}
-			switch cache.eventType {
-			case model.MessageTypeRow:
-				start := time.Now()
-				logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
-				for _, row := range cache.rows {
-					logs = append(logs, RowToRedo(row))
+
+			if cap(logs) > 1024*1024 {
+				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+			} else {
+				logs = logs[:0]
+			}
+			if cap(releaseMemoryCbs) > 1024 {
+				releaseMemoryCbs = make([]func(), 0, 1024)
+			} else {
+				releaseMemoryCbs = releaseMemoryCbs[:0]
+			}
+		}
+		if len(rtsMap) > 0 {
+			for tableID, resolvedTs := range rtsMap {
+				m.onResolvedTsMsg(tableID, resolvedTs)
+				log.Debug("redo manager writes resolvedTs",
+					zap.String("namespace", m.changeFeedID.Namespace),
+					zap.String("changefeed", m.changeFeedID.ID),
+					zap.Int64("tableID", tableID),
+					zap.Uint64("resolvedTs", resolvedTs))
+			}
+			rtsMap = make(map[model.TableID]model.Ts)
+		}
+	}
+
+	for {
+		if len(logs) > 0 || len(rtsMap) > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				emitBatch()
+				m.flushLog(ctx, handleErr)
+			case cache, ok := <-m.logBuffer.Out():
+				if !ok {
+					return // channel closed
 				}
-				err = m.writer.WriteLog(ctx, cache.tableID, logs)
-				if cache.releaseMemory != nil {
-					cache.releaseMemory()
+				switch cache.eventType {
+				case model.MessageTypeRow:
+					for _, row := range cache.rows {
+						logs = append(logs, RowToRedo(row))
+					}
+					if cache.releaseMemory != nil {
+						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
+					}
+				case model.MessageTypeResolved:
+					if rtsMap[cache.tableID] < cache.resolvedTs {
+						rtsMap[cache.tableID] = cache.resolvedTs
+					}
+				default:
+					log.Panic("redo manager receives unknown event type")
 				}
-				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
-			case model.MessageTypeResolved:
-				m.onResolvedTsMsg(cache.tableID, cache.resolvedTs)
+			case err = <-logErrCh:
 			default:
-				log.Debug("handle unknown event type")
+				emitBatch()
+			}
+		} else {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				emitBatch()
+				m.flushLog(ctx, handleErr)
+			case cache, ok := <-m.logBuffer.Out():
+				if !ok {
+					return // channel closed
+				}
+				switch cache.eventType {
+				case model.MessageTypeRow:
+					for _, row := range cache.rows {
+						logs = append(logs, RowToRedo(row))
+					}
+				case model.MessageTypeResolved:
+					if rtsMap[cache.tableID] < cache.resolvedTs {
+						rtsMap[cache.tableID] = cache.resolvedTs
+					}
+				default:
+					log.Panic("redo manager receives unknown event type")
+				}
+			case err = <-logErrCh:
 			}
 		}
 		if err != nil {

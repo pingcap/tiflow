@@ -234,6 +234,9 @@ type CDCClient struct {
 	}
 	ingressCommitTs   model.Ts
 	ingressResolvedTs model.Ts
+	// filterLoop is used in BDR mode, when it is true, tikv cdc component
+	// will filter data that are written by another TiCDC.
+	filterLoop bool
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -247,6 +250,7 @@ func NewCDCClient(
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
 	tableName string,
+	filterLoop bool,
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
@@ -268,6 +272,7 @@ func NewCDCClient(
 		}{
 			counts: list.New(),
 		},
+		filterLoop: filterLoop,
 	}
 	return
 }
@@ -674,6 +679,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			StartKey:     sri.span.Start,
 			EndKey:       sri.span.End,
 			ExtraOp:      extraOp,
+			FilterLoop:   s.client.filterLoop,
 		}
 
 		failpoint.Inject("kvClientPendingRegionDelay", nil)

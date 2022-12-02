@@ -229,7 +229,7 @@ func TestVersionChecking(t *testing.T) {
 		AddRow("version", "10.1.29-MariaDB"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
-	require.Contains(t, msg, "Migrating from MariaDB is experimentally supported")
+	require.Contains(t, msg, "Migrating from MariaDB is still experimental")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -238,7 +238,7 @@ func TestVersionChecking(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Summary.Passed)
 	require.Equal(t, int64(1), result.Summary.Warning)
-	require.Contains(t, result.Results[0].Errors[0].ShortErr, "Migrating from MariaDB is experimentally supported")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "Migrating from MariaDB is still experimental.")
 
 	// too low MySQL version
 
@@ -273,7 +273,7 @@ func TestServerIDChecking(t *testing.T) {
 		AddRow("server_id", "0"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
-	require.Contains(t, msg, "please set server_id greater than 0")
+	require.Contains(t, msg, "Set server_id greater than 0")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -281,7 +281,7 @@ func TestServerIDChecking(t *testing.T) {
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
 	require.True(t, result.Summary.Passed)
-	require.Contains(t, result.Results[0].Instruction, "please set server_id greater than 0")
+	require.Contains(t, result.Results[0].Instruction, "Set server_id greater than 0")
 
 	// happy path
 
