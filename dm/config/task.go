@@ -30,6 +30,7 @@ import (
 	"github.com/dustin/go-humanize"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
+	"github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -275,15 +276,17 @@ const (
 
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize   int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir        string   `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
-	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	PoolSize           int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir                string   `yaml:"dir" toml:"dir" json:"dir"`
+	SortingDirPhysical string   `yaml:"sorting-dir-physical" toml:"sorting-dir-physical" json:"sorting-dir-physical"`
+	SQLMode            string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
+	ImportMode         LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	// deprecated, use OnDuplicateLogical instead.
 	OnDuplicate        LogicalDuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 	OnDuplicateLogical LogicalDuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
-	// TODO: no effects now
+	// TODO: OnDuplicatePhysical has no effects now
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
+	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -325,6 +328,10 @@ func (m *LoaderConfig) adjust() error {
 
 	if m.PoolSize == 0 {
 		m.PoolSize = defaultPoolSize
+	}
+
+	if m.Dir != "" && m.SortingDirPhysical == "" {
+		m.SortingDirPhysical = m.Dir
 	}
 
 	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
