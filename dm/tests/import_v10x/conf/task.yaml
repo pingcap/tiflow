@@ -89,10 +89,12 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
+    sorting-dir-physical: ./dumped_data.test
     import-mode: logical
     on-duplicate: ""
     on-duplicate-logical: replace
     on-duplicate-physical: none
+    disk-quota-physical: 0
 syncers:
   sync-01:
     meta-file: ""
