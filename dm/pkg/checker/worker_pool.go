@@ -105,6 +105,7 @@ func (p *WorkerPool[J, R]) PutJob(job J) bool {
 
 // Wait waits all workers to finish. It will return the first error occurred in
 // workers, or nil if no error.
+// Other methods should not be called concurrent with Wait or after Wait.
 func (p *WorkerPool[J, R]) Wait() error {
 	close(p.inCh)
 	err := p.errGroup.Wait()
