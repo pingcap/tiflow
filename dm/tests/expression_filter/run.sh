@@ -66,14 +66,14 @@ function complex_behaviour() {
 	check_contains "count(10): 0"
 
 	run_sql_tidb "select count(11) from expr_filter.t7 where r = 'a' and s = 2"
-  check_contains "count(11): 1"
-  run_sql_tidb "select count(12) from expr_filter.t7 where r = 'a' and s = 3"
-  check_contains "count(12): 0"
+	check_contains "count(11): 1"
+	run_sql_tidb "select count(12) from expr_filter.t7 where r = 'a' and s = 3"
+	check_contains "count(12): 0"
 
 	insert_num=$(grep -o '"number of filtered insert"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $insert_num -eq 6 ]
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
-	[ $update_num -eq 3 ]
+	[ $update_num -eq 4 ]
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test"
