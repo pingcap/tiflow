@@ -221,7 +221,37 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+<<<<<<< HEAD:cdc/capture/http_handler.go
 	err = h.capture.etcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
+=======
+	o, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = o.ValidateChangefeed(info)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            up.ID,
+		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
+		KeyPath:       up.SecurityConfig.KeyPath,
+		CertPath:      up.SecurityConfig.CertPath,
+		CAPath:        up.SecurityConfig.CAPath,
+		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
+	}
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = etcdClient.CreateChangefeedInfo(
+		ctx, upstreamInfo,
+		info, model.DefaultChangeFeedID(changefeedConfig.ID))
+>>>>>>> 1f6ae1fd8c (cdc: add delay for recreating changefeed (#7730)):cdc/api/v1/api.go
 	if err != nil {
 		_ = c.Error(err)
 		return
