@@ -21,7 +21,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_PROMETHEUS_TIFLOW}"
         },
         "description": "Uptime of Tiflow Engine",
         "fieldConfig": {
@@ -65,7 +65,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
+              "uid": "${DS_PROMETHEUS_TIFLOW}"
             },
             "editorMode": "code",
             "expr": "(time() - process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"})",
@@ -120,7 +120,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_PROMETHEUS_TIFLOW}"
         },
         "description": "Goroutine count of Tiflow Engine",
         "fieldConfig": {
@@ -164,7 +164,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
+              "uid": "${DS_PROMETHEUS_TIFLOW}"
             },
             "editorMode": "code",
             "expr": " go_goroutines{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -178,7 +178,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
+              "uid": "${DS_PROMETHEUS_TIFLOW}"
             },
             "editorMode": "code",
             "expr": "go_threads{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -324,7 +324,7 @@
       "dashes": false,
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "CPU usage of Tiflow Engine",
       "fieldConfig": {
@@ -383,7 +383,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "rate(process_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}[2m])",
@@ -432,7 +432,7 @@
       "dashes": false,
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "Memory usage of Tiflow Engine",
       "fieldConfig": {
@@ -484,7 +484,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -498,7 +498,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_memstats_heap_alloc_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -556,7 +556,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "num of different job state",
       "fieldConfig": {
@@ -634,7 +634,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "max(dataflow_tiflow_server_master_job_num{k8s_cluster=\"$k8s_cluster\"}) by (status)",
@@ -649,7 +649,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "num of different executor state",
       "fieldConfig": {
@@ -727,7 +727,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "max(dataflow_tiflow_server_master_executor_num{k8s_cluster=\"$k8s_cluster\"}) by (status)",
@@ -756,7 +756,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "Tiflow process rss memory usage. Tiflow heap memory size in use.",
       "fieldConfig": {
@@ -840,7 +840,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -852,7 +852,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_memstats_heap_idle_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} - go_memstats_heap_released_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_heap_inuse_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} - go_memstats_heap_alloc_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -864,7 +864,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_memstats_stack_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_mspan_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_mcache_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_buck_hash_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_gc_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} + go_memstats_other_sys_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -876,7 +876,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_memstats_next_gc_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -888,7 +888,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "(clamp_max(idelta(go_memstats_last_gc_time_seconds{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}[1m]), 1) * go_memstats_next_gc_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}) > 0",
@@ -904,7 +904,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "Count of live objects.",
       "fieldConfig": {
@@ -983,7 +983,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_memstats_heap_objects{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -998,7 +998,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "Tiflow Engine process Go garbage collection STW pause duration",
       "fieldConfig": {
@@ -1078,7 +1078,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_gc_duration_seconds{quantile=\"0\", k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -1089,7 +1089,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_gc_duration_seconds{quantile!~\"0|1\", k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -1101,7 +1101,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "go_gc_duration_seconds{quantile=\"1\", k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}",
@@ -1117,7 +1117,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "${DS_PROMETHEUS_TIFLOW}"
       },
       "description": "The throughput of Go's memory allocator.",
       "fieldConfig": {
@@ -1196,7 +1196,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "irate(go_memstats_alloc_bytes_total{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}[30s])",
@@ -1208,7 +1208,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "irate((go_memstats_alloc_bytes_total{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"} - go_memstats_heap_alloc_bytes{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"})[30s:])",
@@ -1220,7 +1220,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "irate(go_memstats_mallocs_total{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}[30s])",
@@ -1232,7 +1232,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${DS_PROMETHEUS_TIFLOW}"
           },
           "editorMode": "code",
           "expr": "irate(go_memstats_frees_total{k8s_cluster=\"$k8s_cluster\", instance=~\"$instance\"}[30s])",
@@ -1256,7 +1256,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_PROMETHEUS_TIFLOW}"
         },
         "definition": "label_values(go_goroutines, k8s_cluster)",
         "hide": 0,
@@ -1280,7 +1280,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
+          "uid": "${DS_PROMETHEUS_TIFLOW}"
         },
         "definition": "label_values(go_goroutines, instance)",
         "hide": 0,
