@@ -46,3 +46,6 @@ alter table t6 add column name2 varchar(20) character set latin1 default 'Mülle
 
 -- trigger a flush
 alter table t5 add column dummy int;
+
+-- test https://github.com/pingcap/tiflow/issues/7774
+UPDATE t7 SET s = s + 1 WHERE a = 1;
