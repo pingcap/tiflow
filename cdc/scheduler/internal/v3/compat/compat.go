@@ -27,9 +27,9 @@ import (
 type Compat struct {
 	enableSpanReplication bool
 
-	hasChecked  bool
-	config      *config.SchedulerConfig
-	captureInfo map[model.CaptureID]*model.CaptureInfo
+	hasChecked    bool
+	regionPerSpan int
+	captureInfo   map[model.CaptureID]*model.CaptureInfo
 }
 
 // New returns a new Compat.
@@ -38,8 +38,8 @@ func New(
 	captureInfo map[model.CaptureID]*model.CaptureInfo,
 ) *Compat {
 	return &Compat{
-		config:      config,
-		captureInfo: captureInfo,
+		regionPerSpan: config.RegionPerSpan,
+		captureInfo:   captureInfo,
 	}
 }
 
@@ -76,7 +76,7 @@ func (c *Compat) CheckSpanReplicationEnabled() bool {
 	}
 	c.hasChecked = true
 
-	c.enableSpanReplication = c.config.RegionPerSpan != 0
+	c.enableSpanReplication = c.regionPerSpan != 0
 	for _, capture := range c.captureInfo {
 		if len(capture.Version) == 0 {
 			c.enableSpanReplication = false
