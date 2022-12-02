@@ -44,9 +44,6 @@ type SortEngine interface {
 	// will be called after any events are resolved.
 	OnResolve(action func(model.TableID, model.Ts))
 
-    // MayHaveEvents indicates whether there could be events in the given range or not.
-    MayHaveEvents(lowerBound, upperBound Position, tableID ...model.TableID) bool
-
 	// FetchByTable creates an iterator to fetch events from the given table.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//

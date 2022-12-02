@@ -188,45 +188,6 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.onResolves = append(s.onResolves, action)
 }
 
-// MayHaveEvents implements engine.SortEngine.
-func (s *EventSorter) MayHaveEvents(lowerBound, upperBound engine.Position, tableID ...model.TableID) bool {
-	if len(tableID) == 0 {
-		log.Panic("tableID must be specified",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
-	}
-
-	s.mu.RLock()
-	state, exists := s.tables[tableID[0]]
-	s.mu.RUnlock()
-	if !exists {
-		return false
-	}
-
-	state.timeSliceMu.RLock()
-	defer state.timeSliceMu.RUnlock()
-
-	bgnIdx := sort.Search(len(state.timeSlices), func(i int) bool {
-		return state.timeSlices[i].pos.Compare(lowerBound) >= 0
-	})
-	if bgnIdx >= len(state.timeSlices) {
-		// Don't know whether there are events in the range or not.
-		return true
-	}
-	endIdx := sort.Search(len(state.timeSlices), func(i int) bool {
-		return state.timeSlices[i].pos.Compare(upperBound) >= 0
-	})
-	if endIdx >= len(state.timeSlices) {
-		// Don't know whether there are events in the range or not.
-		return true
-	}
-	for _, slice := range state.timeSlices[bgnIdx : endIdx+1] {
-		if slice.events > 0 {
-			return true
-		}
-	}
-	return false
-}
 
 // FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(
@@ -253,6 +214,10 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("upperBound", upperBound.CommitTs),
 			zap.Uint64("resolved", sortedResolved))
 	}
+
+    if !s.mayHaveEvents(tableID, lowerBound, upperBound) {
+        return &EventIter{tableID: tableID, state: state, iter: nil, serde: s.serde}
+    }
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
@@ -534,7 +499,7 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	// Clean time slice histories.
 	state.timeSliceMu.Lock()
 	idx := sort.Search(len(state.timeSlices), func(i int) bool {
-		return state.timeSlices[i].pos.Compare(toClean) > 0
+		return state.timeSlices[i].pos.Compare(toClean) >= 0
 	})
 	if idx >= len(state.timeSlices) {
 		state.timeSlices = nil
@@ -561,6 +526,39 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	state.cleaned = toClean
 
 	return nil
+}
+
+func (s *EventSorter) mayHaveEvents(tableID model.TableID, lowerBound, upperBound engine.Position) bool {
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	s.mu.RUnlock()
+	if !exists {
+		return true
+	}
+
+	state.timeSliceMu.RLock()
+	defer state.timeSliceMu.RUnlock()
+
+	bgnIdx := sort.Search(len(state.timeSlices), func(i int) bool {
+		return state.timeSlices[i].pos.Compare(lowerBound) >= 0
+	})
+	if bgnIdx >= len(state.timeSlices) {
+		// Don't know whether there are events in the range or not.
+		return true
+	}
+	endIdx := sort.Search(len(state.timeSlices), func(i int) bool {
+		return state.timeSlices[i].pos.Compare(upperBound) >= 0
+	})
+	if endIdx >= len(state.timeSlices) {
+		// Don't know whether there are events in the range or not.
+		return true
+	}
+	for _, slice := range state.timeSlices[bgnIdx : endIdx+1] {
+		if slice.events > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ----- Some internal variable and functions -----

@@ -57,8 +57,6 @@ type sinkTask struct {
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
 	isCanceled    isCanceled
-	// If skipIter is true it means we can ensure there are no events in the given range.
-	skipIter bool
 }
 
 // redoTask is a task for the redo log.
@@ -68,5 +66,4 @@ type redoTask struct {
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
-	skipIter      bool
 }

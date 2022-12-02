@@ -423,7 +423,6 @@ func (m *SinkManager) generateSinkTasks() error {
 				isCanceled: func() bool {
 					return tableSink.getState() != tablepb.TableStateReplicating
 				},
-				skipIter: m.sourceManager.MayHaveEvents(lowerBound, upperBound, tableSink.tableID),
 			}
 			select {
 			case <-m.ctx.Done():
@@ -541,7 +540,6 @@ func (m *SinkManager) generateRedoTasks() error {
 					default:
 					}
 				},
-				skipIter: m.sourceManager.MayHaveEvents(lowerBound, upperBound, tableSink.tableID),
 			}
 			select {
 			case <-m.ctx.Done():
