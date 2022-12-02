@@ -129,7 +129,7 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	if checkpoint, loaded := k.tableTsMap.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MQ sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
+			zap.Uint64("checkpointTs", checkpoint.(*model.StatefulTs).GetFlushed().Ts))
 	}
 
 	return nil
