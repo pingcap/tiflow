@@ -652,6 +652,13 @@ type StatefulTs struct {
 	unflushed atomic.Value
 }
 
+func NewStatefulTs(unFlushed ResolvedTs) *StatefulTs {
+	s := &StatefulTs{}
+	s.flushed.Store(NewResolvedTs(0))
+	s.unflushed.Store(unFlushed)
+	return s
+}
+
 func (s *StatefulTs) GetFlushed() ResolvedTs {
 	return s.flushed.Load().(ResolvedTs)
 }

@@ -230,7 +230,7 @@ func (k *mqSink) prepareForFlush() (map[model.TableID]model.ResolvedTs, model.Re
 		tableTsMap[tableID] = unflushed
 		return true
 	})
-	
+
 	return tableTsMap, maxResolvedTs
 }
 
@@ -397,8 +397,7 @@ func (k *mqSink) getOrSetTableStatefulTs(tableID model.TableID, resolvedTs model
 	// If the table is not in the map,
 	// it means that the table is newly added.
 	// We need to new a StatefulTs for it.
-	res := &model.StatefulTs{}
-	res.CheckAndSetUnflushed(resolvedTs)
+	res := model.NewStatefulTs(resolvedTs)
 	k.tableTsMap.Store(tableID, res)
 	return res
 }
