@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -54,11 +53,10 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       config.Protocol
 
-	topicManager         manager.TopicManager
-	flushWorker          *flushWorker
-	tableCheckpointTsMap sync.Map
-	lastResolvedTs       atomic.Value
-	resolvedBuffer       *chann.Chann[resolvedTsEvent]
+	topicManager   manager.TopicManager
+	flushWorker    *flushWorker
+	tableTsMap     sync.Map
+	resolvedBuffer *chann.Chann[resolvedTsEvent]
 
 	statistics *metrics.Statistics
 
@@ -105,9 +103,6 @@ func newMqSink(
 		role:           role,
 		id:             changefeedID,
 	}
-	s.lastResolvedTs.Store(model.ResolvedTs{
-		Ts: 0,
-	})
 
 	go func() {
 		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -131,7 +126,7 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
-	if checkpoint, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+	if checkpoint, loaded := k.tableTsMap.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MQ sink",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
@@ -181,11 +176,11 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 func (k *mqSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (model.ResolvedTs, error) {
-	
-	stateTs := k.getTableStatefulTs(tableID)
+
+	stateTs := k.getOrSetTableStatefulTs(tableID, resolved)
 	checkpointTs := stateTs.GetFlushed()
-	if checkpointTs >= resolved.Ts {
-		return model.NewResolvedTs(checkpointTs), nil
+	if checkpointTs.EqualOrGreater(resolved) {
+		return checkpointTs, nil
 	}
 
 	select {
@@ -194,9 +189,9 @@ func (k *mqSink) FlushRowChangedEvents(
 	default:
 	}
 
-	stateTs.CheckAndSetUnflushed(resolved.Ts)
+	stateTs.CheckAndSetUnflushed(resolved)
 	k.statistics.PrintStatus(ctx)
-	return model.NewResolvedTs(checkpointTs), nil
+	return checkpointTs, nil
 }
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
@@ -208,41 +203,45 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			maxResolvedTs := k.getMaxResolvedTs()
-			err := k.flushTsToWorker(ctx, model.NewResolvedTs(maxResolvedTs))
+			unFlushedMap, maxResolvedTs := k.prepareForFlush()
+			err := k.flushTsToWorker(ctx, maxResolvedTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.postFlush()
+			k.postFlush(unFlushedMap)
 		}
 	}
 }
 
-func (k *mqSink) getMaxResolvedTs() model.Ts {
-	var maxResolvedTs model.Ts
-	k.tableCheckpointTsMap.Range(func(key, value interface{}) bool {
-		stateTs := value.(*model.StatefulRts)
-		if stateTs.GetUnflushed() > maxResolvedTs {
-			maxResolvedTs = stateTs.GetUnflushed()
+func (k *mqSink) prepareForFlush() (map[model.TableID]model.ResolvedTs, model.ResolvedTs) {
+	maxResolvedTs := model.NewResolvedTs(0)
+	tableTsMap := make(map[model.TableID]model.ResolvedTs)
+
+	k.tableTsMap.Range(func(key, value interface{}) bool {
+		tableID := key.(model.TableID)
+		stateTs := value.(*model.StatefulTs)
+		unflushed := stateTs.GetUnflushed()
+		if unflushed.EqualOrGreater(maxResolvedTs) {
+			maxResolvedTs = unflushed
 		}
+		tableTsMap[tableID] = unflushed
 		return true
 	})
-	return maxResolvedTs
+	
+	return tableTsMap, maxResolvedTs
 }
 
-func (k *mqSink) postFlush() {
-	k.tableCheckpointTsMap.Range(func(key, value interface{}) bool {
-		stateTs := value.(*model.StatefulRts)
-		unFlushedTs := stateTs.GetUnflushed()
-		flushedTs := stateTs.GetFlushed()
-		if unFlushedTs > flushedTs {
-			stateTs.SetFlushed(unFlushedTs)
+func (k *mqSink) postFlush(unFlushedMap map[model.TableID]model.ResolvedTs) {
+	for tableID, unflushed := range unFlushedMap {
+		if value, loaded := k.tableTsMap.Load(tableID); loaded {
+			if value.(*model.StatefulTs).GetFlushed().Less(unflushed) {
+				value.(*model.StatefulTs).SetFlushed(unflushed)
+			}
 		}
-		return true
-	})
+	}
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedTs) error {
@@ -390,14 +389,17 @@ func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
 	return nil
 }
 
-func (k *mqSink) getTableStatefulTs(tableID model.TableID) *model.StatefulRts {
-	v, ok := k.tableCheckpointTsMap.Load(tableID)
+func (k *mqSink) getOrSetTableStatefulTs(tableID model.TableID, resolvedTs model.ResolvedTs) *model.StatefulTs {
+	v, ok := k.tableTsMap.Load(tableID)
 	if ok {
-		return v.(*model.StatefulRts)
+		return v.(*model.StatefulTs)
 	}
-
-	res := &model.StatefulRts{}
-	k.tableCheckpointTsMap.Store(tableID, res)
+	// If the table is not in the map,
+	// it means that the table is newly added.
+	// We need to new a StatefulTs for it.
+	res := &model.StatefulTs{}
+	res.CheckAndSetUnflushed(resolvedTs)
+	k.tableTsMap.Store(tableID, res)
 	return res
 }
 

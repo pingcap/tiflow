@@ -16,7 +16,6 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -306,33 +305,4 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 type ProcInfoSnap struct {
 	CfID      ChangeFeedID `json:"changefeed-id"`
 	CaptureID string       `json:"capture-id"`
-}
-
-type StatefulRts struct {
-	flushed   Ts
-	unflushed Ts
-}
-
-func (s *StatefulRts) GetFlushed() Ts {
-	return atomic.LoadUint64(&s.flushed)
-}
-
-func (s *StatefulRts) GetUnflushed() Ts {
-	return atomic.LoadUint64(&s.unflushed)
-}
-
-func (s *StatefulRts) SetFlushed(flushed Ts) {
-	atomic.StoreUint64(&s.flushed, flushed)
-}
-
-func (s *StatefulRts) CheckAndSetUnflushed(unflushed Ts) {
-	for {
-		old := atomic.LoadUint64(&s.unflushed)
-		if old > unflushed {
-			return
-		}
-		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
-			break
-		}
-	}
 }

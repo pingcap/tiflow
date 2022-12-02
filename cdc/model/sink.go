@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
@@ -644,4 +645,33 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
+}
+
+type StatefulTs struct {
+	flushed   atomic.Value
+	unflushed atomic.Value
+}
+
+func (s *StatefulTs) GetFlushed() ResolvedTs {
+	return s.flushed.Load().(ResolvedTs)
+}
+
+func (s *StatefulTs) GetUnflushed() ResolvedTs {
+	return s.unflushed.Load().(ResolvedTs)
+}
+
+func (s *StatefulTs) SetFlushed(flushed ResolvedTs) {
+	s.flushed.Store(flushed)
+}
+
+func (s *StatefulTs) CheckAndSetUnflushed(unflushed ResolvedTs) {
+	for {
+		old := s.unflushed.Load().(ResolvedTs)
+		if old.EqualOrGreater(unflushed) {
+			return
+		}
+		if s.unflushed.CompareAndSwap(old, unflushed) {
+			break
+		}
+	}
 }

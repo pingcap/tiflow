@@ -55,7 +55,7 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 func waitCheckpointTs(t *testing.T, s *mqSink, tableID int64, target uint64) uint64 {
 	var checkpointTs uint64
 	err := retry.Do(context.Background(), func() error {
-		if v, ok := s.tableCheckpointTsMap.Load(tableID); ok {
+		if v, ok := s.tableTsMap.Load(tableID); ok {
 			checkpointTs = v.(model.ResolvedTs).Ts
 		}
 		if checkpointTs >= target {
