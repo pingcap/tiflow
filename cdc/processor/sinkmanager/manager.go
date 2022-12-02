@@ -444,6 +444,7 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
+				m.memQuota.refund(requestMemSize)
 				break LOOP
 			}
 		}
@@ -461,9 +462,13 @@ func (m *SinkManager) generateSinkTasks() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-taskTicker.C:
-			dispatchTasks()
+			if err := dispatchTasks(); err != nil {
+				return errors.Trace(err)
+			}
 		case <-m.sinkWorkerAvailable:
-			dispatchTasks()
+			if err := dispatchTasks(); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }
@@ -561,6 +566,7 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
+				m.memQuota.refund(requestMemSize)
 				break LOOP
 			}
 		}
@@ -577,9 +583,13 @@ func (m *SinkManager) generateRedoTasks() error {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
 		case <-taskTicker.C:
-			dispatchTasks()
+			if err := dispatchTasks(); err != nil {
+				return errors.Trace(err)
+			}
 		case <-m.redoWorkerAvailable:
-			dispatchTasks()
+			if err := dispatchTasks(); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }

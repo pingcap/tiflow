@@ -382,8 +382,9 @@ type timeSlice struct {
 
 func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
 	type progress struct {
-		resolved   model.Ts
-		eventCount int
+		resolved             model.Ts
+		resolvedEventCount   int
+		unresolvedEventCount int
 	}
 
 	batch := db.NewBatch()
@@ -399,9 +400,11 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 
 		if item.event.IsResolved() {
 			prog.resolved = item.event.CRTs
+			prog.resolvedEventCount += prog.unresolvedEventCount
+			prog.unresolvedEventCount = 0
 			return false
 		}
-		prog.eventCount += 1
+		prog.unresolvedEventCount += 1
 
 		key := encoding.EncodeKey(s.uniqueID, uint64(item.tableID), item.event)
 		value, err := s.serde.Marshal(item.event, []byte{})
@@ -459,12 +462,11 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				s.mu.RUnlock()
 				continue
 			}
-			ts.eventsSinceLastSlice += prog.eventCount
 			if prog.resolved > 0 {
 				ts.timeSliceMu.Lock()
 				ts.timeSlices = append(ts.timeSlices, timeSlice{
 					pos:    engine.Position{StartTs: prog.resolved - 1, CommitTs: prog.resolved},
-					events: ts.eventsSinceLastSlice,
+					events: ts.eventsSinceLastSlice + prog.resolvedEventCount,
 				})
 				ts.timeSliceMu.Unlock()
 				ts.eventsSinceLastSlice = 0
@@ -474,6 +476,7 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 					onResolve(table, prog.resolved)
 				}
 			}
+			ts.eventsSinceLastSlice += prog.unresolvedEventCount
 			s.mu.RUnlock()
 		}
 		progresses = make(map[model.TableID]*progress)
