@@ -118,7 +118,7 @@ type tablesCheckerWorker struct {
 	upstreamParser *parser.Parser
 }
 
-func (w tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) ([]*incompatibilityOption, error) {
+func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) ([]*incompatibilityOption, error) {
 	var (
 		err   error
 		ret   = make([]*incompatibilityOption, 0, 1)
@@ -150,7 +150,7 @@ func (w tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) (
 			errMessage: err.Error(),
 		}
 		ret = append(ret, opt)
-		return ret, err
+		return ret, nil
 	}
 
 	downstreamStmt, ok := w.c.downstreamTables.Load(checkItem.downstreamTable)
@@ -220,7 +220,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	)
 
 	for i := 0; i < concurrency; i++ {
-		worker := tablesCheckerWorker{c: c}
+		worker := &tablesCheckerWorker{c: c}
 		worker.downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB)
 		if err != nil {
 			markCheckError(r, err)
