@@ -42,11 +42,6 @@ const (
 	cleanTableInterval          = 5 * time.Second
 )
 
-type gcEvent struct {
-	tableID  model.TableID
-	cleanPos engine.Position
-}
-
 // TableStats of a table sink.
 type TableStats struct {
 	CheckpointTs model.Ts

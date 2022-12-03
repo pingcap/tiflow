@@ -217,7 +217,7 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("resolved", sortedResolved))
 	}
 
-	if !state.mayHaveEvents(tableID, lowerBound, upperBound) {
+	if !state.mayHaveEvents(lowerBound, upperBound) {
 		if log.GetLevel() <= zap.DebugLevel {
 			log.Debug("mayHaveEvents return false, check it",
 				zap.Int64("tableID", tableID),
@@ -405,11 +405,6 @@ type resolvedSlice struct {
 }
 
 func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
-	type progress struct {
-		resolved             model.Ts
-		unresolvedEventCount []model.Ts
-	}
-
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
 	states := make(map[model.TableID]*tableState)
@@ -418,7 +413,7 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 		state, exists := states[item.tableID]
 		if !exists {
 			s.mu.RLock()
-			state, _ = s.tables[item.tableID]
+			state = s.tables[item.tableID]
 			s.mu.RUnlock()
 			states[item.tableID] = state
 		}
@@ -551,7 +546,7 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	return nil
 }
 
-func (s *tableState) mayHaveEvents(tableID model.TableID, lowerBound, upperBound engine.Position) bool {
+func (s *tableState) mayHaveEvents(lowerBound, upperBound engine.Position) bool {
 	s.unstable.mu.RLock()
 	defer s.unstable.mu.RUnlock()
 
