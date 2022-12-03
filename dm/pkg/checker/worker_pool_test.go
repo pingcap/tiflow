@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,10 +37,11 @@ type job struct {
 }
 
 type baseAdder struct {
-	base int64
+	base   int64
+	closed atomic.Bool
 }
 
-func (a baseAdder) add(_ context.Context, j job) (int64, error) {
+func (a *baseAdder) add(_ context.Context, j job) (int64, error) {
 	i := j.inc.Inc()
 	return a.base + i, nil
 }
@@ -54,7 +56,7 @@ func TestExampleWorkerPool(t *testing.T) {
 		sum += result
 	})
 	for i := 0; i < concurrency; i++ {
-		worker := baseAdder{base: 666}
+		worker := &baseAdder{base: 666}
 		pool.Go(worker.add)
 	}
 	for i := 0; i < jobNum; i++ {
@@ -65,4 +67,46 @@ func TestExampleWorkerPool(t *testing.T) {
 	require.NoError(t, err)
 	// sum 1 to 1000 = 500500
 	require.Equal(t, int64(666*jobNum+500500), sum)
+}
+
+var (
+	errMock = errors.New("mock error")
+	errorAt = int64(500)
+)
+
+func (a *baseAdder) addAndError(_ context.Context, j job) (int64, error) {
+	i := j.inc.Inc()
+	if i == errorAt {
+		if a.closed.Load() {
+			panic("worker is used after closed")
+		}
+		a.closed.Store(true)
+		return 0, errMock
+	}
+	return a.base + i, nil
+}
+
+func TestExampleWorkerPoolError(t *testing.T) {
+	sum := int64(0)
+	concurrency := 100
+	jobNum := 1000
+	incrementer := slowIncrementer{}
+
+	pool := NewWorkerPool[job, int64](func(result int64) {
+		sum += result
+	})
+	for i := 0; i < concurrency; i++ {
+		worker := &baseAdder{base: 666}
+		pool.Go(worker.addAndError)
+	}
+	for i := 0; i < jobNum; i++ {
+		ok := pool.PutJob(job{inc: &incrementer})
+		if !ok {
+			require.GreaterOrEqual(t, int64(i), errorAt)
+			break
+		}
+	}
+
+	err := pool.Wait()
+	require.ErrorIs(t, err, errMock)
 }

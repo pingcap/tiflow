@@ -218,7 +218,6 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 	if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok &&
 		c.stCfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical &&
 		c.stCfgs[0].Mode != config.ModeIncrement {
-
 		concurrency, err := checker.GetConcurrency(ctx, sourceIDs, dbs, c.stCfgs[0].MydumperConfig.Threads)
 		if err != nil {
 			return nil, err

@@ -121,7 +121,7 @@ type tablesCheckerWorker struct {
 func (w tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) ([]*incompatibilityOption, error) {
 	var (
 		err   error
-		ret   []*incompatibilityOption
+		ret   = make([]*incompatibilityOption, 0, 1)
 		table = checkItem.upstreamTable
 	)
 	log.L().Logger.Debug("checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
