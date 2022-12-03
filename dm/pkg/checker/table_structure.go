@@ -150,6 +150,7 @@ func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) 
 			errMessage: err.Error(),
 		}
 		ret = append(ret, opt)
+		// nolint:nilerr
 		return ret, nil
 	}
 
