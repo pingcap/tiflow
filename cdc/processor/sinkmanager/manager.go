@@ -275,6 +275,7 @@ func (m *SinkManager) backgroundGC() {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
+		defer ticker.Stop()
 		for {
 			select {
 			case <-m.ctx.Done():
@@ -309,11 +310,7 @@ func (m *SinkManager) backgroundGC() {
 							zap.Error(err))
 						select {
 						case m.errChan <- err:
-						default:
-							log.Error("Failed to send error to error channel, error channel is full",
-								zap.String("namespace", m.changefeedID.Namespace),
-								zap.String("changefeed", m.changefeedID.ID),
-								zap.Error(err))
+						case <-m.ctx.Done():
 						}
 					} else {
 						log.Debug("table stale data has been cleaned",

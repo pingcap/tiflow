@@ -253,7 +253,6 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
-
 	if !exists {
 		return nil
 	}
@@ -516,6 +515,10 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 		toClean = upperBound[0]
 	} else {
 		toClean = engine.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
+	}
+
+	if !state.mayHaveEvents(engine.Position{}, toClean) {
+		return nil
 	}
 
 	// Clean time slice histories.
