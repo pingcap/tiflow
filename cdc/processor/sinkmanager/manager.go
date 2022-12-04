@@ -477,7 +477,7 @@ func (m *SinkManager) generateRedoTasks() error {
 		progs := make([]*progress, 0, redoWorkerNum)
 
 		for len(tables) < redoWorkerNum && m.redoProgressHeap.len() > 0 {
-			slowestTableProgress := m.sinkProgressHeap.pop()
+			slowestTableProgress := m.redoProgressHeap.pop()
 			tableID := slowestTableProgress.tableID
 
 			value, ok := m.tableSinks.Load(tableID)
