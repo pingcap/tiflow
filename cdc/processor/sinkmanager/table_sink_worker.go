@@ -146,7 +146,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		if w.eventCache != nil {
+		if w.eventCache == nil {
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
