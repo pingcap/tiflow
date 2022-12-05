@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
@@ -1227,6 +1228,6 @@ func (t *testOptimistSuite) TestBuildLockWithInitSchema() {
 	o.tk.Init(stm)
 }
 
-func getDownstreamMeta(string) (*config.DBConfig, string) {
+func getDownstreamMeta(string) (*dbconfig.DBConfig, string) {
 	return nil, ""
 }

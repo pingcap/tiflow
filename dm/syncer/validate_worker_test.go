@@ -467,7 +467,7 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 
 		worker := &validateWorker{
 			ctx: context.Background(),
-			db:  conn.NewBaseDB(db, func() {}),
+			db:  conn.NewBaseDBForTest(db, func() {}),
 			L:   log.L(),
 		}
 		targetRows, err2 := worker.getTargetRows(cond)
@@ -499,7 +499,7 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 	}
 	worker := &validateWorker{
 		ctx: context.Background(),
-		db:  conn.NewBaseDB(db, func() {}),
+		db:  conn.NewBaseDBForTest(db, func() {}),
 		L:   log.L(),
 	}
 

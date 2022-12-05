@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/errno"
-	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -35,7 +34,7 @@ type dbConn struct {
 	currDB string
 }
 
-func newDBConn(ctx context.Context, cfg *dmconfig.DBConfig, currDB string) (*dbConn, error) {
+func newDBConn(ctx context.Context, cfg conn.ScopedDBConfig, currDB string) (*dbConn, error) {
 	db, err := conn.DefaultDBProvider.Apply(cfg)
 	if err != nil {
 		return nil, err
@@ -53,7 +52,7 @@ func newDBConn(ctx context.Context, cfg *dmconfig.DBConfig, currDB string) (*dbC
 }
 
 func (dc *dbConn) resetConn(ctx context.Context) error {
-	err := dc.db.CloseBaseConn(dc.con)
+	err := dc.db.ForceCloseConn(dc.con)
 	if err != nil {
 		log.L().Warn("fail to close connection", zap.Error(err))
 	}

@@ -13,7 +13,7 @@ function run() {
 
 	run_downstream_cluster $WORK_DIR
 
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/utils/VeryLargeTable=return("t1")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/conn/VeryLargeTable=return("t1")'
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 

@@ -95,7 +95,7 @@ func NewAgentImpl(jobID string, pLogger *zap.Logger) Agent {
 // move these codes to tiflow later.
 func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("create checkpoint")
-	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(cfg.TargetDB)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 // Remove implements Agent.Remove
 func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("remove checkpoint")
-	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(cfg.TargetDB)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 		return true, nil
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(task.Cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(task.Cfg.TargetDB)
 	if err != nil {
 		return false, err
 	}

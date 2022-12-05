@@ -37,7 +37,7 @@ func TestConnNumberChecker(t *testing.T) {
 			},
 		},
 	}
-	baseDB := conn.NewBaseDB(db, func() {})
+	baseDB := conn.NewBaseDBForTest(db, func() {})
 	// test loader: fail
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 16))
@@ -56,7 +56,7 @@ func TestConnNumberChecker(t *testing.T) {
 	// test loader: success
 	db, dbMock, err = sqlmock.New()
 	require.NoError(t, err)
-	baseDB = conn.NewBaseDB(db, func() {})
+	baseDB = conn.NewBaseDBForTest(db, func() {})
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 17))
 	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
@@ -73,7 +73,7 @@ func TestConnNumberChecker(t *testing.T) {
 	// test loader maxConn - usedConn < neededConn: warn
 	db, dbMock, err = sqlmock.New()
 	require.NoError(t, err)
-	baseDB = conn.NewBaseDB(db, func() {})
+	baseDB = conn.NewBaseDBForTest(db, func() {})
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 17))
 	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
@@ -92,7 +92,7 @@ func TestConnNumberChecker(t *testing.T) {
 	// test loader no enough privilege: warn
 	db, dbMock, err = sqlmock.New()
 	require.NoError(t, err)
-	baseDB = conn.NewBaseDB(db, func() {})
+	baseDB = conn.NewBaseDBForTest(db, func() {})
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 17))
 	dbMock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
