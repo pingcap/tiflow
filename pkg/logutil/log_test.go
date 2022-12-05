@@ -15,12 +15,16 @@ package logutil
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -203,4 +207,39 @@ func TestCallerSkip(t *testing.T) {
 	_, filename = filepath.Split(file)
 	log.L().Info("caller skip test", zap.String("other", "other"))
 	require.Contains(t, buffer.Stripped(), fmt.Sprintf("%s:%d", filename, line+2))
+}
+
+func TestMySQLLogger(t *testing.T) {
+	var buffer zaptest.Buffer
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	require.Nil(t, initMySQLLogger())
+
+	// Mock MySQL server
+	ms, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		conn, err := ms.Accept()
+		require.NoError(t, err)
+		err = conn.Close()
+		require.NoError(t, err)
+	}()
+
+	dsnStr := fmt.Sprintf("root:@tcp(%s)/", ms.Addr().String())
+	db, err := sql.Open("mysql", dsnStr)
+	require.Nil(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = db.PingContext(ctx)
+	require.Error(t, err)
+	// Log: [ERROR] [packets.go:37] ["unexpected EOF"] [component="[mysql]"]
+	require.Contains(t, buffer.Stripped(), "[ERROR]")
+	require.Contains(t, buffer.Stripped(), "packets.go")
+	require.Contains(t, buffer.Stripped(), "unexpected EOF")
+	require.Contains(t, buffer.Stripped(), "[mysql]")
+	wg.Wait()
 }
