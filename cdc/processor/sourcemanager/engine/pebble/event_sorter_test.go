@@ -172,6 +172,6 @@ func TestCleanData(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	s.AddTable(1)
+	require.Panics(t, func() { s.CleanByTable(2, engine.Position{}) })
 	require.Nil(t, s.CleanByTable(1, engine.Position{}))
-	require.Nil(t, s.CleanByTable(2, engine.Position{}))
 }

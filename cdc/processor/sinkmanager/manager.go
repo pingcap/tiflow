@@ -39,7 +39,9 @@ const (
 	sinkWorkerNum               = 8
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
-	cleanTableInterval          = 5 * time.Second
+	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
+	cleanTableInterval  = 5 * time.Second
+	cleanTableMinEvents = 128
 )
 
 // TableStats of a table sink.
@@ -301,7 +303,12 @@ func (m *SinkManager) backgroundGC() {
 					if resolvedMark == 0 {
 						continue
 					}
+
 					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
+					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
+						continue
+					}
+
 					if err := m.sourceManager.CleanByTable(tableID, cleanPos); err != nil {
 						log.Error("Failed to clean table in sort engine",
 							zap.String("namespace", m.changefeedID.Namespace),

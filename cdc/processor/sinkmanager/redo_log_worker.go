@@ -162,7 +162,11 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 	upperBound := task.getUpperBound(task.tableSink)
 	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
+	allEventCount := 0
 	defer func() {
+		eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
+		task.tableSink.updateRangeEventCounts(eventCount)
+
 		if err := iter.Close(); err != nil {
 			log.Error("sink redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -195,6 +199,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			return nil
 		}
+		allEventCount += 1
 		if pos.Valid() {
 			lastPos = pos
 		}

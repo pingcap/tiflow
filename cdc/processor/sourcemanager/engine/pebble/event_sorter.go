@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"math"
-	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -107,10 +106,7 @@ func (s *EventSorter) AddTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 		return
 	}
-	s.tables[tableID] = &tableState{
-		ch:       s.channs[getDB(tableID, len(s.dbs))],
-		unstable: &unstable{},
-	}
+	s.tables[tableID] = &tableState{ch: s.channs[getDB(tableID, len(s.dbs))]}
 	s.mu.Unlock()
 }
 
@@ -217,24 +213,6 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("resolved", sortedResolved))
 	}
 
-	if !state.mayHaveEvents(lowerBound, upperBound) {
-		if log.GetLevel() <= zap.DebugLevel {
-			log.Debug("mayHaveEvents return false, check it",
-				zap.Int64("tableID", tableID),
-				zap.Any("lowerbound", lowerBound),
-				zap.Any("upperbound", upperBound))
-
-			db := s.dbs[getDB(tableID, len(s.dbs))]
-			iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
-			xiter := &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
-			if e, _, _ := xiter.Next(); e != nil {
-				log.Panic("check mayHaveEvents fail")
-			}
-			_ = xiter.Close()
-		}
-		return &EventIter{tableID: tableID, state: state, iter: nil, serde: s.serde}
-	}
-
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
 	return &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
@@ -253,9 +231,14 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
+
 	if !exists {
-		return nil
+		log.Panic("clean an non-existent table",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
+
 	return s.cleanTable(state, tableID, upperBound)
 }
 
@@ -381,60 +364,18 @@ type tableState struct {
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
 	cleaned engine.Position
-
-	// unstable traces all events which are not persisted.
-	unstable *unstable
-}
-
-type unstable struct {
-	unresolved      []engine.Position
-	resolved        model.Ts
-	resolvedUpdated bool
-
-	// mu protects slices, which can be accessed in `tableState.mayHaveEvents`.
-	mu sync.RWMutex
-	// slices is a buffer. If slices[i].events is greater than 0,
-	// it means in the range (slices[i-1].pos, slices[i].pos] there must be some events.
-	slices []resolvedSlice
-}
-
-type resolvedSlice struct {
-	pos       engine.Position // included upperbound.
-	hasEvents bool
 }
 
 func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
-	states := make(map[model.TableID]*tableState)
+	newResolved := make(map[model.TableID]model.Ts)
 
 	handleItem := func(item eventWithTableID) bool {
-		state, exists := states[item.tableID]
-		if !exists {
-			s.mu.RLock()
-			state = s.tables[item.tableID]
-			s.mu.RUnlock()
-			states[item.tableID] = state
-		}
-		if state == nil {
-			// The table has been removed.
-			return false
-		}
-		unstable := state.unstable
-
 		if item.event.IsResolved() {
-			if unstable.resolved < item.event.CRTs {
-				unstable.resolved = item.event.CRTs
-				unstable.resolvedUpdated = true
-			}
+			newResolved[item.tableID] = item.event.CRTs
 			return false
 		}
-		pos := engine.Position{StartTs: item.event.CRTs - 1, CommitTs: item.event.CRTs}
-		unresolvedLen := len(unstable.unresolved)
-		if unresolvedLen == 0 || unstable.unresolved[unresolvedLen-1].Compare(pos) < 0 {
-			unstable.unresolved = append(unstable.unresolved, pos)
-		}
-
 		key := encoding.EncodeKey(s.uniqueID, uint64(item.tableID), item.event)
 		value, err := s.serde.Marshal(item.event, []byte{})
 		if err != nil {
@@ -479,30 +420,25 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 		}
 		batch = db.NewBatch()
 
-		for table, state := range states {
-			if !state.unstable.resolvedUpdated {
+		for table, resolved := range newResolved {
+			s.mu.RLock()
+			ts, ok := s.tables[table]
+			if !ok {
+				log.Debug("Table is removed, skip updating resolved",
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID),
+					zap.Int64("table", table),
+					zap.Uint64("resolved", resolved))
+				s.mu.RUnlock()
 				continue
 			}
-			unstable := state.unstable
-			unstable.resolvedUpdated = false
-			pos := engine.Position{StartTs: unstable.resolved - 1, CommitTs: unstable.resolved}
-			idx := sort.Search(len(unstable.unresolved), func(i int) bool {
-				return unstable.unresolved[i].Compare(pos) > 0
-			})
-			hasEvents := idx > 0
-			unstable.mu.Lock()
-			unstable.slices = append(state.unstable.slices, resolvedSlice{pos, hasEvents})
-			unstable.mu.Unlock()
-			unstable.unresolved = state.unstable.unresolved[idx:]
-
-			state.sortedResolved.Store(state.unstable.resolved)
-			s.mu.RLock()
+			ts.sortedResolved.Store(resolved)
 			for _, onResolve := range s.onResolves {
-				onResolve(table, state.unstable.resolved)
+				onResolve(table, resolved)
 			}
 			s.mu.RUnlock()
 		}
-		states = make(map[model.TableID]*tableState)
+		newResolved = make(map[model.TableID]model.Ts)
 	}
 }
 
@@ -517,20 +453,9 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 		toClean = engine.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}
 
-	if !state.mayHaveEvents(engine.Position{}, toClean) {
-		return nil
-	}
-
-	// Clean time slice histories.
-	state.unstable.mu.Lock()
-	idx := sort.Search(len(state.unstable.slices), func(i int) bool {
-		return state.unstable.slices[i].pos.Compare(toClean) >= 0
-	})
-	state.unstable.slices = state.unstable.slices[idx:]
-	state.unstable.mu.Unlock()
-
 	state.mu.RLock()
 	defer state.mu.RUnlock()
+
 	if state.cleaned.Compare(toClean) >= 0 {
 		return nil
 	}
@@ -544,35 +469,9 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	if err != nil {
 		return err
 	}
+
 	state.cleaned = toClean
-
 	return nil
-}
-
-func (s *tableState) mayHaveEvents(lowerBound, upperBound engine.Position) bool {
-	s.unstable.mu.RLock()
-	defer s.unstable.mu.RUnlock()
-
-	bgnIdx := sort.Search(len(s.unstable.slices), func(i int) bool {
-		return s.unstable.slices[i].pos.Compare(lowerBound) >= 0
-	})
-	if bgnIdx >= len(s.unstable.slices) {
-		// Don't know whether there are events in the range or not.
-		return true
-	}
-	endIdx := sort.Search(len(s.unstable.slices), func(i int) bool {
-		return s.unstable.slices[i].pos.Compare(upperBound) >= 0
-	})
-	if endIdx >= len(s.unstable.slices) {
-		// Don't know whether there are events in the range or not.
-		return true
-	}
-	for _, slice := range s.unstable.slices[bgnIdx : endIdx+1] {
-		if slice.hasEvents {
-			return true
-		}
-	}
-	return false
 }
 
 // ----- Some internal variable and functions -----
