@@ -168,6 +168,22 @@ func FetchTargetDoTables(
 	return tableMapper, extendedColumnPerTable, nil
 }
 
+// FetchTableEstimatedBytes returns the estimated size (data + index) in bytes of the table.
+func FetchTableEstimatedBytes(ctx context.Context, db *sql.DB, schema string, table string) (int64, error) {
+	failpoint.Inject("VeryLargeTable", func(val failpoint.Value) {
+		tblName := val.(string)
+		if tblName == table {
+			failpoint.Return(1<<62, nil)
+		}
+	})
+	var size int64
+	err := db.QueryRowContext(ctx, "SELECT data_length + index_length FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", schema, table).Scan(&size)
+	if err != nil {
+		return 0, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	return size, nil
+}
+
 // LowerCaseTableNamesFlavor represents the type of db `lower_case_table_names` settings.
 type LowerCaseTableNamesFlavor uint8
 
