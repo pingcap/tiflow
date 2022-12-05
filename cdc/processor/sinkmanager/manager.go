@@ -827,7 +827,9 @@ func (m *SinkManager) Close() error {
 		return errors.Trace(err)
 	}
 	m.tableSinks.Range(func(key, value interface{}) bool {
-		value.(*tableSinkWrapper).close(m.ctx)
+		sink := value.(*tableSinkWrapper)
+		sink.close(m.ctx)
+		m.memQuota.clean(sink.tableID)
 		return true
 	})
 	log.Info("All table sinks closed",
