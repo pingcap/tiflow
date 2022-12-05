@@ -82,7 +82,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	availableMem := int(requestMemSize)
 	events := make([]*model.PolymorphicEvent, 0, 1024)
 	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound()
+	upperBound := task.getUpperBound(task.tableSink)
 
 	if w.eventCache != nil {
 		lowerBound, err = w.fetchFromCache(task, lowerBound, upperBound)
@@ -142,9 +142,15 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := 0
+	allEventCount := 0
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
+		if w.eventCache == nil {
+			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
+			task.tableSink.updateRangeEventCounts(eventCount)
+		}
+
 		if err := iter.Close(); err != nil {
 			log.Error("Sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -188,6 +194,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		}
 		task.tableSink.receivedEventCount.Add(1)
+		allEventCount += 1
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			// Maybe we just ignore the last event. So we need to record the last position.

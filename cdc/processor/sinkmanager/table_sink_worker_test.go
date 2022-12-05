@@ -176,7 +176,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -282,7 +282,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -407,7 +407,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -537,7 +537,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
@@ -663,7 +663,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -788,7 +788,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -906,7 +906,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func() engine.Position {
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
