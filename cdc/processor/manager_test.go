@@ -29,6 +29,7 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
@@ -296,9 +297,10 @@ func TestQueryTableCount(t *testing.T) {
 	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
 	ctx := context.TODO()
 	// Add some tables to processor.
-	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{
-		tables: map[model.TableID]tablepb.TablePipeline{1: nil, 2: nil},
-	}
+	tables := spanz.NewMap[tablepb.TablePipeline]()
+	tables.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), nil)
+	tables.ReplaceOrInsert(spanz.TableIDToComparableSpan(2), nil)
+	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{tableSpans: tables}
 
 	done := make(chan error, 1)
 	tableCh := make(chan int, 1)
