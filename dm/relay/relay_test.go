@@ -31,10 +31,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -53,7 +55,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 		Flavor:     flavor,
 		RelayDir:   c.MkDir(),
 		ServerID:   12321,
-		From: config.DBConfig{
+		From: dbconfig.DBConfig{
 			Host:     dbCfg.Host,
 			Port:     dbCfg.Port,
 			User:     dbCfg.User,
@@ -69,7 +71,7 @@ func newRelayCfg(c *C, flavor string) *Config {
 	}
 }
 
-func getDBConfigForTest() *config.DBConfig {
+func getDBConfigForTest() *dbconfig.DBConfig {
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -83,7 +85,7 @@ func getDBConfigForTest() *config.DBConfig {
 		user = "root"
 	}
 	password := os.Getenv("MYSQL_PSWD")
-	return &config.DBConfig{
+	return &dbconfig.DBConfig{
 		Host:     host,
 		Port:     port,
 		User:     user,
@@ -157,12 +159,12 @@ func (t *testRelaySuite) TestTryRecoverLatestFile(c *C) {
 		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(cfg)
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -254,7 +256,7 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *C) {
 	)
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(cfg)
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -284,9 +286,9 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *C) {
 	f.Close()
 
 	// recover with empty GTIDs.
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged", `return("")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
 	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), IsNil)
 	_, latestPos := r.meta.Pos()
 	c.Assert(latestPos, DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
@@ -422,7 +424,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(cfg)
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -547,7 +549,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 }
 
 func (t *testRelaySuite) TestReSetupMeta(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	var (
@@ -556,7 +558,7 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 	)
 	cfg := getDBConfigForTest()
 	mockDB := conn.InitMockDB(c)
-	db, err := conn.DefaultDBProvider.Apply(cfg)
+	db, err := conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 	r.db = db
 	c.Assert(r.Init(context.Background()), IsNil)
@@ -571,7 +573,7 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 		r.db = nil
 	}()
 	mockGetServerUUID(mockDB)
-	uuid, err := utils.GetServerUUID(ctx, r.db.DB, r.cfg.Flavor)
+	uuid, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), r.db, r.cfg.Flavor)
 	c.Assert(err, IsNil)
 
 	// re-setup meta with start pos adjusted

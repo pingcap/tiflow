@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -51,7 +52,7 @@ type Optimist struct {
 }
 
 // NewOptimist creates a new Optimist instance.
-func NewOptimist(pLogger *log.Logger, getDownstreamMetaFunc func(string) (*config.DBConfig, string)) *Optimist {
+func NewOptimist(pLogger *log.Logger, getDownstreamMetaFunc func(string) (*dbconfig.DBConfig, string)) *Optimist {
 	return &Optimist{
 		logger: pLogger.WithFields(zap.String("component", "shard DDL optimist")),
 		closed: true,

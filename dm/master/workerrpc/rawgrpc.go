@@ -18,7 +18,7 @@ import (
 	"time"
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/atomic"
@@ -42,7 +42,7 @@ func NewGRPCClientWrap(conn *grpc.ClientConn, client pb.WorkerClient) (*GRPCClie
 }
 
 // NewGRPCClient initializes a new grpc client from worker address.
-func NewGRPCClient(addr string, securityCfg config.Security) (*GRPCClient, error) {
+func NewGRPCClient(addr string, securityCfg security.Security) (*GRPCClient, error) {
 	tls, err := toolutils.NewTLS(securityCfg.SSLCA, securityCfg.SSLCert, securityCfg.SSLKey, addr, securityCfg.CertAllowedCN)
 	if err != nil {
 		return nil, terror.ErrMasterGRPCCreateConn.Delegate(err)

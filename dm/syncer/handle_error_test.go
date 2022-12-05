@@ -89,8 +89,9 @@ func TestHandleError(t *testing.T) {
 	)
 	mockDB, err := conn.MockDefaultDBProvider()
 	require.NoError(t, err)
-	syncer.fromDB, err = dbconn.NewUpStreamConn(&cfg.From) // used to get parser
+	upstreamDB, err := conn.GetUpstreamDB(&cfg.From) // used to get parser
 	require.NoError(t, err)
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: upstreamDB}
 	syncer.streamerController = binlogstream.NewStreamerController4Test(nil, nil)
 
 	for _, cs := range cases {

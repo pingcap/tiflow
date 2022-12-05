@@ -14,25 +14,19 @@
 package utils
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 )
 
@@ -60,155 +54,6 @@ func TrimQuoteMark(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-// FetchAllDoTables returns all need to do tables after filtered (fetches from upstream MySQL).
-func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[string][]string, error) {
-	schemas, err := dbutil.GetSchemas(ctx, db)
-
-	failpoint.Inject("FetchAllDoTablesFailed", func(val failpoint.Value) {
-		err = tmysql.NewErr(uint16(val.(int)))
-		log.L().Warn("FetchAllDoTables failed", zap.String("failpoint", "FetchAllDoTablesFailed"), zap.Error(err))
-	})
-
-	if err != nil {
-		return nil, terror.WithScope(err, terror.ScopeUpstream)
-	}
-
-	ftSchemas := make([]*filter.Table, 0, len(schemas))
-	for _, schema := range schemas {
-		if filter.IsSystemSchema(schema) {
-			continue
-		}
-		ftSchemas = append(ftSchemas, &filter.Table{
-			Schema: schema,
-			Name:   "", // schema level
-		})
-	}
-	ftSchemas = bw.Apply(ftSchemas)
-	if len(ftSchemas) == 0 {
-		log.L().Warn("no schema need to sync")
-		return nil, nil
-	}
-
-	schemaToTables := make(map[string][]string)
-	for _, ftSchema := range ftSchemas {
-		schema := ftSchema.Schema
-		// use `GetTables` from tidb-tools, no view included
-		tables, err := dbutil.GetTables(ctx, db, schema)
-		if err != nil {
-			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
-		}
-		ftTables := make([]*filter.Table, 0, len(tables))
-		for _, table := range tables {
-			ftTables = append(ftTables, &filter.Table{
-				Schema: schema,
-				Name:   table,
-			})
-		}
-		ftTables = bw.Apply(ftTables)
-		if len(ftTables) == 0 {
-			log.L().Info("no tables need to sync", zap.String("schema", schema))
-			continue // NOTE: should we still keep it as an empty elem?
-		}
-		tables = tables[:0]
-		for _, ftTable := range ftTables {
-			tables = append(tables, ftTable.Name)
-		}
-		schemaToTables[schema] = tables
-	}
-
-	return schemaToTables, nil
-}
-
-// FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
-func FetchTargetDoTables(
-	ctx context.Context,
-	source string,
-	db *sql.DB,
-	bw *filter.Filter,
-	router *regexprrouter.RouteTable,
-) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
-	// fetch tables from source and filter them
-	sourceTables, err := FetchAllDoTables(ctx, db, bw)
-
-	failpoint.Inject("FetchTargetDoTablesFailed", func(val failpoint.Value) {
-		err = tmysql.NewErr(uint16(val.(int)))
-		log.L().Warn("FetchTargetDoTables failed", zap.String("failpoint", "FetchTargetDoTablesFailed"), zap.Error(err))
-	})
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	tableMapper := make(map[filter.Table][]filter.Table)
-	extendedColumnPerTable := make(map[filter.Table][]string)
-	for schema, tables := range sourceTables {
-		for _, table := range tables {
-			targetSchema, targetTable, err := router.Route(schema, table)
-			if err != nil {
-				return nil, nil, terror.ErrGenTableRouter.Delegate(err)
-			}
-
-			target := filter.Table{
-				Schema: targetSchema,
-				Name:   targetTable,
-			}
-			tableMapper[target] = append(tableMapper[target], filter.Table{
-				Schema: schema,
-				Name:   table,
-			})
-			col, _ := router.FetchExtendColumn(schema, table, source)
-			if len(col) > 0 {
-				extendedColumnPerTable[target] = col
-			}
-		}
-	}
-
-	return tableMapper, extendedColumnPerTable, nil
-}
-
-// LowerCaseTableNamesFlavor represents the type of db `lower_case_table_names` settings.
-type LowerCaseTableNamesFlavor uint8
-
-const (
-	// LCTableNamesSensitive represent lower_case_table_names = 0, case sensitive.
-	LCTableNamesSensitive LowerCaseTableNamesFlavor = 0
-	// LCTableNamesInsensitive represent lower_case_table_names = 1, case insensitive.
-	LCTableNamesInsensitive = 1
-	// LCTableNamesMixed represent lower_case_table_names = 2, table names are case-sensitive, but case-insensitive in usage.
-	LCTableNamesMixed = 2
-)
-
-// FetchLowerCaseTableNamesSetting return the `lower_case_table_names` setting of target db.
-func FetchLowerCaseTableNamesSetting(ctx context.Context, conn *sql.Conn) (LowerCaseTableNamesFlavor, error) {
-	query := "SELECT @@lower_case_table_names;"
-	row := conn.QueryRowContext(ctx, query)
-	if row.Err() != nil {
-		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(row.Err(), query)
-	}
-	var res uint8
-	if err := row.Scan(&res); err != nil {
-		return LCTableNamesSensitive, terror.ErrDBExecuteFailed.Delegate(err, query)
-	}
-	if res > LCTableNamesMixed {
-		return LCTableNamesSensitive, terror.ErrDBUnExpect.Generate(fmt.Sprintf("invalid `lower_case_table_names` value '%d'", res))
-	}
-	return LowerCaseTableNamesFlavor(res), nil
-}
-
-// GetDBCaseSensitive returns the case-sensitive setting of target db.
-func GetDBCaseSensitive(ctx context.Context, db *sql.DB) (bool, error) {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return true, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	defer conn.Close()
-	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
-	if err != nil {
-		return true, err
-	}
-	return lcFlavor == LCTableNamesSensitive, nil
 }
 
 // CompareShardingDDLs compares s and t ddls

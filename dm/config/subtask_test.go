@@ -20,6 +20,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
@@ -32,13 +34,13 @@ func TestSubTask(t *testing.T) {
 		SourceID:        "mysql-instance-01",
 		OnlineDDL:       false,
 		OnlineDDLScheme: PT,
-		From: DBConfig{
+		From: dbconfig.DBConfig{
 			Host:     "127.0.0.1",
 			Port:     3306,
 			User:     "root",
 			Password: "Up8156jArvIPymkVC+5LxkAT6rek",
 		},
-		To: DBConfig{
+		To: dbconfig.DBConfig{
 			Host:     "127.0.0.1",
 			Port:     4306,
 			User:     "root",
@@ -89,13 +91,13 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			Name:      "test-task",
 			SourceID:  "mysql-instance-01",
 			OnlineDDL: true,
-			From: DBConfig{
+			From: dbconfig.DBConfig{
 				Host:     "127.0.0.1",
 				Port:     3306,
 				User:     "root",
 				Password: "Up8156jArvIPymkVC+5LxkAT6rek",
 			},
-			To: DBConfig{
+			To: dbconfig.DBConfig{
 				Host:     "127.0.0.1",
 				Port:     4306,
 				User:     "root",
@@ -284,13 +286,13 @@ func TestSubTaskAdjustLoaderS3Dir(t *testing.T) {
 }
 
 func TestDBConfigClone(t *testing.T) {
-	a := &DBConfig{
+	a := &dbconfig.DBConfig{
 		Host:     "127.0.0.1",
 		Port:     4306,
 		User:     "root",
 		Password: "123",
 		Session:  map[string]string{"1": "1"},
-		RawDBCfg: DefaultRawDBConfig(),
+		RawDBCfg: dbconfig.DefaultRawDBConfig(),
 	}
 
 	// When add new fields, also update this value
@@ -313,7 +315,7 @@ func TestDBConfigClone(t *testing.T) {
 	require.NotEqual(t, a, b)
 
 	a.RawDBCfg = nil
-	a.Security = &Security{}
+	a.Security = &security.Security{}
 	b = a.Clone()
 	require.Equal(t, a, b)
 	require.NotSame(t, a.Security, b.Security)

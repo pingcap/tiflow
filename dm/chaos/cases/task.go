@@ -26,10 +26,10 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	config2 "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -65,7 +65,7 @@ type task struct {
 
 // newTask creates a new task instance.
 func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema string,
-	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig,
+	targetCfg dbconfig.DBConfig, sourcesCfg ...dbconfig.DBConfig,
 ) (*task, error) {
 	var taskCfg config2.TaskConfig
 	err := taskCfg.DecodeFile(taskFile)
@@ -86,31 +86,31 @@ func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema s
 		}
 
 		cfg := sourcesCfg[i]
-		db, err2 := conn.DefaultDBProvider.Apply(&cfg)
+		db, err2 := conn.GetUpstreamDB(&cfg)
 		if err2 != nil {
 			return nil, err2
 		}
-		conn, err2 := createDBConn(ctx, db, schema)
+		dbConnection, err2 := createDBConn(ctx, db, schema)
 		if err2 != nil {
 			return nil, err2
 		}
 		if taskCfg.CaseSensitive {
-			lcSetting, err2 := utils.FetchLowerCaseTableNamesSetting(ctx, conn.baseConn.DBConn)
+			lcSetting, err2 := conn.FetchLowerCaseTableNamesSetting(ctx, dbConnection.baseConn)
 			if err2 != nil {
 				return nil, err2
 			}
-			if lcSetting == utils.LCTableNamesMixed {
+			if lcSetting == conn.LCTableNamesMixed {
 				msg := "can not set `case-sensitive = true` when upstream `lower_case_table_names = 2`"
 				log.L().Error(msg, zap.Any("instance", cfg))
 				return nil, errors.New(msg)
 			}
 		}
 		sourceDBs = append(sourceDBs, db)
-		sourceConns = append(sourceConns, conn)
+		sourceConns = append(sourceConns, dbConnection)
 		res = append(res, singleResult{})
 	}
 
-	targetDB, err := conn.DefaultDBProvider.Apply(&targetCfg)
+	targetDB, err := conn.GetDownstreamDB(&targetCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -436,12 +436,12 @@ func (t *task) genIncrData(pCtx context.Context) (err error) {
 			// NOTE: no re-order inject even for optimistic shard DDL now.
 
 			var eg errgroup.Group
-			for i, conn := range t.sourceConns {
-				conn2 := conn
+			for i, c := range t.sourceConns {
+				conn2 := c
 				i2 := i
 				eg.Go(func() error {
 					if err2 := conn2.execDDLs(t.ctx, query); err2 != nil {
-						if utils.IsMySQLError(err2, mysql.ErrDupFieldName) {
+						if conn.IsMySQLError(err2, mysql.ErrDupFieldName) {
 							t.logger.Warn("ignore duplicate field name for ddl", log.ShortError(err))
 							return nil
 						}
@@ -501,7 +501,7 @@ func (t *task) diffIncrData(ctx context.Context) (err error) {
 }
 
 func (t *task) updateSchema() error {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	for i, db := range t.sourceDBs {
