@@ -117,7 +117,7 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 	version.ParseServerInfo(versionInfo)
 }
 
-func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, string, error) {
+func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg conn.ScopedDBConfig) (*time.Location, string, error) {
 	var err error
 	if len(tzStr) == 0 {
 		baseDB, err2 := conn.DefaultDBProvider.Apply(dbCfg)

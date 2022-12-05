@@ -33,6 +33,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -526,7 +527,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 
 	dbCfg := l.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
 		SetMaxIdleConns(l.cfg.PoolSize)
 
 	// used to change loader's specified DB settings, currently SQL Mode
@@ -541,7 +542,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
-		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		baseDB, err2 := conn.GetDownstreamDB(&l.cfg.To)
 		if err2 != nil {
 			return err2
 		}
@@ -563,7 +564,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 
 	if !hasSQLMode {
-		sqlModes, err3 := utils.AdjustSQLModeCompatible(l.cfg.LoaderConfig.SQLMode)
+		sqlModes, err3 := conn.AdjustSQLModeCompatible(l.cfg.LoaderConfig.SQLMode)
 		if err3 != nil {
 			l.logger.Warn("cannot adjust sql_mode compatible, the sql_mode will stay the same", log.ShortError(err3))
 		}
@@ -1343,7 +1344,7 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							return err2
 						}
 						defer func(baseConn *conn.BaseConn) {
-							err2 := job.loader.toDB.CloseBaseConn(baseConn)
+							err2 := job.loader.toDB.ForceCloseConn(baseConn)
 							if err2 != nil {
 								job.loader.logger.Warn("fail to close connection", zap.Error(err2))
 							}
@@ -1353,7 +1354,7 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
-								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")
+								return nil, terror.WithScope(terror.ErrDBBadConn.Generate("bad connection error restoreData"), terror.ScopeDownstream)
 							},
 						}
 					}

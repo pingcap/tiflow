@@ -48,19 +48,19 @@ func GetBinaryLogs(ctx *tcontext.Context, db *conn.BaseDB) (FileSizes, error) {
 	query := "SHOW BINARY LOGS"
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	defer rows.Close()
 	files := make([]binlogSize, 0, 10)
 	var rowsResult [][]string
 	rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "Log_name", "File_size")
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
 	for _, rowResult := range rowsResult {
 		pos, err := strconv.ParseInt(rowResult[1], 10, 64)
 		if err != nil {
-			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 		}
 		files = append(files, binlogSize{name: rowResult[0], size: pos})
 	}
