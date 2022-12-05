@@ -66,27 +66,6 @@ func createManagerWithMemEngine(
 	return manager, sortEngine
 }
 
-// nolint:revive
-// In test it is ok move the ctx to the second parameter.
-func createManagerWithMockEngine(
-	t *testing.T,
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	changefeedInfo *model.ChangeFeedInfo,
-	errChan chan error,
-) (*SinkManager, *mockengine.MockSortEngine) {
-	ctrl := gomock.NewController(t)
-	sortEngine := mockengine.NewMockSortEngine(ctrl)
-	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
-	manager, err := New(
-		ctx, changefeedID, changefeedInfo, up,
-		nil, sm,
-		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
-	require.NoError(t, err)
-	return manager, sortEngine
-}
-
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
 		Error:   nil,
