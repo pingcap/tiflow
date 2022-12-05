@@ -24,6 +24,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -67,7 +68,7 @@ func (t *testSchema) setUpDBConn(c *C) {
 	}
 	t.password = os.Getenv("MYSQL_PSWD")
 
-	cfg := &config.DBConfig{
+	cfg := &dbconfig.DBConfig{
 		Host:     t.host,
 		Port:     t.port,
 		User:     t.user,
@@ -78,7 +79,7 @@ func (t *testSchema) setUpDBConn(c *C) {
 
 	var err error
 	t.mockDB = conn.InitMockDB(c)
-	t.db, err = conn.DefaultDBProvider.Apply(cfg)
+	t.db, err = conn.GetUpstreamDB(cfg)
 	c.Assert(err, IsNil)
 }
 
@@ -90,7 +91,7 @@ func (t *testSchema) TestSchemaV106ToV20x(c *C) {
 			SourceID:   "mysql-replica-01",
 			ServerID:   429523137,
 			MetaSchema: "dm_meta_v106_test",
-			From: config.DBConfig{
+			From: dbconfig.DBConfig{
 				Host:     t.host,
 				Port:     t.port,
 				User:     t.user,
@@ -103,9 +104,9 @@ func (t *testSchema) TestSchemaV106ToV20x(c *C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/v1dbschema/MockGetGTIDsForPos", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:10-16")`), IsNil)
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/v1dbschema/MockGetGTIDsForPos")
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
 
 	// update schema without GTID enabled.
 	// mock updateSyncerCheckpoint

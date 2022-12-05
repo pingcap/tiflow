@@ -24,7 +24,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -103,7 +103,7 @@ type Config struct {
 	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// tls config
-	config.Security
+	security.Security
 
 	printVersion      bool
 	printSampleConfig bool

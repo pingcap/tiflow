@@ -15,7 +15,6 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -28,7 +27,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/stretchr/testify/require"
 )
 
@@ -263,7 +263,7 @@ func subtestFlavor(t *testing.T, cfg *SourceConfig, sqlInfo, expectedFlavor, exp
 			AddRow("version", sqlInfo))
 	mock.ExpectClose()
 
-	err = cfg.AdjustFlavor(context.Background(), db)
+	err = cfg.AdjustFlavor(context.Background(), conn.NewBaseDBForTest(db))
 	if expectedError == "" {
 		require.NoError(t, err)
 		require.Equal(t, expectedFlavor, cfg.Flavor)
@@ -319,12 +319,12 @@ func TestAdjustServerIDFallback(t *testing.T) {
 	require.NoError(t, err)
 	cfg.ServerID = 0
 
-	err = cfg.AdjustServerID(context.Background(), db)
+	err = cfg.AdjustServerID(context.Background(), conn.NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.NotEqual(t, 0, cfg.ServerID)
 }
 
-func getMockServerIDs(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+func getMockServerIDs(ctx *tcontext.Context, db *conn.BaseDB) (map[uint32]struct{}, error) {
 	return map[uint32]struct{}{
 		1: {},
 		2: {},
@@ -339,13 +339,13 @@ func TestAdjustCaseSensitive(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectQuery("SELECT @@lower_case_table_names;").
-		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(utils.LCTableNamesMixed))
-	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), db))
+		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(conn.LCTableNamesMixed))
+	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), conn.NewBaseDBForTest(db)))
 	require.False(t, cfg.CaseSensitive)
 
 	mock.ExpectQuery("SELECT @@lower_case_table_names;").
-		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(utils.LCTableNamesSensitive))
-	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), db))
+		WillReturnRows(sqlmock.NewRows([]string{"@@lower_case_table_names"}).AddRow(conn.LCTableNamesSensitive))
+	require.NoError(t, cfg.AdjustCaseSensitive(context.Background(), conn.NewBaseDBForTest(db)))
 	require.True(t, cfg.CaseSensitive)
 
 	require.NoError(t, mock.ExpectationsWereMet())

@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -478,7 +478,7 @@ func (t *testKeeper) TestTargetTablesForTask(c *C) {
 	})
 }
 
-func getDownstreamMeta(string) (*config.DBConfig, string) {
+func getDownstreamMeta(string) (*dbconfig.DBConfig, string) {
 	return nil, ""
 }
 
@@ -488,10 +488,10 @@ func (t *testKeeper) TestGetDownstreamMeta(c *C) {
 		task2 = "hihihi"
 		task3 = "hehehe"
 	)
-	getDownstreamMetaFunc := func(task string) (*config.DBConfig, string) {
+	getDownstreamMetaFunc := func(task string) (*dbconfig.DBConfig, string) {
 		switch task {
 		case task1, task2:
-			return &config.DBConfig{}, "meta"
+			return &dbconfig.DBConfig{}, "meta"
 		default:
 			return nil, ""
 		}

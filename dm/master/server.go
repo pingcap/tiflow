@@ -15,7 +15,6 @@ package master
 
 import (
 	"context"
-	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -36,6 +35,8 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
@@ -1342,19 +1343,19 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 func innerCheckAndAdjustSourceConfig(
 	ctx context.Context,
 	cfg *config.SourceConfig,
-	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
+	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *conn.BaseDB) error,
 ) error {
 	dbConfig := cfg.GenerateDBConfig()
-	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
+	fromDB, err := conn.GetUpstreamDB(dbConfig)
 	if err != nil {
 		return err
 	}
 	defer fromDB.Close()
-	if err = cfg.Adjust(ctx, fromDB.DB); err != nil {
+	if err = cfg.Adjust(ctx, fromDB); err != nil {
 		return err
 	}
 	if hook != nil {
-		if err = hook(cfg, ctx, fromDB.DB); err != nil {
+		if err = hook(cfg, ctx, fromDB); err != nil {
 			return err
 		}
 	}
@@ -1385,13 +1386,13 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 }
 
 // GetLatestMeta gets newest meta(binlog name, pos, gtid) from upstream.
-func GetLatestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig) (*config.Meta, error) {
+func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConfig) (*config.Meta, error) {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
 	}
 
-	fromDB, err := conn.DefaultDBProvider.Apply(&cfg)
+	fromDB, err := conn.GetUpstreamDB(&cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -1409,7 +1410,7 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *config.DBConfig
 	return &config.Meta{BinLogName: pos.Name, BinLogPos: pos.Pos, BinLogGTID: gSet}, nil
 }
 
-func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
+func AdjustTargetDB(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1419,7 +1420,7 @@ func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
+	toDB, err := conn.GetDownstreamDB(&cfg)
 	if err != nil {
 		return err
 	}
@@ -1430,7 +1431,7 @@ func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		return err
 	}
 
-	version, err := utils.ExtractTiDBVersion(value)
+	version, err := conn.ExtractTiDBVersion(value)
 	// Do not adjust if not TiDB
 	if err == nil {
 		config.AdjustTargetDBSessionCfg(dbConfig, version)
@@ -1645,7 +1646,7 @@ func (s *Server) generateSubTask(
 	}
 
 	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
-	dbConfigs := make(map[string]config.DBConfig, len(sourceCfgs))
+	dbConfigs := make(map[string]dbconfig.DBConfig, len(sourceCfgs))
 	for _, sourceCfg := range sourceCfgs {
 		dbConfigs[sourceCfg.SourceID] = sourceCfg.From
 	}
@@ -1671,7 +1672,7 @@ func (s *Server) generateSubTask(
 	return cfg, stCfgs, nil
 }
 
-func setUseTLS(tlsCfg *config.Security) {
+func setUseTLS(tlsCfg *security.Security) {
 	if enableTLS(tlsCfg) {
 		useTLS.Store(true)
 	} else {
@@ -1679,7 +1680,7 @@ func setUseTLS(tlsCfg *config.Security) {
 	}
 }
 
-func enableTLS(tlsCfg *config.Security) bool {
+func enableTLS(tlsCfg *security.Security) bool {
 	if tlsCfg == nil {
 		return false
 	}
@@ -1704,7 +1705,7 @@ func withHost(addr string) string {
 	return addr
 }
 
-func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
+func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *dbconfig.DBConfig) error {
 	failpoint.Inject("MockSkipRemoveMetaData", func() {
 		failpoint.Return(nil)
 	})
@@ -1725,7 +1726,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	}
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.DefaultDBProvider.Apply(toDBCfg)
+	baseDB, err := conn.GetDownstreamDB(toDBCfg)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -1735,7 +1736,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
 	defer func() {
-		err2 := baseDB.CloseBaseConn(dbConn)
+		err2 := baseDB.ForceCloseConn(dbConn)
 		if err2 != nil {
 			log.L().Warn("fail to close connection", zap.Error(err2))
 		}
