@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/google/uuid"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
@@ -323,6 +324,7 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.LoaderConfig = *c.Upstreams[0].Loader
 	cfg.SyncerConfig = *c.Upstreams[0].Syncer
 	cfg.IOTotalBytes = atomic.NewUint64(0)
+	cfg.UUID = uuid.NewString()
 
 	return cfg
 }

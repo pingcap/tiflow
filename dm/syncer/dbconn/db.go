@@ -268,6 +268,7 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
 func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *config.DBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
 	if cfg.IOTotalBytes != nil {
+		tctx.L().Info("create connection with io total bytes")
 		mysql.RegisterDialContext(cfg.UUID, func(ctx context.Context, addr string) (net.Conn, error) {
 			d := &net.Dialer{}
 			conn, err := d.DialContext(ctx, "tcp", addr)
