@@ -14,8 +14,10 @@
 package factory
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -25,6 +27,7 @@ import (
 	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
 	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
+	dbMetrics "github.com/pingcap/tiflow/pkg/db"
 	"go.uber.org/multierr"
 )
 
@@ -151,7 +154,15 @@ func (f *SortEngineFactory) collectMetrics() {
 			id := strconv.Itoa(i + 1)
 			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
 			metrics.InMemoryDataSizeGauge.WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-			// TODO(qupeng): add more metrics about db.
+			dbMetrics.DBIteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
+			dbMetrics.DBWriteDelayCount().WithLabelValues(id).Set(float64(atomic.LoadUint64(&f.writeStalls[i].counter)))
+
+			metricLevelCount := dbMetrics.DBLevelCount().MustCurryWith(map[string]string{"id": id})
+			for level, metric := range stats.Levels {
+				metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
+			}
+			dbMetrics.DBBlockCacheAccess().WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
+			dbMetrics.DBBlockCacheAccess().WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
 		}
 	}
 }

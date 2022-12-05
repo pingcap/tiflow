@@ -86,3 +86,25 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(dbWriteDelayCount)
 	registry.MustRegister(dbBlockCacheAccess)
 }
+
+/* There are some metrics shared with pipeline sorter and pull-based-sink sort engine. */
+
+// DBIteratorGauge returns dbIteratorGauge.
+func DBIteratorGauge() *prometheus.GaugeVec {
+    return dbIteratorGauge
+}
+
+// DBWriteDelayCount returns dbWriteDelayCount.
+func DBWriteDelayCount() *prometheus.GaugeVec {
+    return dbWriteDelayCount
+}
+
+// DBLevelCount returns dbLevelCount.
+func DBLevelCount() *prometheus.GaugeVec {
+    return dbLevelCount
+}
+
+// DBBlockCacheAccess returns dbBlockCacheAccess.
+func DBBlockCacheAccess() *prometheus.GaugeVec {
+    return dbBlockCacheAccess
+}
