@@ -15,6 +15,7 @@ package sourcemanager
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -126,12 +127,24 @@ func (m *SourceManager) ReceivedEvents() int64 {
 
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
+	log.Info("Closing source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID))
+	start := time.Now()
 	m.pullers.Range(func(key, value interface{}) bool {
 		value.(*pullerwrapper.Wrapper).Close()
 		return true
 	})
+	log.Info("All pullers have been closed",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	if err := m.engine.Close(); err != nil {
 		return cerrors.Trace(err)
 	}
+	log.Info("Closed source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	return nil
 }
