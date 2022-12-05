@@ -51,6 +51,23 @@ var (
 	}, []string{"namespace", "id", "call"})
 )
 
+/* Some metrics are shared in pipeline sorter and pull-based-sink sort engine */
+
+// SorterCompactionDuration returns sorterCompactDurationHistogram.
+func SorterCompactionDuration() *prometheus.HistogramVec {
+    return sorterCompactDurationHistogram
+}
+
+// SorterWriteDuration returns sorterWriteDurationHistogram.
+func SorterWriteDuration() *prometheus.HistogramVec {
+    return sorterWriteDurationHistogram
+}
+
+// SorterWriteBytes returns sorterWriteBytesHistogram.
+func SorterWriteBytes() *prometheus.HistogramVec {
+    return sorterWriteBytesHistogram
+}
+
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
