@@ -61,6 +61,8 @@ else
 	test_case="*"
 fi
 
+# Print environment variables.
+env
 set -eu
 
 if [ "$test_case" == "*" ]; then

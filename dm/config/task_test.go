@@ -696,7 +696,8 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			},
 			LoaderConfig: LoaderConfig{
 				PoolSize:            32,
-				Dir:                 "./dumpped_data",
+				Dir:                 "./dumped_data",
+				SortingDirPhysical:  "./dumped_data",
 				ImportMode:          LoadModePhysical,
 				OnDuplicateLogical:  OnDuplicateReplace,
 				OnDuplicatePhysical: OnDuplicateNone,

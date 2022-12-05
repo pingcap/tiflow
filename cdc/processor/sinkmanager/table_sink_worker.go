@@ -19,30 +19,32 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type sinkWorker struct {
-	changefeedID model.ChangeFeedID
-	mg           entry.MounterGroup
-	sortEngine   engine.SortEngine
-	memQuota     *memQuota
-	eventCache   *redoEventCache
+	changefeedID  model.ChangeFeedID
+	sourceManager *sourcemanager.SourceManager
+	memQuota      *memQuota
+	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
+
+	metricRedoEventCacheHit  prometheus.Counter
+	metricRedoEventCacheMiss prometheus.Counter
 }
 
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
-	sortEngine engine.SortEngine,
+	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -50,12 +52,14 @@ func newSinkWorker(
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
-		sortEngine:     sortEngine,
+		sourceManager:  sourceManager,
 		memQuota:       quota,
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
+
+		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
+		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
 	}
 }
 
@@ -137,10 +141,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	}
 
 	// lowerBound and upperBound are both closed intervals.
-	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, lowerBound, upperBound),
-		w.mg, 256)
+	allEventSize := 0
+	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
+		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		if err := iter.Close(); err != nil {
 			log.Error("Sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -178,6 +182,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			)
 			break
 		}
+		// If redo log is enabled, we do not need to update this value.
+		// Because it already has been updated in the redo log worker.
+		if w.eventCache == nil {
+			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
+		}
+		task.tableSink.receivedEventCount.Add(1)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			// Maybe we just ignore the last event. So we need to record the last position.
@@ -187,6 +197,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			continue
 		}
 		eventSize := e.Row.ApproximateBytes()
+		allEventSize += eventSize
 		for availableMem-eventSize < 0 {
 			if !w.splitTxn {
 				// If we do not split the transaction, we do not need to wait for the memory quota.
@@ -416,7 +427,12 @@ func (w *sinkWorker) fetchFromCache(
 	// pushed into cache immediately? It's unlikely and if it happens, new events
 	// are only available after resolvedTs has been advanced. So, here just pop one
 	// time is ok.
-	rows, size, pos := w.eventCache.pop(task.tableID, upperBound)
+	rawEventCount := 0
+	rows, size, pos := w.eventCache.pop(task.tableID, &rawEventCount, upperBound)
+	task.tableSink.receivedEventCount.Add(int64(rawEventCount))
+	if size > 0 {
+		w.metricRedoEventCacheHit.Add(float64(size))
+	}
 	if len(rows) > 0 {
 		task.tableSink.appendRowChangedEvents(rows...)
 		w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)

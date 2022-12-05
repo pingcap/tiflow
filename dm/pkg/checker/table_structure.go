@@ -125,7 +125,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.upstreamDBs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.upstreamDBs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -593,7 +593,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -832,7 +832,7 @@ func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -967,12 +967,14 @@ func dispatchTableItemWithDownstreamTable(
 	close(inCh)
 }
 
-func getConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
+// GetConcurrency gets the concurrency of workers that we can randomly dispatch
+// tasks on any sources to any of them, where each task needs a SQL connection.
+func GetConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
 	concurrency := dumpThreads
 	for _, sourceID := range sourceIDs {
 		db, ok := dbs[sourceID]
 		if !ok {
-			return 0, errors.NotFoundf("client for sourceID %s", sourceID)
+			return 0, errors.NotFoundf("SQL connection for sourceID %s", sourceID)
 		}
 		maxConnections, err := utils.GetMaxConnections(ctx, db)
 		if err != nil {
