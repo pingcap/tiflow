@@ -42,7 +42,11 @@ const (
 // InitCmd initializes the logger, the default context and returns its cancel function.
 func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	// Init log.
-	err := logutil.InitLogger(logCfg, logutil.WithInitGRPCLogger(), logutil.WithInitSaramaLogger())
+	err := logutil.InitLogger(
+		logCfg,
+		logutil.WithInitGRPCLogger(),
+		logutil.WithInitSaramaLogger(),
+		logutil.WithInitMySQLLogger())
 	if err != nil {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
