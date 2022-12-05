@@ -38,7 +38,7 @@ var (
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func() engine.Position
+type upperBoundGetter func(*tableSinkWrapper) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
