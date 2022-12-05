@@ -70,8 +70,8 @@ func NewWorkerPoolWithContext[J, R any](
 }
 
 // Go is like a builtin go keyword. handler represents the logic of worker, if
-// the worker has initializing logic, caller can use a struct, initialize it and
-// pass a method of it as the argument.
+// the worker has initializing logic, caller can use method of structure or
+// closure to refer to the initialized part.
 func (p *WorkerPool[J, R]) Go(handler func(ctx context.Context, job J) (R, error)) {
 	p.errGroup.Go(func() error {
 		for {
