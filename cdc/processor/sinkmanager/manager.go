@@ -403,7 +403,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				return m.ctx.Err()
 			case m.sinkTaskChan <- t:
 			}
-			log.Debug("Generate sink task",
+			log.Info("Generate sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
