@@ -188,14 +188,14 @@ func (p *processor) AddTable(
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
 		case tablepb.TableStateStopped:
-			log.Warn("The same table exists but is stopped. Cancel it and continue.",
+			log.Warn("The same table exists but is stopped, remove sink and redo records",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Int64("tableID", tableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
-			p.removeTable(p.tables[tableID], tableID)
+			p.removeTableConsumer(p.tables[tableID], tableID)
 		}
 	}
 
@@ -413,12 +413,15 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
-		stats := p.sinkManager.GetTableStats(tableID)
+		// The table has already been async removed, so remove it from sourceManager
+		// before remove from sinkManager. Otherwise sinkManager.UpdateReceivedSorterResolvedTs
+		// will be called incorrectly.
+		p.sourceManager.RemoveTable(tableID)
 		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
 			p.redoManager.RemoveTable(tableID)
 		}
-		p.sourceManager.RemoveTable(tableID)
+		stats := p.sinkManager.GetTableStats(tableID)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -1210,7 +1213,7 @@ func (p *processor) createTablePipelineImpl(
 	return table, nil
 }
 
-func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
+func (p *processor) removeTableConsumer(table tablepb.TablePipeline, tableID model.TableID) {
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
 	} else {
