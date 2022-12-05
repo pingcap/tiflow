@@ -57,6 +57,7 @@ type EventSorter struct {
 // EventIter implements sorter.EventIterator.
 type EventIter struct {
 	tableID  model.TableID
+	state    *tableState
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
@@ -89,81 +90,104 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	return eventSorter
 }
 
-// IsTableBased implements sorter.EventSortEngine.
+// IsTableBased implements engine.SortEngine.
 func (s *EventSorter) IsTableBased() bool {
 	return true
 }
 
-// AddTable implements sorter.EventSortEngine.
+// AddTable implements engine.SortEngine.
 func (s *EventSorter) AddTable(tableID model.TableID) {
 	s.mu.Lock()
 	if _, exists := s.tables[tableID]; exists {
 		s.mu.Unlock()
-		log.Panic("add an exist table",
+		log.Warn("add an exist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return
 	}
 	s.tables[tableID] = &tableState{ch: s.channs[getDB(tableID, len(s.dbs))]}
 	s.mu.Unlock()
 }
 
-// RemoveTable implements sorter.EventSortEngine.
+// RemoveTable implements engine.SortEngine.
 func (s *EventSorter) RemoveTable(tableID model.TableID) {
 	s.mu.Lock()
 	if _, exists := s.tables[tableID]; !exists {
 		s.mu.Unlock()
-		log.Panic("remove an unexist table",
+		log.Warn("remove an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return
 	}
 	delete(s.tables, tableID)
 	s.mu.Unlock()
 }
 
-// Add implements sorter.EventSortEngine.
-func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
+// Add implements engine.SortEngine.
+func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
 
 	if !exists {
-		log.Panic("add events into an unexist table",
+		log.Panic("add events into an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
+	maxCommitTs := model.Ts(0)
+	maxResolvedTs := model.Ts(0)
 	for _, event := range events {
 		state.ch.In() <- eventWithTableID{tableID, event}
 		if event.IsResolved() {
-			atomic.StoreUint64(&state.pendingResolved, event.CRTs)
+			if event.CRTs > maxResolvedTs {
+				maxResolvedTs = event.CRTs
+			}
+		} else {
+			state.receivedEvents.Add(1)
+			if event.CRTs > maxCommitTs {
+				maxCommitTs = event.CRTs
+			}
 		}
 	}
-	return
+
+	if maxCommitTs > state.maxReceivedCommitTs.Load() {
+		state.maxReceivedCommitTs.Store(maxCommitTs)
+	}
+	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
+		state.maxReceivedResolvedTs.Store(maxResolvedTs)
+	}
+
+	return nil
 }
 
-// GetResolvedTs implements sorter.EventSortEngine.
+// GetResolvedTs implements engine.SortEngine.
 func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
 
 	if !exists {
-		log.Panic("get resolved ts from an unexist table",
+		log.Panic("get resolved ts from an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
-	return atomic.LoadUint64(&state.pendingResolved)
+	return state.maxReceivedResolvedTs.Load()
 }
 
-// OnResolve implements sorter.EventSortEngine.
+// OnResolve implements engine.SortEngine.
 func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
-// FetchByTable implements sorter.EventSortEngine.
+// FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
 	lowerBound, upperBound engine.Position,
@@ -173,23 +197,28 @@ func (s *EventSorter) FetchByTable(
 	s.mu.RUnlock()
 
 	if !exists {
-		log.Panic("fetch events from an unexist table",
+		log.Panic("fetch events from an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
-	if upperBound.CommitTs > atomic.LoadUint64(&state.sortedResolved) {
+	sortedResolved := state.sortedResolved.Load()
+	if upperBound.CommitTs > sortedResolved {
 		log.Panic("fetch unresolved events",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("upperBound", upperBound.CommitTs),
+			zap.Uint64("resolved", sortedResolved))
 	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
-	return &EventIter{tableID: tableID, iter: iter, serde: s.serde}
+	return &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
 }
 
-// FetchAllTables implements sorter.EventSortEngine.
+// FetchAllTables implements engine.SortEngine.
 func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
@@ -197,22 +226,23 @@ func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIte
 	return nil
 }
 
-// CleanByTable implements sorter.EventSortEngine.
+// CleanByTable implements engine.SortEngine.
 func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
 
 	if !exists {
-		log.Panic("clean an unexist table",
+		log.Panic("clean an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	return s.cleanTable(state, tableID, upperBound)
 }
 
-// CleanAllTables implements sorter.EventSortEngine.
+// CleanAllTables implements engine.EventSortEngine.
 func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 	log.Panic("CleanAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
@@ -220,7 +250,44 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 	return nil
 }
 
-// Close implements sorter.EventSortEngine.
+// GetStatsByTable implements engine.SortEngine.
+func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
+	s.mu.RLock()
+	state, exists := s.tables[tableID]
+	s.mu.RUnlock()
+
+	if !exists {
+		log.Panic("Get stats from an non-existent table",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
+	if maxCommitTs < maxResolvedTs {
+		// In case, there is no write for the table,
+		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
+		maxCommitTs = maxResolvedTs
+	}
+	return engine.TableStats{
+		ReceivedMaxCommitTs:   maxCommitTs,
+		ReceivedMaxResolvedTs: maxResolvedTs,
+	}
+}
+
+// ReceivedEvents implements engine.SortEngine.
+func (s *EventSorter) ReceivedEvents() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	totalReceivedEvents := int64(0)
+	for _, state := range s.tables {
+		totalReceivedEvents += state.receivedEvents.Load()
+	}
+	return totalReceivedEvents
+}
+
+// Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
 	if s.isClosed {
@@ -287,9 +354,12 @@ type eventWithTableID struct {
 }
 
 type tableState struct {
-	ch              *chann.Chann[eventWithTableID]
-	sortedResolved  uint64 // indicates events are ready for fetching.
-	pendingResolved uint64 // events are resolved but not sorted.
+	ch             *chann.Chann[eventWithTableID]
+	sortedResolved atomic.Uint64 // indicates events are ready for fetching.
+	// For statistics.
+	maxReceivedCommitTs   atomic.Uint64
+	maxReceivedResolvedTs atomic.Uint64
+	receivedEvents        atomic.Int64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
@@ -352,9 +422,6 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 
 		for table, resolved := range newResolved {
 			s.mu.RLock()
-			for _, onResolve := range s.onResolves {
-				onResolve(table, resolved)
-			}
 			ts, ok := s.tables[table]
 			if !ok {
 				log.Debug("Table is removed, skip updating resolved",
@@ -365,7 +432,10 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				s.mu.RUnlock()
 				continue
 			}
-			atomic.StoreUint64(&ts.sortedResolved, resolved)
+			ts.sortedResolved.Store(resolved)
+			for _, onResolve := range s.onResolves {
+				onResolve(table, resolved)
+			}
 			s.mu.RUnlock()
 		}
 		newResolved = make(map[model.TableID]model.Ts)
@@ -404,7 +474,7 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 	return nil
 }
 
-// / ----- Some internal variable and functions ----- ///
+// ----- Some internal variable and functions -----
 const batchCommitCount uint32 = 1024
 
 var uniqueIDGen uint32 = 0
@@ -413,6 +483,7 @@ func genUniqueID() uint32 {
 	return atomic.AddUint32(&uniqueIDGen, 1)
 }
 
+// TODO: add test for this function.
 func getDB(tableID model.TableID, dbCount int) int {
 	h := fnv.New64()
 	b := [8]byte{}

@@ -50,26 +50,26 @@ func New(_ context.Context) *EventSorter {
 	return &EventSorter{}
 }
 
-// IsTableBased implements sorter.EventSortEngine.
+// IsTableBased implements engine.SortEngine.
 func (s *EventSorter) IsTableBased() bool {
 	return true
 }
 
-// AddTable implements sorter.EventSortEngine.
+// AddTable implements engine.SortEngine.
 func (s *EventSorter) AddTable(tableID model.TableID) {
 	if _, exists := s.tables.LoadOrStore(tableID, &tableSorter{}); exists {
 		log.Panic("add an exist table", zap.Int64("tableID", tableID))
 	}
 }
 
-// RemoveTable implements sorter.EventSortEngine.
+// RemoveTable implements engine.SortEngine.
 func (s *EventSorter) RemoveTable(tableID model.TableID) {
 	if _, exists := s.tables.LoadAndDelete(tableID); !exists {
 		log.Panic("remove an unexist table", zap.Int64("tableID", tableID))
 	}
 }
 
-// Add implements sorter.EventSortEngine.
+// Add implements engine.SortEngine.
 func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
@@ -87,7 +87,7 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	return nil
 }
 
-// GetResolvedTs implements sorter.EventSortEngine.
+// GetResolvedTs implements engine.SortEngine.
 func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
@@ -97,14 +97,14 @@ func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	return value.(*tableSorter).getResolvedTs()
 }
 
-// OnResolve implements sorter.EventSortEngine.
+// OnResolve implements engine.SortEngine.
 func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
-// FetchByTable implements sorter.EventSortEngine.
+// FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
@@ -114,13 +114,13 @@ func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound
 	return value.(*tableSorter).fetch(tableID, lowerBound, upperBound)
 }
 
-// FetchAllTables implements sorter.EventSortEngine.
+// FetchAllTables implements engine.SortEngine.
 func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }
 
-// CleanByTable implements sorter.EventSortEngine.
+// CleanByTable implements engine.SortEngine.
 func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
@@ -131,13 +131,25 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	return nil
 }
 
-// CleanAllTables implements sorter.EventSortEngine.
+// CleanAllTables implements engine.SortEngine.
 func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 	log.Panic("CleanAllTables should never be called")
 	return nil
 }
 
-// Close implements sorter.EventSortEngine.
+// GetStatsByTable implements engine.SortEngine.
+func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
+	log.Panic("GetStatsByTable should never be called")
+	return engine.TableStats{}
+}
+
+// ReceivedEvents implements engine.SortEngine.
+func (s *EventSorter) ReceivedEvents() int64 {
+	log.Panic("ReceivedEvents should never be called")
+	return 0
+}
+
+// Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.tables = sync.Map{}
 	return nil

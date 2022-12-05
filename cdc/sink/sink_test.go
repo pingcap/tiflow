@@ -38,4 +38,11 @@ func TestValidateSink(t *testing.T) {
 	sinkURI = "blackhole://"
 	err = Validate(ctx, sinkURI, replicateConfig)
 	require.Nil(t, err)
+
+	// test bdr mode error
+	replicateConfig.BDRMode = true
+	sinkURI = "blackhole://"
+	err = Validate(ctx, sinkURI, replicateConfig)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
 }

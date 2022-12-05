@@ -15,14 +15,18 @@ package sinkmanager
 
 import (
 	"context"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -42,9 +46,29 @@ type tableSinkWrapper struct {
 	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
+	// replicateTs is the ts that the table sink has started to replicate.
+	replicateTs model.Ts
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
+	// receivedSorterCommitTs is the commit ts received from the sorter.
+	// We use this to statistics the latency of the table sorter.
+	receivedSorterCommitTs atomic.Uint64
+	// receivedEventCount is the number of events received from the sorter.
+	receivedEventCount atomic.Int64
+	// lastCleanTime indicates the last time the table has been cleaned.
+	lastCleanTime time.Time
+
+	// rangeEventCounts is for clean the table engine.
+	// If rangeEventCounts[i].events is greater than 0, it means there must be
+	// events in the range (rangeEventCounts[i-1].pos, rangeEventCounts[i].pos].
+	rangeEventCounts   []rangeEventCount
+	rangeEventCountsMu sync.Mutex
+}
+
+type rangeEventCount struct {
+	pos    engine.Position
+	events int
 }
 
 func newTableSinkWrapper(
@@ -65,7 +89,14 @@ func newTableSinkWrapper(
 	}
 }
 
-func (t *tableSinkWrapper) start() {
+func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+	log.Info("Sink is started",
+		zap.String("namespace", t.changefeed.Namespace),
+		zap.String("changefeed", t.changefeed.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Uint64("replicateTs", replicateTs),
+	)
+	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
 
@@ -78,6 +109,12 @@ func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 		t.state.Store(tablepb.TableStatePrepared)
 	}
 	t.receivedSorterResolvedTs.Store(ts)
+}
+
+func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
+	if ts > t.receivedSorterCommitTs.Load() {
+		t.receivedSorterCommitTs.Store(ts)
+	}
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
@@ -95,23 +132,64 @@ func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
 }
 
+func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
+	return t.receivedSorterCommitTs.Load()
+}
+
+func (t *tableSinkWrapper) getReceivedEventCount() int64 {
+	return t.receivedEventCount.Load()
+}
+
 func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(ctx context.Context) error {
+func (t *tableSinkWrapper) close(ctx context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	err := t.tableSink.Close(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Info("sink is closed",
+	t.tableSink.Close(ctx)
+	log.Info("Sink is closed",
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
-	return nil
+}
+
+func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	if len(t.rangeEventCounts) == 0 ||
+		t.rangeEventCounts[len(t.rangeEventCounts)-1].pos.Compare(eventCount.pos) < 0 {
+		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+	}
+}
+
+func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, minEvents int) bool {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
+		return t.rangeEventCounts[i].pos.Compare(upperBound) > 0
+	})
+	if len(t.rangeEventCounts) == 0 || idx == 0 {
+		return false
+	}
+
+	count := 0
+	for _, events := range t.rangeEventCounts[0:idx] {
+		count += events.events
+	}
+	shouldClean := count >= minEvents
+
+	if !shouldClean {
+		// To reduce engine.CleanByTable calls.
+		t.rangeEventCounts[idx-1].events = count
+		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
+	} else {
+		t.rangeEventCounts = t.rangeEventCounts[idx:]
+	}
+	return shouldClean
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
