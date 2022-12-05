@@ -214,7 +214,7 @@ func TestMySQLLogger(t *testing.T) {
 	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
 	require.NoError(t, err)
 
-	initMySQLLogger()
+	require.Nil(t, initMySQLLogger())
 
 	// Mock MySQL server
 	ms, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -232,7 +232,6 @@ func TestMySQLLogger(t *testing.T) {
 	dsnStr := fmt.Sprintf("root:@tcp(%s)/", ms.Addr().String())
 	db, err := sql.Open("mysql", dsnStr)
 	require.Nil(t, err)
-	_ = db
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = db.PingContext(ctx)

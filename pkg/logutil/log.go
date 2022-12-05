@@ -189,7 +189,9 @@ func initOptionalComponent(op *loggerOp, cfg *Config) error {
 	}
 
 	if op.isInitMySQLLogger {
-		initMySQLLogger()
+		if err := initMySQLLogger(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -214,8 +216,7 @@ func initMySQLLogger() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	mysql.SetLogger(logger)
-	return nil
+	return mysql.SetLogger(logger)
 }
 
 // initSaramaLogger hacks logger used in sarama lib
