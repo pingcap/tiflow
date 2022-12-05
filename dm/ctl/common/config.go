@@ -24,7 +24,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/google/shlex"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/spf13/pflag"
@@ -130,7 +130,7 @@ type Config struct {
 
 	ConfigFile string `json:"config-file"`
 
-	config.Security
+	security.Security
 }
 
 func (c *Config) String() string {

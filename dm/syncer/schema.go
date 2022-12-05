@@ -31,8 +31,8 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
@@ -73,12 +73,12 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			targetTable := s.route(sourceTable)
 			result, err2 := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
 			result = strings.Replace(result, fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(targetTable.Name)), fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(sourceTable.Name)), 1)
-			return utils.CreateTableSQLToOneRow(result), err2
+			return conn.CreateTableSQLToOneRow(result), err2
 		}
 
 		result := bytes.NewBuffer(make([]byte, 0, 512))
 		err2 := executor.ConstructResultOfShowCreateTable(s.sessCtx, ti, autoid.Allocators{}, result)
-		return utils.CreateTableSQLToOneRow(result.String()), err2
+		return conn.CreateTableSQLToOneRow(result.String()), err2
 
 	case pb.SchemaOp_SetSchema:
 		// from source or target need get schema

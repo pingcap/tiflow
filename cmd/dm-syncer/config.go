@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/version"
 )
@@ -255,8 +256,8 @@ type syncerConfig struct {
 
 	RouteRules []*RouteRule `toml:"route-rules" json:"route-rules"`
 
-	From config.DBConfig `toml:"from" json:"from"`
-	To   config.DBConfig `toml:"to" json:"to"`
+	From dbconfig.DBConfig `toml:"from" json:"from"`
+	To   dbconfig.DBConfig `toml:"to" json:"to"`
 
 	EnableGTID  bool `toml:"enable-gtid" json:"enable-gtid"`
 	AutoFixGTID bool `toml:"auto-fix-gtid" json:"auto-fix-gtid"`

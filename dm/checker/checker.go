@@ -16,7 +16,6 @@ package checker
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -47,7 +47,6 @@ import (
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
 	"go.uber.org/atomic"
@@ -179,9 +178,9 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 			eg.Go(func() error {
 				for _, sourceTables := range tableMapPerUpstream[i] {
 					for _, sourceTable := range sourceTables {
-						size, err2 := utils.FetchTableEstimatedBytes(
+						size, err2 := conn.FetchTableEstimatedBytes(
 							ctx,
-							c.instances[i].sourceDB.DB,
+							c.instances[i].sourceDB,
 							sourceTable.Schema,
 							sourceTable.Name,
 						)
@@ -288,7 +287,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		))
 	}
 	// sourceID -> DB
-	upstreamDBs := make(map[string]*sql.DB)
+	upstreamDBs := make(map[string]*conn.BaseDB)
 	for i, instance := range c.instances {
 		sourceID := instance.cfg.SourceID
 		// init online ddl for checker
@@ -303,7 +302,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		upstreamDBs[sourceID] = instance.sourceDB.DB
+		upstreamDBs[sourceID] = instance.sourceDB
 		if instance.cfg.Mode != config.ModeIncrement {
 			// increment mode needn't check dump privilege
 			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
@@ -351,7 +350,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(
 			upstreamDBs,
-			c.instances[0].targetDB.DB,
+			c.instances[0].targetDB,
 			info.sourceID2TableMap,
 			info.targetTable2ExtendedColumns,
 			dumpThreads,
@@ -515,8 +514,8 @@ func (c *Checker) fetchSourceTargetDB(
 		Password: instance.cfg.From.Password,
 	}
 	dbCfg := instance.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.sourceDB, err = conn.GetUpstreamDB(&dbCfg)
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
 	}
@@ -527,12 +526,12 @@ func (c *Checker) fetchSourceTargetDB(
 		Password: instance.cfg.To.Password,
 	}
 	dbCfg = instance.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-	instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.targetDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return utils.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB.DB, instance.baList, r)
+	return conn.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB, instance.baList, r)
 }
 
 func (c *Checker) displayCheckingItems() string {
@@ -736,7 +735,7 @@ func (c *Checker) IsFreshTask() (bool, error) {
 		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
 		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
 		if err != nil {
-			if utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+			if conn.IsMySQLError(err, mysql.ErrNoSuchTable) {
 				continue
 			}
 			return false, err
