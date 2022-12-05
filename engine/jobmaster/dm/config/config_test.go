@@ -100,7 +100,7 @@ func TestTaskCfg(t *testing.T) {
 		require.NoError(t, err)
 		expectCfg.IOTotalBytes = atomic.NewUint64(0)
 		// require uuid is set
-		require.Greater(t, len(expectCfg.UUID), 0)
+		require.Greater(t, len(subTaskCfg.UUID), 0)
 		// don't check uuid's value
 		expectCfg.UUID = subTaskCfg.UUID
 		require.EqualValues(t, expectCfg, subTaskCfg)
