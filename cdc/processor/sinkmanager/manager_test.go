@@ -19,13 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
-	mockengine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/upstream"
