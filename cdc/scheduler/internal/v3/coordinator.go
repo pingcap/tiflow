@@ -21,7 +21,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
@@ -54,6 +57,8 @@ type coordinator struct {
 	replicationM *replication.Manager
 	captureM     *member.CaptureManager
 	schedulerM   *scheduler.Manager
+	reconciler   *keyspan.Reconciler
+	compat       *compat.Compat
 	pdClock      pdutil.Clock
 
 	lastCollectTime time.Time
@@ -68,8 +73,9 @@ func NewCoordinator(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
-	cfg *config.SchedulerConfig,
+	regionCache keyspan.RegionCache,
 	pdClock pdutil.Clock,
+	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
 		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
@@ -78,6 +84,7 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
+	coord.reconciler = keyspan.NewReconciler(changefeedID, regionCache, cfg.RegionPerSpan)
 	coord.pdClock = pdClock
 	return coord, nil
 }
@@ -100,6 +107,7 @@ func newCoordinator(
 			captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
+		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
 	}
 }
 
@@ -120,6 +128,7 @@ func (c *coordinator) Tick(
 }
 
 // MoveTable implement the scheduler interface
+// FIXME: tableID should be Span.
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -134,7 +143,7 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 		return
 	}
 
-	c.schedulerM.MoveTable(tableID, target)
+	c.schedulerM.MoveTable(tablepb.Span{TableID: tableID}, target)
 }
 
 // Rebalance implement the scheduler interface
@@ -171,11 +180,13 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	}
 
 	var count int
-	for _, rep := range c.replicationM.ReplicationSets() {
-		if rep.Primary == target {
-			count++
-		}
-	}
+	c.replicationM.ReplicationSets().Ascend(
+		func(_ tablepb.Span, rep *replication.ReplicationSet) bool {
+			if rep.Primary == target {
+				count++
+			}
+			return true
+		})
 
 	if count == 0 {
 		log.Info("schedulerv3: drain capture request ignored, "+
@@ -239,12 +250,15 @@ func (c *coordinator) Close(ctx context.Context) {
 // ===========
 
 func (c *coordinator) poll(
-	ctx context.Context,
-	checkpointTs model.Ts,
-	currentTables []model.TableID,
+	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
+	if c.compat.UpdateCaptureInfo(aliveCaptures) {
+		log.Info("schedulerv3: compat update capture info",
+			zap.Any("captures", aliveCaptures),
+			zap.Bool("spanReplicationEnabled", c.compat.CheckSpanReplicationEnabled()))
+	}
 
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
@@ -294,8 +308,9 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
+	currentSpans := c.reconciler.Reconcile(ctx, currentTables, replications, c.compat)
 	allTasks := c.schedulerM.Schedule(
-		checkpointTs, currentTables, c.captureM.Captures, replications, runningTasks)
+		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
@@ -329,6 +344,7 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 			n++
 		}
 	}
+	c.compat.AfterTransportReceive(recvMsgs[:n])
 	return recvMsgs[:n], nil
 }
 
@@ -353,8 +369,8 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			ProcessorEpoch: epoch,
 		}
 		m.From = c.captureID
-
 	}
+	c.compat.BeforeTransportSend(msgs)
 	return c.trans.Send(ctx, msgs)
 }
 
