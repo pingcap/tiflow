@@ -594,6 +594,8 @@ func (m *SinkManager) generateRedoTasks() error {
 }
 
 // UpdateReceivedSorterResolvedTs updates the received sorter resolved ts for the table.
+// NOTE: it's still possible to be called during m.Close is in calling, so Close should
+// take care of this.
 func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
@@ -627,7 +629,19 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		startTs,
 		targetTs,
 	)
-	m.tableSinks.Store(tableID, sinkWrapper)
+	_, loaded := m.tableSinks.LoadOrStore(tableID, sinkWrapper)
+	if loaded {
+		log.Panic("Add an exists table sink",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+		return
+	}
+	log.Info("Add table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("startTs", startTs))
 }
 
 // StartTable sets the table(TableSink) state to replicating.
@@ -719,7 +733,19 @@ func (m *SinkManager) RemoveTable(tableID model.TableID) {
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
-	m.tableSinks.Delete(tableID)
+	value, exists := m.tableSinks.LoadAndDelete(tableID)
+	if !exists {
+		log.Panic("Remove an unexist table sink",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID))
+	}
+	sink := value.(*tableSinkWrapper)
+	log.Info("Remove table sink successfully",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("checkpointTs", sink.getCheckpointTs().Ts))
 	if m.eventCache != nil {
 		m.eventCache.removeTable(tableID)
 	}
