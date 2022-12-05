@@ -29,7 +29,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const sorterInputCap = 32
+const sorterInputCap = 2048
 
 var (
 	_ engine.SortEngine    = (*EventSorter)(nil)
