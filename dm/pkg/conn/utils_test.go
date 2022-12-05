@@ -72,7 +72,7 @@ func TestGetMasterStatus(t *testing.T) {
 	cases := []struct {
 		rows           *sqlmock.Rows
 		binlogName     string
-		pos            uint32
+		pos            uint64
 		binlogDoDB     string
 		binlogIgnoreDB string
 		gtidStr        string

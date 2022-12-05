@@ -100,11 +100,11 @@ func getVariable(ctx *tcontext.Context, conn *BaseConn, variable string, isGloba
 // GetMasterStatus gets status from master.
 // When the returned error is nil, the gtid must be not nil.
 func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
-	string, uint32, string, string, string, error,
+	string, uint64, string, string, string, error,
 ) {
 	var (
 		binlogName     string
-		pos            uint32
+		pos            uint64
 		binlogDoDB     string
 		binlogIgnoreDB string
 		gtidStr        string
@@ -166,7 +166,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint32(posInt)
+			pos = uint64(posInt)
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 			gtidStr = rowsResult[0][4]
@@ -194,7 +194,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint32(posInt)
+			pos = uint64(posInt)
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 		}
@@ -234,7 +234,7 @@ func GetPosAndGs(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	}
 	binlogPos = gmysql.Position{
 		Name: binlogName,
-		Pos:  pos,
+		Pos:  uint32(pos),
 	}
 
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
