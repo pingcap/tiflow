@@ -14,11 +14,12 @@
 package mock
 
 import (
-	context "context"
+	"context"
 
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
 )
 
+// MockNilReturnJobHTTPClient mocks a JobHTTPClient which return (nil, nil)
 type MockNilReturnJobHTTPClient struct{}
 
 // NewMockNilReturnJobHTTPClient news a JobHTTPClient mocker which return (nil, nil)
