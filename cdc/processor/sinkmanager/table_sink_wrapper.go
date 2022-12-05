@@ -115,7 +115,7 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 	currentCheckpointTs := t.checkpointTs.Load()
 	newCheckpointTs := t.tableSink.GetCheckpointTs()
-	if newCheckpointTs.ResolvedMark() < t.startTs {
+	if newCheckpointTs.ResolvedMark() != 0 && newCheckpointTs.ResolvedMark() < t.startTs {
 		log.Panic("The checkpoint ts of the table sink is less than the start ts",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
