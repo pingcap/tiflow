@@ -67,7 +67,7 @@ type EventIter struct {
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(-1)))
+		channs = append(channs, chann.New[eventWithTableID](chann.Cap(2048)))
 	}
 
 	eventSorter := &EventSorter{
