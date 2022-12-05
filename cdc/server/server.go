@@ -229,6 +229,7 @@ func (s *server) startActorSystems(ctx context.Context) error {
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 
+	// fizz: pull base sink 改造中的一环
 	if s.useEventSortEngine {
 		totalMemory, err := memory.MemTotal()
 		if err != nil {

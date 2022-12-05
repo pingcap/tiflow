@@ -44,7 +44,8 @@ type SortEngineFactory struct {
 	dir             string
 	memQuotaInBytes uint64
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// fizz: 每个 changefeed 都会有一个 sortEngine 实例, eventSorter 实现了 sortEngine 方法
 	engines map[model.ChangeFeedID]engine.SortEngine
 
 	wg     sync.WaitGroup

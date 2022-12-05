@@ -219,7 +219,7 @@ func (p *processor) AddTable(
 			p.redoManager.AddTable(tableID, startTs)
 		}
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
-		if !isPrepare {
+		if !isPrepare { // 为什么不是 prepare 的时候才开始 sink？
 			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
 				return false, errors.Trace(err)
 			}

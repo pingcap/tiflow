@@ -29,6 +29,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const sorterInputCap = 32
+
 var (
 	_ engine.SortEngine    = (*EventSorter)(nil)
 	_ engine.EventIterator = (*EventIter)(nil)
@@ -65,9 +67,10 @@ type EventIter struct {
 
 // New creates an EventSorter instance.
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
+	// fizz: 创建 dbs 数量的 chann，用于缓存 even
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(-1)))
+		channs = append(channs, chann.New[eventWithTableID](chann.Cap(sorterInputCap)))
 	}
 
 	eventSorter := &EventSorter{
