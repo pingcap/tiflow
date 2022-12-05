@@ -61,6 +61,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 	}
 	m.blockAcquireCond = sync.NewCond(&m.mu)
 	m.metricTotal.Set(float64(totalBytes))
+	m.metricUsed.Set(float64(0))
 
 	return m
 }
