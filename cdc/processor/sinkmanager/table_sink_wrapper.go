@@ -52,6 +52,8 @@ type tableSinkWrapper struct {
 	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
+	// checkpointTs is the checkpoint ts of the table sink.
+	checkpointTs atomic.Uint64
 }
 
 func newTableSinkWrapper(
@@ -62,7 +64,7 @@ func newTableSinkWrapper(
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
-	return &tableSinkWrapper{
+	s := &tableSinkWrapper{
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableSink:  tableSink,
@@ -70,15 +72,18 @@ func newTableSinkWrapper(
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	s.checkpointTs.Store(startTs)
+	return s
 }
 
-func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Int64("tableID", t.tableID),
 		zap.Uint64("replicateTs", replicateTs),
 	)
+	t.checkpointTs.Store(startTs)
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -108,7 +113,12 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	return t.tableSink.GetCheckpointTs()
+	currentCheckpointTs := t.checkpointTs.Load()
+	newCheckpointTs := t.tableSink.GetCheckpointTs()
+	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
+		return model.NewResolvedTs(currentCheckpointTs)
+	}
+	return newCheckpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
