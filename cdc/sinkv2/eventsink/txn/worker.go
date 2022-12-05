@@ -92,9 +92,17 @@ func (w *worker) Add(txn *txnEvent, unlock func()) {
 }
 
 func (w *worker) Close() {
+	log.Info("Closing txn worker",
+		zap.String("changefeed", w.changefeed),
+		zap.Int("worker", w.ID))
+	start := time.Now()
 	close(w.stopped)
 	w.wg.Wait()
 	w.txnCh.Close()
+	log.Info("Closed txn worker",
+		zap.String("changefeed", w.changefeed),
+		zap.Int("worker", w.ID),
+		zap.Duration("elapsed", time.Since(start)))
 }
 
 // Run a background loop.
