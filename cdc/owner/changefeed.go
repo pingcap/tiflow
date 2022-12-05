@@ -308,8 +308,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
 		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
-	// metricsResolvedTs to store the min resolved ts among all tables and show it in metrics
-	metricsResolvedTs := newResolvedTs
 	costTime := time.Since(startTime)
 	if costTime > schedulerLogsWarnDuration {
 		log.Warn("scheduler tick took too long",
@@ -334,9 +332,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	// If the owner is just initialized, barrierTs can be `checkpoint-1`.
-	// In such case the `newResolvedTs` and `newCheckpointTs` may be larger
-	// than the barrierTs, but it shouldn't be, so we need to handle it here.
+	// If the owner is just initialized, barrierTs can be `checkpoint-1`. To avoid
+	// global resolvedTs and checkpointTs regression, we need to handle the case.
 	if newResolvedTs > barrierTs {
 		newResolvedTs = barrierTs
 	}
@@ -365,12 +362,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		} else {
 			newResolvedTs = prevResolvedTs
 		}
-		metricsResolvedTs = newResolvedTs
-	} else {
-		// If redo is not enabled, there is no need to wait the slowest table
-		// progress, we can just use `barrierTs` as  `newResolvedTs` to make
-		// the checkpointTs as close as possible to the barrierTs.
-		newResolvedTs = barrierTs
 	}
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
@@ -382,7 +373,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// been decreased when the owner is initialized.
 	if newResolvedTs < prevResolvedTs {
 		newResolvedTs = prevResolvedTs
-		metricsResolvedTs = newResolvedTs
 	}
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
 		if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
@@ -396,7 +386,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	})
 
 	c.updateStatus(newCheckpointTs, newResolvedTs)
-	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
+	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 
 	return nil
 }
