@@ -15,12 +15,14 @@ package factory
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
+	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
@@ -48,6 +50,11 @@ func createPebbleDBs(
 					atomic.AddInt64(&ws.durInMs, elapsed)
 				}
 			}
+			opts.EventListener.CompactionEnd = func(job pebble.CompactionInfo) {
+				idstr := strconv.Itoa(id + 1)
+				x := metrics.SorterCompactionDuration().WithLabelValues(idstr)
+				x.Observe(job.TotalDuration.Seconds())
+			}
 		}
 
 		db, err := epebble.OpenPebble(id, dir, cfg, memQuotaInBytes/uint64(cfg.Count), adjust)
@@ -58,6 +65,9 @@ func createPebbleDBs(
 			}
 			return nil, nil, err
 		}
+		log.Info("create pebble instance success",
+			zap.Int("id", id+1),
+			zap.Uint64("cacheSize", memQuotaInBytes/uint64(cfg.Count)))
 		dbs = append(dbs, db)
 	}
 	return dbs, writeStalls, nil
