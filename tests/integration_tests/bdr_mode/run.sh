@@ -23,7 +23,7 @@ function run() {
 	# cdc server 1
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	# cdc server 2
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8400" --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}"
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8400" --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" --logsuffix "down"
 
 	SINK_URI_1="mysql://root@127.0.0.1:3306"
 	SINK_URI_2="mysql://root@127.0.0.1:4000"
