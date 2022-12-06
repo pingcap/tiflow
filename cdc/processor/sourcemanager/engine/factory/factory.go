@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"sync/atomic"
+	stdatomic "sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -161,7 +161,7 @@ func (f *SortEngineFactory) collectMetrics() {
 			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
 			metrics.InMemoryDataSizeGauge.WithLabelValues(id).Set(float64(stats.BlockCache.Size))
 			dbMetrics.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
-			dbMetrics.WriteDelayCount().WithLabelValues(id).Set(float64(atomic.LoadUint64(&f.writeStalls[i].counter)))
+			dbMetrics.WriteDelayCount().WithLabelValues(id).Set(float64(stdatomic.LoadUint64(&f.writeStalls[i].counter)))
 
 			metricLevelCount := dbMetrics.LevelCount().MustCurryWith(map[string]string{"id": id})
 			for level, metric := range stats.Levels {
