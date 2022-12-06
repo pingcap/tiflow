@@ -96,11 +96,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	var lastPos engine.Position
 	// currentCommitTs is used to record the commitTs of the current event.
 	currentCommitTs := uint64(0)
-	// lastTimeCommitTs is used to record the last time commitTs.
-	// Sometimes, we meet the situation that the commitTs of the event is the same.
-	// But we can't advance this kind of event, so we need to record the last time commitTs.
-	// If the current commitTs is the same as the last time commitTs, we don't need to advance.
-	lastTimeCommitTs := uint64(0)
+	// lastTxnCommitTs is used to record the last txn commitTs.
+	// Sometimes, we meet the situation that the commitTs of the event is the same but the startTs is different.
+	// We can't advance this kind of event, so we need to record the last txn commitTs.
+	// If the current commitTs is the same as the last time commitTs, we can't advance.
+	// We only update it when we meet a new commitTs.
+	lastTxnCommitTs := uint64(0)
 	currentTotalSize := uint64(0)
 	batchID := uint64(1)
 
@@ -182,7 +183,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
 				zap.Uint64("currentCommitTs", currentCommitTs),
-				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+				zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 				zap.Uint64("currentTotalSize", currentTotalSize),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
@@ -248,19 +249,19 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		// We meet a finished transaction.
 		if pos.Valid() {
 			lastPos = pos
-			if lastTimeCommitTs == 0 {
+			if lastTxnCommitTs == 0 {
 				// First time meet a finished transaction. So we always need to append the event with current commit ts.
 				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
 					return errors.Trace(err)
 				}
 			} else {
-				if err := appendEventsAndRecordCurrentSize(lastTimeCommitTs); err != nil {
+				if err := appendEventsAndRecordCurrentSize(lastTxnCommitTs); err != nil {
 					return errors.Trace(err)
 				}
 			}
 			// We only update the resolved ts when the currentTotalSize reaches the maxUpdateIntervalSize
 			// to avoid updating the resolved ts too frequently.
-			if currentTotalSize >= maxUpdateIntervalSize && currentCommitTs > lastTimeCommitTs {
+			if currentTotalSize >= maxUpdateIntervalSize && currentCommitTs > lastTxnCommitTs {
 				log.Debug("Advance table sink because met a finished transaction",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
@@ -268,21 +269,21 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("upperBound", upperBound),
 					zap.Uint64("currentCommitTs", currentCommitTs),
-					zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+					zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 					zap.Uint64("currentTotalSize", currentTotalSize),
 					zap.Bool("splitTxn", w.splitTxn),
 				)
-				if lastTimeCommitTs == 0 {
+				if lastTxnCommitTs == 0 {
 					// First time meet a finished transaction. So we always need to advance the with current commit ts.
 					if err := advanceTableSinkAndResetCurrentSize(currentCommitTs); err != nil {
 						return errors.Trace(err)
 					}
 				} else {
-					if err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs); err != nil {
+					if err := advanceTableSinkAndResetCurrentSize(lastTxnCommitTs); err != nil {
 						return errors.Trace(err)
 					}
 				}
-				lastTimeCommitTs = currentCommitTs
+				lastTxnCommitTs = currentCommitTs
 			}
 			if w.splitTxn {
 				batchID = 1
@@ -297,7 +298,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("upperBound", upperBound),
 					zap.Uint64("currentCommitTs", currentCommitTs),
-					zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+					zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 					zap.Uint64("currentTotalSize", currentTotalSize),
 					zap.Bool("splitTxn", w.splitTxn),
 				)
@@ -306,16 +307,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		} else {
 			if w.splitTxn {
 				// If it is a split transaction, we should append the event with current commit ts.
-				// Also need to update the lastTimeCommitTs.
+				// Also need to update the lastTxnCommitTs.
 				// For example:
 				// 1. We have two transactions, txn1 and txn2, txn1 has two events, txn2 has one event.
 				// 2. There are all small transactions, so we do not advance the table sink.
-				// 3. We meet the txn3, and it is a big transaction, if we do not update the lastTimeCommitTs,
+				// 3. We meet the txn3, and it is a big transaction, if we do not update the lastTxnCommitTs,
 				//    next time we will only just advance the table sink with txn2's commit ts.
-				// This is make no sense, so we should update the lastTimeCommitTs. Then next time we will
+				// This is make no sense, so we should update the lastTxnCommitTs. Then next time we will
 				// advance the table sink with txn3's commit ts.(One big transaction + two small transactions).
-				lastTimeCommitTs = currentCommitTs
-				if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
+				lastTxnCommitTs = currentCommitTs
+				if err := appendEventsAndRecordCurrentSize(lastTxnCommitTs); err != nil {
 					return errors.Trace(err)
 				}
 				// If we enable splitTxn, we should emit the events to the sink when the batch size is exceeded.
@@ -327,11 +328,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 						zap.Any("lowerBound", lowerBound),
 						zap.Any("upperBound", upperBound),
 						zap.Uint64("currentCommitTs", currentCommitTs),
-						zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+						zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 						zap.Uint64("currentTotalSize", currentTotalSize),
 						zap.Bool("splitTxn", w.splitTxn),
 					)
-					if err := advanceTableSinkAndResetCurrentSizeWithBatchID(currentCommitTs); err != nil {
+					if err := advanceTableSinkAndResetCurrentSizeWithBatchID(lastTxnCommitTs); err != nil {
 						return errors.Trace(err)
 					}
 					batchID++
@@ -382,8 +383,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		// 2. We append all the events to the table sink, but because we do not reach the update interval,
 		//    we do not advance the table sink.
 		if len(events) > 0 || currentTotalSize > 0 {
-			lastTimeCommitTs = currentCommitTs
-			if err := appendEventsAndRecordCurrentSize(lastTimeCommitTs); err != nil {
+			lastTxnCommitTs = currentCommitTs
+			if err := appendEventsAndRecordCurrentSize(lastTxnCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 			log.Debug("Advance table sink because some events are not flushed",
@@ -393,27 +394,27 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
 				zap.Uint64("currentCommitTs", currentCommitTs),
-				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+				zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 				zap.Uint64("currentTotalSize", currentTotalSize),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
-			if err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs); err != nil {
+			if err := advanceTableSinkAndResetCurrentSize(lastTxnCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 		}
 		// This happens when there is no workload for this table on upstream.
 		if !lastPos.Valid() {
-			lastTimeCommitTs = upperBound.CommitTs
-			log.Debug("No more events, set lastTimeCommitTs to upperBound",
+			lastTxnCommitTs = upperBound.CommitTs
+			log.Debug("No more events, set lastTxnCommitTs to upperBound",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Any("lowerBound", lowerBound),
 				zap.Any("upperBound", upperBound),
-				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+				zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
 				zap.Bool("splitTxn", w.splitTxn),
 			)
-			err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs)
+			err := advanceTableSinkAndResetCurrentSize(lastTxnCommitTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
