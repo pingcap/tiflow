@@ -1212,6 +1212,7 @@ func (p *processor) createTablePipelineImpl(
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 	} else {
 		table.Cancel()
 		table.Wait()
