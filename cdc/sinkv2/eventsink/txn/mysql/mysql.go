@@ -396,6 +396,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
+		log.Info("fizz debug",
+			zap.Bool("translateToInsert", translateToInsert),
+			zap.Uint64("firstRow.CommitTs", firstRow.CommitTs),
+			zap.Uint64("firstRow.ReplicatingTs", firstRow.ReplicatingTs),
+			zap.Bool("s.cfg.EnableOldValue", s.cfg.EnableOldValue),
+			zap.Bool("s.cfg.SafeMode", s.cfg.SafeMode))
 
 		if event.Callback != nil {
 			callbacks = append(callbacks, event.Callback)
