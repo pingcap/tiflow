@@ -846,7 +846,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh)
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			p.sourceManager, p.errCh, p.metricsTableSinkTotalRows)
 		// Bind them so that sourceManager can notify sinkManager.
