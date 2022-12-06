@@ -376,8 +376,33 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		)
 
 	} else {
+		// This happens when:
+		// 1. We just leave the last txn in the events.
+		//    Because we only advance the table sink when meet a new commit ts.
+		// 2. We append all the events to the table sink, but because we do not reach the update interval,
+		//    we do not advance the table sink.
+		if len(events) > 0 || currentTotalSize > 0 {
+			lastTimeCommitTs = currentCommitTs
+			if err := appendEventsAndRecordCurrentSize(lastTimeCommitTs); err != nil {
+				return errors.Trace(err)
+			}
+			log.Debug("Advance table sink because some events are not flushed",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Any("lowerBound", lowerBound),
+				zap.Any("upperBound", upperBound),
+				zap.Uint64("currentCommitTs", currentCommitTs),
+				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
+				zap.Uint64("currentTotalSize", currentTotalSize),
+				zap.Bool("splitTxn", w.splitTxn),
+			)
+			if err := advanceTableSinkAndResetCurrentSize(lastTimeCommitTs); err != nil {
+				return errors.Trace(err)
+			}
+		}
 		// This happens when there is no workload for this table on upstream.
-		if lastTimeCommitTs == 0 {
+		if !lastPos.Valid() {
 			lastTimeCommitTs = upperBound.CommitTs
 			log.Debug("No more events, set lastTimeCommitTs to upperBound",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -393,30 +418,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				return errors.Trace(err)
 			}
 			lastPos = upperBound
-		}
-		// This happens when:
-		// 1. We just leave the last txn in the events.
-		//    Because we only advance the table sink when meet a new commit ts.
-		// 2. We append all the events to the table sink, but because we do not reach the update interval,
-		//    we do not advance the table sink.
-		if len(events) > 0 || currentTotalSize > 0 {
-			if err := appendEventsAndRecordCurrentSize(currentCommitTs); err != nil {
-				return errors.Trace(err)
-			}
-			log.Debug("Advance table sink because some events are not flushed",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Any("lowerBound", lowerBound),
-				zap.Any("upperBound", upperBound),
-				zap.Uint64("currentCommitTs", currentCommitTs),
-				zap.Uint64("lastTimeCommitTs", lastTimeCommitTs),
-				zap.Uint64("currentTotalSize", currentTotalSize),
-				zap.Bool("splitTxn", w.splitTxn),
-			)
-			if err := advanceTableSinkAndResetCurrentSize(currentCommitTs); err != nil {
-				return errors.Trace(err)
-			}
 		}
 		// Add table back.
 		task.callback(lastPos)
