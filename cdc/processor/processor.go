@@ -413,12 +413,12 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
+		stats := p.sinkManager.GetTableStats(tableID)
 		if p.redoManager.Enabled() {
 			p.redoManager.RemoveTable(tableID)
 		}
 		p.sinkManager.RemoveTable(tableID)
 		p.sourceManager.RemoveTable(tableID)
-		stats := p.sinkManager.GetTableStats(tableID)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
