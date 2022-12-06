@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -144,8 +144,8 @@ func (cli *ChaosCli) UpdateFakeJobKey(ctx context.Context, id int, value string)
 
 func (cli *ChaosCli) getFakeJobCheckpoint(
 	ctx context.Context, masterID string,
-) (*fake.Checkpoint, error) {
-	ckptKey := fake.CheckpointKey(masterID)
+) (*fakejob.Checkpoint, error) {
+	ckptKey := fakejob.CheckpointKey(masterID)
 	resp, metaErr := cli.metaCli.Get(ctx, ckptKey)
 	if metaErr != nil {
 		return nil, errors.New(metaErr.Error())
@@ -153,7 +153,7 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 	if len(resp.Kvs) == 0 {
 		return nil, errors.New("no checkpoint found")
 	}
-	checkpoint := &fake.Checkpoint{}
+	checkpoint := &fakejob.Checkpoint{}
 	err := json.Unmarshal(resp.Kvs[0].Value, checkpoint)
 	if err != nil {
 		return nil, errors.Trace(err)
