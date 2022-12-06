@@ -40,7 +40,8 @@ type Wrapper struct {
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// wg is used to wait the puller to exit.
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	bdrMode bool
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -49,12 +50,14 @@ func NewPullerWrapper(
 	tableID model.TableID,
 	tableName string,
 	startTs model.Ts,
+	bdrMode bool,
 ) *Wrapper {
 	return &Wrapper{
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableName:  tableName,
 		startTs:    startTs,
+		bdrMode:    bdrMode,
 	}
 }
 
@@ -96,7 +99,7 @@ func (n *Wrapper) Start(
 		n.changefeed,
 		n.tableID,
 		n.tableName,
-		false,
+		n.bdrMode,
 	)
 	n.wg.Add(1)
 	go func() {
