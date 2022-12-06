@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fake
+package fakejob
 
 import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -20,9 +20,6 @@ import (
 
 // RegisterWorker registers fake job master and fake worker to global registry.
 func RegisterWorker() {
-	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewFakeMaster)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.FakeJobMaster, fakeMasterFactory)
-
 	fakeWorkerFactory := registry.NewSimpleWorkerFactory(NewDummyWorker)
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(frameModel.FakeTask, fakeWorkerFactory)
 }
