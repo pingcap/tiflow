@@ -23,7 +23,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -41,7 +42,7 @@ type TaskManager struct {
 	*ticker.DefaultTicker
 
 	jobStore     *metadata.JobStore
-	messageAgent dmpkg.MessageAgent
+	messageAgent message.MessageAgent
 	logger       *zap.Logger
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
@@ -51,7 +52,7 @@ type TaskManager struct {
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger, metricFactory promutil.Factory) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent message.MessageAgent, pLogger *zap.Logger, metricFactory promutil.Factory) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
@@ -75,7 +76,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 
 // OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
 // called by user request.
-func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
+func (tm *TaskManager) OperateTask(ctx context.Context, op dmproto.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
 	tm.logger.Info("operate task", zap.Stringer("op", op), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
@@ -85,19 +86,19 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 	var stage metadata.TaskStage
 	switch op {
-	case dmpkg.Create:
+	case dmproto.Create:
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
-	case dmpkg.Update:
+	case dmproto.Update:
 		return tm.jobStore.UpdateConfig(ctx, jobCfg)
 	// Deleting marks the job as deleting.
-	case dmpkg.Deleting:
+	case dmproto.Deleting:
 		return tm.jobStore.MarkDeleting(ctx)
 	// Delete deletes the job in metadata.
-	case dmpkg.Delete:
+	case dmproto.Delete:
 		return tm.jobStore.Delete(ctx)
-	case dmpkg.Resume:
+	case dmproto.Resume:
 		stage = metadata.StageRunning
-	case dmpkg.Pause:
+	case dmproto.Pause:
 		stage = metadata.StagePaused
 	default:
 		return errors.New("unknown operate type")
@@ -166,7 +167,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		}
 
 		op := genOp(runningTask.Stage, runningTask.StageUpdatedTime, persistentTask.Stage, persistentTask.StageUpdatedTime)
-		if op == dmpkg.None {
+		if op == dmproto.None {
 			tm.logger.Debug(
 				"task status will not be changed",
 				zap.String("task_id", taskID),
@@ -229,31 +230,31 @@ func genOp(
 	runningStageUpdatedTime time.Time,
 	expectedStage metadata.TaskStage,
 	expectedStageUpdatedTime time.Time,
-) dmpkg.OperateType {
+) dmproto.OperateType {
 	switch {
 	case expectedStage == metadata.StagePaused && (runningStage == metadata.StageRunning || runningStage == metadata.StageError):
-		return dmpkg.Pause
+		return dmproto.Pause
 	case expectedStage == metadata.StageRunning:
 		if runningStage == metadata.StagePaused {
-			return dmpkg.Resume
+			return dmproto.Resume
 		}
 		// only resume a error task for a manual Resume action by checking expectedStageUpdatedTime
 		if runningStage == metadata.StageError && expectedStageUpdatedTime.After(runningStageUpdatedTime) {
-			return dmpkg.Resume
+			return dmproto.Resume
 		}
-		return dmpkg.None
+		return dmproto.None
 	// TODO: support update
 	default:
-		return dmpkg.None
+		return dmproto.None
 	}
 }
 
-func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, op dmpkg.OperateType) error {
-	msg := &dmpkg.OperateTaskMessage{
+func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, op dmproto.OperateType) error {
+	msg := &dmproto.OperateTaskMessage{
 		Task: taskID,
 		Op:   op,
 	}
-	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
+	return tm.messageAgent.SendMessage(ctx, taskID, dmproto.OperateTask, msg)
 }
 
 func (tm *TaskManager) allFinished(ctx context.Context) bool {

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package proto
 
 import (
 	"encoding/json"
@@ -38,6 +38,7 @@ const (
 	BinlogTask       p2p.Topic = "BinlogTask"
 	BinlogSchemaTask p2p.Topic = "BinlogSchemaTask"
 	CoordinateDDL    p2p.Topic = "CoordinateDDL"
+	RedirectDDL      p2p.Topic = "RedirectDDL"
 )
 
 // OperateType represents internal operate type in DM
@@ -210,5 +211,11 @@ type CoordinateDDLRequest metadata.DDLItem
 type CoordinateDDLResponse struct {
 	ErrorMsg      string
 	DDLs          []string
+	ConflictStage optimism.ConflictStage
+}
+
+type RedirectDDLRequest struct {
+	Schema        string
+	Table         string
 	ConflictStage optimism.ConflictStage
 }

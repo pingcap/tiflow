@@ -33,7 +33,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -95,7 +96,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
-		processError = &dmpkg.ProcessError{
+		processError = &dmproto.ProcessError{
 			ErrCode:    1,
 			ErrClass:   "class",
 			ErrScope:   "scope",
@@ -107,9 +108,9 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
-		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes, IoTotalBytes: 0}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
+		dumpStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes, IoTotalBytes: 0}
+		loadStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
+		syncStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
 		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
@@ -179,7 +180,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			},
 		}
 	)
-	messageAgent := &dmpkg.MockMessageAgent{}
+	messageAgent := &message.MockMessageAgent{}
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
@@ -210,7 +211,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
 	require.Equal(t, "", taskStatus.ExpectedStage.String())
-	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
+	require.Equal(t, &dmproto.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
@@ -459,8 +460,8 @@ func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
 		taskManager: NewTaskManager(nil, metadata.NewJobStore(kvmock.NewMetaMock(), log.L()), nil, log.L(), promutil.NewFactory4Test(t.TempDir())),
 	}
-	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupported op type %d for operate task", dmpkg.Delete))
-	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
+	require.EqualError(t, jm.operateTask(context.Background(), dmproto.Delete, nil, nil), fmt.Sprintf("unsupported op type %d for operate task", dmproto.Delete))
+	require.EqualError(t, jm.operateTask(context.Background(), dmproto.Pause, nil, nil), "state not found")
 }
 
 func TestGetJobCfg(t *testing.T) {
@@ -486,7 +487,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockBaseJobmaster   = &MockBaseJobmaster{t: t}
 		metaKVClient        = kvmock.NewMetaMock()
 		mockCheckpointAgent = &MockCheckpointAgent{}
-		messageAgent        = &dmpkg.MockMessageAgent{}
+		messageAgent        = &message.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
@@ -519,7 +520,7 @@ func TestUpdateJobCfg(t *testing.T) {
 	}
 	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "state not found")
 
-	err := jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil)
+	err := jm.taskManager.OperateTask(context.Background(), dmproto.Create, jobCfg, nil)
 	require.NoError(t, err)
 	verDB = conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -531,23 +532,23 @@ func TestUpdateJobCfg(t *testing.T) {
 
 func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
-	messageAgent := &dmpkg.MockMessageAgent{}
+	messageAgent := &message.MockMessageAgent{}
 	jm := &JobMaster{
 		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
 	}
-	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})
+	resp, err := jm.Binlog(context.Background(), &dmproto.BinlogRequest{})
 	require.EqualError(t, err, "state not found")
 	require.Nil(t, resp)
 
-	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmproto.CommonTaskResponse{Msg: "msg"}, nil).Once()
 	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
 	job := metadata.NewJob(&config.JobCfg{Upstreams: []*config.UpstreamCfg{
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task1"}},
 		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task2"}},
 	}})
 	jm.metadata.JobStore().Put(context.Background(), job)
-	resp, err = jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})
+	resp, err = jm.Binlog(context.Background(), &dmproto.BinlogRequest{})
 	require.Nil(t, err)
 	require.Equal(t, "", resp.ErrorMsg)
 	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
@@ -557,16 +558,16 @@ func TestBinlog(t *testing.T) {
 }
 
 func TestBinlogSchema(t *testing.T) {
-	messageAgent := &dmpkg.MockMessageAgent{}
+	messageAgent := &message.MockMessageAgent{}
 	jm := &JobMaster{
 		messageAgent: messageAgent,
 	}
-	resp := jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{})
+	resp := jm.BinlogSchema(context.Background(), &dmproto.BinlogSchemaRequest{})
 	require.Equal(t, "must specify at least one source", resp.ErrorMsg)
 
-	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmproto.CommonTaskResponse{Msg: "msg"}, nil).Once()
 	messageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("error")).Once()
-	resp = jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{Sources: []string{"task1", "task2"}})
+	resp = jm.BinlogSchema(context.Background(), &dmproto.BinlogSchemaRequest{Sources: []string{"task1", "task2"}})
 	require.Equal(t, "", resp.ErrorMsg)
 	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
 	msg := resp.Results["task1"].Msg + resp.Results["task2"].Msg

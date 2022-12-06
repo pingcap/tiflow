@@ -215,6 +215,14 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 		oldVersion = task.Cfg.ModRevision
 		break
 	}
+
+	// if new config is empty, we will use the old config.
+	if jobCfg == nil {
+		jobCfg, err = jobStore.GetJobCfg(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 	jobCfg.ModRevision = oldVersion + 1
 	newJob := NewJob(jobCfg)
 

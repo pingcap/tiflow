@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -50,6 +50,7 @@ type unitHolder interface {
 	CheckAndUpdateStatus()
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
+	RedirectDDL(ctx context.Context, req *dmpkg.RedirectDDLRequest) (string, error)
 }
 
 var (
@@ -321,6 +322,18 @@ func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSche
 	}
 
 	return syncUnit.OperateSchema(ctx, (*pb.OperateWorkerSchemaRequest)(req))
+}
+
+// RedirectDDL implements the redirect ddl api.
+func (u *unitHolderImpl) RedirectDDL(ctx context.Context, req *dmpkg.RedirectDDLRequest) (string, error) {
+	// syncUnit, ok := u.unit.(*syncer.Syncer)
+	//
+	//	if !ok {
+	//		return "", errors.Errorf("such operation is only available for syncer. current unit is %s", u.unit.Type())
+	//	}
+	//
+	// return syncUnit.RedirectDDL(ctx, req)
+	return "", nil
 }
 
 func filterErrors(r *pb.ProcessResult) {

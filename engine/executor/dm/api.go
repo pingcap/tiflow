@@ -21,15 +21,15 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/tiflow/engine/framework"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // QueryStatus implements the api of query status request.
 // QueryStatus is called by refection of commandHandler.
-func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
+func (w *dmWorker) QueryStatus(ctx context.Context, req *dmproto.QueryStatusRequest) *dmproto.QueryStatusResponse {
 	if w.taskID != req.Task {
-		return &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Task, w.taskID)}
+		return &dmproto.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Task, w.taskID)}
 	}
 	// get status from unit
 	status := w.unitHolder.Status(ctx)
@@ -39,12 +39,12 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	var buf bytes.Buffer
 	err := mar.Marshal(&buf, status.(proto.Message))
 	if err != nil {
-		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
+		return &dmproto.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
-	return &dmpkg.QueryStatusResponse{
+	return &dmproto.QueryStatusResponse{
 		Unit:         w.workerType,
 		Stage:        stage,
-		Result:       dmpkg.NewProcessResultFromPB(result),
+		Result:       dmproto.NewProcessResultFromPB(result),
 		Status:       buf.Bytes(),
 		IoTotalBytes: w.cfg.IOTotalBytes.Load(),
 	}
@@ -52,7 +52,7 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 
 // StopWorker implements the api of stop worker message which kill itself.
 // StopWorker is called by refection of commandHandler.
-func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
+func (w *dmWorker) StopWorker(ctx context.Context, msg *dmproto.StopWorkerMessage) error {
 	if w.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
@@ -63,14 +63,14 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 
 // OperateTask implements the api of operate task message.
 // OperateTask is called by refection of commandHandler.
-func (w *dmWorker) OperateTask(ctx context.Context, msg *dmpkg.OperateTaskMessage) error {
+func (w *dmWorker) OperateTask(ctx context.Context, msg *dmproto.OperateTaskMessage) error {
 	if w.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
 	switch msg.Op {
-	case dmpkg.Pause:
+	case dmproto.Pause:
 		return w.unitHolder.Pause(ctx)
-	case dmpkg.Resume:
+	case dmproto.Resume:
 		return w.unitHolder.Resume(ctx)
 	default:
 		return errors.Errorf("unsupported op type %d for task %s", msg.Op, w.taskID)
@@ -79,23 +79,31 @@ func (w *dmWorker) OperateTask(ctx context.Context, msg *dmpkg.OperateTaskMessag
 
 // BinlogTask implements the api of binlog task request.
 // BinlogTask is called by refection of commandHandler.
-func (w *dmWorker) BinlogTask(ctx context.Context, req *dmpkg.BinlogTaskRequest) *dmpkg.CommonTaskResponse {
+func (w *dmWorker) BinlogTask(ctx context.Context, req *dmproto.BinlogTaskRequest) *dmproto.CommonTaskResponse {
 	msg, err := w.unitHolder.Binlog(ctx, req)
 	if err != nil {
-		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
-	return &dmpkg.CommonTaskResponse{Msg: msg}
+	return &dmproto.CommonTaskResponse{Msg: msg}
 }
 
 // BinlogSchemaTask implements the api of binlog schema request.
 // BinlogSchemaTask is called by refection of commandHandler.
-func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) *dmpkg.CommonTaskResponse {
+func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmproto.BinlogSchemaTaskRequest) *dmproto.CommonTaskResponse {
 	if w.taskID != req.Source {
-		return &dmpkg.CommonTaskResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Source, w.taskID)}
+		return &dmproto.CommonTaskResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Source, w.taskID)}
 	}
 	msg, err := w.unitHolder.BinlogSchema(ctx, req)
 	if err != nil {
-		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
-	return &dmpkg.CommonTaskResponse{Msg: msg}
+	return &dmproto.CommonTaskResponse{Msg: msg}
+}
+
+func (w *dmWorker) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) *dmproto.CommonTaskResponse {
+	msg, err := w.unitHolder.RedirectDDL(ctx, req)
+	if err != nil {
+		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
+	}
+	return &dmproto.CommonTaskResponse{Msg: msg}
 }

@@ -34,7 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
@@ -224,7 +224,7 @@ func testSimpleAllModeTask(
 	waitRow("c = 3", db)
 
 	// pause task
-	err = operateJob(ctx, httpClient, jobID, []string{source1}, dmpkg.Pause)
+	err = operateJob(ctx, httpClient, jobID, []string{source1}, dmproto.Pause)
 	require.NoError(t, err)
 
 	// eventually paused
@@ -245,7 +245,7 @@ func testSimpleAllModeTask(
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 
 	// resume task
-	err = operateJob(ctx, httpClient, jobID, nil, dmpkg.Resume)
+	err = operateJob(ctx, httpClient, jobID, nil, dmproto.Resume)
 	require.NoError(t, err)
 
 	// eventually resumed
@@ -314,7 +314,7 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 
 	// pause task
-	err = operateJob(ctx, httpClient, jobID, []string{source1}, dmpkg.Pause)
+	err = operateJob(ctx, httpClient, jobID, []string{source1}, dmproto.Pause)
 	require.NoError(t, err)
 	// eventually paused
 	require.Eventually(t, func() bool {
@@ -358,7 +358,7 @@ func testSimpleAllModeTask(
 	}, time.Second*30, time.Second)
 
 	// resume task
-	err = operateJob(ctx, httpClient, jobID, nil, dmpkg.Resume)
+	err = operateJob(ctx, httpClient, jobID, nil, dmproto.Resume)
 	require.NoError(t, err)
 	// eventually resumed
 	require.Eventually(t, func() bool {
@@ -406,15 +406,15 @@ func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tas
 
 func operateJob(
 	ctx context.Context, client *httputil.Client, jobID string, tasks []string,
-	op dmpkg.OperateType,
+	op dmproto.OperateType,
 ) error {
 	operateJobReq := &openapi.OperateJobRequest{
 		Tasks: &tasks,
 	}
 	switch op {
-	case dmpkg.Pause:
+	case dmproto.Pause:
 		operateJobReq.Op = openapi.OperateJobRequestOpPause
-	case dmpkg.Resume:
+	case dmproto.Resume:
 		operateJobReq.Op = openapi.OperateJobRequestOpResume
 	}
 
@@ -463,7 +463,7 @@ func updateJobCfg(ctx context.Context, client *httputil.Client, jobID string, cf
 
 func getBinlogOperator(ctx context.Context, client *httputil.Client, jobID string,
 	task string, binlogPos string,
-) (*dmpkg.BinlogResponse, error) {
+) (*dmproto.BinlogResponse, error) {
 	u := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
 	v := url.Values{}
 	if binlogPos != "" {
@@ -483,14 +483,14 @@ func getBinlogOperator(ctx context.Context, client *httputil.Client, jobID strin
 	if err != nil {
 		return nil, err
 	}
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	err = json.Unmarshal(respBody, &binlogResp)
 	return &binlogResp, err
 }
 
 func setBinlogOperator(ctx context.Context, client *httputil.Client, jobID string,
 	task string, req *openapi.SetBinlogOperatorRequest,
-) (*dmpkg.BinlogResponse, error) {
+) (*dmproto.BinlogResponse, error) {
 	bs, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -502,27 +502,27 @@ func setBinlogOperator(ctx context.Context, client *httputil.Client, jobID strin
 		return nil, err
 	}
 
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	err = json.Unmarshal(respBody, &binlogResp)
 	return &binlogResp, err
 }
 
 func deleteBinlogOperator(ctx context.Context, client *httputil.Client, jobID string,
 	task string,
-) (*dmpkg.BinlogResponse, error) {
+) (*dmproto.BinlogResponse, error) {
 	url := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
 	respBody, err := client.DoRequest(ctx, url, http.MethodDelete, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	err = json.Unmarshal(respBody, &binlogResp)
 	return &binlogResp, err
 }
 
 func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 	task string, schema string, table string,
-) (*dmpkg.BinlogSchemaResponse, error) {
+) (*dmproto.BinlogSchemaResponse, error) {
 	u := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
 	v := url.Values{}
 	if schema != "" {
@@ -545,7 +545,7 @@ func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 	if err != nil {
 		return nil, err
 	}
-	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	var binlogSchemaResp dmproto.BinlogSchemaResponse
 	err = json.Unmarshal(respBody, &binlogSchemaResp)
 	return &binlogSchemaResp, err
 }
@@ -553,7 +553,7 @@ func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 func setBinlogSchema(
 	ctx context.Context, client *httputil.Client, jobID string, task string,
 	req *openapi.SetBinlogSchemaRequest,
-) (*dmpkg.BinlogSchemaResponse, error) {
+) (*dmproto.BinlogSchemaResponse, error) {
 	url := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
 	bs, err := json.Marshal(req)
 	if err != nil {
@@ -565,7 +565,7 @@ func setBinlogSchema(
 	if err != nil {
 		return nil, err
 	}
-	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	var binlogSchemaResp dmproto.BinlogSchemaResponse
 	err = json.Unmarshal(respBody, &binlogSchemaResp)
 	return &binlogSchemaResp, err
 }

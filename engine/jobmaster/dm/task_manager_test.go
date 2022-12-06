@@ -24,7 +24,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -137,7 +138,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager(nil, jobStore, &message.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -146,28 +147,28 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.EqualError(t.T(), err, "state not found")
 	require.Nil(t.T(), state)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Create, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job := state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Pause, nil, []string{source1, source2}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Pause, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StagePaused)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Resume, nil, []string{source1}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Resume, nil, []string{source1}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Update, jobCfg, nil))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Update, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
@@ -175,13 +176,13 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 	require.False(t.T(), job.Deleting)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Deleting, nil, nil))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Deleting, nil, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.True(t.T(), job.Deleting)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmproto.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.EqualError(t.T(), err, "state not found")
 	require.Nil(t.T(), state)
@@ -238,70 +239,70 @@ func (t *testDMJobmasterSuite) TestGenOp() {
 		runningStageUpdatedTime  time.Time
 		expectedStage            metadata.TaskStage
 		expectedStageUpdatedTime time.Time
-		op                       dmpkg.OperateType
+		op                       dmproto.OperateType
 	}{
 		{
 			runningStage:             metadata.StagePaused,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StagePaused,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.None,
+			op:                       dmproto.None,
 		},
 		{
 			runningStage:             metadata.StageRunning,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StageRunning,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.None,
+			op:                       dmproto.None,
 		},
 		{
 			runningStage:             metadata.StageRunning,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StagePaused,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.Pause,
+			op:                       dmproto.Pause,
 		},
 		{
 			runningStage:             metadata.StageError,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StagePaused,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.Pause,
+			op:                       dmproto.Pause,
 		},
 		{
 			runningStage:             metadata.StageFinished,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StageRunning,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.None,
+			op:                       dmproto.None,
 		},
 		{
 			runningStage:             metadata.StagePaused,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StageRunning,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.Resume,
+			op:                       dmproto.Resume,
 		},
 		{
 			runningStage:             metadata.StageError,
 			runningStageUpdatedTime:  earlierTime,
 			expectedStage:            metadata.StageRunning,
 			expectedStageUpdatedTime: laterTime,
-			op:                       dmpkg.Resume,
+			op:                       dmproto.Resume,
 		},
 		{
 			runningStage:             metadata.StageError,
 			runningStageUpdatedTime:  laterTime,
 			expectedStage:            metadata.StageRunning,
 			expectedStageUpdatedTime: earlierTime,
-			op:                       dmpkg.None,
+			op:                       dmproto.None,
 		},
 		{
 			runningStage:             metadata.StageRunning,
 			runningStageUpdatedTime:  laterTime,
 			expectedStage:            metadata.StagePaused,
 			expectedStageUpdatedTime: earlierTime,
-			op:                       dmpkg.Pause,
+			op:                       dmproto.Pause,
 		},
 	}
 
@@ -319,7 +320,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	mockAgent := &dmpkg.MockMessageAgent{}
+	mockAgent := &message.MockMessageAgent{}
 	taskManager := NewTaskManager(nil, nil, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
@@ -368,7 +369,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
-	mockAgent := &dmpkg.MockMessageAgent{}
+	mockAgent := &message.MockMessageAgent{}
 	taskManager := NewTaskManager(nil, jobStore, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -424,7 +425,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// manually pause task2
-	taskManager.OperateTask(ctx, dmpkg.Pause, nil, []string{source2})
+	taskManager.OperateTask(ctx, dmproto.Pause, nil, []string{source2})
 	mockAgent.On("SendMessage").Return(agentError).Times(3)
 	mockAgent.On("SendMessage").Return(nil).Once().Run(func(args mock.Arguments) { meetExpected.Store(true) })
 	require.Eventually(t.T(), func() bool {
@@ -446,13 +447,13 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 
 	// mock remove task2 by update-job
 	jobCfg.Upstreams = jobCfg.Upstreams[:1]
-	taskManager.OperateTask(ctx, dmpkg.Update, jobCfg, nil)
+	taskManager.OperateTask(ctx, dmproto.Update, jobCfg, nil)
 	require.Eventually(t.T(), func() bool {
 		return len(taskManager.TaskStatus()) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// mock delete job
-	taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
+	taskManager.OperateTask(ctx, dmproto.Delete, nil, nil)
 	require.Eventually(t.T(), func() bool {
 		return len(taskManager.TaskStatus()) == 0
 	}, 5*time.Second, 100*time.Millisecond)

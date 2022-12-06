@@ -34,7 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -91,7 +91,7 @@ type dmWorker struct {
 	*ticker.DefaultTicker
 
 	unitHolder   unitHolder
-	messageAgent dmpkg.MessageAgent
+	messageAgent message.MessageAgent
 	autoResume   *worker.AutoResumeInfo
 
 	mu                    sync.RWMutex
@@ -147,7 +147,7 @@ func newDMWorker(
 // InitImpl implements lib.WorkerImpl.InitImpl
 func (w *dmWorker) InitImpl(ctx context.Context) error {
 	w.Logger().Info("initializing the dm worker", zap.String("task-id", w.taskID))
-	w.messageAgent = dmpkg.NewMessageAgentImpl(w.taskID, w, w.messageHandlerManager, w.Logger())
+	w.messageAgent = message.NewMessageAgentImpl(w.taskID, w, w.messageHandlerManager, w.Logger())
 	// register jobmaster client
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err

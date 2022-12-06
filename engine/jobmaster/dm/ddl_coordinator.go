@@ -29,6 +29,8 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -146,22 +148,24 @@ type DDLCoordinator struct {
 	pendings    sync.WaitGroup
 	logger      *zap.Logger
 
-	kvClient   metaModel.KVClient
-	tableAgent TableAgent
-	jobID      string
-	jobStore   *metadata.JobStore
+	kvClient     metaModel.KVClient
+	tableAgent   TableAgent
+	messageAgent message.MessageAgent
+	jobID        string
+	jobStore     *metadata.JobStore
 }
 
 // NewDDLCoordinator creates a new DDLCoordinator.
-func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger) *DDLCoordinator {
+func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger, messageAgent message.MessageAgent) *DDLCoordinator {
 	return &DDLCoordinator{
-		tableAgent:  tableAgent,
-		tables:      make(map[metadata.TargetTable]map[metadata.SourceTable]struct{}),
-		jobID:       jobID,
-		kvClient:    kvClient,
-		shardGroups: make(map[metadata.TargetTable]*shardGroup),
-		jobStore:    jobStore,
-		logger:      pLogger.With(zap.String("component", "ddl_coordinator")),
+		tableAgent:   tableAgent,
+		tables:       make(map[metadata.TargetTable]map[metadata.SourceTable]struct{}),
+		jobID:        jobID,
+		kvClient:     kvClient,
+		messageAgent: messageAgent,
+		shardGroups:  make(map[metadata.TargetTable]*shardGroup),
+		jobStore:     jobStore,
+		logger:       pLogger.With(zap.String("component", "ddl_coordinator")),
 	}
 }
 
@@ -279,7 +283,7 @@ func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable
 		return g, nil
 	}
 
-	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent)
+	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent, c.messageAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -307,9 +311,13 @@ type shardGroup struct {
 	id                  frameModel.MasterID
 	cfg                 *config.JobCfg
 	deleted             bool
+	messageAgent        message.MessageAgent
 }
 
-func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg, targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{}, kvClient metaModel.KVClient, tableAgent TableAgent) (*shardGroup, error) {
+func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg,
+	targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{},
+	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.MessageAgent,
+) (*shardGroup, error) {
 	g := &shardGroup{
 		tableAgent:          tableAgent,
 		normalTables:        make(map[metadata.SourceTable]string),
@@ -317,6 +325,7 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 		droppedColumnsStore: metadata.NewDroppedColumnsStore(kvClient, targetTable),
 		id:                  id,
 		cfg:                 cfg,
+		messageAgent:        messageAgent,
 	}
 	for sourceTable := range sourceTables {
 		stmt, err := g.tableAgent.FetchTableStmt(ctx, id, cfg, sourceTable)
@@ -412,7 +421,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 	// handle ddls one by one
 	for idx, ddl := range item.DDLs {
 		prevTableStmt, postTableStmt := g.getTableForOneDDL(item, idx)
-		schemaChanged, conflictStage := g.handleDDL(item.SourceTable, prevTableStmt, postTableStmt)
+		schemaChanged, conflictStage := g.handleDDL(ctx, item.SourceTable, prevTableStmt, postTableStmt)
 
 		switch conflictStage {
 		case optimism.ConflictDetected:
@@ -425,6 +434,8 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 			} else if len(col) != 0 {
 				dropCols = append(dropCols, col)
 			}
+		case optimism.ConflictNeedRestart:
+			return nil, optimism.ConflictNeedRestart, errors.Errorf("need restart when coordinate table %v", item.SourceTable)
 		case optimism.ConflictResolved:
 		}
 		if schemaChanged {
@@ -441,7 +452,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 	return newDDLs, optimism.ConflictNone, nil
 }
 
-func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, postTableStmt string) (bool, optimism.ConflictStage) {
+func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceTable, prevTableStmt, postTableStmt string) (bool, optimism.ConflictStage) {
 	delete(g.conflictTables, sourceTable)
 
 	prevTable := genCmpTable(prevTableStmt)
@@ -471,6 +482,10 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 			// return ConflictNone
 			if len(g.conflictTables) > 0 && g.noConflictForTables(final) {
 				log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+				if err := g.redirectDDLs(ctx, sourceTable); err != nil {
+					log.L().Error("redirect DDLs failed", zap.Error(err))
+					return false, optimism.ConflictNeedRestart
+				}
 				g.resolveTables()
 				return true, optimism.ConflictNone
 			}
@@ -508,6 +523,10 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 
 	if g.noConflictForTables(final) {
 		log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		if err := g.redirectDDLs(ctx, sourceTable); err != nil {
+			log.L().Error("redirect DDLs failed", zap.Error(err))
+			return false, optimism.ConflictNeedRestart
+		}
 		g.resolveTables()
 		return true, optimism.ConflictNone
 	}
@@ -645,7 +664,6 @@ func (g *shardGroup) resolveTables() {
 		g.normalTables[sourceTable] = conflictStmt
 	}
 	g.conflictTables = make(map[metadata.SourceTable]string)
-	// TODO: redirect for conflict worker.
 }
 
 func (g *shardGroup) getTableForOneDDL(item *metadata.DDLItem, idx int) (string, string) {
@@ -808,6 +826,31 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 	}
 	// show dropped columns if needed.
 	return tables
+}
+
+func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.SourceTable) (err error) {
+	for tb := range g.conflictTables {
+		if tb == sourceTable {
+			// no redirect for caller table
+			continue
+		}
+		req := &dmproto.RedirectDDLRequest{
+			Schema:        tb.Schema,
+			Table:         tb.Table,
+			ConflictStage: optimism.ConflictResolved,
+		}
+
+		resp, err := g.messageAgent.SendRequest(ctx, tb.Source, dmproto.RedirectDDL, req)
+		if err != nil {
+			return err
+		}
+		errMsg := resp.(*dmproto.CommonTaskResponse).ErrorMsg
+		if len(errMsg) != 0 {
+			return errors.New(errMsg)
+		}
+		log.L().Info("put redirect operation for table", zap.Any("source_table", tb))
+	}
+	return nil
 }
 
 func genCmpTable(createStmt string) schemacmp.Table {

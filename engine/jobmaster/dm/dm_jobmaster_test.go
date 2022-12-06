@@ -42,7 +42,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -190,13 +191,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t.T()}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	mockMessageAgent := &message.MockMessageAgent{}
+	message.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.MessageAgent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
+		message.NewMessageAgent = message.NewMessageAgentImpl
 	}()
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
@@ -263,12 +264,14 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// make sure workerHandle1 bound to task status1, workerHandle2 bound to task status2.
 	taskStatus1 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Stage: metadata.StageRunning,
+		Unit:           frameModel.WorkerDMDump,
+		Stage:          metadata.StageRunning,
+		CfgModRevision: 1,
 	}
 	taskStatus2 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Stage: metadata.StageRunning,
+		Unit:           frameModel.WorkerDMDump,
+		Stage:          metadata.StageRunning,
+		CfgModRevision: 1,
 	}
 	loadStatus := &dmpb.LoadStatus{
 		FinishedBytes:  4,
@@ -354,13 +357,40 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 	}
-	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker5: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
 	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	jm.OnMasterRecovered(context.Background())
+	// stop and re-create worker
+	mockMessageAgent.On("SendMessage").Return(nil).Twice()
+	require.NoError(t.T(), jm.Tick(context.Background()))
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	mockCheckpointAgent.On("IsFresh").Return(true, nil).Once()
+	mockCheckpointAgent.On("IsFresh").Return(false, nil).Once()
+	mockCheckpointAgent.On("IsFresh").Return(true, nil).Times(3)
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
+	jm.OnWorkerOffline(workerHandle1, nil)
+	jm.OnWorkerOffline(workerHandle2, nil)
+	// stop worker
+	require.NoError(t.T(), jm.Tick(context.Background()))
+	taskStatus1.CfgModRevision++
+	taskStatus2.CfgModRevision++
+	bytes1, err = json.Marshal(taskStatus1)
+	require.NoError(t.T(), err)
+	bytes2, err = json.Marshal(taskStatus2)
+	require.NoError(t.T(), err)
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
+	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
+	jm.OnWorkerStatusUpdated(workerHandle2, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes2})
+	// create worker
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -377,7 +407,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.CloseImpl(context.Background())
 
 	// OnCancel
-	mockMessageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
 	mockMessageAgent.On("SendMessage").Return(nil).Twice()
 	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup
@@ -417,13 +447,13 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	mockMessageAgent := &message.MockMessageAgent{}
+	message.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.MessageAgent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
+		message.NewMessageAgent = message.NewMessageAgentImpl
 	}()
 	jm := &JobMaster{
 		BaseJobMaster: mockBaseJobmaster,
