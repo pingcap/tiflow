@@ -35,6 +35,9 @@ type SchedulerConfig struct {
 	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
 	// oom caused by all tables dispatched to only one capture.
 	AddTableBatchSize int `toml:"add-table-batch-size" json:"add-table-batch-size"`
+	// RegionPerSpan the number of regions in a span, must be greater than 1000.
+	// Set 0 to disable span replication.
+	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
 }
 
 // NewDefaultSchedulerConfig return the default scheduler configuration.
@@ -45,6 +48,7 @@ func NewDefaultSchedulerConfig() *SchedulerConfig {
 		// TODO: no need to check balance each minute, relax the interval.
 		CheckBalanceInterval: TomlDuration(time.Minute),
 		AddTableBatchSize:    50,
+		RegionPerSpan:        0,
 	}
 }
 
@@ -62,10 +66,13 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"check-balance-interval must be larger than 1s")
 	}
-
 	if c.AddTableBatchSize <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"add-table-batch-size must be large than 0")
+	}
+	if c.RegionPerSpan < 1000 && c.RegionPerSpan != 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+			"region-per-span must be either 0 or greater than 1000")
 	}
 
 	return nil
