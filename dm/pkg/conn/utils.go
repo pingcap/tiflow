@@ -160,13 +160,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
-			var posInt int64
-			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			var posInt uint64
+			posInt, err = strconv.ParseUint(rowsResult[0][1], 10, 64)
 			if err != nil {
 				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint64(posInt)
+			pos = posInt
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 			gtidStr = rowsResult[0][4]
@@ -188,13 +188,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
-			var posInt int64
-			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			var posInt uint64
+			posInt, err = strconv.ParseUint(rowsResult[0][1], 10, 64)
 			if err != nil {
 				err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint64(posInt)
+			pos = posInt
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 		}
@@ -236,7 +236,7 @@ func GetPosAndGs(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		Name: binlogName,
 		Pos:  uint32(pos),
 	}
-
+	ctx.L().Warn("Convert the pos type returned by GetMasterStatus to uint32 to fit binlog position")
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
 	return
 }
