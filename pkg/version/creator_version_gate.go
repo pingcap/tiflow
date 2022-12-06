@@ -53,7 +53,7 @@ func (g *CreatorVersionGate) ChangefeedStateFromAdminJob() bool {
 		return true
 	}
 
-	creatorVersion := semver.New(removeVAndHash(g.version))
+	creatorVersion := semver.New(SanitizeVersion(g.version))
 	for _, version := range changefeedStateFromAdminJobVersions {
 		// NOTICE: To compare against the same major version.
 		if creatorVersion.Major == version.Major &&
@@ -74,7 +74,7 @@ func (g *CreatorVersionGate) ChangefeedAcceptUnknownProtocols() bool {
 		return true
 	}
 
-	creatorVersion := semver.New(removeVAndHash(g.version))
+	creatorVersion := semver.New(SanitizeVersion(g.version))
 	return creatorVersion.LessThan(changefeedAcceptUnknownProtocolsVersion)
 }
 
@@ -89,6 +89,6 @@ func (g *CreatorVersionGate) ChangefeedAcceptProtocolInMysqlSinURI() bool {
 		return true
 	}
 
-	creatorVersion := semver.New(removeVAndHash(g.version))
+	creatorVersion := semver.New(SanitizeVersion(g.version))
 	return creatorVersion.LessThan(changefeedAcceptProtocolInMysqlSinURI)
 }
