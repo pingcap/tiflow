@@ -14,6 +14,7 @@
 package factory
 
 import (
+	"go.uber.org/atomic"
 	"strconv"
 	"sync"
 	"time"
@@ -54,6 +55,8 @@ type SortEngineFactory struct {
 	pebbleConfig *config.DBConfig
 	dbs          []*pebble.DB
 	writeStalls  []writeStall
+
+	dbInitialized *atomic.Bool
 }
 
 // Create creates a SortEngine. If an engine with same ID already exists,
@@ -68,11 +71,12 @@ func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, 
 		if e, exists = f.engines[ID]; exists {
 			return e, nil
 		}
-		if len(f.dbs) == 0 {
+		if !f.dbInitialized.Load() && len(f.dbs) == 0 {
 			f.dbs, f.writeStalls, err = createPebbleDBs(f.dir, f.pebbleConfig, f.memQuotaInBytes)
 			if err != nil {
 				return
 			}
+			f.dbInitialized.Store(true)
 		}
 		e = epebble.New(ID, f.dbs)
 		f.engines[ID] = e
@@ -121,6 +125,7 @@ func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *Sor
 		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
 		closed:          make(chan struct{}),
 		pebbleConfig:    cfg,
+		dbInitialized:   atomic.NewBool(false),
 	}
 
 	manager.startMetricsCollector()
@@ -145,7 +150,9 @@ func (f *SortEngineFactory) startMetricsCollector() {
 }
 
 func (f *SortEngineFactory) collectMetrics() {
-	if f.engineType == pebbleEngine {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.engineType == pebbleEngine && f.dbInitialized.Load() {
 		for i, db := range f.dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
