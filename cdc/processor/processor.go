@@ -195,7 +195,7 @@ func (p *processor) AddTable(
 				zap.Int64("tableID", tableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
-			p.removeTableConsumer(p.tables[tableID], tableID)
+			p.removeTable(p.tables[tableID], tableID)
 		}
 	}
 
@@ -413,14 +413,11 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
-		// The table has already been async removed, so remove it from sourceManager
-		// before remove from sinkManager. Otherwise sinkManager.UpdateReceivedSorterResolvedTs
-		// will be called incorrectly.
-		p.sourceManager.RemoveTable(tableID)
-		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
 			p.redoManager.RemoveTable(tableID)
 		}
+		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 		stats := p.sinkManager.GetTableStats(tableID)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
@@ -1213,16 +1210,17 @@ func (p *processor) createTablePipelineImpl(
 	return table, nil
 }
 
-func (p *processor) removeTableConsumer(table tablepb.TablePipeline, tableID model.TableID) {
+func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(tableID)
+	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 	} else {
 		table.Cancel()
 		table.Wait()
 		delete(p.tables, tableID)
-	}
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
 	}
 }
 

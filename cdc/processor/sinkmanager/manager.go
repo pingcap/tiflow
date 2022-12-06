@@ -599,7 +599,8 @@ func (m *SinkManager) generateRedoTasks() error {
 func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts model.Ts) {
 	tableSink, ok := m.tableSinks.Load(tableID)
 	if !ok {
-		log.Panic("Table sink not found when updating resolved ts",
+		// It's possible that the table is in removing.
+		log.Debug("Table sink not found when updating resolved ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
