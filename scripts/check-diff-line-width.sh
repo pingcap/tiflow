@@ -28,7 +28,7 @@ git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd \
 	-- ':(exclude)*_gen_test.go' \
 	-- ':(exclude)*_mock.go' \
 	-- ':(exclude)*.pb.go' |
-	grep -E '^\+' | grep -vE '^\+\+\+' | grep -E '^//' |
+	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
 	awk "
 {
