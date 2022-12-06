@@ -395,7 +395,7 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
-		return batch.Count() >= batchCommitCount
+		return batch.Count() >= batchCommitCount || len(batch.Repr()) >= batchCommitSize
 	}
 
 	for {
@@ -420,9 +420,8 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 			}
 		}
 	CommitBatch:
-		writeLen := len(batch.Repr())
-		if writeLen > 0 {
-			writeBytes.Observe(float64(writeLen))
+		if batch.Count() > 0 {
+			writeBytes.Observe(float64(len(batch.Repr())))
 			start := time.Now()
 			if err := batch.Commit(writeOpts); err != nil {
 				log.Panic("failed to commit pebble batch", zap.Error(err),
@@ -488,7 +487,10 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 }
 
 // ----- Some internal variable and functions -----
-const batchCommitCount uint32 = 1024
+const (
+	batchCommitCount uint32 = 1024
+	batchCommitSize  int    = 16 * 1024 * 1024
+)
 
 var uniqueIDGen uint32 = 0
 

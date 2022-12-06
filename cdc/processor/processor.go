@@ -188,7 +188,7 @@ func (p *processor) AddTable(
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
 		case tablepb.TableStateStopped:
-			log.Warn("The same table exists but is stopped, remove sink and redo records",
+			log.Warn("The same table exists but is stopped. Cancel it and continue.",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
@@ -650,7 +650,12 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.refreshMetrics()
+
+	// we should check if this error is nil,
+	// otherwise the function called below may panic.
+	if err != nil {
+		p.refreshMetrics()
+	}
 
 	return p.handleErr(err)
 }
@@ -846,7 +851,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh)
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			p.sourceManager, p.errCh, p.metricsTableSinkTotalRows)
 		if err != nil {

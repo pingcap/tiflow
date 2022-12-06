@@ -28,6 +28,7 @@ import (
 	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	dbMetrics "github.com/pingcap/tiflow/pkg/db"
+	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 )
 
@@ -57,6 +58,9 @@ type SortEngineFactory struct {
 	pebbleConfig *config.DBConfig
 	dbs          []*pebble.DB
 	writeStalls  []writeStall
+
+	// dbs is also readed in the background metrics collector.
+	dbInitialized *atomic.Bool
 }
 
 // Create creates a SortEngine. If an engine with same ID already exists,
@@ -76,6 +80,7 @@ func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, 
 			if err != nil {
 				return
 			}
+			f.dbInitialized.Store(true)
 		}
 		e = epebble.New(ID, f.dbs)
 		f.engines[ID] = e
@@ -124,6 +129,7 @@ func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *Sor
 		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
 		closed:          make(chan struct{}),
 		pebbleConfig:    cfg,
+		dbInitialized:   atomic.NewBool(false),
 	}
 
 	manager.startMetricsCollector()
@@ -148,14 +154,8 @@ func (f *SortEngineFactory) startMetricsCollector() {
 }
 
 func (f *SortEngineFactory) collectMetrics() {
-	if f.engineType == pebbleEngine {
-		// f.dbs is initialized lazily so we need to copy them out to avoid race.
-		var dbs []*pebble.DB
-		f.mu.Lock()
-		dbs = append(dbs, f.dbs...)
-		f.mu.Unlock()
-
-		for i, db := range dbs {
+	if f.engineType == pebbleEngine && f.dbInitialized.Load() {
+		for i, db := range f.dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
 			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
