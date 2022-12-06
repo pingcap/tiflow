@@ -70,7 +70,7 @@ type EventIter struct {
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(2048)))
+		channs = append(channs, chann.New[eventWithTableID](chann.Cap(128)))
 	}
 
 	eventSorter := &EventSorter{
@@ -420,15 +420,18 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 			}
 		}
 	CommitBatch:
-		writeBytes.Observe(float64(len(batch.Repr())))
-		start := time.Now()
-		if err := batch.Commit(writeOpts); err != nil {
-			log.Panic("failed to commit pebble batch", zap.Error(err),
-				zap.String("namespace", s.changefeedID.Namespace),
-				zap.String("changefeed", s.changefeedID.ID))
+		writeLen := len(batch.Repr())
+		if writeLen > 0 {
+			writeBytes.Observe(float64(writeLen))
+			start := time.Now()
+			if err := batch.Commit(writeOpts); err != nil {
+				log.Panic("failed to commit pebble batch", zap.Error(err),
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID))
+			}
+			writeDuration.Observe(time.Since(start).Seconds())
+			batch = db.NewBatch()
 		}
-		writeDuration.Observe(time.Since(start).Seconds())
-		batch = db.NewBatch()
 
 		for table, resolved := range newResolved {
 			s.mu.RLock()
