@@ -44,6 +44,8 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	common2 "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/master/shardddl"
@@ -367,7 +369,7 @@ func testDefaultMasterServer(c *check.C) *Server {
 
 func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, c *check.C, sources, workers []string, password string, workerClients map[string]workerrpc.Client) (*scheduler.Scheduler, []context.CancelFunc) {
 	logger := log.L()
-	scheduler2 := scheduler.NewScheduler(&logger, config.Security{})
+	scheduler2 := scheduler.NewScheduler(&logger, security.Security{})
 	err := scheduler2.Start(ctx, t.etcdTestCli)
 	c.Assert(err, check.IsNil)
 	cancels := make([]context.CancelFunc, 0, 2)
@@ -399,7 +401,7 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 
 func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.WaitGroup, c *check.C, sources, workers []string, password string, workerClients map[string]workerrpc.Client) (*scheduler.Scheduler, []context.CancelFunc) {
 	logger := log.L()
-	scheduler2 := scheduler.NewScheduler(&logger, config.Security{})
+	scheduler2 := scheduler.NewScheduler(&logger, security.Security{})
 	err := scheduler2.Start(ctx, t.etcdTestCli)
 	c.Assert(err, check.IsNil)
 	cancels := make([]context.CancelFunc, 0, 2)
@@ -2876,7 +2878,7 @@ func (t *testMaster) TestGetLatestMeta(*check.C) {
 	require.NoError(t.testT, err)
 	getMasterStatusError := errors.New("failed to get master status")
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
-	meta, err := GetLatestMeta(context.Background(), "", &config.DBConfig{})
+	meta, err := GetLatestMeta(context.Background(), "", &dbconfig.DBConfig{})
 	require.Contains(t.testT, err.Error(), getMasterStatusError.Error())
 	require.Nil(t.testT, meta)
 
@@ -2884,7 +2886,7 @@ func (t *testMaster) TestGetLatestMeta(*check.C) {
 	require.NoError(t.testT, err)
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), "", &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), "", &dbconfig.DBConfig{})
 	require.True(t.testT, terror.ErrNoMasterStatus.Equal(err))
 	require.Nil(t.testT, meta)
 
@@ -2895,7 +2897,7 @@ func (t *testMaster) TestGetLatestMeta(*check.C) {
 		"mysql-bin.000009", 11232, "do_db", "ignore_db", "",
 	)
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &dbconfig.DBConfig{})
 	require.NoError(t.testT, err)
 	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
 	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
@@ -2910,7 +2912,7 @@ func (t *testMaster) TestGetLatestMeta(*check.C) {
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 	rows = mockDB.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
 	mockDB.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &config.DBConfig{})
+	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &dbconfig.DBConfig{})
 	require.NoError(t.testT, err)
 	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
 	require.Equal(t.testT, meta.BinLogPos, uint32(11232))

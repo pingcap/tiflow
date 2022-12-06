@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
@@ -38,7 +38,7 @@ func TestWorker(t *testing.T) {
 	)
 
 	// create a worker with Offline stage and not bound.
-	w, err := NewWorker(info, config.Security{})
+	w, err := NewWorker(info, security.Security{})
 	require.NoError(t, err)
 	defer w.Close()
 	require.Equal(t, info, w.BaseInfo())
