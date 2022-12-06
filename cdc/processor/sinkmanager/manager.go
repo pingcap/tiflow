@@ -682,7 +682,7 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	tableSink.(*tableSinkWrapper).start(replicateTs)
+	tableSink.(*tableSinkWrapper).start(startTs, replicateTs)
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
