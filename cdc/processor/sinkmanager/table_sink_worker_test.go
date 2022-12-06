@@ -1078,6 +1078,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 			CommitTs: 4,
 		}, lastWritePos.Next())
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,

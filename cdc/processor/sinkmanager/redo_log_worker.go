@@ -83,10 +83,48 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 	var lastPos, lastEmitPos engine.Position
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a force require.
-		if usedMemSize > availableMemSize {
-			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
-			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
+		memoryHighUsage := availableMemSize < usedMemSize
+		if memoryHighUsage || rowsSize >= maxUpdateIntervalSize || allFinished {
+			var releaseMem func()
+			if rowsSize-cachedSize > 0 {
+				refundMem := rowsSize - cachedSize
+				releaseMem = func() {
+					w.memQuota.refund(refundMem)
+					log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("memory", refundMem))
+				}
+			}
+			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0 {
+				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				log.Debug("update resolved ts to redo",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("resolvedTs", lastPos.CommitTs))
+				lastEmitPos = lastPos
+			}
+			rowsSize = 0
+			cachedSize = 0
+			rows = rows[:0]
+			if cap(rows) > 1024 {
+				rows = make([]*model.RowChangedEvent, 0, 1024)
+			}
+		}
+
+		// If used memory size exceeds the required limit, do a block require.
+		if memoryHighUsage {
+			w.memQuota.blockAcquire(usedMemSize - availableMemSize)
+			log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
@@ -115,45 +153,14 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 						zap.Uint64("memory", requestMemSize))
 				}
 			} else {
-				w.memQuota.forceAcquire(requestMemSize)
-				availableMemSize += requestMemSize
-				log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", requestMemSize))
-			}
-		}
-
-		if rowsSize >= maxUpdateIntervalSize || allFinished {
-			refundMem := rowsSize - cachedSize
-			releaseMem := func() { w.memQuota.refund(refundMem) }
-			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
-			if err != nil {
-				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", rowsSize))
-				return errors.Trace(err)
-			}
-			if lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0 {
-				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
-				if err != nil {
-					return errors.Trace(err)
+				if w.memQuota.blockAcquire(requestMemSize) == nil {
+					availableMemSize += requestMemSize
+					log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("memory", requestMemSize))
 				}
-				log.Debug("update resolved ts to redo",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("resolvedTs", lastPos.CommitTs))
-				lastEmitPos = lastPos
-			}
-			rowsSize = 0
-			cachedSize = 0
-			rows = rows[:0]
-			if cap(rows) > 1024 {
-				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}
 		}
 

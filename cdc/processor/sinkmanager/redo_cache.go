@@ -72,8 +72,8 @@ func (r *redoEventCache) pop(
 	}
 	r.mu.Unlock()
 
-	item.mu.RLock()
-	defer item.mu.RUnlock()
+	item.mu.Lock()
+	defer item.mu.Unlock()
 	if len(item.events) == 0 || item.readyCount == 0 {
 		return nil, 0, engine.Position{}
 	}
@@ -110,12 +110,10 @@ func (r *redoEventCache) pop(
 	item.events = item.events[fetchCount:]
 	item.sizes = item.sizes[fetchCount:]
 	item.pushCounts = item.pushCounts[fetchCount:]
+	item.readyCount -= fetchCount
 	if len(item.events) == 0 {
-		r.mu.Lock()
-		delete(r.tables, tableID)
-		r.mu.Unlock()
-	} else {
-		item.readyCount -= fetchCount
+		item.broken = false
+		// TODO: clean the table appender if possible.
 	}
 
 	atomic.AddUint64(&r.allocated, ^(size - 1))
@@ -141,13 +139,12 @@ type eventAppender struct {
 	capacity uint64
 	cache    *redoEventCache
 
-	broken bool
-
-	mu         sync.RWMutex
+	mu sync.Mutex
+	// If an eventAppender is broken, it means it missed some events.
+	broken     bool
 	events     []*model.RowChangedEvent
 	sizes      []uint64
 	readyCount int // Count of ready events
-
 	// Several RowChangedEvent can come from one PolymorphicEvent.
 	pushCounts []byte
 }
@@ -157,8 +154,9 @@ func (e *eventAppender) push(
 	txnFinished bool,
 	eventsInSameBatch ...*model.RowChangedEvent,
 ) bool {
-	// At most only one client can call push on a given eventAppender instance,
-	// so lock is unnecessary.
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	if e.broken {
 		return false
 	}
@@ -166,7 +164,9 @@ func (e *eventAppender) push(
 	for {
 		allocated := atomic.LoadUint64(&e.cache.allocated)
 		if allocated >= e.capacity {
-			e.broken = true
+			if len(e.events) > 0 {
+				e.broken = true
+			}
 			return false
 		}
 		if atomic.CompareAndSwapUint64(&e.cache.allocated, allocated, allocated+size) {
@@ -175,8 +175,6 @@ func (e *eventAppender) push(
 		}
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	e.sizes = append(e.sizes, size)
 	e.pushCounts = append(e.pushCounts, 1)
@@ -203,18 +201,29 @@ func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	for i := e.readyCount; i < len(e.events); i++ {
-		pendingSize += e.sizes[i]
-		e.events[i] = nil
+	if !e.broken {
+		return
 	}
 
-	e.events = e.events[0:e.readyCount]
-	e.sizes = e.sizes[0:e.readyCount]
-	e.pushCounts = e.pushCounts[0:e.readyCount]
+	if e.readyCount < len(e.events) {
+		for i := e.readyCount; i < len(e.events); i++ {
+			pendingSize += e.sizes[i]
+			e.events[i] = nil
+		}
 
-	e.broken = false
-	atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
-	e.cache.metricRedoEventCache.Sub(float64(pendingSize))
+		e.events = e.events[0:e.readyCount]
+		e.sizes = e.sizes[0:e.readyCount]
+		e.pushCounts = e.pushCounts[0:e.readyCount]
 
+		atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
+		e.cache.metricRedoEventCache.Sub(float64(pendingSize))
+	}
+	if len(e.events) == 0 {
+		e.broken = false
+	}
+
+	// TODO: maybe it's possible to unset e.broken flag, so that we can push more
+	// events later if there is enough memory. But it will make `pop` more complex,
+	// so just keep e.broken for now.
 	return
 }

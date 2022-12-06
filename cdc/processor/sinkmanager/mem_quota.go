@@ -35,6 +35,9 @@ type memQuota struct {
 	// totalBytes is the total memory quota for one changefeed.
 	totalBytes uint64
 
+	// blockAcquireCond is used to notify the blocked acquire.
+	blockAcquireCond *sync.Cond
+
 	// mu protects the following fields.
 	mu sync.Mutex
 	// usedBytes is the memory usage of one changefeed.
@@ -43,8 +46,6 @@ type memQuota struct {
 	tableMemory map[model.TableID][]*memConsumeRecord
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
-	// blockAcquireCond is used to notify the blocked acquire.
-	blockAcquireCond *sync.Cond
 
 	metricTotal prometheus.Gauge
 	metricUsed  prometheus.Gauge
@@ -82,7 +83,6 @@ func (m *memQuota) tryAcquire(nBytes uint64) bool {
 func (m *memQuota) forceAcquire(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.usedBytes += nBytes
 	m.metricUsed.Set(float64(m.usedBytes))
 }
@@ -112,9 +112,15 @@ func (m *memQuota) refund(nBytes uint64) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.usedBytes < nBytes {
+		log.Panic("memQuota.refund fail",
+			zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+	}
 	m.usedBytes -= nBytes
 	m.metricUsed.Set(float64(m.usedBytes))
-	m.blockAcquireCond.Signal()
+	if m.usedBytes < m.totalBytes {
+		m.blockAcquireCond.Broadcast()
+	}
 }
 
 // record records the memory usage of a table.
@@ -153,17 +159,22 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	i := sort.Search(len(records), func(i int) bool {
 		return records[i].resolvedTs.Greater(resolved)
 	})
-	if i == 0 {
+	var toRelease uint64 = 0
+	for j := 0; j < i; j++ {
+		toRelease += records[j].size
+	}
+	m.tableMemory[tableID] = records[i:]
+	if toRelease == 0 {
 		return
 	}
-	for j := 0; j < i; j++ {
-		m.usedBytes -= records[j].size
+	if m.usedBytes < toRelease {
+		log.Panic("memQuota.release fail",
+			zap.Uint64("used", m.usedBytes), zap.Uint64("release", toRelease))
 	}
+	m.usedBytes -= toRelease
 	m.metricUsed.Set(float64(m.usedBytes))
-	m.tableMemory[tableID] = append(make([]*memConsumeRecord, 0, len(records[i:])), records[i:]...)
-
 	if m.usedBytes < m.totalBytes {
-		m.blockAcquireCond.Signal()
+		m.blockAcquireCond.Broadcast()
 	}
 }
 
@@ -197,6 +208,10 @@ func (m *memQuota) clean(tableID model.TableID) uint64 {
 
 // close the mem quota and notify the blocked acquire.
 func (m *memQuota) close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
+	m.usedBytes = 0
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()

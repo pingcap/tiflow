@@ -214,7 +214,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				// It will cause out of memory. But it is acceptable for now.
 				// Because we split the transaction by default.
 				w.memQuota.forceAcquire(requestMemSize)
-				log.Debug("MemoryQuotaTracing: Force acquire memory for table sink task",
+				log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -231,7 +231,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("MemoryQuotaTracing: Block acquire memory for table sink task",
+				log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
 					zap.Int64("tableID", task.tableID),
@@ -343,7 +343,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	}
 	// Do not forget to refund the unused memory quota.
 	w.memQuota.refund(uint64(availableMem))
-	log.Debug("MemoryQuotaTracing: Refund unused memory for table sink task",
+	log.Debug("MemoryQuotaTracing: refund unused memory for table sink task",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", task.tableID),
@@ -355,7 +355,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		// Because canceling a task means the whole table sink is closed.
 		if currentTotalSize != 0 {
 			w.memQuota.refund(currentTotalSize)
-			log.Debug("MemoryQuotaTracing: Refund memory for table sink task when canceling",
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task when canceling",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),

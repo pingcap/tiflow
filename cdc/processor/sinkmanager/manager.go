@@ -409,7 +409,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				break LOOP
 			}
 
-			log.Debug("MemoryQuotaTracing: Acquire memory for table sink task",
+			log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableSink.tableID),
@@ -444,6 +444,11 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("currentUpperBound", upperBound))
 			default:
 				m.memQuota.refund(requestMemSize)
+				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableSink.tableID),
+					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
 		}
@@ -534,7 +539,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				break LOOP
 			}
 
-			log.Debug("MemoryQuotaTracing: Acquire memory for redo log task",
+			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableSink.tableID),
@@ -566,6 +571,11 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.Any("currentUpperBound", upperBound))
 			default:
 				m.memQuota.refund(requestMemSize)
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableSink.tableID),
+					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
 		}
