@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
@@ -335,7 +336,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	tz := m.cfg.Timezone
 	if len(tz) == 0 {
 		// use target db time_zone as default
-		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+		baseDB, err2 := conn.GetDownstreamDB(&m.cfg.To)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -414,16 +415,15 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 // detectSQLMode tries to detect SQL mode from upstream. If success, write it to LoaderConfig.
 // Because loader will use this SQL mode, we need to treat disable `EscapeBackslash` when NO_BACKSLASH_ESCAPES.
 func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
-	baseDB, err := conn.DefaultDBProvider.Apply(&m.cfg.From)
+	baseDB, err := conn.GetUpstreamDB(&m.cfg.From)
 	if err != nil {
 		log.L().Warn("set up db connect failed", zap.Any("db", m.cfg.From),
 			zap.Error(err))
 		return
 	}
 	defer baseDB.Close()
-	db := baseDB.DB
 
-	sqlMode, err := utils.GetGlobalVariable(ctx, db, "sql_mode")
+	sqlMode, err := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), baseDB, "sql_mode")
 	if err != nil {
 		log.L().Warn("get global sql_mode from upstream failed", zap.Any("db", m.cfg.From), zap.Error(err))
 		return

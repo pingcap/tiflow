@@ -566,7 +566,7 @@ func mockBaseConn(t *testing.T) (*dbconn.DBConn, sqlmock.Sqlmock) {
 	})
 	c, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	baseConn := conn.NewBaseConn(c, nil)
+	baseConn := conn.NewBaseConnForTest(c, nil)
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, baseConn)
 	return dbConn, mock
 }

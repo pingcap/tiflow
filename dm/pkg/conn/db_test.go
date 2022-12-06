@@ -11,10 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package conn
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -25,7 +26,12 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,21 +43,21 @@ func TestGetFlavor(t *testing.T) {
 
 	// MySQL
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'version';`).WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "5.7.31-log"))
-	flavor, err := GetFlavor(context.Background(), db)
+	flavor, err := GetFlavor(context.Background(), NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "mysql", flavor)
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// MariaDB
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'version';`).WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "10.13.1-MariaDB-1~wheezy"))
-	flavor, err = GetFlavor(context.Background(), db)
+	flavor, err = GetFlavor(context.Background(), NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "mariadb", flavor)
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// others
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'version';`).WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "unknown"))
-	flavor, err = GetFlavor(context.Background(), db)
+	flavor, err = GetFlavor(context.Background(), NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "mysql", flavor) // as MySQL
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -63,8 +69,9 @@ func TestGetRandomServerID(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
+	tctx := tcontext.NewContext(context.Background(), log.L())
 	createMockResult(mock, 1, []uint32{100, 101}, "mysql")
-	serverID, err := GetRandomServerID(context.Background(), db)
+	serverID, err := GetRandomServerID(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Greater(t, serverID, uint32(0))
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -78,6 +85,7 @@ func TestGetMariaDBGtidDomainID(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -85,7 +93,7 @@ func TestGetMariaDBGtidDomainID(t *testing.T) {
 	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_domain_id", 101)
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_domain_id'`).WillReturnRows(rows)
 
-	dID, err := GetMariaDBGtidDomainID(ctx, db)
+	dID, err := GetMariaDBGtidDomainID(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, uint32(101), dID)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -96,6 +104,7 @@ func TestGetServerUUID(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -103,7 +112,7 @@ func TestGetServerUUID(t *testing.T) {
 	// MySQL
 	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("server_uuid", "074be7f4-f0f1-11ea-95bd-0242ac120002")
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'server_uuid'`).WillReturnRows(rows)
-	uuid, err := GetServerUUID(ctx, db, "mysql")
+	uuid, err := GetServerUUID(tctx, NewBaseDBForTest(db), "mysql")
 	require.NoError(t, err)
 	require.Equal(t, "074be7f4-f0f1-11ea-95bd-0242ac120002", uuid)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -113,7 +122,7 @@ func TestGetServerUUID(t *testing.T) {
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_domain_id'`).WillReturnRows(rows)
 	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("server_id", 456)
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'server_id'`).WillReturnRows(rows)
-	uuid, err = GetServerUUID(ctx, db, "mariadb")
+	uuid, err = GetServerUUID(tctx, NewBaseDBForTest(db), "mariadb")
 	require.NoError(t, err)
 	require.Equal(t, "123-456", uuid)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -131,7 +140,7 @@ func TestGetServerUnixTS(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"UNIX_TIMESTAMP()"}).AddRow(strconv.FormatInt(ts, 10))
 	mock.ExpectQuery("SELECT UNIX_TIMESTAMP()").WillReturnRows(rows)
 
-	ts2, err := GetServerUnixTS(ctx, db)
+	ts2, err := GetServerUnixTS(ctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, ts2, ts)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -142,6 +151,7 @@ func TestGetParser(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
 
 	var (
 		DDL1 = `ALTER TABLE tbl ADD COLUMN c1 INT`
@@ -155,7 +165,7 @@ func TestGetParser(t *testing.T) {
 	// no `ANSI_QUOTES`
 	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", "")
 	mock.ExpectQuery(`SHOW VARIABLES LIKE 'sql_mode'`).WillReturnRows(rows)
-	p, err := GetParser(ctx, db)
+	p, err := GetParser(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	_, err = p.ParseOneStmt(DDL1, "", "")
 	require.NoError(t, err)
@@ -168,7 +178,7 @@ func TestGetParser(t *testing.T) {
 	// `ANSI_QUOTES`
 	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery(`SHOW VARIABLES LIKE 'sql_mode'`).WillReturnRows(rows)
-	p, err = GetParser(ctx, db)
+	p, err = GetParser(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	_, err = p.ParseOneStmt(DDL1, "", "")
 	require.NoError(t, err)
@@ -184,13 +194,14 @@ func TestGetGTID(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
 	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("GTID_MODE", "ON")
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'GTID_MODE'`).WillReturnRows(rows)
-	mode, err := GetGTIDMode(ctx, db)
+	mode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "ON", mode)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -233,10 +244,11 @@ func TestGetAllServerID(t *testing.T) {
 
 	flavors := []string{gmysql.MariaDBFlavor, gmysql.MySQLFlavor}
 
+	tctx := tcontext.NewContext(context.Background(), log.L())
 	for _, testCase := range testCases {
 		for _, flavor := range flavors {
 			createMockResult(mock, testCase.masterID, testCase.serverIDs, flavor)
-			serverIDs, err2 := GetAllServerID(context.Background(), db)
+			serverIDs, err2 := GetAllServerID(tctx, NewBaseDBForTest(db))
 			require.NoError(t, err2)
 
 			for _, serverID := range testCase.serverIDs {
@@ -338,8 +350,10 @@ func TestAddGSetWithPurged(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := db.Conn(ctx)
+	baseDB := NewBaseDBForTest(db)
+	conn, err := baseDB.GetBaseConn(ctx)
 	require.NoError(t, err)
+	defer baseDB.ForceCloseConnWithoutErr(conn)
 
 	testCases := []struct {
 		originGSet  gmysql.GTIDSet
@@ -387,13 +401,14 @@ func TestGetMaxConnections(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
 	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "151")
 	mock.ExpectQuery(`SHOW VARIABLES LIKE 'max_connections'`).WillReturnRows(rows)
-	maxConnections, err := GetMaxConnections(ctx, db)
+	maxConnections, err := GetMaxConnections(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, 151, maxConnections)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -453,10 +468,162 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 	}
 
+	tctx := tcontext.NewContext(context.Background(), log.L())
 	for _, ca := range cases {
 		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
-		results, err2 := GetSlaveServerID(context.Background(), db)
+		results, err2 := GetSlaveServerID(tctx, NewBaseDBForTest(db))
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
+	}
+}
+
+func TestFetchAllDoTables(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	// empty filter, exclude system schemas
+	ba, err := filter.New(false, nil)
+	require.NoError(t, err)
+
+	// no schemas need to do.
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(sqlmock.NewRows([]string{"Database"}))
+	got, err := FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// only system schemas exist, still no need to do.
+	schemas := []string{"information_schema", "mysql", "performance_schema", "sys", filter.DMHeartbeatSchema}
+	rows := sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// schemas without tables in them.
+	doSchema := "test_db"
+	schemas = []string{"information_schema", "mysql", "performance_schema", "sys", filter.DMHeartbeatSchema, doSchema}
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", doSchema)).WillReturnRows(
+		sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", doSchema), "Table_type"}))
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// do all tables under the schema.
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	tables := []string{"tbl1", "tbl2", "exclude_tbl"}
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", doSchema), "Table_type"})
+	addRowsForTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", doSchema)).WillReturnRows(rows)
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, tables, got[doSchema])
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// use a block-allow-list to fiter some tables
+	ba, err = filter.New(false, &filter.Rules{
+		DoDBs: []string{doSchema},
+		DoTables: []*filter.Table{
+			{Schema: doSchema, Name: "tbl1"},
+			{Schema: doSchema, Name: "tbl2"},
+		},
+	})
+	require.NoError(t, err)
+
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", doSchema), "Table_type"})
+	addRowsForTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", doSchema)).WillReturnRows(rows)
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, []string{"tbl1", "tbl2"}, got[doSchema])
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFetchTargetDoTables(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	// empty filter and router, just as upstream.
+	ba, err := filter.New(false, nil)
+	require.NoError(t, err)
+	r, err := regexprrouter.NewRegExprRouter(false, nil)
+	require.NoError(t, err)
+
+	schemas := []string{"shard1"}
+	rows := sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+
+	tablesM := map[string][]string{
+		"shard1": {"tbl1", "tbl2"},
+	}
+	for schema, tables := range tablesM {
+		rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type"})
+		addRowsForTables(rows, tables)
+		mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+	}
+
+	tablesMap, extendedCols, err := FetchTargetDoTables(context.Background(), "", NewBaseDBForTest(db), ba, r)
+	require.NoError(t, err)
+	require.Equal(t, map[filter.Table][]filter.Table{
+		{Schema: "shard1", Name: "tbl1"}: {{Schema: "shard1", Name: "tbl1"}},
+		{Schema: "shard1", Name: "tbl2"}: {{Schema: "shard1", Name: "tbl2"}},
+	}, tablesMap)
+	require.Len(t, extendedCols, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// route to the same downstream.
+	r, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
+		{SchemaPattern: "shard*", TablePattern: "tbl*", TargetSchema: "shard", TargetTable: "tbl"},
+	})
+	require.NoError(t, err)
+
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	for schema, tables := range tablesM {
+		rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type"})
+		addRowsForTables(rows, tables)
+		mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+	}
+
+	tablesMap, extendedCols, err = FetchTargetDoTables(context.Background(), "", NewBaseDBForTest(db), ba, r)
+	require.NoError(t, err)
+	require.Equal(t, map[filter.Table][]filter.Table{
+		{Schema: "shard", Name: "tbl"}: {
+			{Schema: "shard1", Name: "tbl1"},
+			{Schema: "shard1", Name: "tbl2"},
+		},
+	}, tablesMap)
+	require.Len(t, extendedCols, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func addRowsForSchemas(rows *sqlmock.Rows, schemas []string) {
+	for _, d := range schemas {
+		rows.AddRow(d)
+	}
+}
+
+func addRowsForTables(rows *sqlmock.Rows, tables []string) {
+	for _, table := range tables {
+		rows.AddRow(table, "BASE TABLE")
 	}
 }

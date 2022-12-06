@@ -333,7 +333,7 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 				return err
 			}
 			if targetDB == nil {
-				targetDB, err = conn.DefaultDBProvider.Apply(&cfg2.To)
+				targetDB, err = conn.GetDownstreamDB(&cfg2.To)
 				if err != nil {
 					return err
 				}

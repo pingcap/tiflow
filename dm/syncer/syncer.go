@@ -42,6 +42,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -221,7 +222,7 @@ type Syncer struct {
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
-	SourceTableNamesFlavor utils.LowerCaseTableNamesFlavor
+	SourceTableNamesFlavor conn.LowerCaseTableNamesFlavor
 
 	tsOffset                  atomic.Int64    // time offset between upstream and syncer, DM's timestamp - MySQL's timestamp
 	secondsBehindMaster       atomic.Int64    // current task delay second behind upstream
@@ -355,11 +356,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
 	if err != nil {
 		return
 	}
-	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
+	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 	if err != nil {
 		return
 	}
@@ -432,9 +433,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 
 	var schemaMap map[string]string
 	var tableMap map[string]map[string]string
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// TODO: we should avoid call this function multi times
-		allTables, err1 := utils.FetchAllDoTables(ctx, s.fromDB.BaseDB.DB, s.baList)
+		allTables, err1 := conn.FetchAllDoTables(ctx, s.fromDB.BaseDB, s.baList)
 		if err1 != nil {
 			return err1
 		}
@@ -469,7 +470,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		if err = s.checkpoint.CheckAndUpdate(ctx, schemaMap, tableMap); err != nil {
 			return err
 		}
@@ -580,7 +581,7 @@ func (s *Syncer) initShardingGroups(ctx context.Context, needCheck bool) error {
 	if err2 != nil {
 		return err2
 	}
-	if needCheck && s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if needCheck && s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// try fix persistent data before init
 		schemaMap, tableMap := buildLowerCaseTableNamesMap(s.tctx.L(), sourceTables)
 		if err2 = s.sgk.CheckAndFix(loadMeta, schemaMap, tableMap); err2 != nil {
@@ -2256,6 +2257,38 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var originSQL string // show origin sql when error, only ddl now
 		var err2 error
 		var sourceTable *filter.Table
+		var needContinue bool
+		var eventType string
+
+		funcCommit := func() (bool, error) {
+			// reset eventIndex and force safeMode flag here.
+			eventIndex = 0
+			for schemaName, tableMap := range affectedSourceTables {
+				for table := range tableMap {
+					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, endLocation)
+				}
+			}
+			affectedSourceTables = make(map[string]map[string]struct{})
+			if shardingReSync != nil {
+				// TODO: why shardingReSync need to do so, shardingReSync need refactor
+				shardingReSync.currLocation = endLocation
+
+				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
+					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", eventType), zap.Stringer("re-shard", shardingReSync))
+					err = closeShardingResync()
+					if err != nil {
+						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
+					}
+					return true, nil
+				}
+			}
+
+			s.tctx.L().Debug("", zap.String("event", eventType), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
+
+			job := newXIDJob(endLocation, startLocation, endLocation)
+			_, err = s.handleJobFunc(job)
+			return false, err
+		}
 
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
@@ -2272,34 +2305,21 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
-		case *replication.XIDEvent:
-			// reset eventIndex and force safeMode flag here.
-			eventIndex = 0
-			for schemaName, tableMap := range affectedSourceTables {
-				for table := range tableMap {
-					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, endLocation)
-				}
-			}
-			affectedSourceTables = make(map[string]map[string]struct{})
-			if shardingReSync != nil {
-				// TODO: why shardingReSync need to do so, shardingReSync need refactor
-				shardingReSync.currLocation = endLocation
-
-				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
-					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "XID"), zap.Stringer("re-shard", shardingReSync))
-					err = closeShardingResync()
-					if err != nil {
-						return terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
-					}
+			if originSQL == "COMMIT" {
+				eventType = "COMMIT query event"
+				needContinue, err2 = funcCommit()
+				if needContinue {
 					continue
 				}
+			} else {
+				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 			}
-
-			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
-
-			job := newXIDJob(endLocation, startLocation, endLocation)
-			_, err2 = s.handleJobFunc(job)
+		case *replication.XIDEvent:
+			eventType = "XID"
+			needContinue, err2 = funcCommit()
+			if needContinue {
+				continue
+			}
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
@@ -2777,7 +2797,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
 	originSQL := strings.TrimSpace(string(ev.Query))
-	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+	if originSQL == "BEGIN" || originSQL == "COMMIT" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
 		return nil, nil
 	}
 	var err error
@@ -2891,7 +2911,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	p, err := utils.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
+	p, err := conn.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
@@ -2950,18 +2970,18 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1)
 	if err != nil {
 		return err
 	}
 	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
 	s.fromConn = fromConns[0]
-	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
+	baseConn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
 	}
-	lcFlavor, err := utils.FetchLowerCaseTableNamesSetting(ctx, conn.DBConn)
+	lcFlavor, err := conn.FetchLowerCaseTableNamesSetting(ctx, baseConn)
 	if err != nil {
 		return err
 	}
@@ -2980,11 +3000,11 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		}
 	}
 	if !hasSQLMode {
-		sqlMode, err2 := utils.GetGlobalVariable(ctx, s.fromDB.BaseDB.DB, "sql_mode")
+		sqlMode, err2 := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), s.fromDB.BaseDB, "sql_mode")
 		if err2 != nil {
 			s.tctx.L().Warn("cannot get sql_mode from upstream database, the sql_mode will be assigned \"IGNORE_SPACE, NO_AUTO_VALUE_ON_ZERO, ALLOW_INVALID_DATES\"", log.ShortError(err2))
 		}
-		sqlModes, err3 := utils.AdjustSQLModeCompatible(sqlMode)
+		sqlModes, err3 := conn.AdjustSQLModeCompatible(sqlMode)
 		if err3 != nil {
 			s.tctx.L().Warn("cannot adjust sql_mode compatible, the sql_mode will be assigned  stay the same", log.ShortError(err3))
 		}
@@ -2992,21 +3012,21 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	}
 
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
 	}
 	// baseConn for ddl
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3305,7 +3325,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update timezone
 	if s.timezone == nil {
-		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
+		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 		return err
 	}
 	// update syncer config
@@ -3415,7 +3435,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to build connection", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	gs, err = utils.AddGSetWithPurged(tctx.Context(), gs, dbConn.DBConn)
+	gs, err = conn.AddGSetWithPurged(tctx.Context(), gs, dbConn)
 	if err != nil {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err

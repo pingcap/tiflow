@@ -160,7 +160,7 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 	}
 
 	// for mariadb.version < 10.1.6.,  we don't need to check binlog_row_image.
-	if utils.IsMariaDB(value) && !version.Ge(mariaDBBinlogRowImageRequired) {
+	if conn.IsMariaDB(value) && !version.Ge(mariaDBBinlogRowImageRequired) {
 		result.State = StateSuccess
 		return result
 	}
@@ -210,7 +210,7 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
 	}
 
-	flavor, err := utils.GetFlavor(ctx, c.db.DB)
+	flavor, err := conn.GetFlavor(ctx, c.db)
 	if err != nil {
 		markCheckError(result, err)
 		return result

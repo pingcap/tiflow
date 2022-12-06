@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"go.uber.org/zap"
@@ -27,8 +27,7 @@ import (
 
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
-	mg             entry.MounterGroup
-	sortEngine     engine.SortEngine
+	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
@@ -38,8 +37,7 @@ type redoWorker struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
-	sortEngine engine.SortEngine,
+	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
@@ -48,8 +46,7 @@ func newRedoWorker(
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
-		sortEngine:     sortEngine,
+		sourceManager:  sourceManager,
 		memQuota:       quota,
 		redoManager:    redoManager,
 		eventCache:     eventCache,
@@ -163,12 +160,13 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		return nil
 	}
 
-	upperBound := task.getUpperBound()
-	iter := engine.NewMountedEventIter(
-		w.sortEngine.FetchByTable(task.tableID, task.lowerBound, upperBound),
-		w.mg, 256)
-
+	upperBound := task.getUpperBound(task.tableSink)
+	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
+	allEventCount := 0
 	defer func() {
+		eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
+		task.tableSink.updateRangeEventCounts(eventCount)
+
 		if err := iter.Close(); err != nil {
 			log.Error("sink redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
@@ -201,10 +199,12 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			}
 			return nil
 		}
+		allEventCount += 1
 		if pos.Valid() {
 			lastPos = pos
 		}
 
+		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue

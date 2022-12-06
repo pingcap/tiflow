@@ -16,7 +16,7 @@ package main
 import (
 	"context"
 
-	config2 "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 )
 
@@ -26,8 +26,8 @@ var mustExecSQLs = []string{
 }
 
 // setInstancesState sets the state (like global sql_mode) for upstream and downstream DB instances.
-func setInstancesState(ctx context.Context, targetCfg *config2.DBConfig, sourcesCfg ...*config2.DBConfig) error {
-	targetDB, err := conn.DefaultDBProvider.Apply(targetCfg)
+func setInstancesState(ctx context.Context, targetCfg *dbconfig.DBConfig, sourcesCfg ...*dbconfig.DBConfig) error {
+	targetDB, err := conn.GetDownstreamDB(targetCfg)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func setInstancesState(ctx context.Context, targetCfg *config2.DBConfig, sources
 	}
 
 	for _, cfg := range sourcesCfg {
-		sourceDB, err2 := conn.DefaultDBProvider.Apply(cfg)
+		sourceDB, err2 := conn.GetUpstreamDB(cfg)
 		if err2 != nil {
 			return err2
 		}
