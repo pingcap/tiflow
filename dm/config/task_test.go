@@ -25,6 +25,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
@@ -514,7 +516,7 @@ func TestTaskBlockAllowList(t *testing.T) {
 	cfg := &TaskConfig{
 		Name:           "test",
 		TaskMode:       "full",
-		TargetDB:       &DBConfig{},
+		TargetDB:       &dbconfig.DBConfig{},
 		MySQLInstances: []*MySQLInstance{{SourceID: "source-1"}},
 		BWList:         map[string]*filter.Rules{"source-1": filterRules1},
 	}
@@ -564,13 +566,13 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			"sql_mode":  " NO_AUTO_VALUE_ON_ZERO,ANSI_QUOTES",
 			"time_zone": "+00:00",
 		}
-		security = Security{
+		security = security.Security{
 			SSLCA:         "/path/to/ca",
 			SSLCert:       "/path/to/cert",
 			SSLKey:        "/path/to/key",
 			CertAllowedCN: []string{"allowed-cn"},
 		}
-		rawDBCfg = RawDBConfig{
+		rawDBCfg = dbconfig.RawDBConfig{
 			MaxIdleConns: 333,
 			ReadTimeout:  "2m",
 			WriteTimeout: "1m",
@@ -628,7 +630,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			DeleteValueExpr: "state = 1",
 		}
 		validatorCfg = ValidatorConfig{Mode: ValidationNone}
-		source1DBCfg = DBConfig{
+		source1DBCfg = dbconfig.DBConfig{
 			Host:             "127.0.0.1",
 			Port:             3306,
 			User:             "user_from_1",
@@ -638,7 +640,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			Security:         &security,
 			RawDBCfg:         &rawDBCfg,
 		}
-		source2DBCfg = DBConfig{
+		source2DBCfg = dbconfig.DBConfig{
 			Host:             "127.0.0.1",
 			Port:             3307,
 			User:             "user_from_2",
@@ -671,7 +673,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				BinLogGTID: "1-1-12,4-4-4",
 			},
 			From: source1DBCfg,
-			To: DBConfig{
+			To: dbconfig.DBConfig{
 				Host:             "127.0.0.1",
 				Port:             4000,
 				User:             "user_to",
@@ -834,7 +836,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	require.Equal(t, wordCount(cfg.String()), wordCount(cfg2.String())) // since rules are unordered, so use wordCount to compare
 
 	require.NoError(t, cfg.adjust())
-	stCfgs, err := TaskConfigToSubTaskConfigs(cfg, map[string]DBConfig{source1: source1DBCfg, source2: source2DBCfg})
+	stCfgs, err := TaskConfigToSubTaskConfigs(cfg, map[string]dbconfig.DBConfig{source1: source1DBCfg, source2: source2DBCfg})
 	require.NoError(t, err)
 	// revert ./dumpped_data.from-sub-tasks
 	stCfgs[0].LoaderConfig.Dir = stCfg1.LoaderConfig.Dir
@@ -936,28 +938,28 @@ func TestAdjustTargetDBConfig(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		dbConfig DBConfig
-		result   DBConfig
+		dbConfig dbconfig.DBConfig
+		result   dbconfig.DBConfig
 		version  *semver.Version
 	}{
 		{
-			DBConfig{},
-			DBConfig{Session: map[string]string{}},
+			dbconfig.DBConfig{},
+			dbconfig.DBConfig{Session: map[string]string{}},
 			semver.New("0.0.0"),
 		},
 		{
-			DBConfig{Session: map[string]string{"SQL_MODE": "ANSI_QUOTES"}},
-			DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES"}},
+			dbconfig.DBConfig{Session: map[string]string{"SQL_MODE": "ANSI_QUOTES"}},
+			dbconfig.DBConfig{Session: map[string]string{"sql_mode": "ANSI_QUOTES"}},
 			semver.New("2.0.7"),
 		},
 		{
-			DBConfig{},
-			DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic}},
+			dbconfig.DBConfig{},
+			dbconfig.DBConfig{Session: map[string]string{tidbTxnMode: tidbTxnOptimistic}},
 			semver.New("3.0.1"),
 		},
 		{
-			DBConfig{Session: map[string]string{"SQL_MODE": "", tidbTxnMode: "pessimistic"}},
-			DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic"}},
+			dbconfig.DBConfig{Session: map[string]string{"SQL_MODE": "", tidbTxnMode: "pessimistic"}},
+			dbconfig.DBConfig{Session: map[string]string{"sql_mode": "", tidbTxnMode: "pessimistic"}},
 			semver.New("4.0.0-beta.2"),
 		},
 	}
@@ -974,7 +976,7 @@ func TestDefaultConfig(t *testing.T) {
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
 	cfg.TaskMode = "all"
-	cfg.TargetDB = &DBConfig{}
+	cfg.TargetDB = &dbconfig.DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
 	require.NoError(t, cfg.adjust())
 	require.Equal(t, DefaultMydumperConfig(), *cfg.MySQLInstances[0].Mydumper)
@@ -990,7 +992,7 @@ func TestExclusiveAndWrongExprFilterFields(t *testing.T) {
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
 	cfg.TaskMode = "all"
-	cfg.TargetDB = &DBConfig{}
+	cfg.TargetDB = &dbconfig.DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
 	require.NoError(t, cfg.adjust())
 

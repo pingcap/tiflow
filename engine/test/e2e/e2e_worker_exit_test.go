@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ func TestWorkerExit(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	cfg := &fake.Config{
+	cfg := &fakejob.Config{
 		JobName:     "test-node-failure",
 		WorkerCount: 4,
 		// use a large enough target tick to ensure the fake job long running

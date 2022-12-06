@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fake
+package fakejob
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	fakejobPkg "github.com/pingcap/tiflow/engine/pkg/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
@@ -65,8 +66,8 @@ type Config struct {
 
 // Checkpoint defines the checkpoint of fake job
 type Checkpoint struct {
-	Ticks       map[int]int64            `json:"ticks"`
-	Checkpoints map[int]workerCheckpoint `json:"checkpoints"`
+	Ticks       map[int]int64                       `json:"ticks"`
+	Checkpoints map[int]fakejobPkg.WorkerCheckpoint `json:"checkpoints"`
 }
 
 // String implements fmt.Stringer
@@ -78,16 +79,8 @@ func (cp *Checkpoint) String() string {
 	return string(data)
 }
 
-// workerCheckpoint is used to resume a new worker from old checkpoint
-type workerCheckpoint struct {
-	Tick      int64  `json:"tick"`
-	Revision  int64  `json:"revision"`
-	MvccCount int    `json:"mvcc-count"`
-	Value     string `json:"value"`
-}
-
-func zeroWorkerCheckpoint() workerCheckpoint {
-	return workerCheckpoint{}
+func zeroWorkerCheckpoint() fakejobPkg.WorkerCheckpoint {
+	return fakejobPkg.WorkerCheckpoint{}
 }
 
 var _ framework.JobMasterImpl = (*Master)(nil)
@@ -125,7 +118,7 @@ type Master struct {
 
 type businessStatus struct {
 	sync.RWMutex
-	status map[frameModel.WorkerID]*dummyWorkerStatus
+	status map[frameModel.WorkerID]*fakejobPkg.DummyWorkerStatus
 }
 
 // OnCancel implements JobMasterImpl.OnCancel
@@ -189,7 +182,7 @@ func (m *Master) InitImpl(ctx context.Context) error {
 }
 
 // This function is not thread safe, it must be called with m.workerListMu locked
-func (m *Master) createWorker(wcfg *WorkerConfig) error {
+func (m *Master) createWorker(wcfg *fakejobPkg.WorkerConfig) error {
 	workerID, err := m.CreateWorker(frameModel.FakeTask, wcfg)
 	if err != nil {
 		return errors.Trace(err)
@@ -313,7 +306,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 	for _, worker := range m.workerList {
 		if worker != nil {
 			status := worker.Status()
-			dws := &dummyWorkerStatus{}
+			dws := &fakejobPkg.DummyWorkerStatus{}
 			if status.ExtBytes != nil {
 				var err error
 				dws, err = parseExtBytes(status.ExtBytes)
@@ -535,8 +528,8 @@ func (m *Master) getState() frameModel.WorkerState {
 	return m.statusCode.code
 }
 
-func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
-	dws := &dummyWorkerStatus{}
+func parseExtBytes(data []byte) (*fakejobPkg.DummyWorkerStatus, error) {
+	dws := &fakejobPkg.DummyWorkerStatus{}
 	if err := json.Unmarshal(data, dws); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -579,8 +572,8 @@ func (m *Master) genCheckpoint() string {
 	return m.cachedCheckpoint.String()
 }
 
-func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *WorkerConfig {
-	return &WorkerConfig{
+func (m *Master) genWorkerConfig(index int, checkpoint fakejobPkg.WorkerCheckpoint) *fakejobPkg.WorkerConfig {
+	return &fakejobPkg.WorkerConfig{
 		ID: index,
 
 		// generated from fake master config
@@ -600,7 +593,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 	log.Info("new fake master", zap.Any("config", masterConfig))
 	ckpt := &Checkpoint{
 		Ticks:       make(map[int]int64),
-		Checkpoints: make(map[int]workerCheckpoint),
+		Checkpoints: make(map[int]fakejobPkg.WorkerCheckpoint),
 	}
 	ret := &Master{
 		workerID:            workerID,
@@ -609,7 +602,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		workerID2BusinessID: make(map[frameModel.WorkerID]int),
 		config:              masterConfig,
 		statusRateLimiter:   rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
-		bStatus:             &businessStatus{status: make(map[frameModel.WorkerID]*dummyWorkerStatus)},
+		bStatus:             &businessStatus{status: make(map[frameModel.WorkerID]*fakejobPkg.DummyWorkerStatus)},
 		finishedSet:         make(map[frameModel.WorkerID]int),
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -88,6 +89,7 @@ func SetLogLevel(level string) error {
 type loggerOp struct {
 	isInitGRPCLogger   bool
 	isInitSaramaLogger bool
+	isInitMySQLLogger  bool
 	output             zapcore.WriteSyncer
 }
 
@@ -111,6 +113,13 @@ func WithInitGRPCLogger() LoggerOpt {
 func WithInitSaramaLogger() LoggerOpt {
 	return func(op *loggerOp) {
 		op.isInitSaramaLogger = true
+	}
+}
+
+// WithInitMySQLLogger enables mysql logger initialization when initializes global logger
+func WithInitMySQLLogger() LoggerOpt {
+	return func(op *loggerOp) {
+		op.isInitMySQLLogger = true
 	}
 }
 
@@ -179,6 +188,12 @@ func initOptionalComponent(op *loggerOp, cfg *Config) error {
 		}
 	}
 
+	if op.isInitMySQLLogger {
+		if err := initMySQLLogger(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -191,6 +206,17 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 		}
 	}
 	return zap.Error(err)
+}
+
+// initMySQLLogger setup logger used in mysql lib
+func initMySQLLogger() error {
+	// MySQL lib only prints error logs.
+	level := zapcore.ErrorLevel
+	logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "[mysql]")), level)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return mysql.SetLogger(logger)
 }
 
 // initSaramaLogger hacks logger used in sarama lib
