@@ -20,6 +20,8 @@ import (
 )
 
 // MockNilReturnJobHTTPClient mocks a JobHTTPClient which return (nil, nil)
+//
+//nolint:revive
 type MockNilReturnJobHTTPClient struct{}
 
 // NewMockNilReturnJobHTTPClient news a JobHTTPClient mocker which return (nil, nil)
