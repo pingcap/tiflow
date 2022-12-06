@@ -149,20 +149,26 @@ func (f *SortEngineFactory) startMetricsCollector() {
 
 func (f *SortEngineFactory) collectMetrics() {
 	if f.engineType == pebbleEngine {
-		for i, db := range f.dbs {
+		// f.dbs is initialized lazily so we need to copy them out to avoid race.
+		var dbs []*pebble.DB
+		f.mu.Lock()
+		dbs = append(dbs, f.dbs...)
+		f.mu.Unlock()
+
+		for i, db := range dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
 			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
 			metrics.InMemoryDataSizeGauge.WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-			dbMetrics.DBIteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
-			dbMetrics.DBWriteDelayCount().WithLabelValues(id).Set(float64(atomic.LoadUint64(&f.writeStalls[i].counter)))
+			dbMetrics.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
+			dbMetrics.WriteDelayCount().WithLabelValues(id).Set(float64(atomic.LoadUint64(&f.writeStalls[i].counter)))
 
-			metricLevelCount := dbMetrics.DBLevelCount().MustCurryWith(map[string]string{"id": id})
+			metricLevelCount := dbMetrics.LevelCount().MustCurryWith(map[string]string{"id": id})
 			for level, metric := range stats.Levels {
 				metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
 			}
-			dbMetrics.DBBlockCacheAccess().WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
-			dbMetrics.DBBlockCacheAccess().WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
+			dbMetrics.BlockCacheAccess().WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
+			dbMetrics.BlockCacheAccess().WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
 		}
 	}
 }

@@ -55,17 +55,17 @@ var (
 
 // SorterCompactionDuration returns sorterCompactDurationHistogram.
 func SorterCompactionDuration() *prometheus.HistogramVec {
-    return sorterCompactDurationHistogram
+	return sorterCompactDurationHistogram
 }
 
 // SorterWriteDuration returns sorterWriteDurationHistogram.
 func SorterWriteDuration() *prometheus.HistogramVec {
-    return sorterWriteDurationHistogram
+	return sorterWriteDurationHistogram
 }
 
 // SorterWriteBytes returns sorterWriteBytesHistogram.
 func SorterWriteBytes() *prometheus.HistogramVec {
-    return sorterWriteBytesHistogram
+	return sorterWriteBytesHistogram
 }
 
 // InitMetrics registers all metrics in this file
