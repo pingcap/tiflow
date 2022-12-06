@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/config"
+	"github.com/pingcap/tiflow/engine/framework/logutil"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
@@ -216,9 +217,10 @@ func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
 		clock:         clock.NewMock(),
 		events:        make(map[frameModel.WorkerID]*masterEvent),
 	}
-
+	masterID := "master-1"
+	logger := logutil.WithMasterID(log.L(), masterID)
 	manager := NewWorkerManager(
-		"master-1",
+		masterID,
 		1,
 		ret.meta,
 		ret.messageSender,
@@ -228,7 +230,8 @@ func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
 		ret.onWorkerDispatched,
 		isInit,
 		config.DefaultTimeoutConfig(),
-		ret.clock)
+		ret.clock).
+		WithLogger(logger)
 	ret.manager = manager
 	return ret
 }
