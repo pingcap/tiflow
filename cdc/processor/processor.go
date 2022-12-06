@@ -650,7 +650,12 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.refreshMetrics()
+
+	// we should check if this error is nil,
+	// otherwise the function called below may panic.
+	if err != nil {
+		p.refreshMetrics()
+	}
 
 	return p.handleErr(err)
 }
