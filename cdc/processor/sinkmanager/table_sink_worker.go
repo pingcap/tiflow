@@ -166,6 +166,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
+			zap.Int("events", allEventCount),
 		)
 	}()
 	for !task.isCanceled() {
