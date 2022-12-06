@@ -653,7 +653,7 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 
 	// we should check if this error is nil,
 	// otherwise the function called below may panic.
-	if err != nil {
+	if err == nil {
 		p.refreshMetrics()
 	}
 
